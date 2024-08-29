@@ -1,7 +1,4 @@
-
-mod geometry;
-
-use geometry::{read_geometry_from_file};
+use yfoil::geometry::{read_geometry_from_file};
 
 
 use clap::Parser;
