@@ -1,4 +1,3 @@
-
 pub mod utils {
     #[macro_export]
     macro_rules! assert_error {

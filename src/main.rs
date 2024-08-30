@@ -1,9 +1,7 @@
-use yfoil::geometry::{read_geometry_from_file};
-
+use yfoil::geometry::read_geometry_from_file;
 
 use clap::Parser;
 use plotly::{Plot, Scatter};
-
 
 /// Load aerofoil geometry and determine polar and boundary layer characteristics
 #[derive(Parser, Debug)]
@@ -14,9 +12,7 @@ struct Args {
     file: String,
 }
 
-
 fn main() {
-
     let args = Args::parse();
     let version = env!("CARGO_PKG_VERSION");
 
@@ -31,7 +27,10 @@ fn main() {
     let geometry = read_geometry_from_file(args.file).unwrap();
 
     // Show where the reference is
-    println!("Reference x/c, y/c : {}, {}", geometry.reference[0], geometry.reference[1]);
+    println!(
+        "Reference x/c, y/c : {}, {}",
+        geometry.reference[0], geometry.reference[1]
+    );
 
     // Make a plotly figure
 
