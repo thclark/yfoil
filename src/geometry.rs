@@ -13,7 +13,6 @@ pub struct Geometry {
     pub y_c: Vec<f64>,
 }
 
-
 #[derive(thiserror::Error, Debug)]
 pub enum GeometryReadError {
     #[error("Failed to read the geometry file (missing or corrupted?)")]
@@ -24,11 +23,9 @@ pub enum GeometryReadError {
 
     #[error(transparent)]
     InvalidGeometryError(#[from] InvalidGeometryError),
-
 }
 
 pub fn read_geometry_from_file<P: AsRef<Path>>(path: P) -> Result<Geometry, GeometryReadError> {
-
     use GeometryReadError::*;
 
     // Open the file in read-only mode with buffered read
@@ -37,6 +34,13 @@ pub fn read_geometry_from_file<P: AsRef<Path>>(path: P) -> Result<Geometry, Geom
 
     // Read the JSON contents of the file as an instance of `Geometry`.
     let geometry = serde_json::from_reader(reader).map_err(FileParseError)?;
+
+    /* TODO REFACTOR REQUEST Extract validation from geometry read-in routine
+        Strictly speaking, validation shouldn't be called from here, but it's done this
+        way for now as a shortcut to simplify the main algorithm. There'll ultimately be a
+        re-paneling routine and much more advanced system of checks and geometry validations which
+        should be applied in a flexible way in a layer subsequent to geometry read-in.
+    */
 
     // Validate the geometry by passing a reference
     validate_geometry(&geometry).map_err(InvalidGeometryError)?;
@@ -65,17 +69,23 @@ pub enum InvalidGeometryError {
     BeginAndEndAtTrailingEdgeError(),
 }
 
-
 fn validate_geometry(geometry: &Geometry) -> Result<(), InvalidGeometryError> {
-
     use InvalidGeometryError::*;
 
     let nx = geometry.x_c.len();
     let ny = geometry.y_c.len();
 
     // Find the maximum and minimum values
-    let max_x = geometry.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let max_y = geometry.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let max_x = geometry
+        .x_c
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let max_y = geometry
+        .y_c
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max);
     let min_x = geometry.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
     let min_y = geometry.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
 
