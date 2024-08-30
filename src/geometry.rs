@@ -75,17 +75,11 @@ fn validate_geometry(geometry: &Geometry) -> Result<(), InvalidGeometryError> {
     let nx = geometry.x_c.len();
     let ny = geometry.y_c.len();
 
+    // TODO REFACTOR REQUEST Create functions or macros for max and min of vectors
+
     // Find the maximum and minimum values
-    let max_x = geometry
-        .x_c
-        .iter()
-        .cloned()
-        .fold(f64::NEG_INFINITY, f64::max);
-    let max_y = geometry
-        .y_c
-        .iter()
-        .cloned()
-        .fold(f64::NEG_INFINITY, f64::max);
+    let max_x = geometry.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let max_y = geometry.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let min_x = geometry.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
     let min_y = geometry.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
 
