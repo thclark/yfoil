@@ -1,0 +1,7 @@
+# Adjust the width to reduce the likelihood of expanding, for example, the first two lines of these but not the second two:
+#  let max_x = geometry.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+#  let max_y = geometry.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+#  let min_x = geometry.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
+#  let min_y = geometry.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+ideal_width = 100
+max_width = 120
