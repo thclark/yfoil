@@ -346,3 +346,122 @@ fn test_panel_method_cambered_lift() {
         coeffs.cl
     );
 }
+
+// ============================================================================
+// Boundary Layer Validation Tests
+// ============================================================================
+
+use yfoil::bl::{cf_lam, dampl, hkin, hs_lam, FlowConditions, FlowRegime};
+
+/// Test Blasius flat plate solution for laminar boundary layer
+///
+/// The Blasius solution provides the exact laminar BL solution for a flat plate:
+/// - θ = 0.664 * sqrt(ν*x/U)   (momentum thickness)
+/// - δ* = 1.7208 * sqrt(ν*x/U) (displacement thickness)
+/// - H = δ*/θ = 2.591          (shape factor)
+/// - Cf = 0.664 / sqrt(Re_x)   (skin friction)
+///
+/// Reference: Schlichting, "Boundary Layer Theory"
+#[test]
+fn test_blasius_shape_factor() {
+    // Blasius shape factor H = 2.591
+    let h_blasius = 2.591;
+    let (hk, _, _) = hkin(h_blasius, 0.0);
+
+    // At incompressible conditions, Hk = H
+    assert_relative_eq!(hk, h_blasius, epsilon = 1e-10);
+}
+
+#[test]
+fn test_blasius_skin_friction() {
+    // Test Cf correlation at Blasius conditions
+    // Blasius: Cf = 0.664 / sqrt(Re_x)
+    // For Re_θ, we have Re_x = (Re_θ / 0.664)² approximately
+    // So at Re_θ = 1000, Re_x ≈ 2.27e6, and Cf ≈ 0.664/1507 ≈ 0.00044
+    // But we test Cf * sqrt(Re_θ) which should be roughly constant
+
+    let hk_blasius = 2.591;
+
+    // Test at different Re_θ values
+    for rt in [500.0, 1000.0, 2000.0, 5000.0] {
+        let result = cf_lam(hk_blasius, rt, 0.0);
+        // Cf should be positive for attached laminar flow
+        assert!(result.val > 0.0, "Cf should be positive at Re_θ={}", rt);
+
+        // Cf * sqrt(Re_θ) should be approximately constant for Blasius
+        // The Falkner-Skan correlation gives Cf * Re_θ ≈ constant for given Hk
+        let cf_rt = result.val * rt;
+        assert!(
+            cf_rt > 0.1 && cf_rt < 1.0,
+            "Cf*Re_θ = {} should be O(1) at Re_θ={}",
+            cf_rt,
+            rt
+        );
+    }
+}
+
+#[test]
+fn test_blasius_energy_shape_factor() {
+    // Test H* correlation at Blasius conditions
+    // For Blasius flow, H* ≈ 1.573
+    let hk_blasius = 2.591;
+    let result = hs_lam(hk_blasius, 1000.0, 0.0);
+
+    // H* should be between 1.5 and 1.7 for Blasius-like conditions
+    assert!(
+        result.val > 1.5 && result.val < 1.7,
+        "H* = {} should be ~1.57 for Blasius",
+        result.val
+    );
+}
+
+#[test]
+fn test_laminar_amplification_off_below_critical() {
+    // Below critical Re_θ, amplification should be zero
+    let hk_blasius = 2.591;
+    let theta = 0.001; // Small momentum thickness
+
+    // At low Re_θ (below ~200 for Blasius)
+    let (ax, _, _, _) = dampl(hk_blasius, theta, 100.0);
+    assert_eq!(
+        ax, 0.0,
+        "Amplification should be 0 below critical Re_θ"
+    );
+}
+
+#[test]
+fn test_laminar_amplification_on_above_critical() {
+    // Above critical Re_θ, amplification should be positive
+    let hk_blasius = 2.591;
+    let theta = 0.001;
+
+    // At high Re_θ (well above critical)
+    let (ax, _, _, _) = dampl(hk_blasius, theta, 5000.0);
+    assert!(
+        ax > 0.0,
+        "Amplification should be positive above critical Re_θ"
+    );
+}
+
+#[test]
+fn test_flow_conditions_construction() {
+    let cond = FlowConditions::new(1_000_000.0, 0.3, 9.0, 1.0);
+
+    assert_eq!(cond.reynolds, 1_000_000.0);
+    assert_eq!(cond.mach, 0.3);
+    assert_relative_eq!(cond.msq, 0.09, epsilon = 1e-10);
+    assert_eq!(cond.ncrit, 9.0);
+    // ν = chord / Re = 1.0 / 1e6 = 1e-6
+    assert_relative_eq!(cond.nu, 1e-6, epsilon = 1e-12);
+}
+
+#[test]
+fn test_flow_regime_enum() {
+    let laminar = FlowRegime::Laminar;
+    let turbulent = FlowRegime::Turbulent;
+    let wake = FlowRegime::Wake;
+
+    assert_eq!(laminar, FlowRegime::Laminar);
+    assert_ne!(laminar, turbulent);
+    assert_ne!(turbulent, wake);
+}

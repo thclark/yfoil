@@ -10,13 +10,12 @@
 //! - `march` - BL marching algorithms (direct and mixed modes)
 //! - `newton` - Newton iteration system
 
-// mod state;
-// mod closure;
-// mod transition;
-// mod march;
-// mod newton;
+mod closure;
+mod march;
+mod newton;
+mod state;
 
-// pub use state::*;
-// pub use closure::*;
-// pub use transition::*;
-// pub use march::*;
+pub use closure::*;
+pub use march::*;
+pub use newton::*;
+pub use state::*;
