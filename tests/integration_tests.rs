@@ -268,3 +268,81 @@ fn test_thickness_values() {
     assert!(thick_med > 0.10 && thick_med < 0.14);
     assert!(thick_thick > 0.20 && thick_thick < 0.28);
 }
+
+// ============================================================================
+// Panel Method Validation Tests
+// ============================================================================
+
+use yfoil::forces::integrate_forces;
+use yfoil::panel::solve_inviscid;
+
+/// Test inviscid panel method lift curve slope against thin airfoil theory.
+///
+/// Thin airfoil theory predicts: dCL/dα = 2π ≈ 6.28 per radian
+/// For a 12% thick airfoil, the actual value is slightly lower due to
+/// thickness effects (typically 5.8-6.2).
+#[test]
+fn test_panel_method_lift_slope() {
+    let geom = naca_4digit("0012", 160).unwrap();
+    let airfoil = create_paneled_airfoil(&geom);
+    let solution = solve_inviscid(&airfoil);
+
+    // Calculate CL at two angles
+    let alpha1 = 0.0_f64;
+    let alpha2 = 5.0_f64.to_radians();
+
+    let vel1 = solution.velocity_at_alpha(alpha1);
+    let vel2 = solution.velocity_at_alpha(alpha2);
+    let cp1: Vec<f64> = vel1.iter().map(|&v| 1.0 - v * v).collect();
+    let cp2: Vec<f64> = vel2.iter().map(|&v| 1.0 - v * v).collect();
+
+    let coeffs1 = integrate_forces(&airfoil, &cp1, alpha1);
+    let coeffs2 = integrate_forces(&airfoil, &cp2, alpha2);
+
+    let dcl_dalpha = (coeffs2.cl - coeffs1.cl) / (alpha2 - alpha1);
+
+    // Should be in range 5.0 to 7.0 (thin airfoil theory ≈ 6.28)
+    assert!(
+        dcl_dalpha > 5.0 && dcl_dalpha < 7.0,
+        "Lift slope {} per radian should be near 2π ≈ 6.28",
+        dcl_dalpha
+    );
+}
+
+/// Test that symmetric airfoil has zero lift at alpha=0
+#[test]
+fn test_panel_method_symmetric_zero_lift() {
+    let geom = naca_4digit("0012", 160).unwrap();
+    let airfoil = create_paneled_airfoil(&geom);
+    let solution = solve_inviscid(&airfoil);
+
+    let vel = solution.velocity_at_alpha(0.0);
+    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
+    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+
+    assert!(
+        coeffs.cl.abs() < 0.01,
+        "CL={} should be ~0 for symmetric airfoil at α=0",
+        coeffs.cl
+    );
+}
+
+/// Test that cambered airfoil has positive lift at alpha=0
+#[test]
+fn test_panel_method_cambered_lift() {
+    let geom = naca_4digit("4412", 160).unwrap();
+    let airfoil = create_paneled_airfoil(&geom);
+    let solution = solve_inviscid(&airfoil);
+
+    let vel = solution.velocity_at_alpha(0.0);
+    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
+    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+
+    // NACA 4412 has 4% camber, should produce positive lift at α=0
+    // Thin airfoil theory predicts CL ≈ 2π * 2 * (0.04) ≈ 0.5 for 4% camber
+    assert!(
+        coeffs.cl > 0.2,
+        "CL={} should be positive for cambered airfoil at α=0",
+        coeffs.cl
+    );
+}

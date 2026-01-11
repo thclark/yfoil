@@ -45,6 +45,8 @@ pub struct PaneledAirfoil {
     pub n: usize,
     /// Leading edge arc length parameter
     pub sle: f64,
+    /// Leading edge node index
+    pub le_index: usize,
     /// Chord length
     pub chord: f64,
     /// Whether trailing edge is sharp (zero thickness)

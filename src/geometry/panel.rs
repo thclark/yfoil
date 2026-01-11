@@ -93,7 +93,7 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
     let (nx, ny, apanel) = calculate_normals_and_angles(&x, &y, &xp, &yp, &s);
 
     // Find leading edge (minimum x location)
-    let sle = find_leading_edge(&x, &s, &xp);
+    let (sle, le_index) = find_leading_edge(&x, &s, &xp);
 
     // Calculate chord length
     let chord = calculate_chord(&x, &y);
@@ -113,6 +113,7 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
         apanel,
         n,
         sle,
+        le_index,
         chord,
         sharp_te,
         reference: geometry.reference,
@@ -156,8 +157,10 @@ fn calculate_normals_and_angles(
     (nx, ny, apanel)
 }
 
-/// Find leading edge arc length parameter (point of minimum x)
-fn find_leading_edge(x: &[f64], s: &[f64], xp: &[f64]) -> f64 {
+/// Find leading edge arc length parameter and index (point of minimum x)
+///
+/// Returns (sle, le_index)
+fn find_leading_edge(x: &[f64], s: &[f64], xp: &[f64]) -> (f64, usize) {
     // First find the approximate index
     let mut i_min = 0;
     let mut x_min = x[0];
@@ -182,7 +185,7 @@ fn find_leading_edge(x: &[f64], s: &[f64], xp: &[f64]) -> f64 {
         s_le = s_le.max(s[0]).min(s[s.len() - 1]);
     }
 
-    s_le
+    (s_le, i_min)
 }
 
 /// Calculate chord length (TE to LE distance)

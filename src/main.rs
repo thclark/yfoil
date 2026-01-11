@@ -4,10 +4,12 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use yfoil::forces::{calculate_cp, integrate_forces};
 use yfoil::geometry::{
-    naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file, repanel, write_dat_file,
-    write_geometry_to_json, Geometry,
+    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
+    repanel, write_dat_file, write_geometry_to_json, Geometry,
 };
+use yfoil::panel::solve_inviscid;
 
 #[cfg(feature = "plotting")]
 use plotly::{Plot, Scatter};
@@ -159,9 +161,46 @@ fn main() {
 
     match cli.command {
         Commands::Geom { action } => handle_geom(action),
-        Commands::Analyze { file, alpha, .. } => {
-            println!("Analysis not yet implemented.");
-            println!("Would analyze {} at alpha = {} deg", file.display(), alpha);
+        Commands::Analyze {
+            file,
+            alpha,
+            reynolds: _,
+            mach,
+            ncrit: _,
+            inviscid,
+        } => {
+            if !inviscid {
+                eprintln!("Viscous analysis not yet implemented. Use --inviscid flag.");
+                std::process::exit(1);
+            }
+
+            // Read geometry
+            let geometry = read_geometry_auto(&file);
+            let airfoil = create_paneled_airfoil(&geometry);
+
+            // Solve inviscid flow
+            let solution = solve_inviscid(&airfoil);
+
+            // Convert angle to radians
+            let alpha_rad = alpha.to_radians();
+
+            // Get surface velocity and pressure coefficient
+            let velocity = solution.velocity_at_alpha(alpha_rad);
+            let cp = calculate_cp(&velocity, mach);
+
+            // Integrate forces
+            let coeffs = integrate_forces(&airfoil, &cp, alpha_rad);
+
+            // Output results
+            println!("Inviscid Analysis Results");
+            println!("========================");
+            println!("Airfoil: {}", file.display());
+            println!("Alpha:   {:.2}°", alpha);
+            println!("Mach:    {:.3}", mach);
+            println!();
+            println!("CL  = {:+.6}", coeffs.cl);
+            println!("CM  = {:+.6}", coeffs.cm);
+            println!("CDp = {:+.6} (pressure drag)", coeffs.cdp);
         }
         Commands::Polar { file, .. } => {
             println!("Polar generation not yet implemented.");

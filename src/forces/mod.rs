@@ -7,8 +7,8 @@
 //! - `pressure` - Cp calculation with compressibility corrections
 //! - `integrate` - Force and moment integration
 
-// mod pressure;
-// mod integrate;
+pub mod integrate;
+pub mod pressure;
 
-// pub use pressure::*;
-// pub use integrate::*;
+pub use integrate::*;
+pub use pressure::*;

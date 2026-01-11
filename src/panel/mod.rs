@@ -4,14 +4,14 @@
 //! the inviscid flow around an airfoil.
 //!
 //! # Components
-//! - `influence` - Influence coefficient matrices (AIJ, DIJ)
+//! - `influence` - Influence coefficient calculations
 //! - `solver` - Linear system assembly and solution
-//! - `wake` - Wake trajectory calculation
+//! - `wake` - Wake trajectory calculation (TODO)
 
-// mod influence;
-// mod solver;
+pub mod influence;
+pub mod solver;
 // mod wake;
 
-// pub use influence::*;
-// pub use solver::*;
+pub use influence::*;
+pub use solver::*;
 // pub use wake::*;
