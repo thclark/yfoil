@@ -2,10 +2,34 @@
 name = "yfoil"
 version = "0.1.0"
 edition = "2021"
+description = "Rust-based aerofoil analysis tool reproducing XFOIL's core functionality"
+license = "MIT"
 
 [dependencies]
-serde_json = "1.0.127"
-serde = { version = "1.0.209", features = ["derive"] }
-plotly = "0.9.0"
-clap = { version = "4.5.16", features = ["derive"] }
-thiserror = "1.0.63"
+# Serialization
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Error handling
+thiserror = "1.0"
+
+# Matrix operations
+nalgebra = "0.33"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Optional plotting (behind feature flag)
+plotly = { version = "0.9", optional = true }
+
+[dev-dependencies]
+approx = "0.5"
+tempfile = "3.10"
+
+[features]
+default = []
+plotting = ["plotly"]

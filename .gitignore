@@ -1,3 +1,5 @@
 /target
 /.idea/
 *.html
+.DS_Store
+/xfoil/
