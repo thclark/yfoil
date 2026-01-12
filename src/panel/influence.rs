@@ -107,6 +107,8 @@ pub fn panel_influence(
     let rs2 = rx2 * rx2 + ry2 * ry2;
 
     // Log and arctan terms, handling singularities
+    // Note: using x.atan2(y) gives atan2(x, y) in Rust
+    // XFOIL uses ATAN2(Y, X) for angle of (X, Y) from positive x-axis
     let (g1, t1) = if same_point_j || rs1 < 1e-24 {
         (0.0, 0.0)
     } else {

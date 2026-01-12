@@ -18,12 +18,12 @@ pub struct AeroCoefficients {
 
 /// Integrate pressure distribution to obtain force coefficients
 ///
-/// Uses trapezoidal integration of Cp around the airfoil surface.
+/// Uses panel-based integration of Cp around the airfoil surface.
 /// The forces are computed in wind axes (aligned with freestream).
 ///
 /// # Arguments
 /// * `airfoil` - Paneled airfoil geometry
-/// * `cp` - Pressure coefficients at each node
+/// * `cp` - Pressure coefficients at each panel midpoint (length n)
 /// * `alpha_rad` - Angle of attack in radians
 ///
 /// # Returns
@@ -45,7 +45,7 @@ pub fn integrate_forces(
     let mut ca = 0.0; // Axial force coefficient (body axes)
     let mut cm = 0.0; // Moment coefficient
 
-    // Integrate around the airfoil using trapezoidal rule
+    // Integrate around the airfoil using panel-based values
     // Convention: airfoil goes TE -> upper -> LE -> lower -> TE (counterclockwise)
     for i in 0..n {
         // Panel from node i to node i+1 (with wraparound)
@@ -55,8 +55,8 @@ pub fn integrate_forces(
         let dx = airfoil.x[ip1] - airfoil.x[i];
         let dy = airfoil.y[ip1] - airfoil.y[i];
 
-        // Average Cp on panel (trapezoidal rule)
-        let cp_avg = 0.5 * (cp[i] + cp[ip1]);
+        // Cp at panel midpoint (already computed there)
+        let cp_panel = cp[i];
 
         // Panel midpoint for moment arm
         let x_mid = 0.5 * (airfoil.x[i] + airfoil.x[ip1]);
@@ -69,19 +69,14 @@ pub fn integrate_forces(
         //
         // Normal force (positive up): dCn = Cp * dx
         // Axial force (positive downstream): dCa = -Cp * dy
-        cn += cp_avg * dx;
-        ca -= cp_avg * dy;
+        cn += cp_panel * dx;
+        ca -= cp_panel * dy;
 
         // Moment about reference point (positive nose-up)
-        // dCm = (x_mid - x_ref) * dCn - (y_mid - y_ref) * dCa
-        //     = (x_mid - x_ref) * Cp * dx - (y_mid - y_ref) * (-Cp * dy)
-        //     = Cp * ((x_mid - x_ref) * dx + (y_mid - y_ref) * dy)
-        // But we want positive nose-up, and moment arm from reference to panel
         // The cross product r × F gives: (x-xref)*Fy - (y-yref)*Fx
         //                              = (x-xref)*Cp*dx - (y-yref)*(-Cp*dy)
         //                              = Cp*((x-xref)*dx + (y-yref)*dy)
-        // Sign: nose-up is negative Cm convention in some systems, let's verify
-        cm += cp_avg * ((x_mid - x_ref) * dx + (y_mid - y_ref) * dy);
+        cm += cp_panel * ((x_mid - x_ref) * dx + (y_mid - y_ref) * dy);
     }
 
     // Transform from body axes to wind axes
@@ -234,5 +229,74 @@ mod tests {
             "Lift slope {} should be near 2π",
             dcl_dalpha
         );
+    }
+
+    #[test]
+    fn test_diagnose_cdp_issue() {
+        let geom = naca_4digit("0012", 80).unwrap();
+        let airfoil = create_paneled_airfoil(&geom);
+        let solution = solve_inviscid(&airfoil);
+
+        let alpha = 5.0_f64.to_radians();
+        let vel = solution.velocity_at_alpha(alpha);
+        let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
+
+        // Find extreme velocity values
+        let max_vel = vel.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_vel = vel.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_vel_idx = vel.iter().position(|&v| v == max_vel).unwrap();
+        let min_vel_idx = vel.iter().position(|&v| v == min_vel).unwrap();
+
+        println!("\n=== CDp Diagnostic ===");
+        println!("Panels: {}", airfoil.n);
+        println!("Velocity range: {:.4} to {:.4}", min_vel, max_vel);
+        println!("Max vel at idx {} (x={:.4})", max_vel_idx, airfoil.x[max_vel_idx]);
+        println!("Min vel at idx {} (x={:.4})", min_vel_idx, airfoil.x[min_vel_idx]);
+
+        // Check first few panels (near TE on upper surface)
+        println!("\nNear TE (upper, indices 0-5):");
+        for i in 0..5.min(airfoil.n) {
+            println!("  i={}: x={:.4}, y={:.5}, vel={:.4}, Cp={:.4}",
+                i, airfoil.x[i], airfoil.y[i], vel[i], cp[i]);
+        }
+
+        // Check last few panels (near TE on lower surface)
+        println!("\nNear TE (lower, last 5):");
+        for i in (airfoil.n - 5).max(0)..airfoil.n {
+            println!("  i={}: x={:.4}, y={:.5}, vel={:.4}, Cp={:.4}",
+                i, airfoil.x[i], airfoil.y[i], vel[i], cp[i]);
+        }
+
+        // Calculate contribution to CDp from each panel
+        let cosa = alpha.cos();
+        let sina = alpha.sin();
+        let mut panel_cdp = Vec::new();
+        for i in 0..airfoil.n {
+            let ip1 = if i == airfoil.n - 1 { 0 } else { i + 1 };
+            let dx = airfoil.x[ip1] - airfoil.x[i];
+            let dy = airfoil.y[ip1] - airfoil.y[i];
+            let cp_avg = 0.5 * (cp[i] + cp[ip1]);
+            let cn_i = cp_avg * dx;
+            let ca_i = -cp_avg * dy;
+            let cdp_i = cn_i * sina + ca_i * cosa;
+            panel_cdp.push(cdp_i);
+        }
+
+        // Find panels with largest CDp contribution
+        let mut indexed: Vec<_> = panel_cdp.iter().enumerate().collect();
+        indexed.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+
+        println!("\nTop 10 panels by |CDp| contribution:");
+        for (i, &cdp_i) in indexed.iter().take(10) {
+            println!("  Panel {}: CDp={:.6}, x={:.4}, vel={:.4}, Cp={:.4}",
+                i, cdp_i, airfoil.x[*i], vel[*i], cp[*i]);
+        }
+
+        let coeffs = integrate_forces(&airfoil, &cp, alpha);
+        println!("\nTotal: CL={:.4}, CDp={:.4}", coeffs.cl, coeffs.cdp);
+
+        // The high CDp is a known issue - this test is for diagnostics
+        // We expect CL > 0 and CDp != 0 due to numerical issues
+        assert!(coeffs.cl > 0.3);
     }
 }

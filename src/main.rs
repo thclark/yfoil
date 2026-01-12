@@ -4,12 +4,14 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use yfoil::bl::FlowConditions;
 use yfoil::forces::{calculate_cp, integrate_forces};
 use yfoil::geometry::{
     create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
     repanel, write_dat_file, write_geometry_to_json, Geometry,
 };
 use yfoil::panel::solve_inviscid;
+use yfoil::solver::{solve_viscous, ViscalConfig};
 
 #[cfg(feature = "plotting")]
 use plotly::{Plot, Scatter};
@@ -164,43 +166,68 @@ fn main() {
         Commands::Analyze {
             file,
             alpha,
-            reynolds: _,
+            reynolds,
             mach,
-            ncrit: _,
+            ncrit,
             inviscid,
         } => {
-            if !inviscid {
-                eprintln!("Viscous analysis not yet implemented. Use --inviscid flag.");
-                std::process::exit(1);
-            }
-
             // Read geometry
             let geometry = read_geometry_auto(&file);
             let airfoil = create_paneled_airfoil(&geometry);
 
-            // Solve inviscid flow
-            let solution = solve_inviscid(&airfoil);
-
             // Convert angle to radians
             let alpha_rad = alpha.to_radians();
 
-            // Get surface velocity and pressure coefficient
-            let velocity = solution.velocity_at_alpha(alpha_rad);
-            let cp = calculate_cp(&velocity, mach);
+            if inviscid {
+                // Inviscid-only analysis
+                let solution = solve_inviscid(&airfoil);
+                let velocity = solution.velocity_at_alpha(alpha_rad);
+                let cp = calculate_cp(&velocity, mach);
+                let coeffs = integrate_forces(&airfoil, &cp, alpha_rad);
 
-            // Integrate forces
-            let coeffs = integrate_forces(&airfoil, &cp, alpha_rad);
+                println!("Inviscid Analysis Results");
+                println!("========================");
+                println!("Airfoil: {}", file.display());
+                println!("Alpha:   {:.2}°", alpha);
+                println!("Mach:    {:.3}", mach);
+                println!();
+                println!("CL  = {:+.6}", coeffs.cl);
+                println!("CM  = {:+.6}", coeffs.cm);
+                println!("CDp = {:+.6} (pressure drag)", coeffs.cdp);
+            } else {
+                // Viscous analysis
+                let cond = FlowConditions::new(reynolds, mach, ncrit, airfoil.chord);
+                let config = ViscalConfig::default();
 
-            // Output results
-            println!("Inviscid Analysis Results");
-            println!("========================");
-            println!("Airfoil: {}", file.display());
-            println!("Alpha:   {:.2}°", alpha);
-            println!("Mach:    {:.3}", mach);
-            println!();
-            println!("CL  = {:+.6}", coeffs.cl);
-            println!("CM  = {:+.6}", coeffs.cm);
-            println!("CDp = {:+.6} (pressure drag)", coeffs.cdp);
+                let result = solve_viscous(&airfoil, alpha_rad, &cond, &config);
+
+                println!("Viscous Analysis Results");
+                println!("========================");
+                println!("Airfoil: {}", file.display());
+                println!("Alpha:   {:.2}°", alpha);
+                println!("Re:      {:.2e}", reynolds);
+                println!("Mach:    {:.3}", mach);
+                println!("Ncrit:   {:.1}", ncrit);
+                println!();
+                println!("CL  = {:+.6}", result.cl);
+                println!("CD  = {:+.6}", result.cd);
+                println!("  CDf = {:+.6} (friction)", result.cdf);
+                println!("  CDp = {:+.6} (pressure)", result.cdp);
+                println!("CM  = {:+.6}", result.cm);
+                println!();
+                println!("Transition:");
+                println!("  Upper: {:.1}% chord", result.xtr_upper * 100.0);
+                println!("  Lower: {:.1}% chord", result.xtr_lower * 100.0);
+                println!();
+                if result.converged {
+                    println!("Converged in {} iterations", result.iterations);
+                } else {
+                    println!(
+                        "Warning: Not converged after {} iterations (residual: {:.2e})",
+                        result.iterations, result.residual
+                    );
+                }
+            }
         }
         Commands::Polar { file, .. } => {
             println!("Polar generation not yet implemented.");

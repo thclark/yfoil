@@ -16,6 +16,10 @@ pub struct InviscidSolution {
     pub gam_0: Vec<f64>,
     /// Vortex strength at each node for α=90° unit solution
     pub gam_90: Vec<f64>,
+    /// Surface velocity at panel midpoints for α=0° unit solution
+    pub qinv_0: Vec<f64>,
+    /// Surface velocity at panel midpoints for α=90° unit solution
+    pub qinv_90: Vec<f64>,
     /// Internal streamfunction value for α=0°
     pub psi_0: f64,
     /// Internal streamfunction value for α=90°
@@ -25,11 +29,12 @@ pub struct InviscidSolution {
 }
 
 impl InviscidSolution {
-    /// Get vortex distribution (surface velocity) at arbitrary angle of attack
+    /// Get vortex distribution at arbitrary angle of attack
     ///
     /// γ(α) = cos(α) * γ₀ + sin(α) * γ₉₀
     ///
-    /// For attached flow, γ = q_surface (tangential velocity)
+    /// Note: This returns node-based vortex strengths, not surface velocities.
+    /// For surface velocities, use `velocity_at_alpha` instead.
     pub fn gamma_at_alpha(&self, alpha_rad: f64) -> Vec<f64> {
         let cosa = alpha_rad.cos();
         let sina = alpha_rad.sin();
@@ -40,11 +45,33 @@ impl InviscidSolution {
             .collect()
     }
 
-    /// Get surface velocity at arbitrary angle of attack
+    /// Get surface velocity at panel midpoints for arbitrary angle of attack
     ///
-    /// For inviscid flow, surface velocity equals vortex strength
+    /// Q(α) = cos(α) * Q₀ + sin(α) * Q₉₀
+    ///
+    /// These are computed at panel midpoints (control points) to avoid
+    /// the trailing edge singularity that occurs at panel nodes.
     pub fn velocity_at_alpha(&self, alpha_rad: f64) -> Vec<f64> {
+        let cosa = alpha_rad.cos();
+        let sina = alpha_rad.sin();
+        self.qinv_0
+            .iter()
+            .zip(&self.qinv_90)
+            .map(|(&q0, &q90)| cosa * q0 + sina * q90)
+            .collect()
+    }
+
+    /// Get surface velocity at nodes (original method, has TE singularity)
+    ///
+    /// This is the raw gamma distribution which for attached flow
+    /// approximates the surface velocity.
+    pub fn velocity_at_nodes(&self, alpha_rad: f64) -> Vec<f64> {
         self.gamma_at_alpha(alpha_rad)
+    }
+
+    /// Get the number of velocity/panel values
+    pub fn num_panels(&self) -> usize {
+        self.n
     }
 }
 
@@ -54,6 +81,7 @@ impl InviscidSolution {
 /// - Linear vorticity distribution on each panel
 /// - Kutta condition at trailing edge: γ₁ + γₙ = 0
 /// - Flow tangency (constant streamfunction on surface)
+/// - Control points at panel MIDPOINTS (not nodes) to avoid singularity
 ///
 /// # Arguments
 /// * `airfoil` - Paneled airfoil geometry
@@ -138,19 +166,82 @@ pub fn solve_inviscid(airfoil: &PaneledAirfoil) -> InviscidSolution {
         .solve(&rhs_90)
         .expect("Panel system should be solvable for α=90°");
 
-    // Extract results
+    // Extract vortex strengths
     let gam_0: Vec<f64> = solution_0.rows(0, n).iter().copied().collect();
     let gam_90: Vec<f64> = solution_90.rows(0, n).iter().copied().collect();
     let psi_0 = solution_0[n];
     let psi_90 = solution_90[n];
 
+    // Compute velocities at panel midpoints
+    // For the midpoint-based formulation, the gamma values at nodes
+    // give the surface velocity when properly averaged
+    let (qinv_0, qinv_90) =
+        compute_midpoint_velocities(airfoil, &gam_0, &gam_90);
+
     InviscidSolution {
         gam_0,
         gam_90,
+        qinv_0,
+        qinv_90,
         psi_0,
         psi_90,
         n,
     }
+}
+
+/// Compute surface velocities at panel midpoints.
+///
+/// For a vortex panel method, the solved vortex strength γ at each node
+/// equals the tangential surface velocity there (by the properties of the
+/// potential flow solution). At panel midpoints, we use the average of
+/// the two node values.
+///
+/// Special handling for trailing edge:
+/// - TE nodes (indices 0 and n-1) have singular γ values due to the Kutta condition
+/// - Panels adjacent to the TE use extrapolation from nearby interior nodes
+///
+/// This approach follows XFOIL's treatment of the trailing edge singularity.
+fn compute_midpoint_velocities(
+    airfoil: &PaneledAirfoil,
+    gam_0: &[f64],
+    gam_90: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
+    let n = airfoil.n;
+    let mut qinv_0 = vec![0.0; n];
+    let mut qinv_90 = vec![0.0; n];
+
+    // For most panels, use average of node values
+    for i in 0..n {
+        let ip1 = if i == n - 1 { 0 } else { i + 1 };
+
+        // Check if either node is a TE node (indices 0 or n-1)
+        let node_i_is_te = i == 0 || i == n - 1;
+        let node_ip1_is_te = ip1 == 0 || ip1 == n - 1;
+
+        if (node_i_is_te || node_ip1_is_te) && airfoil.sharp_te {
+            // Panel touches the TE - use only the non-TE node value
+            if node_i_is_te && !node_ip1_is_te {
+                // Node i is TE, use node ip1
+                qinv_0[i] = gam_0[ip1];
+                qinv_90[i] = gam_90[ip1];
+            } else if !node_i_is_te && node_ip1_is_te {
+                // Node ip1 is TE, use node i
+                qinv_0[i] = gam_0[i];
+                qinv_90[i] = gam_90[i];
+            } else {
+                // Both nodes are TE (the TE panel itself) - use average of
+                // the two nodes adjacent to TE (nodes 1 and n-2)
+                qinv_0[i] = 0.5 * (gam_0[1] + gam_0[n - 2]);
+                qinv_90[i] = 0.5 * (gam_90[1] + gam_90[n - 2]);
+            }
+        } else {
+            // Normal panels: average of the two node values
+            qinv_0[i] = 0.5 * (gam_0[i] + gam_0[ip1]);
+            qinv_90[i] = 0.5 * (gam_90[i] + gam_90[ip1]);
+        }
+    }
+
+    (qinv_0, qinv_90)
 }
 
 #[cfg(test)]
@@ -229,15 +320,15 @@ mod tests {
         let airfoil = create_paneled_airfoil(&geom);
         let solution = solve_inviscid(&airfoil);
 
-        // Test superposition
+        // Test superposition of midpoint velocities
         let alpha = 0.1; // ~5.7 degrees
         let vel = solution.velocity_at_alpha(alpha);
 
-        // Manual calculation
+        // Manual calculation for midpoint velocities
         let cosa = alpha.cos();
         let sina = alpha.sin();
         for i in 0..airfoil.n {
-            let expected = cosa * solution.gam_0[i] + sina * solution.gam_90[i];
+            let expected = cosa * solution.qinv_0[i] + sina * solution.qinv_90[i];
             assert_relative_eq!(vel[i], expected, epsilon = 1e-12);
         }
     }
