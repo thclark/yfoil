@@ -117,21 +117,47 @@ pub struct BLSolution {
 
 /// Find stagnation point from velocity distribution
 ///
-/// The stagnation point is where the surface velocity changes sign
-/// (or is minimum magnitude near the leading edge).
+/// The stagnation point is where the surface velocity changes sign.
+/// This finds the panel where the sign change occurs, preferring the
+/// geometric LE when velocities are symmetric.
 pub fn find_stagnation_point(airfoil: &PaneledAirfoil, velocity: &[f64]) -> usize {
-    // Find minimum velocity magnitude near leading edge
     let le_idx = airfoil.le_index;
     let search_range = (airfoil.n / 4).max(5);
 
     let start = le_idx.saturating_sub(search_range);
     let end = (le_idx + search_range).min(airfoil.n);
 
+    // Look for sign change in velocity (stagnation point)
+    // Upper surface has positive velocity, lower has negative (for standard ordering)
+    for i in start..end.saturating_sub(1) {
+        if velocity[i] > 0.0 && velocity[i + 1] <= 0.0 {
+            // Sign change found - pick the panel with smaller magnitude
+            // For symmetric case, prefer the LE index
+            if (i + 1) == le_idx {
+                return le_idx;
+            } else if i == le_idx {
+                return le_idx;
+            } else if velocity[i].abs() <= velocity[i + 1].abs() {
+                return i;
+            } else {
+                return i + 1;
+            }
+        }
+    }
+
+    // Fallback: find minimum velocity magnitude, preferring LE on tie
     let mut min_vel = f64::MAX;
     let mut stag_idx = le_idx;
 
+    // Check LE first so it wins on ties
+    if le_idx < velocity.len() {
+        min_vel = velocity[le_idx].abs();
+        stag_idx = le_idx;
+    }
+
     for i in start..end {
         let vel_mag = velocity[i].abs();
+        // Use strict less-than so LE wins on tie
         if vel_mag < min_vel {
             min_vel = vel_mag;
             stag_idx = i;
@@ -151,17 +177,37 @@ pub fn extract_upper_surface(
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     // Upper surface goes from stagnation (near LE) towards TE at index 0
     // In standard airfoil ordering: TE(0) -> upper -> LE -> lower -> TE(n)
+    //
+    // For symmetric treatment with lower surface:
+    // - At stagnation (node stag_idx), use velocity[stag_idx] (panel to lower side)
+    // - At subsequent nodes, use velocity[i] where i is the current node index
+    //   This uses the panel from node i to node i+1, which is towards TE
+    //
+    // The symmetric pairs are: vel[stag_idx-1]↔vel[stag_idx], vel[stag_idx-2]↔vel[stag_idx+1], etc.
     let mut x = Vec::new();
     let mut y = Vec::new();
     let mut s = Vec::new();
     let mut ue = Vec::new();
 
     let mut arc_len = 0.0;
-    for i in (0..=stag_idx).rev() {
+    let n_stations = stag_idx + 1;
+
+    for j in 0..n_stations {
+        let i = stag_idx - j; // Node index (stag_idx, stag_idx-1, ..., 0)
         x.push(airfoil.x[i]);
         y.push(airfoil.y[i]);
         s.push(arc_len);
-        ue.push(velocity[i].abs()); // Use magnitude for BL
+
+        // For upper surface, the panel "at" node i is panel i-1 (from node i-1 to i)
+        // except at stagnation where we use panel stag_idx (symmetric with lower)
+        let vel_idx = if j == 0 {
+            stag_idx // At stagnation, use same panel as lower surface
+        } else if i > 0 {
+            i - 1 // Panel from node i-1 to node i
+        } else {
+            0 // At TE, use panel 0
+        };
+        ue.push(velocity[vel_idx].abs());
 
         if i > 0 {
             let dx = airfoil.x[i - 1] - airfoil.x[i];
@@ -179,20 +225,29 @@ pub fn extract_lower_surface(
     velocity: &[f64],
     stag_idx: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
-    // Lower surface goes from stagnation towards TE at index n
+    // Lower surface goes from stagnation towards TE at index n-1
+    // For velocity at the TE node (n-1), we use velocity[n-2] (the last lower
+    // surface panel) instead of velocity[n-1] (the TE gap panel which is ~0).
+    // This ensures symmetric treatment with the upper surface.
     let mut x = Vec::new();
     let mut y = Vec::new();
     let mut s = Vec::new();
     let mut ue = Vec::new();
 
+    let n = airfoil.n;
     let mut arc_len = 0.0;
-    for i in stag_idx..airfoil.n {
+    let end_idx = n - 1; // Lower TE node
+
+    for i in stag_idx..=end_idx {
         x.push(airfoil.x[i]);
         y.push(airfoil.y[i]);
         s.push(arc_len);
-        ue.push(velocity[i].abs());
 
-        if i + 1 < airfoil.n {
+        // For the TE node, use the previous panel velocity (not TE gap panel)
+        let vel_idx = if i == end_idx && n >= 2 { n - 2 } else { i };
+        ue.push(velocity[vel_idx].abs());
+
+        if i < end_idx {
             let dx = airfoil.x[i + 1] - airfoil.x[i];
             let dy = airfoil.y[i + 1] - airfoil.y[i];
             arc_len += (dx * dx + dy * dy).sqrt();
