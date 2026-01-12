@@ -6,12 +6,12 @@
 //! - `results` - Result structs (JSON serializable)
 //! - `plot` - Optional Plotly visualization (feature-gated)
 
-// mod results;
+mod results;
 
 // #[cfg(feature = "plotting")]
 // mod plot;
 
-// pub use results::*;
+pub use results::*;
 
 // #[cfg(feature = "plotting")]
 // pub use plot::*;

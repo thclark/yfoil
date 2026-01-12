@@ -8,8 +8,8 @@
 //! - `viscal` - Main coupling iteration loop
 //! - `polar` - Alpha sweep for polar generation
 
+mod polar;
 mod viscal;
-// mod polar;
 
+pub use polar::*;
 pub use viscal::*;
-// pub use polar::*;

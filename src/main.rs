@@ -11,7 +11,8 @@ use yfoil::geometry::{
     repanel, write_dat_file, write_geometry_to_json, Geometry,
 };
 use yfoil::panel::solve_inviscid;
-use yfoil::solver::{solve_viscous, ViscalConfig};
+use yfoil::output::PolarOutput;
+use yfoil::solver::{compute_polar, solve_viscous, PolarConfig, ViscalConfig};
 
 #[cfg(feature = "plotting")]
 use plotly::{Plot, Scatter};
@@ -59,7 +60,7 @@ enum Commands {
         inviscid: bool,
     },
 
-    /// Generate polar sweep (placeholder)
+    /// Generate polar sweep
     Polar {
         /// Path to geometry file (JSON)
         file: PathBuf,
@@ -79,6 +80,22 @@ enum Commands {
         /// Reynolds number
         #[arg(short, long, default_value_t = 1_000_000.0)]
         reynolds: f64,
+
+        /// Mach number
+        #[arg(short, long, default_value_t = 0.0)]
+        mach: f64,
+
+        /// Critical amplification factor for transition
+        #[arg(short, long, default_value_t = 9.0)]
+        ncrit: f64,
+
+        /// Output JSON format
+        #[arg(long)]
+        json: bool,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 
@@ -219,19 +236,128 @@ fn main() {
                 println!("  Upper: {:.1}% chord", result.xtr_upper * 100.0);
                 println!("  Lower: {:.1}% chord", result.xtr_lower * 100.0);
                 println!();
+                println!("Convergence:");
+                println!("  Iterations: {}", result.iterations);
+                println!("  Residual:   {:.2e}", result.residual);
                 if result.converged {
-                    println!("Converged in {} iterations", result.iterations);
+                    println!("  Status:     Converged");
                 } else {
-                    println!(
-                        "Warning: Not converged after {} iterations (residual: {:.2e})",
-                        result.iterations, result.residual
-                    );
+                    println!("  Status:     NOT CONVERGED");
                 }
             }
         }
-        Commands::Polar { file, .. } => {
-            println!("Polar generation not yet implemented.");
-            println!("Would generate polar for {}", file.display());
+        Commands::Polar {
+            file,
+            alpha_max,
+            alpha_min,
+            alpha_step,
+            reynolds,
+            mach,
+            ncrit,
+            json,
+            output,
+        } => {
+            // Read geometry
+            let geometry = read_geometry_auto(&file);
+            let airfoil = create_paneled_airfoil(&geometry);
+
+            // Set up polar configuration
+            let conditions = FlowConditions::new(reynolds, mach, ncrit, airfoil.chord);
+            let config = PolarConfig {
+                alpha_max,
+                alpha_min,
+                alpha_step,
+                conditions: conditions.clone(),
+                ..Default::default()
+            };
+
+            // Run polar sweep
+            let result = compute_polar(&airfoil, &config);
+
+            // Create output struct
+            let airfoil_name = file
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Unknown");
+            let polar_output = PolarOutput::from_polar(&result, airfoil_name);
+
+            if json {
+                // JSON output
+                let json_str = polar_output.to_json().unwrap();
+                if let Some(ref path) = output {
+                    std::fs::write(path, &json_str).expect("Failed to write output file");
+                    println!("Wrote JSON polar to {}", path.display());
+                } else {
+                    println!("{}", json_str);
+                }
+            } else {
+                // Human-readable output
+                println!("Polar Results");
+                println!("=============");
+                println!("Airfoil: {}", file.display());
+                println!("Re:      {:.2e}", reynolds);
+                println!("Mach:    {:.3}", mach);
+                println!("Ncrit:   {:.1}", ncrit);
+                println!();
+                println!(
+                    "{:>8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>8} {:>5} {:>10}",
+                    "Alpha", "CL", "CD", "CM", "L/D", "Xtr_U", "Xtr_L", "Iter", "Residual"
+                );
+                println!("{}", "-".repeat(92));
+
+                for point in &polar_output.points {
+                    println!(
+                        "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e}",
+                        point.alpha_deg,
+                        point.cl,
+                        point.cd,
+                        point.cm,
+                        point.ld,
+                        point.xtr_upper,
+                        point.xtr_lower,
+                        point.iterations,
+                        point.residual
+                    );
+                }
+
+                println!();
+                println!("Summary:");
+                if let Some(cl_max) = polar_output.summary.cl_max {
+                    println!(
+                        "  CL_max = {:.4} at alpha = {:.2}°",
+                        cl_max,
+                        polar_output.summary.alpha_cl_max.unwrap_or(0.0)
+                    );
+                }
+                if let Some(ld_max) = polar_output.summary.ld_max {
+                    println!(
+                        "  L/D_max = {:.2} at CL = {:.4}",
+                        ld_max,
+                        polar_output.summary.cl_at_ld_max.unwrap_or(0.0)
+                    );
+                }
+                if let Some(cd0) = polar_output.summary.cd0 {
+                    println!("  CD0 = {:.6}", cd0);
+                }
+                println!(
+                    "  Converged: {}/{} points",
+                    polar_output.summary.num_converged,
+                    polar_output.summary.num_converged + polar_output.summary.num_failed
+                );
+
+                if !result.completed {
+                    println!();
+                    println!("Warning: Sweep stopped early due to consecutive failures");
+                }
+
+                // Write to file if requested
+                if let Some(ref path) = output {
+                    let json_str = polar_output.to_json().unwrap();
+                    std::fs::write(path, &json_str).expect("Failed to write output file");
+                    println!();
+                    println!("Wrote JSON polar to {}", path.display());
+                }
+            }
         }
     }
 }
