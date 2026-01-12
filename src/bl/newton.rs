@@ -215,9 +215,20 @@ pub fn solve_station(
             let d_theta = (-r1 * dr2_dh2 + r2 * dr1_dh2) / det;
             let d_h = (-r2 * dr1_dtheta2 + r1 * dr2_dtheta2) / det;
 
-            // Apply with relaxation and limiting
-            theta2 = (theta2 + config.relax * d_theta).max(config.theta_min);
-            h2 = (h2 + config.relax * d_h).clamp(1.0, config.hk_max);
+            // Adaptive relaxation: reduce relaxation when H is large (approaching separation)
+            let relax_eff = if hk2 > 3.5 {
+                // Stronger under-relaxation for high shape factors
+                config.relax * 0.5 * (4.0 / hk2).min(1.0)
+            } else {
+                config.relax
+            };
+
+            // Limit step size on H to prevent wild oscillations
+            let d_h_limited = d_h.clamp(-0.5, 0.5);
+
+            // Apply with adaptive relaxation and limiting
+            theta2 = (theta2 + relax_eff * d_theta).max(config.theta_min);
+            h2 = (h2 + relax_eff * d_h_limited).clamp(1.0, config.hk_max);
         }
 
         // Check convergence
