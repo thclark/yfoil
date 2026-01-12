@@ -148,6 +148,38 @@ pub fn solve_inviscid(airfoil: &PaneledAirfoil) -> InviscidSolution {
         rhs_90[i] = x_i;
     }
 
+    // For sharp trailing edge, replace the equation for node n-1 with
+    // a curvature extrapolation condition (XFOIL paper equation 9).
+    // This prevents the TE singularity by enforcing smooth γ approach
+    // from both sides:
+    //   (γ[2] - 2γ[1] + γ[0]) - (γ[n-3] - 2γ[n-2] + γ[n-1]) = 0
+    //
+    // This replaces the ill-conditioned flow tangency equation at node n-1
+    // (which would be nearly identical to node 0 for sharp TE).
+    if airfoil.sharp_te && n >= 6 {
+        // Clear row n-1
+        for j in 0..=n {
+            aij[(n - 1, j)] = 0.0;
+        }
+
+        // Upper surface curvature: γ[2] - 2γ[1] + γ[0]
+        aij[(n - 1, 0)] = 1.0;
+        aij[(n - 1, 1)] = -2.0;
+        aij[(n - 1, 2)] = 1.0;
+
+        // Lower surface curvature: -(γ[n-3] - 2γ[n-2] + γ[n-1])
+        aij[(n - 1, n - 3)] = -1.0;
+        aij[(n - 1, n - 2)] = 2.0;
+        aij[(n - 1, n - 1)] = -1.0;
+
+        // No ψ_internal dependency for this equation
+        aij[(n - 1, n)] = 0.0;
+
+        // RHS is 0 (curvatures should be equal)
+        rhs_0[n - 1] = 0.0;
+        rhs_90[n - 1] = 0.0;
+    }
+
     // Kutta condition: γ₁ + γₙ = 0
     // Row n+1 (index n): enforce γ[0] + γ[n-1] = 0
     aij[(n, 0)] = 1.0;

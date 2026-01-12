@@ -31,17 +31,23 @@ pub struct NewtonConfig {
     pub hk_min: f64,
     /// Maximum allowed Hk value
     pub hk_max: f64,
+    /// Maximum laminar Hk before inverse mode (XFOIL's HLMAX)
+    pub hlmax: f64,
+    /// Maximum turbulent Hk before inverse mode (XFOIL's HTMAX)
+    pub htmax: f64,
 }
 
 impl Default for NewtonConfig {
     fn default() -> Self {
         Self {
-            max_iter: 25,
+            max_iter: 50,
             tol: 1e-5,
             relax: 1.0,
             theta_min: 1e-10,
             hk_min: 1.00005,
             hk_max: 12.0,
+            hlmax: 3.8,  // XFOIL's laminar Hk limit
+            htmax: 2.5,  // XFOIL's turbulent Hk limit
         }
     }
 }
@@ -215,20 +221,13 @@ pub fn solve_station(
             let d_theta = (-r1 * dr2_dh2 + r2 * dr1_dh2) / det;
             let d_h = (-r2 * dr1_dtheta2 + r1 * dr2_dtheta2) / det;
 
-            // Adaptive relaxation: reduce relaxation when H is large (approaching separation)
-            let relax_eff = if hk2 > 3.5 {
-                // Stronger under-relaxation for high shape factors
-                config.relax * 0.5 * (4.0 / hk2).min(1.0)
-            } else {
-                config.relax
-            };
+            // Apply relaxation and limiting (XFOIL uses similar approach)
+            // Limit step sizes to prevent divergence in difficult regions
+            let d_theta_limited = d_theta.clamp(-0.3 * theta2, 0.3 * theta2);
+            let d_h_limited = d_h.clamp(-0.8, 0.8);
 
-            // Limit step size on H to prevent wild oscillations
-            let d_h_limited = d_h.clamp(-0.5, 0.5);
-
-            // Apply with adaptive relaxation and limiting
-            theta2 = (theta2 + relax_eff * d_theta).max(config.theta_min);
-            h2 = (h2 + relax_eff * d_h_limited).clamp(1.0, config.hk_max);
+            theta2 = (theta2 + config.relax * d_theta_limited).max(config.theta_min);
+            h2 = (h2 + config.relax * d_h_limited).clamp(1.0, config.hk_max);
         }
 
         // Check convergence
@@ -259,12 +258,29 @@ pub fn solve_station(
         }
     };
 
-    // Compute amplification factor for laminar flow
+    // Compute amplification factor for laminar flow using XFOIL's AXSET approach
     let n2 = if regime == FlowRegime::Laminar {
-        let (hk_avg, _, _) = hkin(0.5 * (h1 + h2), cond.msq);
-        let theta_avg = 0.5 * (theta1 + theta2);
-        let rt_avg = 0.5 * ((ue1 * theta1 + ue2 * theta2) / cond.nu);
-        let (ax, _, _, _) = dampl(hk_avg, theta_avg, rt_avg.max(1.0));
+        // Get quantities at station 1
+        let (hk1, _, _) = hkin(h1, cond.msq);
+        let rt1 = (ue1 * theta1 / cond.nu).max(1.0);
+        let (ax1, _, _, _) = dampl(hk1, theta1, rt1);
+
+        // Get quantities at station 2
+        let rt2_amp = (ue2 * theta2 / cond.nu).max(1.0);
+        let (ax2, _, _, _) = dampl(hk2, theta2, rt2_amp);
+
+        // RMS average (XFOIL uses this instead of simple average)
+        let axsq = 0.5 * (ax1.powi(2) + ax2.powi(2));
+        let axa = if axsq <= 0.0 { 0.0 } else { axsq.sqrt() };
+
+        // Additional term to ensure dN/dx > 0 near N = Ncrit (XFOIL's DAX term)
+        let a_avg = 0.5 * (n1 + n1); // At station 1, both are n1
+        let arg = (20.0 * (cond.ncrit - a_avg)).min(20.0);
+        let exn = if arg <= 0.0 { 1.0 } else { (-arg).exp() };
+        let dax = exn * 0.002 / (theta1 + theta2);
+
+        // Combined amplification rate
+        let ax = axa + dax;
         n1 + ax * ds
     } else {
         n1
@@ -341,7 +357,7 @@ pub fn march_newton(
         let ds = s_dist[i] - s_dist[i - 1];
 
         // Solve for this station
-        let result = solve_station(
+        let mut result = solve_station(
             prev.theta,
             prev.h,
             ue_dist[i - 1],
@@ -352,6 +368,55 @@ pub fn march_newton(
             cond,
             config,
         );
+
+        // XFOIL-style inverse mode: when Hk exceeds threshold, prescribe Hk growth
+        // instead of allowing it to grow unbounded
+        let hmax = match regime {
+            FlowRegime::Laminar => config.hlmax,
+            FlowRegime::Turbulent | FlowRegime::Wake => config.htmax,
+        };
+
+        if result.hk > hmax {
+            // Switch to inverse mode with prescribed Hk growth (XFOIL approach)
+            let htarg = match regime {
+                FlowRegime::Laminar => {
+                    // Laminar: relatively slow increase in Hk downstream
+                    // XFOIL: HTARG = HK1 + 0.03*(X2-X1)/T1
+                    (prev.hk + 0.03 * ds / prev.theta).min(hmax)
+                }
+                FlowRegime::Turbulent | FlowRegime::Wake => {
+                    // Turbulent: relatively fast decrease toward equilibrium
+                    // XFOIL: HTARG = HK1 - 0.15*(X2-X1)/T1
+                    (prev.hk - 0.15 * ds / prev.theta).max(config.hk_min)
+                }
+            };
+
+            // Use prescribed Hk and solve for θ from momentum equation
+            result.h = htarg;
+            result.hk = htarg;
+
+            // Estimate θ using momentum integral with prescribed H
+            let due_ds = (ue_dist[i] - ue_dist[i - 1]) / ds;
+            let ue_avg = 0.5 * (ue_dist[i - 1] + ue_dist[i]);
+            let h_avg = 0.5 * (prev.h + htarg);
+            let cf_est = prev.cf;
+
+            // From momentum: dθ/ds = Cf/2 - (H+2)*θ/Ue * dUe/ds
+            // Simplified trapezoidal integration
+            let theta_coef = (h_avg + 2.0) / ue_avg * due_ds;
+            let dtheta = (cf_est / 2.0 - theta_coef * prev.theta) * ds;
+            result.theta = (prev.theta + dtheta).max(config.theta_min);
+            result.dstar = result.h * result.theta;
+            result.converged = false; // Mark as inverse mode
+        }
+
+        // Sanity check: θ should not drop drastically in adverse pressure gradient
+        let theta_min_physical = prev.theta * 0.7;
+        if result.theta < theta_min_physical && regime == FlowRegime::Laminar {
+            result.theta = theta_min_physical;
+            result.dstar = result.h * result.theta;
+            result.converged = false;
+        }
 
         // Check for transition
         if regime == FlowRegime::Laminar && result.n_amp >= cond.ncrit {
@@ -402,7 +467,7 @@ mod tests {
     #[test]
     fn test_newton_config_default() {
         let config = NewtonConfig::default();
-        assert_eq!(config.max_iter, 25);
+        assert_eq!(config.max_iter, 50);
         assert!(config.tol < 1e-4);
         assert_eq!(config.relax, 1.0);
     }

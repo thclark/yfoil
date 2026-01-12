@@ -91,6 +91,104 @@ pub fn integrate_forces(
     AeroCoefficients { cl, cm, cdp }
 }
 
+/// Integrate forces using node-based Cp (XFOIL-style)
+///
+/// This method uses vortex strength (gamma) at nodes to compute Cp,
+/// which avoids the trailing edge singularity that occurs in panel
+/// midpoint velocities. This matches XFOIL's CLCALC subroutine.
+///
+/// # Arguments
+/// * `airfoil` - Paneled airfoil geometry
+/// * `gamma` - Vortex strength at nodes (n+1 values for n panels)
+/// * `alpha_rad` - Angle of attack in radians
+/// * `mach` - Mach number for compressibility correction
+///
+/// # Returns
+/// Lift, moment, and pressure drag coefficients
+pub fn integrate_forces_from_gamma(
+    airfoil: &PaneledAirfoil,
+    gamma: &[f64],
+    alpha_rad: f64,
+    mach: f64,
+) -> AeroCoefficients {
+    let n = airfoil.n;
+    let cosa = alpha_rad.cos();
+    let sina = alpha_rad.sin();
+
+    // Compressibility parameters (Karman-Tsien)
+    let m2 = mach * mach;
+    let beta = (1.0 - m2).sqrt().max(0.001);
+    let bfac = 0.5 * m2 / (1.0 + beta);
+
+    // Reference point for moments
+    let x_ref = airfoil.reference[0];
+    let y_ref = airfoil.reference[1];
+
+    let mut cl = 0.0;
+    let mut cm = 0.0;
+    let mut cdp = 0.0;
+
+    // Unit freestream velocity
+    let qinf = 1.0;
+
+    // Compute Cp at first node
+    let cginc1 = 1.0 - (gamma[0] / qinf).powi(2);
+    let mut cpg1 = if mach < 0.001 {
+        cginc1
+    } else {
+        cginc1 / (beta + bfac * cginc1)
+    };
+
+    // Integrate around airfoil using trapezoidal averaging (like XFOIL's CLCALC)
+    for i in 0..n {
+        let ip1 = (i + 1) % (n + 1);
+        let ip1_idx = if ip1 == n { 0 } else { ip1 }; // Handle wraparound for gamma
+
+        // Cp at node ip1
+        let cginc2 = 1.0 - (gamma[ip1_idx] / qinf).powi(2);
+        let cpg2 = if mach < 0.001 {
+            cginc2
+        } else {
+            cginc2 / (beta + bfac * cginc2)
+        };
+
+        // Panel geometry in wind axes
+        let i_node = i;
+        let ip1_node = if i == n - 1 { 0 } else { i + 1 };
+
+        let dx_body = airfoil.x[ip1_node] - airfoil.x[i_node];
+        let dy_body = airfoil.y[ip1_node] - airfoil.y[i_node];
+
+        // Transform to wind axes
+        let dx = dx_body * cosa + dy_body * sina;
+        let dy = dy_body * cosa - dx_body * sina;
+
+        // Average Cp over panel (trapezoidal)
+        let ag = 0.5 * (cpg2 + cpg1);
+
+        // Midpoint in body axes for moment calculation
+        let ax_body = 0.5 * (airfoil.x[i_node] + airfoil.x[ip1_node]) - x_ref;
+        let ay_body = 0.5 * (airfoil.y[i_node] + airfoil.y[ip1_node]) - y_ref;
+
+        // Transform midpoint to wind axes
+        let ax = ax_body * cosa + ay_body * sina;
+        let ay = ay_body * cosa - ax_body * sina;
+
+        // Linear Cp variation for moment (XFOIL includes this refinement)
+        let dg = cpg2 - cpg1;
+
+        // Force integration
+        cl += dx * ag;
+        cdp -= dy * ag;
+        cm -= dx * (ag * ax + dg * dx / 12.0) + dy * (ag * ay + dg * dy / 12.0);
+
+        // Move to next panel
+        cpg1 = cpg2;
+    }
+
+    AeroCoefficients { cl, cm, cdp }
+}
+
 /// Compute lift coefficient using Kutta-Joukowski theorem
 ///
 /// CL = Γ_total / (0.5 * chord) = 2 * Γ_total / chord
