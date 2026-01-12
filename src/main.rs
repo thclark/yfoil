@@ -300,14 +300,15 @@ fn main() {
                 println!("Ncrit:   {:.1}", ncrit);
                 println!();
                 println!(
-                    "{:>8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>8} {:>5} {:>10}",
-                    "Alpha", "CL", "CD", "CM", "L/D", "Xtr_U", "Xtr_L", "Iter", "Residual"
+                    "{:>8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>8} {:>5} {:>10} {:>5}",
+                    "Alpha", "CL", "CD", "CM", "L/D", "Xtr_U", "Xtr_L", "Iter", "Residual", "Conv"
                 );
-                println!("{}", "-".repeat(92));
+                println!("{}", "-".repeat(98));
 
                 for point in &polar_output.points {
+                    let conv_marker = if point.converged { "Y" } else { "N" };
                     println!(
-                        "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e}",
+                        "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e} {:>5}",
                         point.alpha_deg,
                         point.cl,
                         point.cd,
@@ -316,7 +317,8 @@ fn main() {
                         point.xtr_upper,
                         point.xtr_lower,
                         point.iterations,
-                        point.residual
+                        point.residual,
+                        conv_marker
                     );
                 }
 

@@ -8,7 +8,7 @@
 
 use crate::bl::FlowConditions;
 use crate::geometry::PaneledAirfoil;
-use crate::solver::{solve_viscous, ViscalConfig, ViscousResult};
+use crate::solver::{solve_viscous, solve_viscous_with_init, ViscalConfig, ViscousResult};
 
 /// Configuration for polar sweep
 #[derive(Debug, Clone)]
@@ -96,71 +96,127 @@ impl PolarResult {
 
 /// Execute a polar sweep
 ///
-/// Sweeps angle of attack from 0° upward to α_max, then from 0° downward
-/// to α_min. Each operating point is solved independently starting from
-/// the inviscid solution (no BL state carried between points).
+/// Sweeps angle of attack following XFOIL convention:
+/// 1. Start at α=0° and compute baseline solution
+/// 2. Sweep upward from α=0° to α_max, using previous solution as initial guess
+/// 3. Reset to α=0° solution
+/// 4. Sweep downward from α=0° to α_min, using previous solution as initial guess
+/// 5. Assemble results sorted by alpha
 ///
-/// The sweep order (0° → α_max, then 0° → α_min) follows XFOIL convention.
-/// The downward sweep starts fresh from 0°, not from the α_max solution.
+/// All points are included in results regardless of convergence status.
+/// Using the previous converged solution as initial guess improves convergence
+/// for nearby operating points.
 ///
 /// # Arguments
 /// * `airfoil` - Paneled airfoil geometry
 /// * `config` - Polar sweep configuration
 ///
 /// # Returns
-/// Polar result with all computed points
+/// Polar result with all computed points (converged and unconverged)
 pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarResult {
     let mut points = Vec::new();
     let mut failed_alphas = Vec::new();
     let mut completed = true;
 
-    // Sweep upward from 0° to α_max
-    // Each point starts fresh from inviscid solution
+    // Step 1: Compute α=0° solution as baseline
+    let alpha_zero_result = solve_viscous(airfoil, 0.0, &config.conditions, &config.viscal);
+
+    // Store the α=0° dq_source for resetting before downward sweep
+    let alpha_zero_dq = alpha_zero_result.dq_source.clone();
+    let alpha_zero_converged = alpha_zero_result.converged;
+
+    if !alpha_zero_result.converged {
+        failed_alphas.push(0.0);
+    }
+    // Always include the result
+    points.push(alpha_zero_result);
+
+    // Step 2: Sweep upward from α=step to α_max
+    // Use previous solution as initial guess
     let mut consecutive_failures = 0;
-    let mut alpha = 0.0;
+    let mut prev_dq: Option<Vec<f64>> = if alpha_zero_converged {
+        Some(alpha_zero_dq.clone())
+    } else {
+        None
+    };
+
+    let mut alpha = config.alpha_step;
     while alpha <= config.alpha_max + 1e-6 {
         let alpha_rad = alpha.to_radians();
-        let result = solve_viscous(airfoil, alpha_rad, &config.conditions, &config.viscal);
+
+        let result = solve_viscous_with_init(
+            airfoil,
+            alpha_rad,
+            &config.conditions,
+            &config.viscal,
+            prev_dq.as_deref(),
+        );
 
         if result.converged {
-            points.push(result);
+            prev_dq = Some(result.dq_source.clone());
             consecutive_failures = 0;
         } else {
             failed_alphas.push(alpha);
             consecutive_failures += 1;
+            // Don't update prev_dq on failure - keep using last good solution
             if consecutive_failures >= config.max_failures {
                 completed = false;
-                break;
             }
+        }
+        // Always include the result
+        points.push(result);
+
+        if !completed {
+            break;
         }
         alpha += config.alpha_step;
     }
 
-    // Sweep downward from 0° to α_min
-    // Reset: start fresh from 0° (not from α_max solution)
-    // Skip 0° itself since we already computed it in the upward sweep
+    // Step 3: Reset to α=0° solution for downward sweep
+    // Use the α=0° dq_source as starting point, NOT the α_max solution
+    prev_dq = if alpha_zero_converged {
+        Some(alpha_zero_dq)
+    } else {
+        None
+    };
+
+    // Step 4: Sweep downward from α=-step to α_min
     consecutive_failures = 0;
+    let mut completed_down = true;
     alpha = -config.alpha_step;
     while alpha >= config.alpha_min - 1e-6 {
         let alpha_rad = alpha.to_radians();
-        // Each point starts fresh from inviscid solution
-        let result = solve_viscous(airfoil, alpha_rad, &config.conditions, &config.viscal);
+
+        let result = solve_viscous_with_init(
+            airfoil,
+            alpha_rad,
+            &config.conditions,
+            &config.viscal,
+            prev_dq.as_deref(),
+        );
 
         if result.converged {
-            points.push(result);
+            prev_dq = Some(result.dq_source.clone());
             consecutive_failures = 0;
         } else {
             failed_alphas.push(alpha);
             consecutive_failures += 1;
             if consecutive_failures >= config.max_failures {
-                completed = false;
-                break;
+                completed_down = false;
             }
+        }
+        // Always include the result
+        points.push(result);
+
+        if !completed_down {
+            break;
         }
         alpha -= config.alpha_step;
     }
 
-    // Sort points by alpha
+    completed = completed && completed_down;
+
+    // Step 5: Sort points by alpha for final output
     points.sort_by(|a, b| a.alpha.partial_cmp(&b.alpha).unwrap());
 
     PolarResult {

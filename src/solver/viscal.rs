@@ -49,7 +49,7 @@ pub struct ViscalConfig {
 impl Default for ViscalConfig {
     fn default() -> Self {
         Self {
-            max_iter: 30,
+            max_iter: 300,
             tol_cl: 1e-4,
             tol_dstar: 1e-4,
             relax: 0.7,
@@ -84,6 +84,8 @@ pub struct ViscousResult {
     pub converged: bool,
     /// Final CL residual
     pub residual: f64,
+    /// Source velocity correction (for use as initial guess in polar sweeps)
+    pub dq_source: Vec<f64>,
 }
 
 /// Boundary layer state for coupling
@@ -391,6 +393,27 @@ pub fn solve_viscous(
     cond: &FlowConditions,
     config: &ViscalConfig,
 ) -> ViscousResult {
+    solve_viscous_with_init(airfoil, alpha_rad, cond, config, None)
+}
+
+/// Viscous-inviscid coupling solver with optional initial guess
+///
+/// # Arguments
+/// * `airfoil` - Paneled airfoil geometry
+/// * `alpha_rad` - Angle of attack in radians
+/// * `cond` - Flow conditions (Re, M, Ncrit)
+/// * `config` - Coupling configuration
+/// * `init_dq` - Optional initial source velocity correction from previous solution
+///
+/// # Returns
+/// Converged viscous solution
+pub fn solve_viscous_with_init(
+    airfoil: &PaneledAirfoil,
+    alpha_rad: f64,
+    cond: &FlowConditions,
+    config: &ViscalConfig,
+    init_dq: Option<&[f64]>,
+) -> ViscousResult {
     // Step 1: Solve inviscid panel method
     let inviscid = solve_inviscid(airfoil);
 
@@ -402,8 +425,24 @@ pub fn solve_viscous(
     let mut iterations = 0;
     let mut residual = f64::MAX;
 
-    // Source velocity correction (initially zero)
-    let mut dq_source = vec![0.0; airfoil.n];
+    // Source velocity correction - use initial guess if provided
+    let mut dq_source = if let Some(init) = init_dq {
+        if init.len() == airfoil.n {
+            init.to_vec()
+        } else {
+            vec![0.0; airfoil.n]
+        }
+    } else {
+        vec![0.0; airfoil.n]
+    };
+
+    // Apply initial guess to velocity if provided
+    if init_dq.is_some() {
+        let qinv = inviscid.velocity_at_alpha(alpha_rad);
+        for i in 0..airfoil.n {
+            velocity[i] = qinv[i] + dq_source[i];
+        }
+    }
 
     // Compute total circulation from inviscid solution (for wake model)
     let gamma = inviscid.gamma_at_alpha(alpha_rad);
@@ -498,6 +537,7 @@ pub fn solve_viscous(
                 iterations,
                 converged: true,
                 residual,
+                dq_source,
             };
         }
 
@@ -532,6 +572,7 @@ pub fn solve_viscous(
         iterations,
         converged: false,
         residual,
+        dq_source,
     }
 }
 
