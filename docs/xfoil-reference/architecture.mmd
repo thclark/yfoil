@@ -1,0 +1,133 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryBorderColor': '#01579b', 'lineColor': '#01579b'}}}%%
+flowchart TB
+    subgraph INPUT["Input"]
+        geom["Geometry<br/>(X, Y coordinates)"]
+        cond["Conditions<br/>(α, Re, M∞)"]
+    end
+
+    subgraph GEOM["Geometry Setup"]
+        pangen["PANGEN<br/>Repanel"]
+        spline["SPLINE<br/>Compute coefficients"]
+        tecalc["TECALC<br/>TE geometry"]
+    end
+
+    subgraph INVISCID["Inviscid Solution"]
+        psilin["PSILIN<br/>Influence coefficients"]
+        setup["SETUP<br/>Factor AIJ matrix"]
+        gamcalc["GAMCALC<br/>Solve for γ"]
+        qinv["QINV<br/>Tangential velocity"]
+    end
+
+    subgraph VISCAL["VISCAL - Coupling Loop"]
+        direction TB
+
+        subgraph SETUP_SUB["Setup"]
+            xywake["XYWAKE<br/>Wake trajectory"]
+            qdcalc["QDCALC<br/>DIJ matrix"]
+            stfind["STFIND<br/>Stagnation point"]
+        end
+
+        subgraph NEWTON["Newton Iteration"]
+            setbl["SETBL<br/>Fill system"]
+            blsolv["BLSOLV<br/>Block solve"]
+            update["UPDATE<br/>Apply deltas"]
+        end
+
+        subgraph BL_DETAIL["BL Station Processing"]
+            blprv["BLPRV<br/>Primary variables"]
+            blkin["BLKIN<br/>Secondary variables"]
+            blvar["BLVAR<br/>Closure relations"]
+            blsys["BLSYS<br/>Local system"]
+            trchek["TRCHEK<br/>Transition"]
+        end
+
+        subgraph VEL_UPDATE["Velocity Update"]
+            qvfue["QVFUE<br/>Qvis from mass defect"]
+            gamqv["GAMQV<br/>γ from Qvis"]
+            stmove["STMOVE<br/>Move stagnation"]
+        end
+    end
+
+    subgraph FORCES["Force Calculation"]
+        clcalc["CLCALC<br/>CL, CM"]
+        cdcalc["CDCALC<br/>CD"]
+    end
+
+    subgraph OUTPUT["Output"]
+        coeffs["CL, CD, CM"]
+        cp["Cp distribution"]
+        bl["BL parameters<br/>δ*, θ, Cf, H"]
+        trans["Transition<br/>locations"]
+    end
+
+    %% Main flow
+    INPUT --> GEOM
+    GEOM --> INVISCID
+    INVISCID --> VISCAL
+
+    %% Geometry flow
+    geom --> pangen
+    cond --> pangen
+    pangen --> spline
+    spline --> tecalc
+
+    %% Inviscid flow
+    tecalc --> psilin
+    psilin --> setup
+    setup --> gamcalc
+    gamcalc --> qinv
+
+    %% VISCAL setup
+    qinv --> xywake
+    qinv --> qdcalc
+    qinv --> stfind
+
+    %% Newton loop
+    xywake --> setbl
+    qdcalc --> setbl
+    stfind --> setbl
+
+    %% BL processing within SETBL
+    setbl --> blprv
+    blprv --> blkin
+    blkin --> blvar
+    blvar --> blsys
+    blsys --> trchek
+    trchek --> blsolv
+
+    %% Newton iteration
+    blsolv --> update
+    update --> qvfue
+    qvfue --> gamqv
+    gamqv --> stmove
+
+    %% Convergence check
+    stmove --> conv{RMSBL < 1e-4?}
+    conv -->|No| setbl
+    conv -->|Yes| FORCES
+
+    %% Force calculation
+    FORCES --> clcalc
+    FORCES --> cdcalc
+
+    %% Output
+    clcalc --> coeffs
+    cdcalc --> coeffs
+    clcalc --> cp
+    cdcalc --> bl
+    blsolv --> trans
+
+    %% Styling
+    classDef inputOutput fill:#e8f5e9,stroke:#2e7d32
+    classDef geomStyle fill:#fff3e0,stroke:#e65100
+    classDef inviscidStyle fill:#e3f2fd,stroke:#1565c0
+    classDef viscalStyle fill:#fce4ec,stroke:#c2185b
+    classDef blStyle fill:#f3e5f5,stroke:#7b1fa2
+    classDef forceStyle fill:#e0f2f1,stroke:#00695c
+
+    class INPUT,OUTPUT inputOutput
+    class GEOM geomStyle
+    class INVISCID inviscidStyle
+    class VISCAL viscalStyle
+    class BL_DETAIL blStyle
+    class FORCES forceStyle

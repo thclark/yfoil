@@ -198,7 +198,8 @@ fn main() {
             if inviscid {
                 // Inviscid-only analysis
                 let solution = solve_inviscid(&airfoil);
-                let velocity = solution.velocity_at_alpha(alpha_rad);
+                // Use node-based velocities for consistency with XFOIL
+                let velocity = solution.velocity_at_nodes(alpha_rad);
                 let cp = calculate_cp(&velocity, mach);
                 let coeffs = integrate_forces(&airfoil, &cp, alpha_rad);
 

@@ -46,7 +46,10 @@ pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
     let mut y_lower = Vec::with_capacity(n_half + 1);
 
     for i in 0..=n_half {
-        let beta = std::f64::consts::PI * (i as f64) / (n_half as f64);
+        // Use half-cell offset to avoid putting a node at exactly x=0 (LE).
+        // XFOIL's PANE command creates panels that straddle the LE, not pass through it.
+        // With a node at exact x=0, gamma=0 there and the BL fails to converge.
+        let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 + 1.0);
         let x = 0.5 * (1.0 - beta.cos());
 
         // Thickness distribution (modified for closed TE)
@@ -65,19 +68,20 @@ pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
         y_lower.push(yc - yt * theta.cos());
     }
 
-    // Combine: TE -> upper (reverse) -> LE -> lower -> TE
-    // Upper surface goes from TE (x=1) to LE (x=0), so reverse it
-    // Lower surface goes from LE (x=0) to TE (x=1)
-    let mut x_c = Vec::with_capacity(2 * n_half + 1);
-    let mut y_c = Vec::with_capacity(2 * n_half + 1);
+    // Combine: TE -> upper (reverse) -> near-LE upper -> near-LE lower -> lower -> TE
+    // With half-cell offset, we have two near-LE points that straddle the actual LE:
+    //   upper[0] at (x_small, +y) and lower[0] at (x_small, -y)
+    // Both points must be included (like XFOIL's PANE does).
+    let mut x_c = Vec::with_capacity(2 * n_half + 2);
+    let mut y_c = Vec::with_capacity(2 * n_half + 2);
 
-    // Upper surface from TE to LE (reverse order, skip last point which is LE)
-    for i in (1..=n_half).rev() {
+    // Upper surface from TE to near-LE (include ALL points including i=0)
+    for i in (0..=n_half).rev() {
         x_c.push(x_upper[i]);
         y_c.push(y_upper[i]);
     }
 
-    // Lower surface from LE to TE (skip first point which is LE, already included)
+    // Lower surface from near-LE to TE (include ALL points including i=0)
     for i in 0..=n_half {
         x_c.push(x_lower[i]);
         y_c.push(y_lower[i]);
@@ -151,7 +155,10 @@ pub fn naca_5digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
     let mut y_lower = Vec::with_capacity(n_half + 1);
 
     for i in 0..=n_half {
-        let beta = std::f64::consts::PI * (i as f64) / (n_half as f64);
+        // Use half-cell offset to avoid putting a node at exactly x=0 (LE).
+        // XFOIL's PANE command creates panels that straddle the LE, not pass through it.
+        // With a node at exact x=0, gamma=0 there and the BL fails to converge.
+        let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 + 1.0);
         let x = 0.5 * (1.0 - beta.cos());
 
         // Thickness distribution (same as 4-digit, modified for closed TE)
@@ -170,17 +177,20 @@ pub fn naca_5digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
         y_lower.push(yc - yt * theta.cos());
     }
 
-    // Combine: TE -> upper (reverse) -> LE -> lower -> TE
-    let mut x_c = Vec::with_capacity(2 * n_half + 1);
-    let mut y_c = Vec::with_capacity(2 * n_half + 1);
+    // Combine: TE -> upper (reverse) -> near-LE upper -> near-LE lower -> lower -> TE
+    // With half-cell offset, we have two near-LE points that straddle the actual LE:
+    //   upper[0] at (x_small, +y) and lower[0] at (x_small, -y)
+    // Both points must be included (like XFOIL's PANE does).
+    let mut x_c = Vec::with_capacity(2 * n_half + 2);
+    let mut y_c = Vec::with_capacity(2 * n_half + 2);
 
-    // Upper surface from TE to LE (reverse order, skip last point which is LE)
-    for i in (1..=n_half).rev() {
+    // Upper surface from TE to near-LE (include ALL points including i=0)
+    for i in (0..=n_half).rev() {
         x_c.push(x_upper[i]);
         y_c.push(y_upper[i]);
     }
 
-    // Lower surface from LE to TE
+    // Lower surface from near-LE to TE (include ALL points including i=0)
     for i in 0..=n_half {
         x_c.push(x_lower[i]);
         y_c.push(y_lower[i]);

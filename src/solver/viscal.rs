@@ -135,19 +135,13 @@ pub fn find_stagnation_point(airfoil: &PaneledAirfoil, velocity: &[f64]) -> usiz
 
     // Look for sign change in velocity (stagnation point)
     // Upper surface has positive velocity, lower has negative (for standard ordering)
+    // XFOIL convention: IST is the first panel with non-positive velocity (first lower panel)
+    // This makes IST the shared starting point for both upper and lower BL marches
     for i in start..end.saturating_sub(1) {
         if velocity[i] > 0.0 && velocity[i + 1] <= 0.0 {
-            // Sign change found - pick the panel with smaller magnitude
-            // For symmetric case, prefer the LE index
-            if (i + 1) == le_idx {
-                return le_idx;
-            } else if i == le_idx {
-                return le_idx;
-            } else if velocity[i].abs() <= velocity[i + 1].abs() {
-                return i;
-            } else {
-                return i + 1;
-            }
+            // Sign change found at (i, i+1)
+            // Pick i+1 to match XFOIL's IST convention (first lower surface panel)
+            return i + 1;
         }
     }
 
@@ -181,39 +175,40 @@ pub fn extract_upper_surface(
     velocity: &[f64],
     stag_idx: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
-    // Upper surface goes from stagnation (near LE) towards TE at index 0
+    // Upper surface goes from near-LE (upper side) towards TE at index 0
     // In standard airfoil ordering: TE(0) -> upper -> LE -> lower -> TE(n)
     //
-    // For symmetric treatment with lower surface:
-    // - At stagnation (node stag_idx), use velocity[stag_idx] (panel to lower side)
-    // - At subsequent nodes, use velocity[i] where i is the current node index
-    //   This uses the panel from node i to node i+1, which is towards TE
-    //
-    // The symmetric pairs are: vel[stag_idx-1]↔vel[stag_idx], vel[stag_idx-2]↔vel[stag_idx+1], etc.
+    // With straddling LE geometry (two nodes at min x, one upper y>0, one lower y<0):
+    // - stag_idx is the LOWER near-LE node (first with non-positive velocity)
+    // - stag_idx - 1 is the UPPER near-LE node
+    // - Upper surface: nodes (stag_idx - 1), (stag_idx - 2), ..., 0
+    // - Lower surface: nodes stag_idx, (stag_idx + 1), ..., (n - 1)
     let mut x = Vec::new();
     let mut y = Vec::new();
     let mut s = Vec::new();
     let mut ue = Vec::new();
 
-    let mut arc_len = 0.0;
-    let n_stations = stag_idx + 1;
+    // Start from the node BEFORE stag_idx (upper near-LE) and go to TE at 0
+    let start_idx = stag_idx.saturating_sub(1);
+    let n_stations = start_idx + 1;
+
+    // XFOIL initializes BL with arc length from stagnation, not s=0.
+    // The first upper station (start_idx) is at some distance from stag (stag_idx).
+    // Initialize arc_len as the distance from stag_idx to start_idx.
+    let mut arc_len = {
+        let dx = airfoil.x[start_idx] - airfoil.x[stag_idx];
+        let dy = airfoil.y[start_idx] - airfoil.y[stag_idx];
+        (dx * dx + dy * dy).sqrt()
+    };
 
     for j in 0..n_stations {
-        let i = stag_idx - j; // Node index (stag_idx, stag_idx-1, ..., 0)
+        let i = start_idx - j; // Node index (start_idx, start_idx-1, ..., 0)
         x.push(airfoil.x[i]);
         y.push(airfoil.y[i]);
         s.push(arc_len);
 
-        // For upper surface, the panel "at" node i is panel i-1 (from node i-1 to i)
-        // except at stagnation where we use panel stag_idx (symmetric with lower)
-        let vel_idx = if j == 0 {
-            stag_idx // At stagnation, use same panel as lower surface
-        } else if i > 0 {
-            i - 1 // Panel from node i-1 to node i
-        } else {
-            0 // At TE, use panel 0
-        };
-        ue.push(velocity[vel_idx].abs());
+        // For node-based velocities, use velocity[i] directly at each node.
+        ue.push(velocity[i].abs());
 
         if i > 0 {
             let dx = airfoil.x[i - 1] - airfoil.x[i];
@@ -279,9 +274,11 @@ pub fn compute_mass_defect(
     let mut mass = vec![0.0; n];
 
     // Upper surface: map BL stations back to panel indices
-    // Upper surface goes from stag_idx down to 0
-    for j in 0..bl_upper.len().min(stag_idx + 1) {
-        let i = stag_idx - j;
+    // Upper surface goes from (stag_idx - 1) down to 0
+    // Note: extract_upper_surface starts at stag_idx - 1, not stag_idx
+    let upper_start = stag_idx.saturating_sub(1);
+    for j in 0..bl_upper.len().min(upper_start + 1) {
+        let i = upper_start - j;
         if i < n && j < ue_upper.len() && j < bl_upper.len() {
             let ue = ue_upper[j].abs();
             let dstar = bl_upper[j].dstar;
@@ -542,7 +539,12 @@ pub fn solve_viscous_with_init(
     let inviscid = solve_inviscid(airfoil);
 
     // Get inviscid velocity at this alpha (SIGNED: + for upper, - for lower)
-    let qinv = inviscid.velocity_at_alpha(alpha_rad);
+    // Use node-based velocities (gamma values) which XFOIL uses.
+    // Note: yfoil's paneling has a node at exact x=0 (stagnation) where gamma=0,
+    // while XFOIL's paneling doesn't have a node at x=0 (LE falls between panels).
+    // This difference is handled in extract_upper/lower_surface by interpolating
+    // the stagnation panel velocity to match XFOIL's behavior.
+    let qinv = inviscid.velocity_at_nodes(alpha_rad);
 
     // Convert to UNSIGNED edge velocities for coupling (following XFOIL's approach)
     // XFOIL works with unsigned Ue in the BL solver, only converting to signed for forces
@@ -759,7 +761,8 @@ pub fn solve_inviscid_only(
     mach: f64,
 ) -> AeroCoefficients {
     let inviscid = solve_inviscid(airfoil);
-    let velocity = inviscid.velocity_at_alpha(alpha_rad);
+    // Use node-based velocities for consistency with XFOIL
+    let velocity = inviscid.velocity_at_nodes(alpha_rad);
     let cp = calculate_cp(&velocity, mach);
     integrate_forces(airfoil, &cp, alpha_rad)
 }
