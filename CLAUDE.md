@@ -93,6 +93,18 @@ G F
 ```
 This disables graphics mode to prevent "Cannot open display" errors.
 
+## Variable Mapping Documentation
+
+The file `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` contains a comprehensive mapping between XFOIL Fortran variables/common blocks and their YFoil Rust equivalents.
+
+**Keep this mapping updated** when:
+- Adding or renaming struct fields in YFoil
+- Changing how XFOIL variables are represented
+- Adding new BL or solver state variables
+- Modifying closure result structures
+
+This document is essential for debugging discrepancies between XFOIL and YFoil behavior.
+
 ## Development Approach
 
 Build each module to completion with full tests before proceeding to the next. Order:
