@@ -148,17 +148,25 @@ This document maps XFOIL Fortran variables and common blocks to their YFoil Rust
 
 ### Closure Derivatives
 
-**Important**: XFOIL and YFoil use different derivative bases.
+YFoil and XFOIL use the same derivative structure with chain rule conversion:
 
-**XFOIL** computes derivatives w.r.t. primary BL variables:
-- `HK_U` = ∂Hk/∂Ue, `HK_T` = ∂Hk/∂θ, `HK_D` = ∂Hk/∂δ*
+**Step 1 - Closure functions** return derivatives w.r.t. intermediate variables:
+- `hk_h`, `hk_msq` from `hkin()`
+- `hs_hk`, `hs_rt`, `hs_msq` from `hs_lam()`/`hs_turb()`
+- `cf_hk`, `cf_rt`, `cf_msq` from `cf_lam()`/`cf_turb()`
+- `di_hk`, `di_rt` from `di_lam()`
 
-**YFoil** computes derivatives w.r.t. derived variables:
-- `hk_hkc` = ∂Hk/∂Hk_c, `hk_msq` = ∂Hk/∂M²
-- `hs_hk` = ∂Hs/∂Hk, `hs_rt` = ∂Hs/∂Rθ, `hs_msq` = ∂Hs/∂M²
-- Similar for `cf_*`, `cd_*`
+**Step 2 - BLKIN equivalent** (`BLStationState::blkin()`) computes intermediate derivatives:
+- `hk_u`, `hk_t`, `hk_d` = ∂Hk/∂U, ∂Hk/∂θ, ∂Hk/∂δ*
+- `rt_u`, `rt_t` = ∂Rθ/∂U, ∂Rθ/∂θ
+- `msq_u` = ∂M²/∂U
 
-Chain rule conversion is applied in the BL system assembly to transform YFoil's derivatives to the XFOIL basis for Jacobian construction.
+**Step 3 - BLVAR equivalent** (`BLStationState::blvar()`) applies chain rule:
+- `hs_u = hs_hk * hk_u + hs_rt * rt_u + hs_msq * msq_u`
+- `cf_u = cf_hk * hk_u + cf_rt * rt_u + cf_msq * msq_u`
+- etc.
+
+This matches XFOIL's BLKIN + BLVAR approach exactly.
 
 ---
 
