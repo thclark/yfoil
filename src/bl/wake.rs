@@ -194,6 +194,8 @@ pub fn solve_wake(
         cd: 0.0,
         hs: hs_init,
         n_amp: 0.0, // Wake is always turbulent
+        ue: init.ue,
+        x: 0.0, // Wake x will be set separately
         iterations: 0,
         residual: 0.0,
         converged: true,
@@ -237,6 +239,8 @@ pub fn solve_wake(
             cd: 0.0,
             hs: hs_new,
             n_amp: 0.0,
+            ue: ue_wake[i],
+            x: 0.0, // Wake x set separately
             iterations: 0,
             residual: 0.0,
             converged: true,
@@ -322,6 +326,8 @@ mod tests {
             cd: 0.001,
             hs: 1.5,
             n_amp: 10.0,
+            ue: 1.0,
+            x: 1.0,
             iterations: 5,
             residual: 1e-6,
             converged: true,
@@ -335,6 +341,8 @@ mod tests {
             cd: 0.001,
             hs: 1.5,
             n_amp: 10.0,
+            ue: 1.0,
+            x: 1.0,
             iterations: 5,
             residual: 1e-6,
             converged: true,

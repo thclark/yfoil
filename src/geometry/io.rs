@@ -124,11 +124,32 @@ fn is_lednicer_format(x: &[f64]) -> bool {
         return false;
     }
 
-    // In Lednicer format, x goes from ~0 to ~1, then restarts from ~0 to ~1
-    // Look for a restart (large decrease in x where next point is near LE)
+    // Lednicer format: x goes from ~0 to ~1 (upper surface), then 0 to 1 again (lower)
+    // Key distinction from Selig format:
+    // - Lednicer STARTS near LE (x < 0.1) and first increases toward TE
+    // - Selig STARTS near TE (x > 0.8) and first decreases toward LE
+    //
+    // Additionally, in Lednicer format we see x reach ~1 then jump back to ~0
+    // In Selig format, x goes 1 -> 0 -> 1 smoothly (just passes through LE)
+
+    // Check starting point: Selig starts near TE, Lednicer starts near LE
+    let starts_near_le = x[0] < 0.2;
+    let starts_near_te = x[0] > 0.8;
+
+    if starts_near_te {
+        // Selig format - x decreases from TE towards LE
+        return false;
+    }
+
+    if !starts_near_le {
+        // Neither clear format - default to Selig
+        return false;
+    }
+
+    // Starts near LE - could be Lednicer
+    // Check if x increases towards TE then restarts near LE
     for i in 1..x.len() {
-        // Large jump backwards (x decreases by more than 0.3)
-        // And the new point is near LE (x < 0.1)
+        // Look for the restart: x was near TE, now near LE
         if x[i - 1] > 0.8 && x[i] < 0.1 {
             return true;
         }
@@ -209,9 +230,9 @@ pub fn write_dat_file<P: AsRef<Path>>(
     // Write name
     writeln!(file, "{}", name)?;
 
-    // Write coordinates
+    // Write coordinates with full double precision for numerical consistency
     for i in 0..geometry.x_c.len() {
-        writeln!(file, " {:10.6}  {:10.6}", geometry.x_c[i], geometry.y_c[i])?;
+        writeln!(file, " {:22.16}  {:22.16}", geometry.x_c[i], geometry.y_c[i])?;
     }
 
     Ok(())
@@ -319,5 +340,116 @@ mod tests {
         // Lednicer format: x goes 0 -> 1, then 0 -> 1 again
         let lednicer_x = vec![0.0, 0.5, 1.0, 0.0, 0.5, 1.0];
         assert!(is_lednicer_format(&lednicer_x));
+    }
+
+    #[test]
+    fn test_read_xfoil_fortran_notation() {
+        // XFOIL outputs coordinates in Fortran scientific notation
+        // e.g., "0.1260000E-02" instead of "0.00126"
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "NACA 0012").unwrap();
+        writeln!(temp_file, "    1.000000      0.1260000E-02").unwrap();
+        writeln!(temp_file, "   0.9916796      0.2421450E-02").unwrap();
+        writeln!(temp_file, "   0.9803692      0.3981369E-02").unwrap();
+        writeln!(temp_file, "   0.0000260      0.9100000E-03").unwrap();
+        writeln!(temp_file, "   0.9803692     -0.3981369E-02").unwrap();
+        writeln!(temp_file, "   0.9916796     -0.2421450E-02").unwrap();
+        writeln!(temp_file, "    1.000000     -0.1260000E-02").unwrap();
+        temp_file.flush().unwrap();
+
+        let (name, geom) = read_dat_file(temp_file.path()).unwrap();
+
+        assert_eq!(name, "NACA 0012");
+        assert_eq!(geom.x_c.len(), 7);
+
+        // Check first point (TE upper)
+        assert!(
+            (geom.x_c[0] - 1.0).abs() < 1e-6,
+            "x[0] = {} (expected 1.0)",
+            geom.x_c[0]
+        );
+        assert!((geom.y_c[0] - 0.00126).abs() < 1e-8);
+
+        // Check second point
+        assert!((geom.x_c[1] - 0.9916796).abs() < 1e-6);
+        assert!((geom.y_c[1] - 0.00242145).abs() < 1e-8);
+
+        // Check LE point
+        assert!((geom.x_c[3] - 0.000026).abs() < 1e-8);
+        assert!((geom.y_c[3] - 0.00091).abs() < 1e-8);
+
+        // Check TE lower (last point)
+        assert!((geom.x_c[6] - 1.0).abs() < 1e-6);
+        assert!((geom.y_c[6] - (-0.00126)).abs() < 1e-8);
+    }
+
+    #[test]
+    fn test_xfoil_paneled_geometry_properties() {
+        // Test that XFOIL-paneled coordinates produce correct geometric properties
+        // This simulates loading a 160-panel NACA 0012 from XFOIL
+        use crate::geometry::panel::create_paneled_airfoil;
+
+        // Create a representative subset of XFOIL-paneled NACA 0012
+        // (Full 160 panels would be too verbose, using 20 points for test)
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "NACA 0012 (XFOIL paneled)").unwrap();
+        // Upper surface from TE to LE
+        writeln!(temp_file, "  1.000000   0.001260").unwrap();
+        writeln!(temp_file, "  0.950000   0.008000").unwrap();
+        writeln!(temp_file, "  0.850000   0.017500").unwrap();
+        writeln!(temp_file, "  0.700000   0.030000").unwrap();
+        writeln!(temp_file, "  0.500000   0.042000").unwrap();
+        writeln!(temp_file, "  0.300000   0.047000").unwrap();
+        writeln!(temp_file, "  0.150000   0.044000").unwrap();
+        writeln!(temp_file, "  0.050000   0.030500").unwrap();
+        writeln!(temp_file, "  0.010000   0.015200").unwrap();
+        writeln!(temp_file, "  0.000000   0.000000").unwrap();
+        // Lower surface from LE to TE
+        writeln!(temp_file, "  0.010000  -0.015200").unwrap();
+        writeln!(temp_file, "  0.050000  -0.030500").unwrap();
+        writeln!(temp_file, "  0.150000  -0.044000").unwrap();
+        writeln!(temp_file, "  0.300000  -0.047000").unwrap();
+        writeln!(temp_file, "  0.500000  -0.042000").unwrap();
+        writeln!(temp_file, "  0.700000  -0.030000").unwrap();
+        writeln!(temp_file, "  0.850000  -0.017500").unwrap();
+        writeln!(temp_file, "  0.950000  -0.008000").unwrap();
+        writeln!(temp_file, "  1.000000  -0.001260").unwrap();
+        temp_file.flush().unwrap();
+
+        let (name, geom) = read_dat_file(temp_file.path()).unwrap();
+        assert_eq!(name, "NACA 0012 (XFOIL paneled)");
+        assert_eq!(geom.x_c.len(), 19);
+
+        // Create paneled airfoil and verify properties
+        let paneled = create_paneled_airfoil(&geom);
+
+        // Chord should be approximately 1.0
+        assert!(
+            (paneled.chord - 1.0).abs() < 0.01,
+            "Chord should be ~1.0, got {}",
+            paneled.chord
+        );
+
+        // LE should be at index 9 (the 0,0 point)
+        assert_eq!(paneled.le_index, 9, "LE should be at index 9");
+
+        // Arc lengths should be monotonically increasing
+        for i in 1..paneled.s.len() {
+            assert!(
+                paneled.s[i] > paneled.s[i - 1],
+                "Arc length should be monotonic at index {}",
+                i
+            );
+        }
+
+        // Normal vectors should have unit length
+        for i in 0..paneled.n {
+            let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+            assert!(
+                (mag - 1.0).abs() < 1e-10,
+                "Normal at {} should be unit length",
+                i
+            );
+        }
     }
 }

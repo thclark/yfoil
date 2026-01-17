@@ -71,6 +71,10 @@ pub struct NewtonResult {
     pub hs: f64,
     /// Amplification factor (laminar only)
     pub n_amp: f64,
+    /// Edge velocity at this station (normalized by Qinf)
+    pub ue: f64,
+    /// X-coordinate at this station (for drag integration)
+    pub x: f64,
     /// Number of iterations taken
     pub iterations: usize,
     /// Final residual norm
@@ -82,7 +86,10 @@ pub struct NewtonResult {
 /// Solve BL equations at a station using Newton-Raphson
 ///
 /// Given upstream state and downstream edge velocity, find the
-/// downstream θ and H that satisfy the integral BL equations.
+/// downstream θ and δ* that satisfy the integral BL equations.
+///
+/// Uses XFOIL's (θ, δ*) variable choice with proper coupling terms and
+/// logarithmic form for better accuracy.
 ///
 /// # Arguments
 /// * `theta1` - Upstream momentum thickness
@@ -90,7 +97,8 @@ pub struct NewtonResult {
 /// * `ue1` - Upstream edge velocity
 /// * `n1` - Upstream amplification factor
 /// * `ue2` - Downstream edge velocity (prescribed)
-/// * `ds` - Arc length step
+/// * `s1` - Upstream arc length
+/// * `s2` - Downstream arc length
 /// * `regime` - Flow regime (laminar/turbulent)
 /// * `cond` - Flow conditions
 /// * `config` - Newton solver configuration
@@ -100,18 +108,57 @@ pub fn solve_station(
     ue1: f64,
     n1: f64,
     ue2: f64,
-    ds: f64,
+    s1: f64,
+    s2: f64,
     regime: FlowRegime,
     cond: &FlowConditions,
     config: &NewtonConfig,
 ) -> NewtonResult {
-    // Initial guess: extrapolate from upstream
+    let ds = s2 - s1;
     let due_ds = (ue2 - ue1) / ds;
     let ue_avg = 0.5 * (ue1 + ue2);
 
-    // Initial guess for theta using momentum equation trend
-    let mut theta2 = theta1 * (1.0 + 0.1 * ds); // Slight growth
-    let mut h2 = h1; // Shape factor roughly preserved
+    // Get upstream quantities
+    let (hk1, _, _) = hkin(h1, cond.msq);
+    let hk1 = hk1.clamp(config.hk_min, config.hk_max);
+    let rt1 = (ue1 * theta1 / cond.nu).max(1.0);
+
+    // Initial guess using momentum equation
+    let cf1_guess = match regime {
+        FlowRegime::Laminar => cf_lam(hk1, rt1, cond.msq).val,
+        _ => cf_turb(hk1, rt1.max(200.0), cond.msq, 1.0).val,
+    };
+    let shape_term = (h1 + 2.0 - cond.msq) * theta1 / ue_avg * due_ds;
+    let dtheta_ds_pred = cf1_guess / 2.0 - shape_term;
+    let mut theta2 = (theta1 + ds * dtheta_ds_pred).clamp(theta1 * 0.5, theta1 * 2.0);
+
+    // Initial H guess
+    let h_init = match regime {
+        FlowRegime::Turbulent | FlowRegime::Wake if h1 > 2.0 => 1.5, // At transition
+        FlowRegime::Turbulent | FlowRegime::Wake => h1.clamp(1.2, 2.5),
+        FlowRegime::Laminar => h1,
+    };
+    let mut dstar2 = h_init * theta2; // Use (θ, δ*) as Newton variables
+
+    // Upstream closures
+    let (hs1, cf1, di1) = match regime {
+        FlowRegime::Laminar => (
+            hs_lam(hk1, rt1, cond.msq),
+            cf_lam(hk1, rt1, cond.msq),
+            di_lam(hk1, rt1),
+        ),
+        _ => {
+            let cf = cf_turb(hk1, rt1.max(200.0), cond.msq, 1.0);
+            let hs = hs_turb(hk1, rt1.max(200.0), cond.msq);
+            let di = ClosureResult {
+                val: 0.5 * cf.val * ue1 / hs.val,
+                val_hk: 0.0,
+                val_rt: 0.0,
+                val_msq: 0.0,
+            };
+            (hs, cf, di)
+        }
+    };
 
     // Newton iteration
     let mut converged = false;
@@ -121,11 +168,20 @@ pub fn solve_station(
     for iter in 0..config.max_iter {
         iterations = iter + 1;
 
-        // Compute derived quantities at station 2
-        let _dstar2 = h2 * theta2;
-        let (hk2, hk2_h, _hk2_msq) = hkin(h2, cond.msq);
-        let hk2 = hk2.clamp(config.hk_min, config.hk_max);
+        // Compute H from (θ, δ*) - key XFOIL coupling
+        let h2 = dstar2 / theta2;
+
+        // Derived quantities
+        let (hk2_raw, hk2_h, _) = hkin(h2, cond.msq);
+        let hk2 = hk2_raw.clamp(config.hk_min, config.hk_max);
         let rt2 = (ue2 * theta2 / cond.nu).max(1.0);
+
+        // XFOIL coupling terms
+        let h2_t2 = -h2 / theta2; // ∂H/∂θ at constant δ*
+        let h2_d2 = 1.0 / theta2; // ∂H/∂δ* at constant θ
+        let hk2_t2 = hk2_h * h2_t2;
+        let hk2_d2 = hk2_h * h2_d2;
+        let rt2_t2 = rt2 / theta2;
 
         // Get closure relations
         let (cf_res, hs_res, di_res) = match regime {
@@ -138,7 +194,6 @@ pub fn solve_station(
             FlowRegime::Turbulent | FlowRegime::Wake => {
                 let cf = cf_turb(hk2, rt2.max(200.0), cond.msq, 1.0);
                 let hs = hs_turb(hk2, rt2.max(200.0), cond.msq);
-                // Simplified dissipation for turbulent
                 let di = ClosureResult {
                     val: 0.5 * cf.val * ue2 / hs.val,
                     val_hk: 0.0,
@@ -149,94 +204,162 @@ pub fn solve_station(
             }
         };
 
-        // Average quantities for trapezoidal integration
+        // Closure derivatives in (θ, δ*) coordinates
+        let cf2_t2 = cf_res.val_hk * hk2_t2 + cf_res.val_rt * rt2_t2;
+        let cf2_d2 = cf_res.val_hk * hk2_d2;
+        let hs2_t2 = hs_res.val_hk * hk2_t2 + hs_res.val_rt * rt2_t2;
+        let hs2_d2 = hs_res.val_hk * hk2_d2;
+        let di2_t2 = di_res.val_hk * hk2_t2 + di_res.val_rt * rt2_t2;
+        let di2_d2 = di_res.val_hk * hk2_d2;
+
+        // Average quantities
         let theta_avg = 0.5 * (theta1 + theta2);
         let h_avg = 0.5 * (h1 + h2);
-        let (hk1, _, _) = hkin(h1, cond.msq);
+        let s_avg = 0.5 * (s1 + s2);
+        let hs_avg = 0.5 * (hs1.val + hs_res.val);
 
-        // Upstream closure for H*
-        let hs1 = match regime {
-            FlowRegime::Laminar => hs_lam(hk1, (ue1 * theta1 / cond.nu).max(1.0), cond.msq),
-            _ => hs_turb(hk1, (ue1 * theta1 / cond.nu).max(200.0), cond.msq),
+        // Midpoint Cf (BLMID approach for better accuracy)
+        let hk_avg = 0.5 * (hk1 + hk2);
+        let rt_avg = 0.5 * (rt1 + rt2);
+        let cf_mid = match regime {
+            FlowRegime::Laminar => cf_lam(hk_avg, rt_avg, cond.msq),
+            _ => cf_turb(hk_avg, rt_avg.max(200.0), cond.msq, 1.0),
         };
 
-        // ================================================================
-        // Residual 1: Momentum integral equation
-        // dθ/ds + (H + 2 - M²) * θ/Ue * dUe/ds = Cf/2
-        // ================================================================
-        let mom_coef = (h_avg + 2.0 - cond.msq) * theta_avg / ue_avg;
-        let r1 = (theta2 - theta1) / ds + mom_coef * due_ds - cf_res.val / 2.0;
+        // Use logarithmic form when s1 is large enough
+        let use_log_form = s1 > 1e-6;
 
-        // Jacobian entries for R1
-        // dR1/dθ2
-        let dr1_dtheta2 =
-            1.0 / ds + 0.5 * (h_avg + 2.0 - cond.msq) / ue_avg * due_ds - cf_res.val_rt / 2.0 * ue2
-                / cond.nu;
+        let (r1, dr1_dt2, dr1_dd2) = if use_log_form {
+            // XFOIL logarithmic momentum equation
+            let tlog = (theta2 / theta1).ln();
+            let ulog = (ue2 / ue1).ln();
+            let xlog = (s2 / s1).ln();
+            let btmp = h_avg + 2.0 - cond.msq;
 
-        // dR1/dH2 (through h_avg and Cf dependence on Hk)
-        let dr1_dh2 = 0.5 * theta_avg / ue_avg * due_ds - cf_res.val_hk / 2.0 * hk2_h;
+            // CFX = 0.50*CFM*XA/TA + 0.25*(CF1*X1/T1 + CF2*X2/T2)
+            let cfx = 0.5 * cf_mid.val * s_avg / theta_avg
+                + 0.25 * (cf1.val * s1 / theta1 + cf_res.val * s2 / theta2);
 
-        // ================================================================
-        // Residual 2: Shape parameter equation (kinetic energy form)
-        // θ * dH*/ds + (2H** + H*(1-H)) * θ/Ue * dUe/ds = 2CD - H*Cf/2
-        // ================================================================
-        let hs_avg = 0.5 * (hs1.val + hs_res.val);
-        let dhs_ds = (hs_res.val - hs1.val) / ds;
+            let r1_val = tlog + btmp * ulog - xlog * 0.5 * cfx;
 
-        // Density shape factor H** ≈ 0 for low Mach
-        let hss = 0.0;
-        let shape_coef = (2.0 * hss + hs_avg * (1.0 - h_avg)) * theta_avg / ue_avg;
+            // Jacobian with coupling terms
+            // CFX depends on θ2 through both theta_avg and cf_res
+            let cfx_t2 = -0.5 * cf_mid.val * s_avg / theta_avg.powi(2) * 0.5
+                - 0.25 * cf_res.val * s2 / theta2.powi(2)
+                + 0.25 * cf2_t2 * s2 / theta2;
 
-        let r2 =
-            theta_avg * dhs_ds + shape_coef * due_ds - 2.0 * di_res.val + hs_avg * cf_res.val / 2.0;
+            let cfx_d2 = 0.25 * cf2_d2 * s2 / theta2;
 
-        // Jacobian entries for R2
-        // dR2/dθ2
-        let dr2_dtheta2 = 0.5 * dhs_ds
-            + 0.5 * (2.0 * hss + hs_avg * (1.0 - h_avg)) / ue_avg * due_ds
-            + hs_avg * cf_res.val_rt / 2.0 * ue2 / cond.nu
-            - 2.0 * di_res.val_rt * ue2 / cond.nu;
+            // dr1/dθ2 includes H coupling through btmp
+            let dr1_dt2_val = 1.0 / theta2 + 0.5 * ulog * h2_t2 - xlog * 0.5 * cfx_t2;
+            let dr1_dd2_val = 0.5 * ulog * h2_d2 - xlog * 0.5 * cfx_d2;
 
-        // dR2/dH2
-        let dr2_dh2 = theta_avg / ds * hs_res.val_hk * hk2_h * 0.5
-            + (0.5 * hs_res.val_hk * hk2_h * (1.0 - h_avg) - 0.5 * hs_avg) * theta_avg / ue_avg
-                * due_ds
-            + 0.5 * hs_res.val_hk * hk2_h * cf_res.val / 2.0
-            + hs_avg * cf_res.val_hk / 2.0 * hk2_h
-            - 2.0 * di_res.val_hk * hk2_h;
+            (r1_val, dr1_dt2_val, dr1_dd2_val)
+        } else {
+            // Differential form near stagnation
+            let btmp = h_avg + 2.0 - cond.msq;
+            let mom_coef = btmp * theta_avg / ue_avg;
+            let r1_val = (theta2 - theta1) / ds + mom_coef * due_ds - cf_mid.val / 2.0;
 
-        // ================================================================
-        // Solve 2x2 Newton system: J * [Δθ, ΔH]ᵀ = -[R1, R2]ᵀ
-        // ================================================================
-        let det = dr1_dtheta2 * dr2_dh2 - dr1_dh2 * dr2_dtheta2;
+            let dr1_dt2_val = 1.0 / ds
+                + 0.5 * btmp / ue_avg * due_ds
+                + 0.5 * h2_t2 * theta_avg / ue_avg * due_ds
+                - cf2_t2 / 2.0;
+
+            let dr1_dd2_val = 0.5 * h2_d2 * theta_avg / ue_avg * due_ds - cf2_d2 / 2.0;
+
+            (r1_val, dr1_dt2_val, dr1_dd2_val)
+        };
+
+        // Shape equation with upwinding
+        let upw = {
+            let hdcon = 5.0 / hk2.powi(2);
+            let arg = ((hk2 - 1.0) / (hk1 - 1.0).max(0.01)).abs();
+            let hl = arg.ln();
+            let hlsq = hl.powi(2).min(15.0);
+            1.0 - 0.5 * (-hlsq * hdcon).exp()
+        };
+
+        let (r2, dr2_dt2, dr2_dd2) = if use_log_form {
+            // XFOIL logarithmic shape equation
+            let hlog = (hs_res.val / hs1.val).ln();
+            let ulog = (ue2 / ue1).ln();
+            let xlog = (s2 / s1).ln();
+            let btmp_h = 1.0 - h_avg; // Simplified for low Mach
+
+            let xot1 = s1 / theta1;
+            let xot2 = s2 / theta2;
+            let dix = (1.0 - upw) * di1.val * xot1 + upw * di_res.val * xot2;
+            let cfx = (1.0 - upw) * cf1.val * xot1 + upw * cf_res.val * xot2;
+
+            let r2_val = hlog + btmp_h * ulog + xlog * (0.5 * cfx - dix);
+
+            // Jacobian
+            let dhlog_dt2 = hs2_t2 / hs_res.val;
+            let dhlog_dd2 = hs2_d2 / hs_res.val;
+
+            let dix_t2 = upw * (-di_res.val * xot2 / theta2 + di2_t2 * xot2);
+            let dix_d2 = upw * di2_d2 * xot2;
+            let cfx_t2 = upw * (-cf_res.val * xot2 / theta2 + cf2_t2 * xot2);
+            let cfx_d2 = upw * cf2_d2 * xot2;
+
+            let dr2_dt2_val = dhlog_dt2 - 0.5 * h2_t2 * ulog + xlog * (0.5 * cfx_t2 - dix_t2);
+            let dr2_dd2_val = dhlog_dd2 - 0.5 * h2_d2 * ulog + xlog * (0.5 * cfx_d2 - dix_d2);
+
+            (r2_val, dr2_dt2_val, dr2_dd2_val)
+        } else {
+            // Differential form
+            let dhs_ds = (hs_res.val - hs1.val) / ds;
+            let shape_coef = hs_avg * (1.0 - h_avg) * theta_avg / ue_avg;
+            let r2_val = theta_avg * dhs_ds + shape_coef * due_ds
+                - 2.0 * di_res.val + hs_avg * cf_res.val / 2.0;
+
+            let dr2_dt2_val = 0.5 * dhs_ds + theta_avg / ds * hs2_t2
+                + (0.5 * hs2_t2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_t2) * theta_avg / ue_avg * due_ds
+                + hs_avg * cf2_t2 / 2.0 - 2.0 * di2_t2;
+
+            let dr2_dd2_val = theta_avg / ds * hs2_d2
+                + (0.5 * hs2_d2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_d2) * theta_avg / ue_avg * due_ds
+                + hs_avg * cf2_d2 / 2.0 - 2.0 * di2_d2;
+
+            (r2_val, dr2_dt2_val, dr2_dd2_val)
+        };
+
+        // Solve 2x2 Newton system
+        let det = dr1_dt2 * dr2_dd2 - dr1_dd2 * dr2_dt2;
+
+        let h_min = match regime {
+            FlowRegime::Turbulent | FlowRegime::Wake => 1.2,
+            FlowRegime::Laminar => 1.0,
+        };
+        let theta_max = theta1 * 3.0;
 
         if det.abs() < 1e-20 {
-            // Singular Jacobian - use steepest descent fallback
             let d_theta = -r1 * config.relax * 0.1;
-            let d_h = -r2 * config.relax * 0.1;
-            theta2 = (theta2 + d_theta).max(config.theta_min);
-            h2 = (h2 + d_h).clamp(1.0, config.hk_max);
+            let d_dstar = -r2 * config.relax * 0.1;
+            theta2 = (theta2 + d_theta).clamp(config.theta_min, theta_max);
+            dstar2 = (dstar2 + d_dstar).clamp(h_min * theta2, config.hk_max * theta2);
         } else {
-            // Standard Newton step
-            let d_theta = (-r1 * dr2_dh2 + r2 * dr1_dh2) / det;
-            let d_h = (-r2 * dr1_dtheta2 + r1 * dr2_dtheta2) / det;
+            let d_theta = (-r1 * dr2_dd2 + r2 * dr1_dd2) / det;
+            let d_dstar = (-r2 * dr1_dt2 + r1 * dr2_dt2) / det;
 
-            // Apply relaxation and limiting (XFOIL uses similar approach)
-            // Limit step sizes to prevent divergence in difficult regions
-            let d_theta_limited = d_theta.clamp(-0.3 * theta2, 0.3 * theta2);
-            let d_h_limited = d_h.clamp(-0.8, 0.8);
+            // XFOIL-style unified relaxation
+            let dmax = (d_theta / theta2).abs().max((d_dstar / dstar2).abs());
+            let rlx = if dmax > 0.3 { 0.3 / dmax } else { 1.0 };
 
-            theta2 = (theta2 + config.relax * d_theta_limited).max(config.theta_min);
-            h2 = (h2 + config.relax * d_h_limited).clamp(1.0, config.hk_max);
+            theta2 = (theta2 + rlx * config.relax * d_theta).clamp(config.theta_min, theta_max);
+            dstar2 = (dstar2 + rlx * config.relax * d_dstar).clamp(h_min * theta2, config.hk_max * theta2);
         }
 
-        // Check convergence
         residual = (r1.powi(2) + r2.powi(2)).sqrt();
         if residual < config.tol {
             converged = true;
             break;
         }
     }
+
+    // Final values
+    let h2 = dstar2 / theta2;
 
     // Final closure values at converged solution
     let dstar2 = h2 * theta2;
@@ -295,6 +418,8 @@ pub fn solve_station(
         cd: di_final * hs_final / 2.0,
         hs: hs_final,
         n_amp: n2,
+        ue: ue2, // Store edge velocity for drag integration
+        x: 0.0,  // Will be set by caller
         iterations,
         residual,
         converged,
@@ -323,10 +448,16 @@ pub fn march_newton(
 
     let mut results = Vec::with_capacity(n);
 
-    // Initialize at stagnation point using Thwaites' method
-    let due_ds_init = (ue_dist[1] - ue_dist[0]) / (s_dist[1] - s_dist[0]);
-    let theta_init = (0.45 * cond.nu / due_ds_init.abs().max(1e-10)).sqrt();
-    let h_init = 2.216; // Hiemenz stagnation point
+    // Initialize at stagnation point using XFOIL's Thwaites formula
+    // XFOIL uses power-law: Ue = UCON * s^BULE with BULE=1.0 (stagnation flow)
+    // theta^2 = 0.45 * nu * s / (Ue * (5*BULE + 1))
+    // For BULE=1.0: theta = sqrt(0.45 * nu * s / (6 * Ue))
+    //
+    // At first station (index 0), s=0, so use index 1 for initialization
+    let s_init = s_dist[1].max(1e-10);
+    let ue_init = ue_dist[1].max(0.01);
+    let theta_init = (0.45 * cond.nu * s_init / (6.0 * ue_init)).sqrt();
+    let h_init = 2.2; // Hiemenz stagnation point (XFOIL uses 2.2)
 
     // First station
     let (hk_init, _, _) = hkin(h_init, cond.msq);
@@ -344,6 +475,8 @@ pub fn march_newton(
         cd: di_init * hs_init / 2.0,
         hs: hs_init,
         n_amp: 0.0,
+        ue: ue_dist[0],
+        x: 0.0, // Will be set by caller
         iterations: 0,
         residual: 0.0,
         converged: true,
@@ -354,7 +487,9 @@ pub fn march_newton(
 
     for i in 1..n {
         let prev = &results[i - 1];
-        let ds = s_dist[i] - s_dist[i - 1];
+        let s1 = s_dist[i - 1];
+        let s2 = s_dist[i];
+        let ds = s2 - s1;
 
         // Solve for this station
         let mut result = solve_station(
@@ -363,7 +498,8 @@ pub fn march_newton(
             ue_dist[i - 1],
             prev.n_amp,
             ue_dist[i],
-            ds,
+            s1,
+            s2,
             regime,
             cond,
             config,
@@ -483,9 +619,10 @@ mod tests {
         let ue1 = 0.5;
         let n1 = 0.0;
         let ue2 = 0.55; // Slight acceleration
-        let ds = 0.02;
+        let s1 = 0.1;
+        let s2 = 0.12;
 
-        let result = solve_station(theta1, h1, ue1, n1, ue2, ds, FlowRegime::Laminar, &cond, &config);
+        let result = solve_station(theta1, h1, ue1, n1, ue2, s1, s2, FlowRegime::Laminar, &cond, &config);
 
         // Check that solution is physically reasonable (may not fully converge for single station)
         assert!(result.theta > 0.0, "Theta should be positive");
@@ -510,10 +647,11 @@ mod tests {
         let ue1 = 1.0;
         let n1 = 10.0; // Already transitioned
         let ue2 = 1.0; // Constant velocity (no pressure gradient)
-        let ds = 0.02;
+        let s1 = 0.5;
+        let s2 = 0.52;
 
         let result =
-            solve_station(theta1, h1, ue1, n1, ue2, ds, FlowRegime::Turbulent, &cond, &config);
+            solve_station(theta1, h1, ue1, n1, ue2, s1, s2, FlowRegime::Turbulent, &cond, &config);
 
         // Check physically reasonable solution
         assert!(result.theta > 0.0, "Theta should be positive");

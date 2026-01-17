@@ -21,9 +21,9 @@
 //! - Drela, M., Giles, M. "Viscous-Inviscid Analysis of Transonic and Low Reynolds Number Airfoils"
 
 use crate::bl::{
-    find_transition, generate_wake_coordinates, integrate_friction, march_newton,
-    solve_wake, squire_young_drag, wake_edge_velocity, FlowConditions, NewtonConfig,
-    NewtonResult, WakeConfig, WakeInitialState,
+    find_transition, generate_wake_coordinates, integrate_friction, march_newton, solve_wake,
+    squire_young_drag, wake_edge_velocity, FlowConditions, NewtonConfig, NewtonResult, WakeConfig,
+    WakeInitialState,
 };
 use crate::forces::{calculate_cp, integrate_forces, AeroCoefficients};
 use crate::geometry::PaneledAirfoil;
@@ -52,7 +52,7 @@ impl Default for ViscalConfig {
             max_iter: 300,
             tol_cl: 1e-4,
             tol_dstar: 1e-4,
-            relax: 0.7,
+            relax: 1.0,
             newton: NewtonConfig::default(),
             wake: WakeConfig::default(),
         }
@@ -86,6 +86,8 @@ pub struct ViscousResult {
     pub residual: f64,
     /// Source velocity correction (for use as initial guess in polar sweeps)
     pub dq_source: Vec<f64>,
+    /// Boundary layer solution (for debugging and detailed analysis)
+    pub bl: BLSolution,
 }
 
 /// Boundary layer state for coupling
@@ -103,6 +105,10 @@ pub struct BLSolution {
     pub s_lower: Vec<f64>,
     /// Wake arc lengths
     pub s_wake: Vec<f64>,
+    /// Upper surface x-coordinates (for drag integration)
+    pub x_upper: Vec<f64>,
+    /// Lower surface x-coordinates (for drag integration)
+    pub x_lower: Vec<f64>,
     /// Wake x-coordinates
     pub x_wake: Vec<f64>,
     /// Wake y-coordinates
@@ -257,57 +263,95 @@ pub fn extract_lower_surface(
     (x, y, s, ue)
 }
 
-/// Compute source-induced velocity correction from displacement thickness
+/// Compute mass defect array from BL solution
 ///
-/// The mass defect source strength is: m = d(ρ*Ue*δ*)/ds
-/// This creates a velocity perturbation that modifies the inviscid solution.
-pub fn compute_source_velocity(
+/// Mass defect m* = Ue * δ* at each panel, mapped from BL stations.
+/// This is used with the DIJ matrix to compute velocity corrections.
+pub fn compute_mass_defect(
     airfoil: &PaneledAirfoil,
     bl_upper: &[NewtonResult],
     bl_lower: &[NewtonResult],
-    s_upper: &[f64],
-    s_lower: &[f64],
+    ue_upper: &[f64],
+    ue_lower: &[f64],
     stag_idx: usize,
 ) -> Vec<f64> {
     let n = airfoil.n;
-    let mut dq = vec![0.0; n];
+    let mut mass = vec![0.0; n];
 
     // Upper surface: map BL stations back to panel indices
-    for j in 0..bl_upper.len() {
-        // Panel index (going from stag backwards to TE)
-        let i = if stag_idx >= j { stag_idx - j } else { 0 };
-        if i < n {
-            // Source effect: simplified model using local δ* gradient
-            // More accurate would use influence coefficients
-            if j > 0 && j < bl_upper.len() - 1 {
-                let ds = s_upper[j + 1] - s_upper[j - 1];
-                if ds > 1e-10 {
-                    let dm = (bl_upper[j + 1].dstar * bl_upper[j + 1].theta.sqrt()
-                        - bl_upper[j - 1].dstar * bl_upper[j - 1].theta.sqrt())
-                        / ds;
-                    dq[i] += dm * 0.5; // Simplified coupling
-                }
+    // Upper surface goes from stag_idx down to 0
+    for j in 0..bl_upper.len().min(stag_idx + 1) {
+        let i = stag_idx - j;
+        if i < n && j < ue_upper.len() && j < bl_upper.len() {
+            let ue = ue_upper[j].abs();
+            let dstar = bl_upper[j].dstar;
+            // Mass defect = Ue * δ*, ensure non-negative
+            if ue.is_finite() && dstar.is_finite() && dstar >= 0.0 {
+                mass[i] = ue * dstar;
             }
         }
     }
 
-    // Lower surface
+    // Lower surface: from stag_idx to n-1
     for j in 0..bl_lower.len() {
         let i = stag_idx + j;
-        if i < n {
-            if j > 0 && j < bl_lower.len() - 1 {
-                let ds = s_lower[j + 1] - s_lower[j - 1];
-                if ds > 1e-10 {
-                    let dm = (bl_lower[j + 1].dstar * bl_lower[j + 1].theta.sqrt()
-                        - bl_lower[j - 1].dstar * bl_lower[j - 1].theta.sqrt())
-                        / ds;
-                    dq[i] += dm * 0.5;
-                }
+        if i < n && j < ue_lower.len() && j < bl_lower.len() {
+            let ue = ue_lower[j].abs();
+            let dstar = bl_lower[j].dstar;
+            if ue.is_finite() && dstar.is_finite() && dstar >= 0.0 {
+                mass[i] = ue * dstar;
             }
         }
     }
 
-    dq
+    mass
+}
+
+/// Compute source-induced velocity correction using DIJ matrix
+///
+/// This is the XFOIL-style coupling following the exact formula:
+///   dQ[i] = Σ_j (-VTI[i] * VTI[j] * DIJ[i,j] * MASS[j])
+///
+/// where:
+/// - mass_defect = Ue * δ* at each panel
+/// - VTI = +1 for upper surface, -1 for lower surface
+/// - DIJ was precomputed as AIJ^-1 * BIJ
+///
+/// # Arguments
+/// * `inviscid` - Inviscid solution containing DIJ matrix
+/// * `mass_defect` - Mass defect at each panel
+/// * `le_index` - Leading edge index to determine upper/lower surface
+pub fn compute_source_velocity_dij(
+    inviscid: &crate::panel::InviscidSolution,
+    mass_defect: &[f64],
+    le_index: usize,
+) -> Vec<f64> {
+    // Use the DIJ matrix from the inviscid solution
+    if let Some(dq) = inviscid.velocity_from_mass_defect(mass_defect, le_index) {
+        dq
+    } else {
+        // Fallback: no DIJ matrix, return zeros
+        vec![0.0; mass_defect.len()]
+    }
+}
+
+/// Compute source-induced velocity correction for UNSIGNED edge velocity
+///
+/// Unlike `compute_source_velocity_dij`, this computes the correction for the
+/// unsigned edge velocity |Ue| directly:
+///   dUe[i] = Σ_j DIJ[i,j] * MASS[j]
+///
+/// The VTI sign conversion is NOT applied here because we're working with
+/// unsigned velocities throughout the coupling loop.
+pub fn compute_source_velocity_unsigned(
+    inviscid: &crate::panel::InviscidSolution,
+    mass_defect: &[f64],
+) -> Vec<f64> {
+    if let Some(dq) = inviscid.velocity_from_mass_defect_unsigned(mass_defect) {
+        dq
+    } else {
+        vec![0.0; mass_defect.len()]
+    }
 }
 
 /// Solve boundary layer on both surfaces and wake
@@ -322,9 +366,9 @@ pub fn solve_boundary_layer(
     wake_config: &WakeConfig,
 ) -> BLSolution {
     // Extract surfaces
-    let (_x_upper, _y_upper, s_upper, ue_upper) =
+    let (x_upper, _y_upper, s_upper, ue_upper) =
         extract_upper_surface(airfoil, velocity, stag_idx);
-    let (_x_lower, _y_lower, s_lower, ue_lower) =
+    let (x_lower, _y_lower, s_lower, ue_lower) =
         extract_lower_surface(airfoil, velocity, stag_idx);
 
     // March BL on each surface
@@ -393,6 +437,8 @@ pub fn solve_boundary_layer(
         s_upper,
         s_lower,
         s_wake,
+        x_upper,
+        x_lower,
         x_wake,
         y_wake,
         i_stag: stag_idx,
@@ -402,17 +448,40 @@ pub fn solve_boundary_layer(
 }
 
 /// Calculate friction drag from BL solution
-pub fn calculate_friction_drag(bl: &BLSolution) -> f64 {
-    let cdf_upper = integrate_friction(&bl.upper, &bl.s_upper);
-    let cdf_lower = integrate_friction(&bl.lower, &bl.s_lower);
+///
+/// Uses XFOIL-compatible integration over chord-projected distance
+/// with Ue² weighting factor.
+pub fn calculate_friction_drag(bl: &BLSolution, alpha: f64) -> f64 {
+    let cdf_upper = integrate_friction(&bl.upper, &bl.x_upper);
+    let cdf_lower = integrate_friction(&bl.lower, &bl.x_lower);
     cdf_upper + cdf_lower
 }
 
 /// Calculate total drag using Squire-Young formula applied to wake
 ///
-/// This gives a more accurate drag estimate by using the far-wake
-/// momentum thickness extrapolated from the TE conditions.
+/// This matches XFOIL's CDCALC approach: use wake END values (not TE values)
+/// to extrapolate to downstream infinity using the Squire-Young relation.
+///
+/// CD = 2 * θ_wake * (Ue_wake/Q∞)^((5+H_wake)/2)
+///
+/// This gives the most accurate total drag by including both friction and
+/// pressure drag effects through the momentum thickness evolution.
 pub fn calculate_drag_squire_young(bl: &BLSolution, chord: f64) -> f64 {
+    // First try to use wake end values (preferred, matches XFOIL)
+    if !bl.wake.is_empty() {
+        let wake_end = bl.wake.last().unwrap();
+        let theta_wake = wake_end.theta;
+        let h_wake = wake_end.h;
+        let ue_wake = wake_end.ue;
+
+        // Squire-Young: CD = 2 * θ * (Ue/Q∞)^((5+H)/2)
+        // For normalized airfoil with Q∞ = 1
+        let exponent = 0.5 * (5.0 + h_wake);
+        let theta_inf = theta_wake * ue_wake.powf(exponent);
+        return 2.0 * theta_inf / chord;
+    }
+
+    // Fallback: use TE values if no wake
     if bl.upper.is_empty() || bl.lower.is_empty() {
         return 0.0;
     }
@@ -472,15 +541,19 @@ pub fn solve_viscous_with_init(
     // Step 1: Solve inviscid panel method
     let inviscid = solve_inviscid(airfoil);
 
-    // Get inviscid velocity at this alpha
-    let mut velocity = inviscid.velocity_at_alpha(alpha_rad);
+    // Get inviscid velocity at this alpha (SIGNED: + for upper, - for lower)
+    let qinv = inviscid.velocity_at_alpha(alpha_rad);
+
+    // Convert to UNSIGNED edge velocities for coupling (following XFOIL's approach)
+    // XFOIL works with unsigned Ue in the BL solver, only converting to signed for forces
+    let mut ue_mag: Vec<f64> = qinv.iter().map(|&q| q.abs()).collect();
 
     // Initialize tracking variables
     let mut cl_prev = 0.0;
     let mut iterations = 0;
     let mut residual = f64::MAX;
 
-    // Source velocity correction - use initial guess if provided
+    // Source velocity correction (for UNSIGNED Ue) - use initial guess if provided
     let mut dq_source = if let Some(init) = init_dq {
         if init.len() == airfoil.n {
             init.to_vec()
@@ -491,11 +564,11 @@ pub fn solve_viscous_with_init(
         vec![0.0; airfoil.n]
     };
 
-    // Apply initial guess to velocity if provided
+    // Apply initial guess to unsigned edge velocity if provided
     if init_dq.is_some() {
-        let qinv = inviscid.velocity_at_alpha(alpha_rad);
+        let qinv_mag: Vec<f64> = qinv.iter().map(|&q| q.abs()).collect();
         for i in 0..airfoil.n {
-            velocity[i] = qinv[i] + dq_source[i];
+            ue_mag[i] = (qinv_mag[i] + dq_source[i]).max(0.01);
         }
     }
 
@@ -503,14 +576,23 @@ pub fn solve_viscous_with_init(
     let gamma = inviscid.gamma_at_alpha(alpha_rad);
     let gamma_total: f64 = gamma.iter().sum::<f64>() / airfoil.n as f64 * airfoil.chord;
 
+    // Create signed velocity for stagnation point detection
+    // Sign convention: use original qinv signs
+    let mut velocity: Vec<f64> = ue_mag
+        .iter()
+        .zip(qinv.iter())
+        .map(|(&ue, &q)| if q >= 0.0 { ue } else { -ue })
+        .collect();
+
     // Coupling iteration
     for iter in 0..config.max_iter {
         iterations = iter + 1;
 
-        // Step 2: Find stagnation point
+        // Step 2: Find stagnation point (using signed velocity)
         let stag_idx = find_stagnation_point(airfoil, &velocity);
 
-        // Step 3: Solve boundary layer (including wake)
+        // Step 3: Solve boundary layer (using UNSIGNED velocity)
+        // Note: extract_*_surface takes abs() of velocity, so we pass the signed version
         let bl = solve_boundary_layer(
             airfoil,
             &velocity,
@@ -522,25 +604,54 @@ pub fn solve_viscous_with_init(
             &config.wake,
         );
 
-        // Step 4: Compute source velocity correction
-        let dq_new = compute_source_velocity(
+        // Extract edge velocities for mass defect calculation
+        let (_, _, _, ue_upper) = extract_upper_surface(airfoil, &velocity, stag_idx);
+        let (_, _, _, ue_lower) = extract_lower_surface(airfoil, &velocity, stag_idx);
+
+        // Step 4: Compute mass defect and source velocity correction
+        let mass_defect = compute_mass_defect(
             airfoil,
             &bl.upper,
             &bl.lower,
-            &bl.s_upper,
-            &bl.s_lower,
+            &ue_upper,
+            &ue_lower,
             stag_idx,
         );
 
-        // Relaxed update of source velocity
+        // Compute dq for UNSIGNED velocity (remove VTI multiplication from the formula)
+        let dq_new = compute_source_velocity_unsigned(&inviscid, &mass_defect);
+
+        // Adaptive relaxation
+        let qinv_mag: Vec<f64> = qinv.iter().map(|&q| q.abs()).collect();
+        let mut rlx = config.relax;
+
+        // Find maximum relative change
+        let mut dmax = 0.0_f64;
         for i in 0..airfoil.n {
-            dq_source[i] = (1.0 - config.relax) * dq_source[i] + config.relax * dq_new[i];
+            let delta = (dq_new[i] - dq_source[i]).abs();
+            let qref = qinv_mag[i].max(0.1);
+            let rel_change = delta / qref;
+            dmax = dmax.max(rel_change);
         }
 
-        // Step 5: Update edge velocity
-        let qinv = inviscid.velocity_at_alpha(alpha_rad);
+        // Limit relaxation if changes are too large (XFOIL uses 0.3 threshold)
+        if dmax > 0.3 {
+            rlx = (0.3 / dmax).min(config.relax);
+        }
+
+        // Relaxed update of source velocity correction
         for i in 0..airfoil.n {
-            velocity[i] = qinv[i] + dq_source[i];
+            dq_source[i] = rlx * dq_new[i] + (1.0 - rlx) * dq_source[i];
+        }
+
+        // Step 5: Update UNSIGNED edge velocity
+        for i in 0..airfoil.n {
+            ue_mag[i] = (qinv_mag[i] + dq_source[i]).max(0.01);
+        }
+
+        // Convert to signed velocity for force calculation and next iteration
+        for i in 0..airfoil.n {
+            velocity[i] = if qinv[i] >= 0.0 { ue_mag[i] } else { -ue_mag[i] };
         }
 
         // Step 6: Calculate forces with updated velocity
@@ -552,9 +663,13 @@ pub fn solve_viscous_with_init(
         residual = cl_change;
 
         if cl_change < config.tol_cl && iter > 0 {
-            // Calculate final results
-            let cdf = calculate_friction_drag(&bl);
-            let cdp = coeffs.cdp;
+            // Calculate final results using XFOIL's approach:
+            // - Total CD from Squire-Young (includes both friction and pressure effects)
+            // - CDF from skin friction integration (for reporting)
+            // - CDP = CD - CDF (derived, for reporting)
+            let cdf = calculate_friction_drag(&bl, alpha_rad);
+            let cd = calculate_drag_squire_young(&bl, airfoil.chord);
+            let cdp = cd - cdf; // Derived pressure drag
 
             // Convert transition locations to x/c
             let xtr_upper = if bl.s_tr_upper < f64::INFINITY && !bl.upper.is_empty() {
@@ -583,9 +698,9 @@ pub fn solve_viscous_with_init(
             return ViscousResult {
                 alpha: alpha_rad,
                 cl: coeffs.cl,
-                cd: cdf + cdp,
-                cdf,
-                cdp,
+                cd,   // Total drag from Squire-Young
+                cdf,  // Friction drag component
+                cdp,  // Pressure drag = CD - CDF
                 cm: coeffs.cm,
                 xtr_upper,
                 xtr_lower,
@@ -593,6 +708,7 @@ pub fn solve_viscous_with_init(
                 converged: true,
                 residual,
                 dq_source,
+                bl,
             };
         }
 
@@ -613,14 +729,18 @@ pub fn solve_viscous_with_init(
     );
     let cp = calculate_cp(&velocity, cond.mach);
     let coeffs = integrate_forces(airfoil, &cp, alpha_rad);
-    let cdf = calculate_friction_drag(&bl);
+
+    // Use Squire-Young for total drag (same as converged case)
+    let cdf = calculate_friction_drag(&bl, alpha_rad);
+    let cd = calculate_drag_squire_young(&bl, airfoil.chord);
+    let cdp = cd - cdf; // Derived pressure drag
 
     ViscousResult {
         alpha: alpha_rad,
         cl: coeffs.cl,
-        cd: cdf + coeffs.cdp,
-        cdf,
-        cdp: coeffs.cdp,
+        cd,   // Total drag from Squire-Young
+        cdf,  // Friction drag component
+        cdp,  // Pressure drag = CD - CDF
         cm: coeffs.cm,
         xtr_upper: 1.0,
         xtr_lower: 1.0,
@@ -628,6 +748,7 @@ pub fn solve_viscous_with_init(
         converged: false,
         residual,
         dq_source,
+        bl,
     }
 }
 

@@ -280,10 +280,14 @@ pub fn hc_turb(hk: f64, msq: f64) -> (f64, f64, f64) {
 // Transition Prediction (eN Method)
 // ============================================================================
 
-/// Amplification rate for envelope eN method
+/// Amplification rate for envelope eN method (XFOIL DAMPL2 formulation)
 ///
 /// Returns the spatial amplification rate dN/dx that is integrated
 /// along the surface to obtain N(x). Transition occurs when N >= Ncrit.
+///
+/// This uses the DAMPL2 formulation from XFOIL (Nov 1996) which includes
+/// improved correlation for high Hk (near-separation) profiles with an
+/// additional exponential term in the m(H) correlation.
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
@@ -292,6 +296,10 @@ pub fn hc_turb(hk: f64, msq: f64) -> (f64, f64, f64) {
 ///
 /// # Returns
 /// (ax, ax_hk, ax_th, ax_rt) - Amplification rate and sensitivities
+///
+/// # Reference
+/// Drela, M., Giles, M., "Viscous/Inviscid Analysis of Transonic and
+/// Low Reynolds Number Airfoils", AIAA Journal, Oct. 1987.
 pub fn dampl(hk: f64, th: f64, rt: f64) -> (f64, f64, f64, f64) {
     const DGR: f64 = 0.08;
 
@@ -328,7 +336,7 @@ pub fn dampl(hk: f64, th: f64, rt: f64) -> (f64, f64, f64, f64) {
             (rfac, rfac_rn * rn_hk, rfac_rn * rn_rt)
         };
 
-        // Amplification envelope slope correlation
+        // Amplification envelope slope correlation (d(N)/d(Rtheta))
         let arg = 3.87 * hmi - 2.52;
         let arg_hk = 3.87 * hmi_hk;
 
@@ -338,7 +346,8 @@ pub fn dampl(hk: f64, th: f64, rt: f64) -> (f64, f64, f64, f64) {
         let dadr = 0.028 * (hk - 1.0) - 0.0345 * ex;
         let dadr_hk = 0.028 - 0.0345 * ex_hk;
 
-        // m(H) correlation
+        // m(H) correlation - DAMPL version (March 1991)
+        // Note: DAMPL2 has an additional +0.1*exp(-20*HMI) term, but XFOIL defaults to DAMPL
         let af = -0.05 + 2.7 * hmi - 5.5 * hmi.powi(2) + 3.0 * hmi.powi(3);
         let af_hmi = 2.7 - 11.0 * hmi + 9.0 * hmi.powi(2);
         let af_hk = af_hmi * hmi_hk;

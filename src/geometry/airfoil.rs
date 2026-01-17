@@ -83,6 +83,104 @@ pub enum InvalidGeometryError {
 }
 
 impl Geometry {
+    /// Sharpen the trailing edge by moving first and last points to coincide.
+    ///
+    /// This creates a sharp TE geometry where nodes 0 and n-1 are at the same
+    /// location, which is appropriate for airfoils with zero TE thickness.
+    /// The sharp TE requires special handling in the panel method solver.
+    ///
+    /// # Returns
+    /// A new geometry with the TE nodes moved to their midpoint.
+    pub fn sharpen(&self) -> Geometry {
+        let n = self.x_c.len();
+        if n < 2 {
+            return self.clone();
+        }
+
+        // Calculate midpoint of current TE
+        let x_te = 0.5 * (self.x_c[0] + self.x_c[n - 1]);
+        let y_te = 0.5 * (self.y_c[0] + self.y_c[n - 1]);
+
+        let mut x_c = self.x_c.clone();
+        let mut y_c = self.y_c.clone();
+
+        // Move both TE points to coincide at the midpoint
+        x_c[0] = x_te;
+        y_c[0] = y_te;
+        x_c[n - 1] = x_te;
+        y_c[n - 1] = y_te;
+
+        Geometry {
+            reference: self.reference,
+            x_c,
+            y_c,
+        }
+    }
+
+    /// Open the trailing edge by creating a small gap.
+    ///
+    /// This creates a blunt TE geometry where nodes 0 and n-1 have a small
+    /// vertical separation, which is appropriate for airfoils with finite TE
+    /// thickness. The blunt TE uses standard flow tangency equations in the
+    /// panel method (no curvature extrapolation).
+    ///
+    /// # Arguments
+    /// * `gap` - The vertical gap to create at TE (typical value: 0.002 for 0.2% chord)
+    ///
+    /// # Returns
+    /// A new geometry with a blunt trailing edge.
+    pub fn blunten(&self, gap: f64) -> Geometry {
+        let n = self.x_c.len();
+        if n < 2 {
+            return self.clone();
+        }
+
+        // Calculate midpoint of current TE
+        let x_te = 0.5 * (self.x_c[0] + self.x_c[n - 1]);
+        let y_te = 0.5 * (self.y_c[0] + self.y_c[n - 1]);
+
+        let mut x_c = self.x_c.clone();
+        let mut y_c = self.y_c.clone();
+
+        // Separate the TE points vertically (node 0 is upper surface, node n-1 is lower)
+        // For standard airfoil ordering: TE -> upper -> LE -> lower -> TE
+        x_c[0] = x_te;
+        y_c[0] = y_te + gap / 2.0; // Upper surface TE moves up
+        x_c[n - 1] = x_te;
+        y_c[n - 1] = y_te - gap / 2.0; // Lower surface TE moves down
+
+        Geometry {
+            reference: self.reference,
+            x_c,
+            y_c,
+        }
+    }
+
+    /// Check if the trailing edge is sharp (closed).
+    ///
+    /// Returns true if the TE gap is less than 0.01% of chord.
+    pub fn is_sharp_te(&self) -> bool {
+        let n = self.x_c.len();
+        if n < 2 {
+            return false;
+        }
+        let te_gap =
+            ((self.x_c[0] - self.x_c[n - 1]).powi(2) + (self.y_c[0] - self.y_c[n - 1]).powi(2))
+                .sqrt();
+        // Use same threshold as panel.rs: 0.0001 * chord
+        // For normalized airfoil, chord ≈ 1.0
+        te_gap < 0.0001
+    }
+
+    /// Get the trailing edge gap as a fraction of chord.
+    pub fn te_gap(&self) -> f64 {
+        let n = self.x_c.len();
+        if n < 2 {
+            return 0.0;
+        }
+        ((self.x_c[0] - self.x_c[n - 1]).powi(2) + (self.y_c[0] - self.y_c[n - 1]).powi(2)).sqrt()
+    }
+
     /// Validate the geometry for basic sanity checks
     pub fn validate(&self) -> Result<(), InvalidGeometryError> {
         use InvalidGeometryError::*;
@@ -125,6 +223,7 @@ impl Geometry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
 
     #[test]
     fn test_geometry_validation_mismatched_dimensions() {
@@ -150,5 +249,98 @@ mod tests {
             geom.validate(),
             Err(InvalidGeometryError::TooFewPanels(_))
         ));
+    }
+
+    #[test]
+    fn test_sharpen_closes_te_gap() {
+        // Create a simple geometry with open TE
+        let geom = Geometry {
+            reference: [0.25, 0.0],
+            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0], // TE at x=1, LE at x=0
+            y_c: vec![0.01, 0.05, 0.0, -0.05, -0.01], // Gap of 0.02 at TE
+        };
+
+        assert!(!geom.is_sharp_te());
+        assert_relative_eq!(geom.te_gap(), 0.02, epsilon = 1e-10);
+
+        let sharpened = geom.sharpen();
+
+        assert!(sharpened.is_sharp_te());
+        assert_relative_eq!(sharpened.te_gap(), 0.0, epsilon = 1e-10);
+
+        // TE should be at midpoint
+        assert_relative_eq!(sharpened.x_c[0], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(sharpened.y_c[0], 0.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            sharpened.x_c[sharpened.x_c.len() - 1],
+            1.0,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            sharpened.y_c[sharpened.y_c.len() - 1],
+            0.0,
+            epsilon = 1e-10
+        );
+    }
+
+    #[test]
+    fn test_blunten_opens_te_gap() {
+        // Create a simple geometry with closed TE
+        let geom = Geometry {
+            reference: [0.25, 0.0],
+            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0],
+            y_c: vec![0.0, 0.05, 0.0, -0.05, 0.0], // Closed TE
+        };
+
+        assert!(geom.is_sharp_te());
+        assert_relative_eq!(geom.te_gap(), 0.0, epsilon = 1e-10);
+
+        let blunted = geom.blunten(0.02);
+
+        assert!(!blunted.is_sharp_te());
+        assert_relative_eq!(blunted.te_gap(), 0.02, epsilon = 1e-10);
+
+        // Upper TE should move up, lower should move down
+        assert_relative_eq!(blunted.y_c[0], 0.01, epsilon = 1e-10);
+        assert_relative_eq!(
+            blunted.y_c[blunted.y_c.len() - 1],
+            -0.01,
+            epsilon = 1e-10
+        );
+    }
+
+    #[test]
+    fn test_sharpen_then_blunten_preserves_midpoint() {
+        let geom = Geometry {
+            reference: [0.25, 0.0],
+            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0],
+            y_c: vec![0.01, 0.05, 0.0, -0.05, -0.01],
+        };
+
+        let sharpened = geom.sharpen();
+        let blunted = sharpened.blunten(0.02);
+
+        // The midpoint y should be at 0 (original gap midpoint)
+        let mid_y = 0.5 * (blunted.y_c[0] + blunted.y_c[blunted.y_c.len() - 1]);
+        assert_relative_eq!(mid_y, 0.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_is_sharp_te_threshold() {
+        // Gap of 0.00005 (below threshold of 0.0001)
+        let sharp = Geometry {
+            reference: [0.25, 0.0],
+            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0],
+            y_c: vec![0.000025, 0.05, 0.0, -0.05, -0.000025],
+        };
+        assert!(sharp.is_sharp_te());
+
+        // Gap of 0.0002 (above threshold of 0.0001)
+        let blunt = Geometry {
+            reference: [0.25, 0.0],
+            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0],
+            y_c: vec![0.0001, 0.05, 0.0, -0.05, -0.0001],
+        };
+        assert!(!blunt.is_sharp_te());
     }
 }

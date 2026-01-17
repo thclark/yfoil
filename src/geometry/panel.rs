@@ -3,7 +3,7 @@
 //! Functions for redistributing panel points on an airfoil surface.
 
 use super::airfoil::{Geometry, PaneledAirfoil};
-use super::spline::{deval, seval, spline};
+use super::spline::{d2val, deval, seval, spline};
 
 /// Repanel an airfoil with a new number of panels using cosine spacing
 ///
@@ -92,8 +92,8 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
     // Calculate normal vectors and panel angles
     let (nx, ny, apanel) = calculate_normals_and_angles(&x, &y, &xp, &yp, &s);
 
-    // Find leading edge (minimum x location)
-    let (sle, le_index) = find_leading_edge(&x, &s, &xp);
+    // Find leading edge using XFOIL's chord-perpendicular criterion
+    let (sle, le_index) = find_leading_edge(&x, &y, &s, &xp, &yp);
 
     // Calculate chord length
     let chord = calculate_chord(&x, &y);
@@ -157,35 +157,83 @@ fn calculate_normals_and_angles(
     (nx, ny, apanel)
 }
 
-/// Find leading edge arc length parameter and index (point of minimum x)
+/// Find leading edge arc length parameter and index
+///
+/// Uses XFOIL's LEFIND algorithm: finds where the surface tangent is perpendicular
+/// to the chord line connecting the LE point to the TE.
+///
+/// The defining condition is: (X-XTE, Y-YTE) · (X', Y') = 0 at S = SLE
 ///
 /// Returns (sle, le_index)
-fn find_leading_edge(x: &[f64], s: &[f64], xp: &[f64]) -> (f64, usize) {
-    // First find the approximate index
-    let mut i_min = 0;
-    let mut x_min = x[0];
-    for (i, &xi) in x.iter().enumerate() {
-        if xi < x_min {
-            x_min = xi;
-            i_min = i;
-        }
-    }
+fn find_leading_edge(
+    x: &[f64],
+    y: &[f64],
+    s: &[f64],
+    xp: &[f64],
+    yp: &[f64],
+) -> (f64, usize) {
+    let n = x.len();
 
-    // Refine using Newton iteration on dx/ds = 0
-    let mut s_le = s[i_min];
-    for _ in 0..10 {
-        let dx_ds = deval(s_le, x, xp, s);
-        // We'd need d2x/ds2 for proper Newton, so just use secant-like update
-        if dx_ds.abs() < 1e-10 {
+    // Convergence tolerance (matches XFOIL)
+    let dseps = (s[n - 1] - s[0]) * 1.0e-5;
+
+    // Trailing edge coordinates
+    let x_te = 0.5 * (x[0] + x[n - 1]);
+    let y_te = 0.5 * (y[0] + y[n - 1]);
+
+    // Get first guess for SLE by finding where dot product changes sign
+    // This matches XFOIL's approach exactly
+    let mut i_le = n / 2; // fallback
+    for i in 2..n - 2 {
+        let dxte = x[i] - x_te;
+        let dyte = y[i] - y_te;
+        let dx = x[i + 1] - x[i];
+        let dy = y[i + 1] - y[i];
+        let dotp = dxte * dx + dyte * dy;
+        if dotp < 0.0 {
+            i_le = i;
             break;
         }
-        // Simple gradient descent step
-        s_le -= 0.1 * dx_ds;
-        // Clamp to valid range
-        s_le = s_le.max(s[0]).min(s[s.len() - 1]);
     }
 
-    (s_le, i_min)
+    let mut s_le = s[i_le];
+
+    // Check for sharp LE case (doubled point)
+    if i_le > 0 && (s[i_le] - s[i_le - 1]).abs() < 1e-14 {
+        return (s_le, i_le);
+    }
+
+    // Newton iteration to get exact SLE value (matches XFOIL exactly)
+    for _ in 0..50 {
+        let x_le = seval(s_le, x, xp, s);
+        let y_le = seval(s_le, y, yp, s);
+        let dxds = deval(s_le, x, xp, s);
+        let dyds = deval(s_le, y, yp, s);
+        let dxdd = d2val(s_le, x, xp, s);
+        let dydd = d2val(s_le, y, yp, s);
+
+        let xchord = x_le - x_te;
+        let ychord = y_le - y_te;
+
+        // Drive dot product between chord line and LE tangent to zero
+        let res = xchord * dxds + ychord * dyds;
+        let ress = dxds * dxds + dyds * dyds + xchord * dxdd + ychord * dydd;
+
+        // Newton delta for SLE
+        let mut dsle = -res / ress;
+
+        // Limit step size (matches XFOIL exactly: ABS(XCHORD+YCHORD), not ABS(XCHORD)+ABS(YCHORD))
+        let dsle_limit = 0.02 * (xchord + ychord).abs();
+        dsle = dsle.max(-dsle_limit).min(dsle_limit);
+
+        s_le += dsle;
+
+        if dsle.abs() < dseps {
+            break;
+        }
+    }
+
+    (s_le, i_le)
 }
 
 /// Calculate chord length (TE to LE distance)

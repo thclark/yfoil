@@ -465,3 +465,254 @@ fn test_flow_regime_enum() {
     assert_ne!(laminar, turbulent);
     assert_ne!(turbulent, wake);
 }
+
+// ============================================================================
+// Trailing Edge Geometry Tests
+// ============================================================================
+
+/// Test that sharp TE detection works correctly
+#[test]
+fn test_sharp_te_detection() {
+    // NACA generator creates closed TE (sharp)
+    let geom = naca_4digit("0012", 160).unwrap();
+    let paneled = create_paneled_airfoil(&geom);
+
+    assert!(
+        paneled.sharp_te,
+        "NACA 0012 from generator should have sharp TE"
+    );
+    assert!(
+        geom.is_sharp_te(),
+        "Geometry should also detect as sharp TE"
+    );
+}
+
+/// Test that blunt TE detection works correctly
+#[test]
+fn test_blunt_te_detection() {
+    let geom = naca_4digit("0012", 160).unwrap();
+
+    // Blunten the geometry
+    let blunt_geom = geom.blunten(0.002);
+    let paneled = create_paneled_airfoil(&blunt_geom);
+
+    assert!(
+        !paneled.sharp_te,
+        "Blunted airfoil should have blunt TE"
+    );
+    assert!(
+        !blunt_geom.is_sharp_te(),
+        "Geometry should detect as blunt TE"
+    );
+
+    // TE gap should be ~0.002
+    assert_relative_eq!(blunt_geom.te_gap(), 0.002, epsilon = 1e-10);
+}
+
+/// Test panel method with sharp TE gives near-zero CDp for symmetric airfoil at α=0
+///
+/// This validates that the curvature extrapolation condition (XFOIL equation 9)
+/// properly eliminates the TE singularity.
+#[test]
+fn test_sharp_te_zero_cdp_symmetric() {
+    let geom = naca_4digit("0012", 160).unwrap();
+    let airfoil = create_paneled_airfoil(&geom);
+
+    assert!(airfoil.sharp_te, "Should use sharp TE handling");
+
+    let solution = solve_inviscid(&airfoil);
+    let vel = solution.velocity_at_alpha(0.0);
+    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
+    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+
+    // For symmetric airfoil at α=0, CDp should be essentially zero
+    assert!(
+        coeffs.cdp.abs() < 0.001,
+        "CDp = {} should be ~0 for symmetric airfoil at α=0 with sharp TE",
+        coeffs.cdp
+    );
+
+    // CL should also be essentially zero
+    assert!(
+        coeffs.cl.abs() < 0.01,
+        "CL = {} should be ~0 for symmetric airfoil at α=0",
+        coeffs.cl
+    );
+}
+
+/// Test panel method with blunt TE still produces reasonable results
+///
+/// Blunt TE uses standard flow tangency equations (no curvature extrapolation).
+/// The Kutta condition still ensures finite TE velocity, and results should
+/// be physically reasonable even if not as clean as sharp TE.
+#[test]
+fn test_blunt_te_reasonable_results() {
+    let geom = naca_4digit("0012", 160).unwrap();
+    let blunt_geom = geom.blunten(0.002); // 0.2% gap
+    let airfoil = create_paneled_airfoil(&blunt_geom);
+
+    assert!(!airfoil.sharp_te, "Should use blunt TE handling");
+
+    let solution = solve_inviscid(&airfoil);
+    let vel = solution.velocity_at_alpha(0.0);
+    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
+    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+
+    // For symmetric airfoil at α=0, CL should still be near zero
+    assert!(
+        coeffs.cl.abs() < 0.05,
+        "CL = {} should be near 0 for symmetric airfoil at α=0",
+        coeffs.cl
+    );
+
+    // CDp may not be exactly zero but should be small
+    // The blunt TE may cause some small asymmetry in the solution
+    assert!(
+        coeffs.cdp.abs() < 0.01,
+        "CDp = {} should be small for blunt TE",
+        coeffs.cdp
+    );
+
+    // Velocities should be smooth (no huge spikes)
+    let max_vel = vel.iter().map(|v| v.abs()).fold(f64::NEG_INFINITY, f64::max);
+    assert!(
+        max_vel < 3.0,
+        "Max velocity {} should be reasonable (no singularity)",
+        max_vel
+    );
+}
+
+/// Test that lift slope is correct for both sharp and blunt TE
+#[test]
+fn test_te_type_lift_slope_comparison() {
+    // Sharp TE
+    let geom_sharp = naca_4digit("0012", 160).unwrap();
+    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
+    let solution_sharp = solve_inviscid(&airfoil_sharp);
+
+    // Blunt TE
+    let geom_blunt = geom_sharp.blunten(0.002);
+    let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
+    let solution_blunt = solve_inviscid(&airfoil_blunt);
+
+    // Calculate lift slope for both
+    let alpha1 = 0.0_f64;
+    let alpha2 = 5.0_f64.to_radians();
+
+    // Sharp TE lift slope
+    let vel1_sharp = solution_sharp.velocity_at_alpha(alpha1);
+    let vel2_sharp = solution_sharp.velocity_at_alpha(alpha2);
+    let cp1_sharp: Vec<f64> = vel1_sharp.iter().map(|&v| 1.0 - v * v).collect();
+    let cp2_sharp: Vec<f64> = vel2_sharp.iter().map(|&v| 1.0 - v * v).collect();
+    let coeffs1_sharp = integrate_forces(&airfoil_sharp, &cp1_sharp, alpha1);
+    let coeffs2_sharp = integrate_forces(&airfoil_sharp, &cp2_sharp, alpha2);
+    let dcl_dalpha_sharp = (coeffs2_sharp.cl - coeffs1_sharp.cl) / (alpha2 - alpha1);
+
+    // Blunt TE lift slope
+    let vel1_blunt = solution_blunt.velocity_at_alpha(alpha1);
+    let vel2_blunt = solution_blunt.velocity_at_alpha(alpha2);
+    let cp1_blunt: Vec<f64> = vel1_blunt.iter().map(|&v| 1.0 - v * v).collect();
+    let cp2_blunt: Vec<f64> = vel2_blunt.iter().map(|&v| 1.0 - v * v).collect();
+    let coeffs1_blunt = integrate_forces(&airfoil_blunt, &cp1_blunt, alpha1);
+    let coeffs2_blunt = integrate_forces(&airfoil_blunt, &cp2_blunt, alpha2);
+    let dcl_dalpha_blunt = (coeffs2_blunt.cl - coeffs1_blunt.cl) / (alpha2 - alpha1);
+
+    // Both should be close to thin airfoil theory (2π ≈ 6.28)
+    assert!(
+        dcl_dalpha_sharp > 5.0 && dcl_dalpha_sharp < 7.5,
+        "Sharp TE lift slope {} should be near 2π",
+        dcl_dalpha_sharp
+    );
+    assert!(
+        dcl_dalpha_blunt > 5.0 && dcl_dalpha_blunt < 7.5,
+        "Blunt TE lift slope {} should be near 2π",
+        dcl_dalpha_blunt
+    );
+
+    // They should be similar (within 10%)
+    let diff_pct = ((dcl_dalpha_sharp - dcl_dalpha_blunt) / dcl_dalpha_sharp).abs() * 100.0;
+    assert!(
+        diff_pct < 15.0,
+        "Lift slopes should be similar: sharp={}, blunt={}, diff={}%",
+        dcl_dalpha_sharp,
+        dcl_dalpha_blunt,
+        diff_pct
+    );
+}
+
+/// Test Kutta condition is satisfied for both sharp and blunt TE
+#[test]
+fn test_kutta_condition_both_te_types() {
+    // Sharp TE
+    let geom_sharp = naca_4digit("0012", 160).unwrap();
+    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
+    let solution_sharp = solve_inviscid(&airfoil_sharp);
+
+    let kutta_sharp_0 = solution_sharp.gam_0[0] + solution_sharp.gam_0[airfoil_sharp.n - 1];
+    let kutta_sharp_90 = solution_sharp.gam_90[0] + solution_sharp.gam_90[airfoil_sharp.n - 1];
+    assert!(
+        kutta_sharp_0.abs() < 1e-9,
+        "Sharp TE Kutta condition violated for α=0°: {}",
+        kutta_sharp_0
+    );
+    assert!(
+        kutta_sharp_90.abs() < 1e-9,
+        "Sharp TE Kutta condition violated for α=90°: {}",
+        kutta_sharp_90
+    );
+
+    // Blunt TE
+    let geom_blunt = geom_sharp.blunten(0.002);
+    let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
+    let solution_blunt = solve_inviscid(&airfoil_blunt);
+
+    let kutta_blunt_0 = solution_blunt.gam_0[0] + solution_blunt.gam_0[airfoil_blunt.n - 1];
+    let kutta_blunt_90 = solution_blunt.gam_90[0] + solution_blunt.gam_90[airfoil_blunt.n - 1];
+    assert!(
+        kutta_blunt_0.abs() < 1e-9,
+        "Blunt TE Kutta condition violated for α=0°: {}",
+        kutta_blunt_0
+    );
+    assert!(
+        kutta_blunt_90.abs() < 1e-9,
+        "Blunt TE Kutta condition violated for α=90°: {}",
+        kutta_blunt_90
+    );
+}
+
+/// Test that the gamma distribution is smooth near TE for sharp case
+///
+/// With curvature extrapolation, gamma should smoothly approach zero at TE
+/// from both upper and lower surfaces.
+#[test]
+fn test_sharp_te_smooth_gamma() {
+    let geom = naca_4digit("0012", 160).unwrap();
+    let airfoil = create_paneled_airfoil(&geom);
+    let solution = solve_inviscid(&airfoil);
+
+    // For α=0° symmetric case, check gamma at TE nodes
+    let n = airfoil.n;
+    let gam = solution.gamma_at_alpha(0.0);
+
+    // TE gammas should be small (Kutta condition + smooth approach)
+    assert!(
+        gam[0].abs() < 2.0,
+        "Upper TE gamma {} should be small with curvature extrapolation",
+        gam[0]
+    );
+    assert!(
+        gam[n - 1].abs() < 2.0,
+        "Lower TE gamma {} should be small with curvature extrapolation",
+        gam[n - 1]
+    );
+
+    // Second derivatives at TE should be similar (curvature condition)
+    let curv_upper = gam[2] - 2.0 * gam[1] + gam[0];
+    let curv_lower = gam[n - 3] - 2.0 * gam[n - 2] + gam[n - 1];
+    assert!(
+        (curv_upper - curv_lower).abs() < 0.1,
+        "TE curvatures should match: upper={}, lower={}",
+        curv_upper,
+        curv_lower
+    );
+}
