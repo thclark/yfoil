@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::geometry::{Geometry, PaneledAirfoil};
+use crate::output::InviscidAnalysisOutput;
 
 /// Configuration for geometry plots
 #[derive(Debug, Clone)]
@@ -361,4 +362,615 @@ pub fn write_precision_svg<P: AsRef<Path>>(
     writeln!(file, "</svg>")?;
 
     Ok(())
+}
+
+/// Configuration for analysis distribution plots (Cp and Ue)
+#[derive(Debug, Clone)]
+pub struct AnalysisPlotConfig {
+    /// Image width in pixels
+    pub width: u32,
+    /// Image height in pixels
+    pub height: u32,
+    /// Upper surface color (RGB) - default blue
+    pub upper_color: (u8, u8, u8),
+    /// Lower surface color (RGB) - default red
+    pub lower_color: (u8, u8, u8),
+    /// Airfoil outline color (RGB) - default gray
+    pub airfoil_color: (u8, u8, u8),
+    /// Background color (RGB)
+    pub background: (u8, u8, u8),
+    /// Title for the plot
+    pub title: Option<String>,
+}
+
+impl Default for AnalysisPlotConfig {
+    fn default() -> Self {
+        Self {
+            width: 1200,
+            height: 800,
+            upper_color: (0, 100, 200),     // Blue
+            lower_color: (200, 50, 50),     // Red
+            airfoil_color: (100, 100, 100), // Gray
+            background: (255, 255, 255),    // White
+            title: None,
+        }
+    }
+}
+
+/// Plot Cp and Ue distributions from inviscid analysis results
+///
+/// Creates a two-panel plot with:
+/// - Top panel: Cp distribution (negative upward, aerodynamic convention)
+/// - Bottom panel: Ue (edge velocity) distribution
+///
+/// Both panels show upper surface in blue and lower surface in red,
+/// with the airfoil outline superimposed at ~1/3 of the y-axis height.
+///
+/// Uses high-precision SVG output (6 decimal places) for smooth curves.
+pub fn plot_analysis_svg<P: AsRef<Path>>(
+    analysis: &InviscidAnalysisOutput,
+    output_path: P,
+    config: &AnalysisPlotConfig,
+) -> Result<(), PlotError> {
+    write_analysis_precision_svg(analysis, output_path, config)
+}
+
+/// Plot Cp and Ue distributions to PNG
+pub fn plot_analysis_png<P: AsRef<Path>>(
+    analysis: &InviscidAnalysisOutput,
+    output_path: P,
+    config: &AnalysisPlotConfig,
+) -> Result<(), PlotError> {
+    let root = BitMapBackend::new(&output_path, (config.width, config.height))
+        .into_drawing_area();
+
+    plot_analysis_impl(&root, analysis, config)
+}
+
+/// Internal implementation for analysis distribution plotting (for PNG)
+fn plot_analysis_impl<DB: DrawingBackend>(
+    root: &DrawingArea<DB, plotters::coord::Shift>,
+    analysis: &InviscidAnalysisOutput,
+    config: &AnalysisPlotConfig,
+) -> Result<(), PlotError>
+where
+    DB::ErrorType: 'static,
+{
+    let bg_color = RGBColor(config.background.0, config.background.1, config.background.2);
+    root.fill(&bg_color)
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    // Get surface data
+    let (x_upper, cp_upper, vel_upper) = analysis.upper_surface();
+    let (x_lower, cp_lower, vel_lower) = analysis.lower_surface();
+
+    // Get airfoil outline
+    let airfoil_x = &analysis.stations.x;
+    let airfoil_y = &analysis.stations.y;
+
+    // Calculate data ranges for Cp (note: inverted y-axis for negative convention)
+    let cp_min = cp_upper.iter().chain(cp_lower.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let cp_max = cp_upper.iter().chain(cp_lower.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cp_range = cp_max - cp_min;
+    let cp_padding = 0.1 * cp_range;
+
+    // Calculate data ranges for Ue
+    let vel_min = vel_upper.iter().chain(vel_lower.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let vel_max = vel_upper.iter().chain(vel_lower.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let vel_range = vel_max - vel_min;
+    let vel_padding = 0.1 * vel_range;
+
+    // Airfoil y range
+    let y_min = airfoil_y.iter().cloned().fold(f64::INFINITY, f64::min);
+    let y_max = airfoil_y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    // Split into upper and lower regions with margin for title
+    let title = config.title.clone().unwrap_or_else(|| {
+        format!("{} at α = {:.1}°", analysis.airfoil, analysis.alpha_deg)
+    });
+
+    let (upper, lower) = root.split_vertically(config.height / 2);
+
+    // Colors
+    let upper_color = RGBColor(config.upper_color.0, config.upper_color.1, config.upper_color.2);
+    let lower_color = RGBColor(config.lower_color.0, config.lower_color.1, config.lower_color.2);
+    let airfoil_color = RGBColor(config.airfoil_color.0, config.airfoil_color.1, config.airfoil_color.2);
+
+    // ===== Cp Plot (upper panel) =====
+    // Y-axis is INVERTED: more negative values at top (suction), positive at bottom (pressure)
+    let cp_y_min = cp_min - cp_padding;  // This will be at the TOP (most negative = most suction)
+    let cp_y_max = cp_max + cp_padding;  // This will be at the BOTTOM (most positive = pressure)
+
+    let mut cp_chart = ChartBuilder::on(&upper)
+        .caption(&title, ("sans-serif", 18))
+        .margin(10)
+        .x_label_area_size(35)
+        .y_label_area_size(50)
+        .build_cartesian_2d(
+            -0.05..1.1,
+            cp_y_max..cp_y_min,  // INVERTED: positive at bottom, negative at top
+        )
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    cp_chart
+        .configure_mesh()
+        .x_desc("x/c")
+        .y_desc("Cp")
+        .x_labels(10)
+        .y_labels(8)
+        .light_line_style(TRANSPARENT)
+        .draw()
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    // Draw airfoil outline scaled to ~1/3 of plot height at the bottom of Cp range
+    // Map airfoil y to Cp coordinates: scale y to fit in bottom 1/3 of Cp range
+    let cp_display_range = cp_y_max - cp_y_min;
+    let airfoil_scale = (cp_display_range / 3.0) / (y_max - y_min);
+    let airfoil_offset = cp_y_max - 0.05 * cp_display_range; // Position near the bottom (high Cp values)
+
+    let airfoil_cp_points: Vec<(f64, f64)> = airfoil_x.iter()
+        .zip(airfoil_y.iter())
+        .map(|(&x, &y)| (x, airfoil_offset - (y - y_min) * airfoil_scale))
+        .collect();
+
+    cp_chart
+        .draw_series(LineSeries::new(airfoil_cp_points, airfoil_color.stroke_width(1)))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    // Draw Cp distributions
+    let upper_cp_points: Vec<(f64, f64)> = x_upper.iter()
+        .zip(cp_upper.iter())
+        .map(|(&x, &cp)| (x, cp))
+        .collect();
+
+    let lower_cp_points: Vec<(f64, f64)> = x_lower.iter()
+        .zip(cp_lower.iter())
+        .map(|(&x, &cp)| (x, cp))
+        .collect();
+
+    cp_chart
+        .draw_series(LineSeries::new(upper_cp_points, upper_color.stroke_width(2)))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?
+        .label("Upper surface")
+        .legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], upper_color.stroke_width(2)));
+
+    cp_chart
+        .draw_series(LineSeries::new(lower_cp_points, lower_color.stroke_width(2)))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?
+        .label("Lower surface")
+        .legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], lower_color.stroke_width(2)));
+
+    cp_chart
+        .configure_series_labels()
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
+        .position(SeriesLabelPosition::UpperRight)
+        .draw()
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    // ===== Ue Plot (lower panel) =====
+    let vel_y_min = vel_min - vel_padding;
+    let vel_y_max = vel_max + vel_padding;
+
+    let mut vel_chart = ChartBuilder::on(&lower)
+        .margin(10)
+        .x_label_area_size(35)
+        .y_label_area_size(50)
+        .build_cartesian_2d(-0.05..1.1, vel_y_min..vel_y_max)
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    vel_chart
+        .configure_mesh()
+        .x_desc("x/c")
+        .y_desc("Ue/U∞")
+        .x_labels(10)
+        .y_labels(8)
+        .light_line_style(TRANSPARENT)
+        .draw()
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    // Draw airfoil outline scaled to ~1/3 of plot height at the bottom of velocity range
+    let vel_display_range = vel_y_max - vel_y_min;
+    let airfoil_vel_scale = (vel_display_range / 3.0) / (y_max - y_min);
+    let airfoil_vel_offset = vel_y_min + 0.05 * vel_display_range;
+
+    let airfoil_vel_points: Vec<(f64, f64)> = airfoil_x.iter()
+        .zip(airfoil_y.iter())
+        .map(|(&x, &y)| (x, airfoil_vel_offset + (y - y_min) * airfoil_vel_scale))
+        .collect();
+
+    vel_chart
+        .draw_series(LineSeries::new(airfoil_vel_points, airfoil_color.stroke_width(1)))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    // Draw Ue distributions
+    let upper_vel_points: Vec<(f64, f64)> = x_upper.iter()
+        .zip(vel_upper.iter())
+        .map(|(&x, &v)| (x, v))
+        .collect();
+
+    let lower_vel_points: Vec<(f64, f64)> = x_lower.iter()
+        .zip(vel_lower.iter())
+        .map(|(&x, &v)| (x, v))
+        .collect();
+
+    vel_chart
+        .draw_series(LineSeries::new(upper_vel_points, upper_color.stroke_width(2)))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    vel_chart
+        .draw_series(LineSeries::new(lower_vel_points, lower_color.stroke_width(2)))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    root.present()
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Write high-precision SVG for analysis plots
+///
+/// Unlike the plotters SVGBackend which rounds to integer pixels,
+/// this outputs coordinates with 6 decimal places for smooth curves.
+fn write_analysis_precision_svg<P: AsRef<Path>>(
+    analysis: &InviscidAnalysisOutput,
+    output_path: P,
+    config: &AnalysisPlotConfig,
+) -> Result<(), PlotError> {
+    let mut file = std::fs::File::create(output_path)?;
+
+    // Get surface data
+    let (x_upper, cp_upper, vel_upper) = analysis.upper_surface();
+    let (x_lower, cp_lower, vel_lower) = analysis.lower_surface();
+
+    // Get airfoil outline
+    let airfoil_x = &analysis.stations.x;
+    let airfoil_y = &analysis.stations.y;
+
+    // Calculate data ranges for Cp
+    let cp_min = cp_upper.iter().chain(cp_lower.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let cp_max = cp_upper.iter().chain(cp_lower.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cp_range = cp_max - cp_min;
+    let cp_padding = 0.1 * cp_range;
+    let cp_y_min = cp_min - cp_padding;
+    let cp_y_max = cp_max + cp_padding;
+
+    // Calculate data ranges for Ue
+    let vel_min = vel_upper.iter().chain(vel_lower.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let vel_max = vel_upper.iter().chain(vel_lower.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let vel_range = vel_max - vel_min;
+    let vel_padding = 0.1 * vel_range;
+    let vel_y_min = vel_min - vel_padding;
+    let vel_y_max = vel_max + vel_padding;
+
+    // Airfoil y range
+    let af_y_min = airfoil_y.iter().cloned().fold(f64::INFINITY, f64::min);
+    let af_y_max = airfoil_y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    // Layout dimensions
+    let width = config.width as f64;
+    let height = config.height as f64;
+    let margin_left = 60.0;
+    let margin_right = 20.0;
+    let margin_top = 40.0;
+    let margin_bottom = 40.0;
+    let gap = 20.0; // Gap between plots
+
+    let plot_width = width - margin_left - margin_right;
+    let plot_height = (height - margin_top - margin_bottom - gap) / 2.0;
+
+    // X data range (same for both plots)
+    let x_data_min = -0.05;
+    let x_data_max = 1.1;
+    let x_data_range = x_data_max - x_data_min;
+
+    // Coordinate transforms for Cp plot (top)
+    let cp_plot_top = margin_top;
+    let cp_plot_bottom = margin_top + plot_height;
+    let cp_data_range = cp_y_max - cp_y_min;
+
+    let to_svg_x = |x: f64| -> f64 {
+        margin_left + (x - x_data_min) / x_data_range * plot_width
+    };
+    // Cp: inverted y-axis (negative at top, positive at bottom)
+    let to_svg_cp_y = |cp: f64| -> f64 {
+        cp_plot_top + (cp - cp_y_min) / cp_data_range * plot_height
+    };
+
+    // Coordinate transforms for Ue plot (bottom)
+    let vel_plot_top = cp_plot_bottom + gap;
+    let vel_plot_bottom = vel_plot_top + plot_height;
+    let vel_data_range = vel_y_max - vel_y_min;
+
+    let to_svg_vel_y = |vel: f64| -> f64 {
+        vel_plot_bottom - (vel - vel_y_min) / vel_data_range * plot_height
+    };
+
+    // Colors
+    let upper_color = format!("rgb({},{},{})", config.upper_color.0, config.upper_color.1, config.upper_color.2);
+    let lower_color = format!("rgb({},{},{})", config.lower_color.0, config.lower_color.1, config.lower_color.2);
+    let airfoil_color = format!("rgb({},{},{})", config.airfoil_color.0, config.airfoil_color.1, config.airfoil_color.2);
+    let grid_color = "#DDDDDD"; // Light grey for major gridlines
+
+    // SVG header
+    writeln!(
+        file,
+        r#"<svg width="{}" height="{}" viewBox="0 0 {} {}" xmlns="http://www.w3.org/2000/svg">"#,
+        config.width, config.height, config.width, config.height
+    )?;
+
+    // Background
+    writeln!(
+        file,
+        r#"<rect width="100%" height="100%" fill="rgb({},{},{})"/>"#,
+        config.background.0, config.background.1, config.background.2
+    )?;
+
+    // Title
+    let title = config.title.clone().unwrap_or_else(|| {
+        format!("{} at α = {:.1}°", analysis.airfoil, analysis.alpha_deg)
+    });
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="25" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold">{}</text>"#,
+        width / 2.0,
+        title
+    )?;
+
+    // ===== Cp Plot (top) =====
+
+    // Plot border
+    writeln!(
+        file,
+        r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        margin_left, cp_plot_top, plot_width, plot_height
+    )?;
+
+    // Major gridlines for Cp (light grey, no minor gridlines)
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    // Vertical gridlines at x = 0.0, 0.1, 0.2, ... 1.0
+    for i in 0..=10 {
+        let x = i as f64 / 10.0;
+        let sx = to_svg_x(x);
+        if sx > margin_left && sx < margin_left + plot_width {
+            writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+                sx, cp_plot_top, sx, cp_plot_bottom)?;
+        }
+    }
+    // Horizontal gridlines (Cp)
+    let cp_step = nice_step(cp_data_range, 6);
+    let cp_start = (cp_y_min / cp_step).floor() * cp_step;
+    let mut cp_val = cp_start;
+    while cp_val <= cp_y_max {
+        let sy = to_svg_cp_y(cp_val);
+        if sy > cp_plot_top && sy < cp_plot_bottom {
+            writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+                margin_left, sy, margin_left + plot_width, sy)?;
+        }
+        cp_val += cp_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Cp axis labels
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12">x/c</text>"#,
+        margin_left + plot_width / 2.0,
+        cp_plot_bottom + 30.0
+    )?;
+    writeln!(
+        file,
+        r#"<text x="15" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12" transform="rotate(-90 15 {:.1})">Cp</text>"#,
+        cp_plot_top + plot_height / 2.0,
+        cp_plot_top + plot_height / 2.0
+    )?;
+
+    // Cp tick labels
+    writeln!(file, r#"<g font-family="sans-serif" font-size="10" text-anchor="end">"#)?;
+    cp_val = cp_start;
+    while cp_val <= cp_y_max {
+        let sy = to_svg_cp_y(cp_val);
+        if sy > cp_plot_top + 5.0 && sy < cp_plot_bottom - 5.0 {
+            writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.1}</text>"#,
+                margin_left - 5.0, sy + 4.0, cp_val)?;
+        }
+        cp_val += cp_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // X tick labels for Cp plot
+    writeln!(file, r#"<g font-family="sans-serif" font-size="10" text-anchor="middle">"#)?;
+    for i in 0..=10 {
+        let x = i as f64 / 10.0;
+        let sx = to_svg_x(x);
+        writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.1}</text>"#,
+            sx, cp_plot_bottom + 15.0, x)?;
+    }
+    writeln!(file, "</g>")?;
+
+    // Airfoil outline on Cp plot (scaled to ~1/3 height, centered at Cp=0)
+    let cp_display_range_val = cp_y_max - cp_y_min;
+    let airfoil_scale = (cp_display_range_val / 3.0) / (af_y_max - af_y_min);
+
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="1" points=""#, airfoil_color)?;
+    for (i, (&x, &y)) in airfoil_x.iter().zip(airfoil_y.iter()).enumerate() {
+        // Map airfoil y directly to Cp coordinates (y=0 on airfoil -> Cp=0)
+        let cp_y = -y * airfoil_scale;
+        let sx = to_svg_x(x);
+        let sy = to_svg_cp_y(cp_y);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Upper surface Cp (blue)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, upper_color)?;
+    for (i, (&x, &cp)) in x_upper.iter().zip(cp_upper.iter()).enumerate() {
+        let sx = to_svg_x(x);
+        let sy = to_svg_cp_y(cp);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Lower surface Cp (red)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, lower_color)?;
+    for (i, (&x, &cp)) in x_lower.iter().zip(cp_lower.iter()).enumerate() {
+        let sx = to_svg_x(x);
+        let sy = to_svg_cp_y(cp);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Legend for Cp plot
+    let legend_x = margin_left + plot_width - 120.0;
+    let legend_y = cp_plot_top + 15.0;
+    writeln!(file, r#"<rect x="{:.1}" y="{:.1}" width="110" height="45" fill="white" fill-opacity="0.8" stroke="black" stroke-width="0.5"/>"#,
+        legend_x, legend_y)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x + 10.0, legend_y + 15.0, legend_x + 30.0, legend_y + 15.0, upper_color)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">Upper surface</text>"#,
+        legend_x + 35.0, legend_y + 19.0)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x + 10.0, legend_y + 32.0, legend_x + 30.0, legend_y + 32.0, lower_color)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">Lower surface</text>"#,
+        legend_x + 35.0, legend_y + 36.0)?;
+
+    // ===== Ue Plot (bottom) =====
+
+    // Plot border
+    writeln!(
+        file,
+        r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        margin_left, vel_plot_top, plot_width, plot_height
+    )?;
+
+    // Major gridlines for Ue (light grey)
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    // Vertical gridlines at x = 0.0, 0.1, 0.2, ... 1.0
+    for i in 0..=10 {
+        let x = i as f64 / 10.0;
+        let sx = to_svg_x(x);
+        if sx > margin_left && sx < margin_left + plot_width {
+            writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+                sx, vel_plot_top, sx, vel_plot_bottom)?;
+        }
+    }
+    // Horizontal gridlines (Ue)
+    let vel_step = nice_step(vel_data_range, 6);
+    let vel_start = (vel_y_min / vel_step).floor() * vel_step;
+    let mut vel_val = vel_start;
+    while vel_val <= vel_y_max {
+        let sy = to_svg_vel_y(vel_val);
+        if sy > vel_plot_top && sy < vel_plot_bottom {
+            writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+                margin_left, sy, margin_left + plot_width, sy)?;
+        }
+        vel_val += vel_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Ue axis labels
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12">x/c</text>"#,
+        margin_left + plot_width / 2.0,
+        vel_plot_bottom + 30.0
+    )?;
+    writeln!(
+        file,
+        r#"<text x="15" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12" transform="rotate(-90 15 {:.1})">Ue/U∞</text>"#,
+        vel_plot_top + plot_height / 2.0,
+        vel_plot_top + plot_height / 2.0
+    )?;
+
+    // Ue tick labels
+    writeln!(file, r#"<g font-family="sans-serif" font-size="10" text-anchor="end">"#)?;
+    vel_val = vel_start;
+    while vel_val <= vel_y_max {
+        let sy = to_svg_vel_y(vel_val);
+        if sy > vel_plot_top + 5.0 && sy < vel_plot_bottom - 5.0 {
+            writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.2}</text>"#,
+                margin_left - 5.0, sy + 4.0, vel_val)?;
+        }
+        vel_val += vel_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // X tick labels for Ue plot
+    writeln!(file, r#"<g font-family="sans-serif" font-size="10" text-anchor="middle">"#)?;
+    for i in 0..=10 {
+        let x = i as f64 / 10.0;
+        let sx = to_svg_x(x);
+        writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.1}</text>"#,
+            sx, vel_plot_bottom + 15.0, x)?;
+    }
+    writeln!(file, "</g>")?;
+
+    // Airfoil outline on Ue plot (scaled to ~1/3 height, centered at Ue=0)
+    let vel_display_range_val = vel_y_max - vel_y_min;
+    let airfoil_vel_scale = (vel_display_range_val / 3.0) / (af_y_max - af_y_min);
+
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="1" points=""#, airfoil_color)?;
+    for (i, (&x, &y)) in airfoil_x.iter().zip(airfoil_y.iter()).enumerate() {
+        // Map airfoil y directly to Ue coordinates (y=0 on airfoil -> Ue=0)
+        let vel_y = y * airfoil_vel_scale;
+        let sx = to_svg_x(x);
+        let sy = to_svg_vel_y(vel_y);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Upper surface Ue (blue)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, upper_color)?;
+    for (i, (&x, &vel)) in x_upper.iter().zip(vel_upper.iter()).enumerate() {
+        let sx = to_svg_x(x);
+        let sy = to_svg_vel_y(vel);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Lower surface Ue (red)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, lower_color)?;
+    for (i, (&x, &vel)) in x_lower.iter().zip(vel_lower.iter()).enumerate() {
+        let sx = to_svg_x(x);
+        let sy = to_svg_vel_y(vel);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    writeln!(file, "</svg>")?;
+
+    Ok(())
+}
+
+/// Calculate a nice step size for axis ticks
+fn nice_step(range: f64, target_ticks: usize) -> f64 {
+    let rough_step = range / target_ticks as f64;
+    let magnitude = 10.0_f64.powf(rough_step.log10().floor());
+    let normalized = rough_step / magnitude;
+
+    let nice = if normalized < 1.5 {
+        1.0
+    } else if normalized < 3.0 {
+        2.0
+    } else if normalized < 7.0 {
+        5.0
+    } else {
+        10.0
+    };
+
+    nice * magnitude
 }

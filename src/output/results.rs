@@ -205,6 +205,8 @@ pub struct InviscidAnalysisOutput {
     pub mach: f64,
     /// Number of stations (panel nodes)
     pub n_stations: usize,
+    /// Leading edge index (for splitting upper/lower surfaces)
+    pub le_index: usize,
     /// Force coefficients
     pub coefficients: InviscidCoefficients,
     /// Station distributions
@@ -253,6 +255,7 @@ impl InviscidAnalysisOutput {
             alpha_deg,
             mach,
             n_stations: airfoil.n,
+            le_index: airfoil.le_index,
             coefficients: InviscidCoefficients {
                 cl: coeffs.cl,
                 cm: coeffs.cm,
@@ -266,6 +269,28 @@ impl InviscidAnalysisOutput {
                 cp: cp.to_vec(),
             },
         }
+    }
+
+    /// Get upper surface data (TE to LE, indices 0..=le_index)
+    ///
+    /// Returns (x, cp, velocity) vectors for the upper surface
+    pub fn upper_surface(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+        let le = self.le_index;
+        let x: Vec<f64> = self.stations.x[0..=le].to_vec();
+        let cp: Vec<f64> = self.stations.cp[0..=le].to_vec();
+        let vel: Vec<f64> = self.stations.velocity[0..=le].to_vec();
+        (x, cp, vel)
+    }
+
+    /// Get lower surface data (LE to TE, indices le_index..n)
+    ///
+    /// Returns (x, cp, velocity) vectors for the lower surface
+    pub fn lower_surface(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+        let le = self.le_index;
+        let x: Vec<f64> = self.stations.x[le..].to_vec();
+        let cp: Vec<f64> = self.stations.cp[le..].to_vec();
+        let vel: Vec<f64> = self.stations.velocity[le..].to_vec();
+        (x, cp, vel)
     }
 
     /// Serialize to JSON string

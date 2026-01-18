@@ -15,7 +15,7 @@ use yfoil::output::{InviscidAnalysisOutput, PolarOutput};
 use yfoil::solver::{compute_polar, solve_viscous, PolarConfig, ViscalConfig};
 
 #[cfg(feature = "plotting")]
-use yfoil::output::{plot_paneled_svg, plot_paneled_png, GeometryPlotConfig};
+use yfoil::output::{plot_paneled_svg, plot_paneled_png, GeometryPlotConfig, plot_analysis_svg, plot_analysis_png, AnalysisPlotConfig};
 
 /// YFoil - Rust-based aerofoil analysis tool
 #[derive(Parser, Debug)]
@@ -100,6 +100,28 @@ enum Commands {
         /// Output file path
         #[arg(short, long)]
         output: Option<PathBuf>,
+    },
+
+    /// Plot analysis results (Cp and Ue distributions)
+    Plot {
+        /// Path to analysis results JSON file
+        file: PathBuf,
+
+        /// Output file (SVG or PNG based on extension)
+        #[arg(short, long, default_value = "analysis.svg")]
+        output: PathBuf,
+
+        /// Plot title (auto-generated from file if not specified)
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Image width in pixels
+        #[arg(long, default_value_t = 1200)]
+        width: u32,
+
+        /// Image height in pixels
+        #[arg(long, default_value_t = 800)]
+        height: u32,
     },
 }
 
@@ -416,6 +438,74 @@ fn main() {
                     println!();
                     println!("Wrote JSON polar to {}", path.display());
                 }
+            }
+        }
+        Commands::Plot {
+            file,
+            output,
+            title,
+            width,
+            height,
+        } => {
+            #[cfg(feature = "plotting")]
+            {
+                // Read analysis results JSON
+                let json_str = match std::fs::read_to_string(&file) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Error reading file: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                let analysis: InviscidAnalysisOutput = match serde_json::from_str(&json_str) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        eprintln!("Error parsing JSON: {}", e);
+                        eprintln!("Make sure the file is an inviscid analysis output (from 'yfoil analyze --inviscid -o')");
+                        std::process::exit(1);
+                    }
+                };
+
+                let config = AnalysisPlotConfig {
+                    width,
+                    height,
+                    title,
+                    ..Default::default()
+                };
+
+                // Determine output format from extension
+                let ext = output
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("svg")
+                    .to_lowercase();
+
+                let result = match ext.as_str() {
+                    "png" => plot_analysis_png(&analysis, &output, &config),
+                    _ => plot_analysis_svg(&analysis, &output, &config),
+                };
+
+                match result {
+                    Ok(()) => println!("Wrote analysis plot to {}", output.display()),
+                    Err(e) => {
+                        eprintln!("Error creating plot: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "plotting"))]
+            {
+                let _ = file;
+                let _ = output;
+                let _ = title;
+                let _ = width;
+                let _ = height;
+                eprintln!(
+                    "Plotting feature not enabled. Rebuild with: cargo build --features plotting"
+                );
+                std::process::exit(1);
             }
         }
     }
