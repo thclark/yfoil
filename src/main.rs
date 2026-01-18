@@ -5,13 +5,13 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use yfoil::bl::FlowConditions;
-use yfoil::forces::{calculate_cp, integrate_forces};
+use yfoil::forces::{calculate_cp, integrate_forces}; // calculate_cp still needed for JSON output
 use yfoil::geometry::{
     create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
     repanel_cosine, repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
 use yfoil::panel::solve_inviscid;
-use yfoil::output::PolarOutput;
+use yfoil::output::{InviscidAnalysisOutput, PolarOutput};
 use yfoil::solver::{compute_polar, solve_viscous, PolarConfig, ViscalConfig};
 
 #[cfg(feature = "plotting")]
@@ -58,6 +58,10 @@ enum Commands {
         /// Inviscid analysis only
         #[arg(long)]
         inviscid: bool,
+
+        /// Output file path for JSON results
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 
     /// Generate polar sweep
@@ -215,6 +219,7 @@ fn main() {
             mach,
             ncrit,
             inviscid,
+            output,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
@@ -228,8 +233,10 @@ fn main() {
                 let solution = solve_inviscid(&airfoil);
                 // Use node-based velocities for consistency with XFOIL
                 let velocity = solution.velocity_at_nodes(alpha_rad);
+                // integrate_forces computes Cp internally with Karman-Tsien correction
+                let coeffs = integrate_forces(&airfoil, &velocity, alpha_rad, mach);
+                // Compute Cp for JSON output
                 let cp = calculate_cp(&velocity, mach);
-                let coeffs = integrate_forces(&airfoil, &cp, alpha_rad);
 
                 println!("Inviscid Analysis Results");
                 println!("========================");
@@ -240,6 +247,27 @@ fn main() {
                 println!("CL  = {:+.6}", coeffs.cl);
                 println!("CM  = {:+.6}", coeffs.cm);
                 println!("CDp = {:+.6} (pressure drag)", coeffs.cdp);
+
+                // Write JSON output if requested
+                if let Some(ref path) = output {
+                    let airfoil_name = file
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Unknown");
+                    let result = InviscidAnalysisOutput::new(
+                        &airfoil,
+                        &velocity,
+                        &cp,
+                        &coeffs,
+                        alpha,
+                        mach,
+                        airfoil_name,
+                    );
+                    let json_str = result.to_json().expect("Failed to serialize results");
+                    std::fs::write(path, &json_str).expect("Failed to write output file");
+                    println!();
+                    println!("Wrote JSON to {}", path.display());
+                }
             } else {
                 // Viscous analysis
                 let cond = FlowConditions::new(reynolds, mach, ncrit, airfoil.chord);

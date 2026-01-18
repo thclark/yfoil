@@ -1233,9 +1233,7 @@ mod tests {
         );
 
         // CL should be essentially zero for symmetric airfoil at α=0
-        // Convert velocity to pressure coefficient: Cp = 1 - V^2
-        let cp: Vec<f64> = qinv.iter().map(|&v| 1.0 - v * v).collect();
-        let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+        let coeffs = integrate_forces(&airfoil, &qinv, 0.0, 0.0);
         // CL may be slightly non-zero due to TE gap (blunt TE) discretization effects
         assert!(coeffs.cl.abs() < 0.01, "CL should be ~0 for symmetric airfoil at α=0, got {}", coeffs.cl);
     }

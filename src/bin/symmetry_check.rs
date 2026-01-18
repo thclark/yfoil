@@ -1,6 +1,6 @@
 use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
 use yfoil::panel::solve_inviscid;
-use yfoil::forces::{calculate_cp, integrate_forces};
+use yfoil::forces::integrate_forces;
 use yfoil::bl::FlowConditions;
 use yfoil::solver::{solve_viscous, ViscalConfig};
 
@@ -45,9 +45,8 @@ fn main() {
         println!("  vel[{}]={:+.6}", i, vel[i]);
     }
 
-    // Check Cp and forces
-    let cp = calculate_cp(&vel, 0.0);
-    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+    // Check forces
+    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
 
     println!("\n=== Inviscid Forces at α=0° ===");
     println!("CL = {:+.6} (should be 0)", coeffs.cl);

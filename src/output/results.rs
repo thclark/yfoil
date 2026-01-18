@@ -194,6 +194,86 @@ impl AnalysisOutput {
     }
 }
 
+/// Inviscid analysis result with velocity distributions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InviscidAnalysisOutput {
+    /// Airfoil name/description
+    pub airfoil: String,
+    /// Angle of attack in degrees
+    pub alpha_deg: f64,
+    /// Mach number
+    pub mach: f64,
+    /// Number of stations (panel nodes)
+    pub n_stations: usize,
+    /// Force coefficients
+    pub coefficients: InviscidCoefficients,
+    /// Station distributions
+    pub stations: StationDistributions,
+}
+
+/// Inviscid force coefficients
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InviscidCoefficients {
+    /// Lift coefficient
+    pub cl: f64,
+    /// Moment coefficient (about quarter chord)
+    pub cm: f64,
+    /// Pressure drag coefficient
+    pub cdp: f64,
+}
+
+/// Distributions at each station
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationDistributions {
+    /// X-coordinates (x/c)
+    pub x: Vec<f64>,
+    /// Y-coordinates (y/c)
+    pub y: Vec<f64>,
+    /// Arc length parameter
+    pub s: Vec<f64>,
+    /// Surface velocity (normalized by freestream)
+    pub velocity: Vec<f64>,
+    /// Pressure coefficient
+    pub cp: Vec<f64>,
+}
+
+impl InviscidAnalysisOutput {
+    /// Create from inviscid solution and airfoil geometry
+    pub fn new(
+        airfoil: &crate::geometry::PaneledAirfoil,
+        velocity: &[f64],
+        cp: &[f64],
+        coeffs: &crate::forces::AeroCoefficients,
+        alpha_deg: f64,
+        mach: f64,
+        airfoil_name: &str,
+    ) -> Self {
+        Self {
+            airfoil: airfoil_name.to_string(),
+            alpha_deg,
+            mach,
+            n_stations: airfoil.n,
+            coefficients: InviscidCoefficients {
+                cl: coeffs.cl,
+                cm: coeffs.cm,
+                cdp: coeffs.cdp,
+            },
+            stations: StationDistributions {
+                x: airfoil.x.clone(),
+                y: airfoil.y.clone(),
+                s: airfoil.s.clone(),
+                velocity: velocity.to_vec(),
+                cp: cp.to_vec(),
+            },
+        }
+    }
+
+    /// Serialize to JSON string
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+}
+
 /// Geometry information output
 ///
 /// Contains comprehensive geometric properties of a paneled airfoil,

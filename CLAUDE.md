@@ -164,5 +164,30 @@ Any deviation from XFOIL's actual implementation is wrong and must be fixed, not
 
 ## Development Workflow
 
-- For temporary files and debug scripts, use the `.tmp/` directory in the repo root instead of `/tmp`. This avoids
-  permission issues and keeps debug artifacts with the project.
+For temporary files and debug scripts, use the `.tmp/` directory in the repo root instead of `/tmp`. This avoids
+permission issues and keeps debug artifacts with the project.
+
+## Full validation against XFOIL
+
+There should be a set of validations maintained in the final documentation (these cases may also be useful for debugging
+purposes).
+
+- NACA0012 at 0 degree angle of attack (for paneling, inviscid solution and base case viscous solutions which check
+  symmetry in the solution)
+- NACA0012 at 0 then 1 degree angle of attack (for inviscid and viscous solutions and polars, where the subsequent value
+  of the polar at 1 degree is initialised from the first solution at 0 degrees.
+- NACA0012 at 0 and then -1 degree angle of attack (to test the same in reverse angles to check signs)
+- NACA4412 at 0-15 degrees, then reinitialised at 0, then -1--15 as a complete polar to test beyond limits of divergence
+
+Each of these cases should be tabulated and plotted, including differences between all boundary layer variable
+distributions,.
+
+All xfoil runs should be run with the same default number of iterations as yfoil has.
+
+For every validation, test comparison output or debugging run of xfoil, it's imperative to use the same panels -
+now we have the geometry working, do that by generating the geometry then repaneling it using the xfoil-based paneler (
+this can be done with yfoil geom).
+
+
+
+

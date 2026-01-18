@@ -418,6 +418,158 @@ fn run_xfoil_viscous(dat_path: &str, alpha_deg: f64) {
         .output();
 }
 
+/// Test that velocity distribution matches XFOIL to machine precision
+/// This test locks in the good velocity matching we've verified.
+#[test]
+fn test_velocity_distribution_matches_xfoil() {
+    use yfoil::geometry::{create_paneled_airfoil, naca_4digit, repanel_xfoil, write_dat_file, PaneConfig};
+    use yfoil::panel::solve_inviscid;
+
+    // Generate and repanel using xfoil method to ensure identical paneling
+    let geom = naca_4digit("0012", 160).expect("Failed to generate NACA 0012");
+    let config = PaneConfig::default();
+    let repaneled = repanel_xfoil(&geom, 160, &config);
+    let airfoil = create_paneled_airfoil(&repaneled);
+
+    // Save yfoil geometry to .dat file for XFOIL to load
+    let dat_path = "/tmp/yfoil_velocity_test.dat";
+    write_dat_file(&repaneled, "NACA 0012 yfoil repaneled", dat_path)
+        .expect("Failed to write .dat file");
+
+    // Test at alpha=0
+    {
+        let solution = solve_inviscid(&airfoil);
+        let alpha_rad = 0.0_f64;
+        let velocity = solution.velocity_at_nodes(alpha_rad);
+
+        run_xfoil_inviscid(dat_path, 0.0);
+        let xfoil = parse_xfoil_inviscid("/tmp/xfoil_inviscid.dat");
+
+        assert_eq!(airfoil.n, xfoil.n, "Panel count mismatch");
+
+        let mut max_vel_diff = 0.0f64;
+        for i in 0..airfoil.n {
+            let diff = (velocity[i] - xfoil.qinv[i]).abs();
+            max_vel_diff = max_vel_diff.max(diff);
+        }
+
+        eprintln!("Alpha=0: Max velocity difference: {:.6e}", max_vel_diff);
+        assert!(
+            max_vel_diff < 1e-4,
+            "Velocity mismatch at alpha=0: max diff = {:.6e}",
+            max_vel_diff
+        );
+    }
+
+    // Test at alpha=1 degree
+    {
+        let solution = solve_inviscid(&airfoil);
+        let alpha_rad = 1.0_f64.to_radians();
+        let velocity = solution.velocity_at_nodes(alpha_rad);
+
+        run_xfoil_inviscid(dat_path, 1.0);
+        let xfoil = parse_xfoil_inviscid("/tmp/xfoil_inviscid.dat");
+
+        let mut max_vel_diff = 0.0f64;
+        for i in 0..airfoil.n {
+            let diff = (velocity[i] - xfoil.qinv[i]).abs();
+            max_vel_diff = max_vel_diff.max(diff);
+        }
+
+        eprintln!("Alpha=1: Max velocity difference: {:.6e}", max_vel_diff);
+        assert!(
+            max_vel_diff < 1e-4,
+            "Velocity mismatch at alpha=1: max diff = {:.6e}",
+            max_vel_diff
+        );
+    }
+}
+
+/// Test force coefficient integration against XFOIL
+/// This test captures the current discrepancy in force integration.
+#[test]
+fn test_force_coefficients_match_xfoil() {
+    use yfoil::geometry::{create_paneled_airfoil, naca_4digit, repanel_xfoil, write_dat_file, PaneConfig};
+    use yfoil::panel::solve_inviscid;
+    use yfoil::forces::integrate_forces;
+
+    // Generate and repanel using xfoil method
+    let geom = naca_4digit("0012", 160).expect("Failed to generate NACA 0012");
+    let config = PaneConfig::default();
+    let repaneled = repanel_xfoil(&geom, 160, &config);
+    let airfoil = create_paneled_airfoil(&repaneled);
+
+    let dat_path = "/tmp/yfoil_force_test.dat";
+    write_dat_file(&repaneled, "NACA 0012 yfoil repaneled", dat_path)
+        .expect("Failed to write .dat file");
+
+    // Test at alpha=0 (symmetric airfoil should have CL=0)
+    {
+        let solution = solve_inviscid(&airfoil);
+        let alpha_rad = 0.0_f64;
+        let alpha_deg = 0.0_f64;
+        let mach = 0.0_f64;
+
+        // integrate_forces uses velocity at nodes and computes Cp internally
+        let velocity = solution.velocity_at_nodes(alpha_rad);
+        let coeffs = integrate_forces(&airfoil, &velocity, alpha_rad, mach);
+
+        // Get XFOIL coefficients
+        run_xfoil_inviscid(dat_path, alpha_deg);
+        let xfoil = parse_xfoil_inviscid("/tmp/xfoil_inviscid.dat");
+
+        eprintln!("\n=== Alpha=0 Force Coefficients ===");
+        eprintln!("XFOIL:  CL={:.10e}, CM={:.10e}", xfoil.cl, xfoil.cm);
+        eprintln!("yfoil:  CL={:.10e}, CM={:.10e}, CDp={:.10e}",
+                  coeffs.cl, coeffs.cm, coeffs.cdp);
+
+        let cl_diff = (coeffs.cl - xfoil.cl).abs();
+        let cm_diff = (coeffs.cm - xfoil.cm).abs();
+
+        eprintln!("CL diff: {:.6e}", cl_diff);
+        eprintln!("CM diff: {:.6e}", cm_diff);
+
+        // integrate_forces should match XFOIL to high precision
+        assert!(
+            cl_diff < 1e-6,
+            "CL mismatch at alpha=0: yfoil={:.10e}, XFOIL={:.10e}, diff={:.6e}",
+            coeffs.cl, xfoil.cl, cl_diff
+        );
+    }
+
+    // Test at alpha=1 degree
+    {
+        let solution = solve_inviscid(&airfoil);
+        let alpha_rad = 1.0_f64.to_radians();
+        let alpha_deg = 1.0_f64;
+        let mach = 0.0_f64;
+
+        let velocity = solution.velocity_at_nodes(alpha_rad);
+        let coeffs = integrate_forces(&airfoil, &velocity, alpha_rad, mach);
+
+        run_xfoil_inviscid(dat_path, alpha_deg);
+        let xfoil = parse_xfoil_inviscid("/tmp/xfoil_inviscid.dat");
+
+        eprintln!("\n=== Alpha=1 Force Coefficients ===");
+        eprintln!("XFOIL:  CL={:.10e}, CM={:.10e}", xfoil.cl, xfoil.cm);
+        eprintln!("yfoil:  CL={:.10e}, CM={:.10e}, CDp={:.10e}",
+                  coeffs.cl, coeffs.cm, coeffs.cdp);
+
+        let cl_diff = (coeffs.cl - xfoil.cl).abs();
+        let cm_diff = (coeffs.cm - xfoil.cm).abs();
+
+        eprintln!("CL diff: {:.6e}", cl_diff);
+        eprintln!("CM diff: {:.6e}", cm_diff);
+
+        // These should match to high precision
+        assert!(
+            cl_diff < 1e-6,
+            "CL mismatch at alpha=1: yfoil={:.10e}, XFOIL={:.10e}, diff={:.6e}",
+            coeffs.cl, xfoil.cl, cl_diff
+        );
+    }
+}
+
 #[test]
 fn test_dij_matrix_matches_xfoil() {
     use yfoil::geometry::{create_paneled_airfoil, naca_4digit, write_dat_file};

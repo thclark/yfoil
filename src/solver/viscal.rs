@@ -25,7 +25,7 @@ use crate::bl::{
     squire_young_drag, wake_edge_velocity, FlowConditions, NewtonConfig, NewtonResult, WakeConfig,
     WakeInitialState,
 };
-use crate::forces::{calculate_cp, integrate_forces, AeroCoefficients};
+use crate::forces::{integrate_forces, AeroCoefficients};
 use crate::geometry::PaneledAirfoil;
 use crate::panel::solve_inviscid;
 
@@ -655,8 +655,7 @@ pub fn solve_viscous_with_init(
         }
 
         // Step 6: Calculate forces with updated velocity
-        let cp = calculate_cp(&velocity, cond.mach);
-        let coeffs = integrate_forces(airfoil, &cp, alpha_rad);
+        let coeffs = integrate_forces(airfoil, &velocity, alpha_rad, cond.mach);
 
         // Check convergence
         let cl_change = (coeffs.cl - cl_prev).abs();
@@ -727,8 +726,7 @@ pub fn solve_viscous_with_init(
         &config.newton,
         &config.wake,
     );
-    let cp = calculate_cp(&velocity, cond.mach);
-    let coeffs = integrate_forces(airfoil, &cp, alpha_rad);
+    let coeffs = integrate_forces(airfoil, &velocity, alpha_rad, cond.mach);
 
     // Use Squire-Young for total drag (same as converged case)
     let cdf = calculate_friction_drag(&bl, alpha_rad);
@@ -761,8 +759,7 @@ pub fn solve_inviscid_only(
     let inviscid = solve_inviscid(airfoil);
     // Use node-based velocities for consistency with XFOIL
     let velocity = inviscid.velocity_at_nodes(alpha_rad);
-    let cp = calculate_cp(&velocity, mach);
-    integrate_forces(airfoil, &cp, alpha_rad)
+    integrate_forces(airfoil, &velocity, alpha_rad, mach)
 }
 
 #[cfg(test)]

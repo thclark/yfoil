@@ -293,11 +293,9 @@ fn test_panel_method_lift_slope() {
 
     let vel1 = solution.velocity_at_alpha(alpha1);
     let vel2 = solution.velocity_at_alpha(alpha2);
-    let cp1: Vec<f64> = vel1.iter().map(|&v| 1.0 - v * v).collect();
-    let cp2: Vec<f64> = vel2.iter().map(|&v| 1.0 - v * v).collect();
 
-    let coeffs1 = integrate_forces(&airfoil, &cp1, alpha1);
-    let coeffs2 = integrate_forces(&airfoil, &cp2, alpha2);
+    let coeffs1 = integrate_forces(&airfoil, &vel1, alpha1, 0.0);
+    let coeffs2 = integrate_forces(&airfoil, &vel2, alpha2, 0.0);
 
     let dcl_dalpha = (coeffs2.cl - coeffs1.cl) / (alpha2 - alpha1);
 
@@ -317,8 +315,7 @@ fn test_panel_method_symmetric_zero_lift() {
     let solution = solve_inviscid(&airfoil);
 
     let vel = solution.velocity_at_alpha(0.0);
-    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
-    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
 
     assert!(
         coeffs.cl.abs() < 0.01,
@@ -335,8 +332,7 @@ fn test_panel_method_cambered_lift() {
     let solution = solve_inviscid(&airfoil);
 
     let vel = solution.velocity_at_alpha(0.0);
-    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
-    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
 
     // NACA 4412 has 4% camber, should produce positive lift at α=0
     // Thin airfoil theory predicts CL ≈ 2π * 2 * (0.04) ≈ 0.5 for 4% camber
@@ -522,8 +518,7 @@ fn test_sharp_te_zero_cdp_symmetric() {
 
     let solution = solve_inviscid(&airfoil);
     let vel = solution.velocity_at_alpha(0.0);
-    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
-    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
 
     // For symmetric airfoil at α=0, CDp should be essentially zero
     assert!(
@@ -555,8 +550,7 @@ fn test_blunt_te_reasonable_results() {
 
     let solution = solve_inviscid(&airfoil);
     let vel = solution.velocity_at_alpha(0.0);
-    let cp: Vec<f64> = vel.iter().map(|&v| 1.0 - v * v).collect();
-    let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(
@@ -602,19 +596,15 @@ fn test_te_type_lift_slope_comparison() {
     // Sharp TE lift slope
     let vel1_sharp = solution_sharp.velocity_at_alpha(alpha1);
     let vel2_sharp = solution_sharp.velocity_at_alpha(alpha2);
-    let cp1_sharp: Vec<f64> = vel1_sharp.iter().map(|&v| 1.0 - v * v).collect();
-    let cp2_sharp: Vec<f64> = vel2_sharp.iter().map(|&v| 1.0 - v * v).collect();
-    let coeffs1_sharp = integrate_forces(&airfoil_sharp, &cp1_sharp, alpha1);
-    let coeffs2_sharp = integrate_forces(&airfoil_sharp, &cp2_sharp, alpha2);
+    let coeffs1_sharp = integrate_forces(&airfoil_sharp, &vel1_sharp, alpha1, 0.0);
+    let coeffs2_sharp = integrate_forces(&airfoil_sharp, &vel2_sharp, alpha2, 0.0);
     let dcl_dalpha_sharp = (coeffs2_sharp.cl - coeffs1_sharp.cl) / (alpha2 - alpha1);
 
     // Blunt TE lift slope
     let vel1_blunt = solution_blunt.velocity_at_alpha(alpha1);
     let vel2_blunt = solution_blunt.velocity_at_alpha(alpha2);
-    let cp1_blunt: Vec<f64> = vel1_blunt.iter().map(|&v| 1.0 - v * v).collect();
-    let cp2_blunt: Vec<f64> = vel2_blunt.iter().map(|&v| 1.0 - v * v).collect();
-    let coeffs1_blunt = integrate_forces(&airfoil_blunt, &cp1_blunt, alpha1);
-    let coeffs2_blunt = integrate_forces(&airfoil_blunt, &cp2_blunt, alpha2);
+    let coeffs1_blunt = integrate_forces(&airfoil_blunt, &vel1_blunt, alpha1, 0.0);
+    let coeffs2_blunt = integrate_forces(&airfoil_blunt, &vel2_blunt, alpha2, 0.0);
     let dcl_dalpha_blunt = (coeffs2_blunt.cl - coeffs1_blunt.cl) / (alpha2 - alpha1);
 
     // Both should be close to thin airfoil theory (2π ≈ 6.28)
