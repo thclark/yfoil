@@ -163,6 +163,10 @@ enum GeomAction {
     Info {
         /// Input file path
         input: PathBuf,
+
+        /// Output file path for JSON (if not specified, prints summary to stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 
     /// Plot geometry (requires 'plotting' feature)
@@ -510,9 +514,20 @@ fn handle_geom(action: GeomAction) {
             println!("Wrote to {}", output_path.display());
         }
 
-        GeomAction::Info { input } => {
+        GeomAction::Info { input, output } => {
             let geometry = read_geometry_auto(&input);
-            print_geometry_info(&geometry);
+            let airfoil = create_paneled_airfoil(&geometry);
+            let info = yfoil::output::GeometryInfo::from_paneled(&airfoil);
+
+            if let Some(ref path) = output {
+                // Write full JSON to file
+                let json_str = info.to_json().expect("Failed to serialize geometry info");
+                std::fs::write(path, &json_str).expect("Failed to write output file");
+                println!("Wrote geometry info to {}", path.display());
+            } else {
+                // Print summary to stdout
+                print_geometry_info(&info.summary);
+            }
         }
 
         GeomAction::Plot { input, output } => {
@@ -580,26 +595,38 @@ fn read_geometry_auto(path: &PathBuf) -> Geometry {
     }
 }
 
-fn print_geometry_info(geometry: &Geometry) {
-    let n = geometry.x_c.len();
-    let max_x = geometry.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_x = geometry.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
-    let max_y = geometry.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y = geometry.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
-
+fn print_geometry_info(summary: &yfoil::output::GeometrySummary) {
     println!("Geometry Information:");
-    println!("  Number of points: {}", n);
-    println!("  X range: {:.6} to {:.6}", min_x, max_x);
-    println!("  Y range: {:.6} to {:.6}", min_y, max_y);
-    println!("  Max thickness: {:.4}", max_y - min_y);
+    println!("  Number of points: {}", summary.n_points);
+    println!("  Chord: {:.6}", summary.chord);
+    println!(
+        "  X range: {:.6} to {:.6}",
+        summary.x_range[0], summary.x_range[1]
+    );
+    println!(
+        "  Y range: {:.6} to {:.6}",
+        summary.y_range[0], summary.y_range[1]
+    );
+    println!("  Max thickness: {:.4}", summary.max_thickness);
+    println!("  TE gap: {:.6}", summary.te_gap);
+    println!(
+        "  Sharp TE: {}",
+        if summary.sharp_te { "yes" } else { "no" }
+    );
     println!(
         "  Reference point: ({:.4}, {:.4})",
-        geometry.reference[0], geometry.reference[1]
+        summary.reference[0], summary.reference[1]
     );
-    println!("  First point: ({:.6}, {:.6})", geometry.x_c[0], geometry.y_c[0]);
+    println!("  LE index: {}", summary.le_index);
+    println!("  LE arc length: {:.6}", summary.sle);
+    println!("  Total arc length: {:.6}", summary.total_arc_length);
+    println!("  Max curvature: {:.4}", summary.max_curvature);
+    println!(
+        "  First point: ({:.6}, {:.6})",
+        summary.first_point[0], summary.first_point[1]
+    );
     println!(
         "  Last point: ({:.6}, {:.6})",
-        geometry.x_c[n - 1],
-        geometry.y_c[n - 1]
+        summary.last_point[0], summary.last_point[1]
     );
 }

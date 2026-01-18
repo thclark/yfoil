@@ -120,22 +120,42 @@
 //! Display statistics about an airfoil geometry:
 //!
 //! ```text
-//! yfoil geom info <input>
+//! yfoil geom info <input> [OPTIONS]
 //!
 //! Arguments:
 //!   <input>              Input file path (.json or .dat)
+//!
+//! Options:
+//!   -o, --output <PATH>  Output JSON file path (if not specified, prints summary to stdout)
 //! ```
 //!
-//! Output includes:
-//! - Number of points
+//! ### Summary Output (stdout)
+//!
+//! When no `--output` is specified, prints a human-readable summary:
+//! - Number of points and chord length
 //! - X/Y coordinate ranges
 //! - Maximum thickness
+//! - Trailing edge gap and whether TE is sharp
 //! - Reference point for moments
+//! - Leading edge index and arc length
+//! - Total arc length around the airfoil
+//! - Maximum curvature
 //! - First/last point coordinates (trailing edge)
 //!
-//! Example:
+//! ### JSON Output (file)
+//!
+//! When `--output` is specified, writes a comprehensive JSON file containing:
+//! - All summary statistics
+//! - Full distributions: coordinates (x, y), arc length (s), curvature,
+//!   panel angles, and normal vectors (nx, ny) at each node
+//!
+//! Examples:
 //! ```text
+//! # Print summary to stdout
 //! yfoil geom info naca0012.json
+//!
+//! # Write full info to JSON file
+//! yfoil geom info naca0012.json -o naca0012_info.json
 //! ```
 //!
 //! ## `yfoil geom plot` - Visualize Geometry (Feature-gated)
