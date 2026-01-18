@@ -4,14 +4,14 @@
 //!
 //! # Components
 //! - `results` - Result structs (JSON serializable)
-//! - `plot` - Optional Plotly visualization (feature-gated)
+//! - `plot` - Optional plotting with plotters library (feature-gated)
 
 mod results;
 
-// #[cfg(feature = "plotting")]
-// mod plot;
+#[cfg(feature = "plotting")]
+mod plot;
 
 pub use results::*;
 
-// #[cfg(feature = "plotting")]
-// pub use plot::*;
+#[cfg(feature = "plotting")]
+pub use plot::*;

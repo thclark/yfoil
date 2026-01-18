@@ -15,7 +15,7 @@ use yfoil::output::PolarOutput;
 use yfoil::solver::{compute_polar, solve_viscous, PolarConfig, ViscalConfig};
 
 #[cfg(feature = "plotting")]
-use plotly::{Plot, Scatter};
+use yfoil::output::{plot_paneled_svg, plot_paneled_png, GeometryPlotConfig};
 
 /// YFoil - Rust-based aerofoil analysis tool
 #[derive(Parser, Debug)]
@@ -174,9 +174,29 @@ enum GeomAction {
         /// Input file path
         input: PathBuf,
 
-        /// Output HTML file
-        #[arg(short, long, default_value = "geometry.html")]
+        /// Output file (SVG or PNG based on extension)
+        #[arg(short, long, default_value = "geometry.svg")]
         output: PathBuf,
+
+        /// Show panel node ticks perpendicular to surface
+        #[arg(long)]
+        nodes: bool,
+
+        /// Length of node ticks as fraction of chord
+        #[arg(long, default_value_t = 0.015)]
+        tick_length: f64,
+
+        /// Plot title
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Image width in pixels
+        #[arg(long, default_value_t = 1200)]
+        width: u32,
+
+        /// Image height in pixels
+        #[arg(long, default_value_t = 400)]
+        height: u32,
     },
 }
 
@@ -530,22 +550,59 @@ fn handle_geom(action: GeomAction) {
             }
         }
 
-        GeomAction::Plot { input, output } => {
+        GeomAction::Plot {
+            input,
+            output,
+            nodes,
+            tick_length,
+            title,
+            width,
+            height,
+        } => {
             let geometry = read_geometry_auto(&input);
+            let airfoil = create_paneled_airfoil(&geometry);
 
             #[cfg(feature = "plotting")]
             {
-                let mut plot = Plot::new();
-                let trace = Scatter::new(geometry.x_c.clone(), geometry.y_c.clone());
-                plot.add_trace(trace);
-                plot.write_html(&output);
-                println!("Wrote plot to {}", output.display());
+                let config = GeometryPlotConfig {
+                    width,
+                    height,
+                    show_nodes: nodes,
+                    tick_length,
+                    title,
+                    ..Default::default()
+                };
+
+                // Determine output format from extension
+                let ext = output
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("svg")
+                    .to_lowercase();
+
+                let result = match ext.as_str() {
+                    "png" => plot_paneled_png(&airfoil, &output, &config),
+                    _ => plot_paneled_svg(&airfoil, &output, &config),
+                };
+
+                match result {
+                    Ok(()) => println!("Wrote plot to {}", output.display()),
+                    Err(e) => {
+                        eprintln!("Error creating plot: {}", e);
+                        std::process::exit(1);
+                    }
+                }
             }
 
             #[cfg(not(feature = "plotting"))]
             {
-                let _ = geometry;
+                let _ = airfoil;
                 let _ = output;
+                let _ = nodes;
+                let _ = tick_length;
+                let _ = title;
+                let _ = width;
+                let _ = height;
                 eprintln!(
                     "Plotting feature not enabled. Rebuild with: cargo build --features plotting"
                 );
