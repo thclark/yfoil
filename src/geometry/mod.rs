@@ -19,5 +19,5 @@ pub use io::{
     write_geometry_to_json, GeometryReadError,
 };
 pub use naca::{naca_4digit, naca_5digit, NacaError};
-pub use panel::{create_paneled_airfoil, repanel};
+pub use panel::{create_paneled_airfoil, pane, repanel, PaneConfig};
 pub use spline::{d2val, deval, seval, spline};

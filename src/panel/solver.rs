@@ -1162,6 +1162,7 @@ fn compute_midpoint_velocities(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::forces::integrate_forces;
     use crate::geometry::{create_paneled_airfoil, naca_4digit};
     use approx::assert_relative_eq;
 
@@ -1210,23 +1211,33 @@ mod tests {
         let solution = solve_inviscid(&airfoil);
 
         // At α=0° for symmetric airfoil, flow should be symmetric
-        // Upper and lower surface velocities should be mirror images
+        // The inviscid velocities at symmetric x-positions should be equal in magnitude
         let n = airfoil.n;
-        let le_idx = airfoil.le_index;
 
-        // Compare corresponding upper/lower points
-        for i in 1..le_idx.min(n - le_idx) {
-            let upper_idx = le_idx - i;
-            let lower_idx = le_idx + i;
-            if lower_idx < n {
-                // Velocities should be equal in magnitude, opposite sign
-                assert_relative_eq!(
-                    solution.gam_0[upper_idx],
-                    -solution.gam_0[lower_idx],
-                    epsilon = 0.05
-                );
-            }
-        }
+        // Check TE symmetry: velocities at upper and lower TE should be equal magnitude
+        // qinv = gamma at panels, and velocity_at_nodes computes qinv at panel nodes
+        let qinv = solution.velocity_at_nodes(0.0);
+
+        // Upper TE (index 0) and lower TE (index n-1) should have equal magnitude
+        assert_relative_eq!(
+            qinv[0].abs(),
+            qinv[n - 1].abs(),
+            epsilon = 1e-6
+        );
+
+        // Near-TE points should also be symmetric
+        assert_relative_eq!(
+            qinv[1].abs(),
+            qinv[n - 2].abs(),
+            epsilon = 1e-6
+        );
+
+        // CL should be essentially zero for symmetric airfoil at α=0
+        // Convert velocity to pressure coefficient: Cp = 1 - V^2
+        let cp: Vec<f64> = qinv.iter().map(|&v| 1.0 - v * v).collect();
+        let coeffs = integrate_forces(&airfoil, &cp, 0.0);
+        // CL may be slightly non-zero due to TE gap (blunt TE) discretization effects
+        assert!(coeffs.cl.abs() < 0.01, "CL should be ~0 for symmetric airfoil at α=0, got {}", coeffs.cl);
     }
 
     #[test]

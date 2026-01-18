@@ -227,9 +227,8 @@ pub fn extract_lower_surface(
     stag_idx: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     // Lower surface goes from stagnation towards TE at index n-1
-    // For velocity at the TE node (n-1), we use velocity[n-2] (the last lower
-    // surface panel) instead of velocity[n-1] (the TE gap panel which is ~0).
-    // This ensures symmetric treatment with the upper surface.
+    // Uses velocity[i] directly at each node for consistent treatment
+    // with upper surface.
     let mut x = Vec::new();
     let mut y = Vec::new();
     let mut s = Vec::new();
@@ -244,9 +243,8 @@ pub fn extract_lower_surface(
         y.push(airfoil.y[i]);
         s.push(arc_len);
 
-        // For the TE node, use the previous panel velocity (not TE gap panel)
-        let vel_idx = if i == end_idx && n >= 2 { n - 2 } else { i };
-        ue.push(velocity[vel_idx].abs());
+        // Use velocity[i] directly (same as upper surface)
+        ue.push(velocity[i].abs());
 
         if i < end_idx {
             let dx = airfoil.x[i + 1] - airfoil.x[i];
@@ -828,46 +826,30 @@ mod tests {
 
     #[test]
     fn test_solve_boundary_layer() {
+        // Use solve_viscous to properly set up the boundary layer,
+        // then verify the BL solution properties
         let geom = naca_4digit("0012", 80).unwrap();
         let airfoil = create_paneled_airfoil(&geom);
-        let inviscid = solve_inviscid(&airfoil);
-        let alpha = 0.0;
-        let vel = inviscid.velocity_at_alpha(alpha);
 
-        let stag = find_stagnation_point(&airfoil, &vel);
         let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);
-        let newton_config = NewtonConfig::default();
-        let wake_config = WakeConfig::default();
+        let config = ViscalConfig::default();
 
-        // Compute total circulation
-        let gamma = inviscid.gamma_at_alpha(alpha);
-        let gamma_total: f64 = gamma.iter().sum::<f64>() / airfoil.n as f64 * airfoil.chord;
-
-        let bl = solve_boundary_layer(
-            &airfoil,
-            &vel,
-            stag,
-            alpha,
-            gamma_total,
-            &cond,
-            &newton_config,
-            &wake_config,
-        );
+        let result = solve_viscous(&airfoil, 0.0, &cond, &config);
 
         // Should have results on both surfaces
-        assert!(!bl.upper.is_empty(), "Upper surface BL should have results");
-        assert!(!bl.lower.is_empty(), "Lower surface BL should have results");
+        assert!(!result.bl.upper.is_empty(), "Upper surface BL should have results");
+        assert!(!result.bl.lower.is_empty(), "Lower surface BL should have results");
 
         // Should have wake results
-        assert!(!bl.wake.is_empty(), "Wake should have results");
+        assert!(!result.bl.wake.is_empty(), "Wake should have results");
 
         // θ should be positive at all stations
-        for (i, r) in bl.upper.iter().enumerate() {
+        for (i, r) in result.bl.upper.iter().enumerate() {
             assert!(r.theta > 0.0, "θ should be positive at station {}: {}", i, r.theta);
         }
 
         // Wake should have Cf = 0
-        for r in &bl.wake {
+        for r in &result.bl.wake {
             assert_eq!(r.cf, 0.0, "Wake should have zero skin friction");
         }
     }

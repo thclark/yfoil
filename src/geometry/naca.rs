@@ -39,17 +39,27 @@ pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
         / 100.0; // thickness
 
     // Generate cosine-spaced x coordinates
+    // To produce exactly n_panels points total, we need n_panels/2 points per surface.
+    // XFOIL's PANE command:
+    // - Places nodes at exactly x=1.0 (TE)
+    // - Straddles the LE (no node at exactly x=0)
     let n_half = n_panels / 2;
-    let mut x_upper = Vec::with_capacity(n_half + 1);
-    let mut y_upper = Vec::with_capacity(n_half + 1);
-    let mut x_lower = Vec::with_capacity(n_half + 1);
-    let mut y_lower = Vec::with_capacity(n_half + 1);
+    let mut x_upper = Vec::with_capacity(n_half);
+    let mut y_upper = Vec::with_capacity(n_half);
+    let mut x_lower = Vec::with_capacity(n_half);
+    let mut y_lower = Vec::with_capacity(n_half);
 
-    for i in 0..=n_half {
-        // Use half-cell offset to avoid putting a node at exactly x=0 (LE).
-        // XFOIL's PANE command creates panels that straddle the LE, not pass through it.
-        // With a node at exact x=0, gamma=0 there and the BL fails to converge.
-        let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 + 1.0);
+    for i in 0..n_half {
+        // Cosine distribution that places node at x=1 (TE) and straddles x=0 (LE).
+        // After reversal, the ordering will be: TE (x=1) -> near-LE (x≈0).
+        // XFOIL places station 1 exactly at x=1.0.
+        //
+        // Without half-cell offset: beta = π*i/(n_half-1) gives x=0 at i=0 and x=1 at i=n_half-1.
+        // But we want to avoid x=0 exactly, so we use a slight offset at the LE end only:
+        // - i=0: beta = 0.5π/(n_half-1+0.5), x ≈ 0.0001 (near LE)
+        // - i=n_half-1: beta = π, x = 1.0 (exact TE)
+        let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 - 0.5);
+        let beta = beta.min(std::f64::consts::PI); // Cap at π for last point
         let x = 0.5 * (1.0 - beta.cos());
 
         // Thickness distribution (modified for closed TE)
@@ -72,17 +82,18 @@ pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
     // With half-cell offset, we have two near-LE points that straddle the actual LE:
     //   upper[0] at (x_small, +y) and lower[0] at (x_small, -y)
     // Both points must be included (like XFOIL's PANE does).
-    let mut x_c = Vec::with_capacity(2 * n_half + 2);
-    let mut y_c = Vec::with_capacity(2 * n_half + 2);
+    // Total: n_half + n_half = n_panels points
+    let mut x_c = Vec::with_capacity(n_panels);
+    let mut y_c = Vec::with_capacity(n_panels);
 
-    // Upper surface from TE to near-LE (include ALL points including i=0)
-    for i in (0..=n_half).rev() {
+    // Upper surface from TE to near-LE (n_half points: indices n_half-1, n_half-2, ..., 0)
+    for i in (0..n_half).rev() {
         x_c.push(x_upper[i]);
         y_c.push(y_upper[i]);
     }
 
-    // Lower surface from near-LE to TE (include ALL points including i=0)
-    for i in 0..=n_half {
+    // Lower surface from near-LE to TE (n_half points: indices 0, 1, ..., n_half-1)
+    for i in 0..n_half {
         x_c.push(x_lower[i]);
         y_c.push(y_lower[i]);
     }
@@ -323,11 +334,12 @@ fn camber_line_5digit(x: f64, r: f64, k1: f64, k2_k1: f64, reflex: bool) -> (f64
 /// Returns half-thickness at given x/c coordinate
 fn thickness_distribution(x: f64, t: f64) -> f64 {
     // Standard NACA 4-digit thickness equation
-    // Modified last coefficient for closed trailing edge (0.1036 instead of 0.1015)
+    // Original coefficient -0.1015 gives blunt trailing edge (XFOIL default)
+    // For NACA 0012: half-thickness at TE = 0.00126, gap = 0.00252
     let yt = 5.0
         * t
         * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3)
-            - 0.1036 * x.powi(4));
+            - 0.1015 * x.powi(4));
     yt
 }
 
@@ -368,12 +380,12 @@ mod tests {
     fn test_naca_0012_symmetric() {
         let geom = naca_4digit("0012", 100).unwrap();
 
-        // Should have points on both sides
-        assert!(geom.x_c.len() > 100);
+        // Should produce exactly the requested number of points
+        assert_eq!(geom.x_c.len(), 100);
 
-        // Should start and end near trailing edge
-        assert!(geom.x_c[0] > 0.95);
-        assert!(geom.x_c.last().unwrap() > &0.95);
+        // Should start and end at trailing edge (x=1.0)
+        assert!((geom.x_c[0] - 1.0).abs() < 0.01);
+        assert!((geom.x_c.last().unwrap() - 1.0).abs() < 0.01);
 
         // Symmetric airfoil: check that max thickness is approximately 12%
         let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -407,9 +419,9 @@ mod tests {
         let yt_le = thickness_distribution(0.0, 0.12);
         assert_relative_eq!(yt_le, 0.0, epsilon = 1e-10);
 
-        // At x=1, thickness should be approximately 0 (closed TE)
+        // At x=1, thickness should be approximately 0.00126 (blunt TE, XFOIL-compatible)
         let yt_te = thickness_distribution(1.0, 0.12);
-        assert!(yt_te.abs() < 0.002);
+        assert!((yt_te - 0.00126).abs() < 0.0001);
     }
 
     #[test]

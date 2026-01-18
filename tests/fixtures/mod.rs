@@ -181,3 +181,86 @@ pub const DEFAULT_REL_TOL: f64 = 1e-10;
 
 /// Default absolute tolerance for XFOIL comparisons
 pub const DEFAULT_ABS_TOL: f64 = 1e-14;
+
+/// Wake initial conditions from XFOIL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct WakeInitFixture {
+    /// Theta from upper TE
+    pub THET_TE1: f64,
+    /// Theta from lower TE
+    pub THET_TE2: f64,
+    /// Delta* from upper TE
+    pub DSTR_TE1: f64,
+    /// Delta* from lower TE
+    pub DSTR_TE2: f64,
+    /// Ctau from upper TE
+    pub CTAU_TE1: f64,
+    /// Ctau from lower TE
+    pub CTAU_TE2: f64,
+    /// Ue at upper TE
+    pub UEDG_TE1: f64,
+    /// Ue at lower TE
+    pub UEDG_TE2: f64,
+    /// TE base thickness (gap)
+    pub ANTE: f64,
+    /// Combined theta at wake start
+    pub TTE: f64,
+    /// Combined delta* at wake start (includes ANTE)
+    pub DTE: f64,
+    /// Weighted Ctau at wake start
+    pub CTE: f64,
+}
+
+/// Wake station data from XFOIL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct WakeStationFixture {
+    /// Wake station index (1-based)
+    pub IW: i32,
+    /// Arc length from LE
+    pub XSSI: f64,
+    /// Edge velocity
+    pub UEDG: f64,
+    /// Momentum thickness
+    pub THET: f64,
+    /// Displacement thickness
+    pub DSTR: f64,
+    /// Mass defect
+    pub MASS: f64,
+    /// Ctau (squared shear stress coeff)
+    pub CTAU: f64,
+    /// Theta (same as THET)
+    pub T2: f64,
+    /// Delta* (may differ from DSTR by wake thickness)
+    pub D2: f64,
+    /// Compressibility-corrected Ue
+    pub U2: f64,
+    /// Kinematic shape factor
+    pub HK2: f64,
+    /// Energy shape factor
+    pub HS2: f64,
+    /// Skin friction (0 in wake)
+    pub CF2: f64,
+    /// Dissipation coefficient
+    pub DI2: f64,
+}
+
+/// Complete wake fixture
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WakeFixture {
+    pub description: String,
+    pub airfoil: String,
+    pub alpha_deg: f64,
+    pub reynolds: f64,
+    pub mach: f64,
+    pub wake_init: WakeInitFixture,
+    pub wake_stations: Vec<WakeStationFixture>,
+}
+
+impl WakeFixture {
+    /// Load a wake fixture from a JSON file
+    pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        load_json(path)
+    }
+}

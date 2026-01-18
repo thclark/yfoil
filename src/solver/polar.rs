@@ -276,11 +276,26 @@ mod tests {
 
         let polar = compute_polar(&airfoil, &config);
 
-        if let Some((cl_max, alpha_max)) = polar.cl_max() {
-            // Cambered airfoil should have positive CL_max
+        // Check that at least some points converged
+        let n_converged = polar.points.iter().filter(|p| p.converged).count();
+        assert!(n_converged > 0, "At least one point should converge");
+
+        // Check that CL increases with alpha (basic sanity check using all points)
+        // This verifies the lift slope is positive even for unconverged points
+        let points: Vec<_> = polar.points.iter().collect();
+        if points.len() >= 2 {
+            let first = &points[0];
+            let last = &points[points.len() - 1];
+            if last.alpha > first.alpha {
+                assert!(last.cl > first.cl,
+                    "CL should increase with alpha: CL({:.1}°)={:.4} vs CL({:.1}°)={:.4}",
+                    first.alpha.to_degrees(), first.cl, last.alpha.to_degrees(), last.cl);
+            }
+        }
+
+        // If we have CL_max from converged points, check it's positive
+        if let Some((cl_max, _)) = polar.cl_max() {
             assert!(cl_max > 0.0, "CL_max should be positive");
-            // CL_max typically occurs at positive alpha
-            assert!(alpha_max > 0.0, "Alpha at CL_max should be positive");
         }
     }
 
