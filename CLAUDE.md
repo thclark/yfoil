@@ -10,16 +10,19 @@ The name follows the tradition: "y" comes after "x", but the true choice is a li
 
 ## What YFoil Does
 
-- Viscous/inviscid analysis of 2D airfoil sections
-- Panel method for inviscid flow with vortex distribution
-- Integral boundary layer solver with eN transition prediction
-- Coupled viscous-inviscid iteration (VISCAL)
+YFoil is intended to replicate XFoil as near to exactly as possible. Features include:
+
+- Generation of aerofoil geometry
+- Panel method for 2D airfoil sections
+    - Inviscid solver
+    - Integral boundary layer solver with eN transition prediction
+    - Coupled viscous-inviscid iteration
 - Polar sweep generation (from 0° up, then 0° down)
 - Compressibility corrections (Karman-Tsien for subsonic Mach)
 
 ## What YFoil Does NOT Do
 
-- No inverse design (Qspec manipulation for airfoil design)
+- No inverse design (Qspec manipulation for aerofoil design)
 - No interactive mode (CLI is one-shot commands only)
 - No multi-element airfoils
 - No 3D effects
@@ -46,25 +49,11 @@ forces/     - Pressure coefficients, CL/CD/CM integration
 output/     - Results serialization, optional plotting
 ```
 
-### Data Flow
-
-```
-Geometry → Panel Method → Inviscid Solution
-                ↓
-         BL Solver ← Edge Velocities
-                ↓
-         Mass Defect → Source Distribution
-                ↓
-         Updated Velocities (iterate until converged)
-                ↓
-         Force Integration → CL, CD, CM
-```
-
 ## CLI Structure
 
 ```
-yfoil geom     - Geometry operations (convert, naca, repanel, smooth)
-yfoil analyze  - Single operating point analysis
+yfoil geom     - Geometry operations to create a set of panels (convert, naca, repanel, smooth)
+yfoil analyze  - Single operating point analysis for a given paneling
 yfoil polar    - Alpha sweep
 yfoil plot     - Visualization (feature-gated)
 ```
@@ -83,23 +72,27 @@ XFOIL 6.99 source code and compiled binary are in `xfoil/xfoil6.99/`. Key source
 - `xoper.f` - VISCAL coupling loop
 - `XFOIL.INC` - Data structure definitions
 
-The compiled XFOIL binary is located at `xfoil/xfoil6.99/bin/xfoil`. Always use this binary for generating reference data - do NOT search for xfoil elsewhere.
+The compiled XFOIL binary is located at `xfoil/xfoil6.99/bin/xfoil`. Always use this binary for generating reference
+data - do NOT search for xfoil elsewhere.
 
 When running XFOIL non-interactively (via script/stdin), always start the script with:
+
 ```
 PLOP
 G F
-
 ```
+
 This disables graphics mode to prevent "Cannot open display" errors.
 
 ## Variable Mapping Documentation
 
-The file `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` contains a comprehensive mapping between XFOIL Fortran variables/common blocks and their YFoil Rust equivalents.
+The file `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` contains a comprehensive mapping between XFOIL Fortran
+variables/common blocks and their YFoil Rust equivalents.
 
 **Keep this mapping updated** when:
+
 - Adding or renaming struct fields in YFoil
-- Changing how XFOIL variables are represented
+- Changing how XFOIL variables are represented in YFoil
 - Adding new BL or solver state variables
 - Modifying closure result structures
 
@@ -121,27 +114,32 @@ Build each module to completion with full tests before proceeding to the next. O
 
 - 5-10% error is UNACCEPTABLE - this indicates a bug, not acceptable tolerance
 - The only acceptable differences are floating-point rounding errors (typically < 1e-10)
-- There should be NO differences in calculation logic between yfoil and XFOIL
+- There should be NO differences in calculation logic between YFoil and XFOIL
 - Every formula, coefficient, and algorithm must match XFOIL exactly
 - When in doubt, instrument XFOIL to verify the exact values being computed
 
 **NO WORKAROUNDS. NO APPROXIMATIONS.**
 
-If something doesn't match XFOIL output, it is a BUG. The objective is not to replicate "something like XFOIL" - it is to TRANSLATE XFOIL IDENTICALLY. Do not:
+If something doesn't match XFOIL output, it is a BUG. The objective is not to replicate "something like XFOIL" - it is
+to TRANSLATE XFOIL IDENTICALLY. Do not:
+
 - Adjust relaxation factors to "make it stable"
 - Limit iterations to "avoid divergence"
 - Change signs to "make it work"
-- Use simplified approaches instead of the actual XFOIL algorithm
+- Use simplified approaches instead of the actual XFOIL algorithms
 
-If XFOIL uses a Newton system, implement the Newton system. If XFOIL uses a specific formula, use that exact formula. Any deviation from XFOIL's actual implementation is wrong and must be fixed, not worked around.
+If XFOIL uses a Newton system, implement the Newton system. If XFOIL uses a specific formula, use that exact formula.
+Any deviation from XFOIL's actual implementation is wrong and must be fixed, not worked around.
 
 **Debugging Approach:**
+
 1. Instrument XFOIL Fortran source with WRITE statements to output intermediate values
 2. Recompile the instrumented XFOIL binary
 3. Compare yfoil output at each step against instrumented XFOIL output
 4. Values must match to machine precision (typically 12+ significant figures)
 
 **Instrumentation Process:**
+
 1. Add WRITE statements to the relevant XFOIL subroutine
 2. Rebuild XFOIL: `cd xfoil/xfoil6.99 && make clean && make`
 3. Run instrumented XFOIL with identical inputs
@@ -152,6 +150,7 @@ If XFOIL uses a Newton system, implement the Newton system. If XFOIL uses a spec
 
 - Unit tests for pure functions (closures, splines, influence)
 - Integration tests comparing against XFOIL results with EXACT numerical matching
+    - Run instrumented XFOIL to get input and output values to create fixtures
 - Regression tests with stored known-good outputs
 - Test airfoils: NACA 0012 (symmetric), NACA 4412 (cambered)
 - Instrumented comparison tests at each solver stage
@@ -165,10 +164,5 @@ If XFOIL uses a Newton system, implement the Newton system. If XFOIL uses a spec
 
 ## Development Workflow
 
-- For temporary files and debug scripts, use the `.tmp/` directory in the repo root instead of `/tmp`. This avoids permission issues and keeps debug artifacts with the project.
-
-## Notes
-
-### Friction Drag Integration
-
-XFOIL integrates friction drag over chord-projected distance (DX = Δx·cos(α) + Δy·sin(α)) rather than arc length. This may be a simplification in XFOIL but we replicate it exactly. Could revisit using arc length for physical accuracy in a future "improved" mode, but only AFTER achieving exact XFOIL replication.
+- For temporary files and debug scripts, use the `.tmp/` directory in the repo root instead of `/tmp`. This avoids
+  permission issues and keeps debug artifacts with the project.
