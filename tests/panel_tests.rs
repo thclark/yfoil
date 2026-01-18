@@ -1,13 +1,15 @@
 //! Tests for panel geometry matching XFOIL
 //!
-//! These tests verify that YFoil produces identical panel coordinates to XFOIL.
+//! These tests verify that YFoil produces identical panel coordinates to XFOIL,
+//! and that both repaneling methods (XFOIL PANE and cosine) produce valid geometry.
 
 use std::fs::File;
 use std::io::BufReader;
 
+use approx::assert_relative_eq;
 use serde::Deserialize;
 
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit, pane, PaneConfig};
+use yfoil::geometry::{create_paneled_airfoil, naca_4digit, repanel_cosine, repanel_xfoil, PaneConfig};
 
 #[derive(Debug, Deserialize)]
 struct Coordinate {
@@ -136,7 +138,7 @@ fn test_naca_0012_panel_spacing() {
     // panel distribution algorithms. Exact match requires implementing XFOIL's PANE.
     println!("\nNote: Panel spacing differs from XFOIL due to different algorithms.");
     println!("      XFOIL uses curvature-based PANE, YFoil uses cosine spacing.");
-    println!("      To match exactly, use the pane() function.");
+    println!("      To match exactly, use the repanel_xfoil() function.");
 }
 
 /// Test PANE algorithm produces coordinates closer to XFOIL than cosine spacing
@@ -155,7 +157,7 @@ fn test_naca_0012_pane_algorithm() {
 
     // Apply PANE algorithm with XFOIL defaults
     let config = PaneConfig::default();
-    let paned_geom = pane(&buffer_geom, fixture.n_panels, &config);
+    let paned_geom = repanel_xfoil(&buffer_geom, fixture.n_panels, &config);
     let paned_airfoil = create_paneled_airfoil(&paned_geom);
 
     // Also generate with cosine spacing for comparison
@@ -234,7 +236,7 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
         ctrrat: fixture.ctrrat.unwrap_or(0.2),
         ..PaneConfig::default()
     };
-    let paned_geom = pane(&buffer_geom, fixture.n_panels, &config);
+    let paned_geom = repanel_xfoil(&buffer_geom, fixture.n_panels, &config);
     let paned_airfoil = create_paneled_airfoil(&paned_geom);
 
     // Calculate RMS errors in x and y coordinates
@@ -304,4 +306,234 @@ fn test_pane_cterat_0_30() {
 #[test]
 fn test_pane_cterat_0_50() {
     test_pane_with_cterat(0.50, "tests/fixtures/naca0012/panels_cterat_0.50.json");
+}
+
+// ============================================================================
+// Repanel method tests (XFOIL PANE vs cosine spacing)
+// ============================================================================
+
+/// Test that PANE method produces valid geometry for aerodynamic analysis
+#[test]
+fn test_pane_method_produces_valid_paneled_airfoil() {
+    let original = naca_4digit("0012", 100).expect("Failed to create airfoil");
+    let config = PaneConfig::default();
+    let paned = repanel_xfoil(&original, 160, &config);
+    let paneled = create_paneled_airfoil(&paned);
+
+    // Verify panel count
+    assert_eq!(paneled.n, 160, "Panel count should match requested");
+
+    // Verify chord is approximately 1.0
+    assert_relative_eq!(paneled.chord, 1.0, epsilon = 0.05);
+
+    // Verify arc lengths are monotonically increasing
+    for i in 1..paneled.s.len() {
+        assert!(
+            paneled.s[i] > paneled.s[i - 1],
+            "Arc length should be monotonic at index {}",
+            i
+        );
+    }
+
+    // Verify normal vectors have unit length
+    for i in 0..paneled.n {
+        let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+        assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
+    }
+
+    // Verify LE index is sensible (approximately in the middle)
+    assert!(
+        paneled.le_index > paneled.n / 4 && paneled.le_index < 3 * paneled.n / 4,
+        "LE index {} should be near middle of {}",
+        paneled.le_index,
+        paneled.n
+    );
+}
+
+/// Test that cosine method produces valid geometry for aerodynamic analysis
+#[test]
+fn test_cosine_method_produces_valid_paneled_airfoil() {
+    let original = naca_4digit("0012", 100).expect("Failed to create airfoil");
+    let cosined = repanel_cosine(&original, 160, 0.15);
+    let paneled = create_paneled_airfoil(&cosined);
+
+    // Verify panel count is approximately correct (may vary slightly)
+    assert!(
+        paneled.n > 155 && paneled.n < 165,
+        "Panel count {} should be near 160",
+        paneled.n
+    );
+
+    // Verify chord is approximately 1.0
+    assert_relative_eq!(paneled.chord, 1.0, epsilon = 0.05);
+
+    // Verify arc lengths are monotonically increasing
+    for i in 1..paneled.s.len() {
+        assert!(
+            paneled.s[i] > paneled.s[i - 1],
+            "Arc length should be monotonic at index {}",
+            i
+        );
+    }
+
+    // Verify normal vectors have unit length
+    for i in 0..paneled.n {
+        let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+        assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
+    }
+}
+
+/// Test that PANE and cosine methods produce different panel distributions
+#[test]
+fn test_pane_and_cosine_methods_differ() {
+    let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
+    let config = PaneConfig::default();
+
+    let paned = repanel_xfoil(&original, 160, &config);
+    let cosined = repanel_cosine(&original, 160, 0.15);
+
+    // Both should produce geometry with similar extent
+    let paned_max_x = paned.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cosined_max_x = cosined.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    assert_relative_eq!(paned_max_x, cosined_max_x, epsilon = 0.01);
+
+    // But interior point distributions should differ
+    // Count points where x coordinates differ by more than 0.001
+    let min_len = paned.x_c.len().min(cosined.x_c.len());
+    let mut differences = 0;
+    for i in 10..min_len.saturating_sub(10) {
+        let dx = (paned.x_c[i] - cosined.x_c[i]).abs();
+        if dx > 0.001 {
+            differences += 1;
+        }
+    }
+
+    // There should be meaningful differences in the distributions
+    assert!(
+        differences > 10,
+        "PANE and cosine should produce different distributions, but only {} points differ",
+        differences
+    );
+}
+
+/// Test that both repaneling methods preserve airfoil shape (extents)
+#[test]
+fn test_both_methods_preserve_shape() {
+    let original = naca_4digit("4412", 120).expect("Failed to create cambered airfoil");
+
+    let config = PaneConfig::default();
+    let paned = repanel_xfoil(&original, 160, &config);
+    let cosined = repanel_cosine(&original, 160, 0.15);
+
+    // Original extents
+    let orig_max_x = original.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let orig_min_x = original.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let orig_max_y = original.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let orig_min_y = original.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // PANE extents
+    let paned_max_x = paned.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let paned_min_x = paned.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let paned_max_y = paned.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let paned_min_y = paned.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // Cosine extents
+    let cosined_max_x = cosined.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cosined_min_x = cosined.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let cosined_max_y = cosined.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cosined_min_y = cosined.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // Both should preserve x extents
+    assert_relative_eq!(paned_max_x, orig_max_x, epsilon = 0.01);
+    assert_relative_eq!(paned_min_x, orig_min_x, epsilon = 0.01);
+    assert_relative_eq!(cosined_max_x, orig_max_x, epsilon = 0.01);
+    assert_relative_eq!(cosined_min_x, orig_min_x, epsilon = 0.01);
+
+    // Both should preserve y extents (within interpolation tolerance)
+    assert_relative_eq!(paned_max_y, orig_max_y, epsilon = 0.01);
+    assert_relative_eq!(paned_min_y, orig_min_y, epsilon = 0.01);
+    assert_relative_eq!(cosined_max_y, orig_max_y, epsilon = 0.01);
+    assert_relative_eq!(cosined_min_y, orig_min_y, epsilon = 0.01);
+}
+
+/// Test PANE method clusters panels at leading edge (high curvature)
+#[test]
+fn test_pane_clusters_at_leading_edge() {
+    let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
+    let config = PaneConfig::default();
+    let paned = repanel_xfoil(&original, 160, &config);
+
+    // Calculate average panel spacing in different regions
+    let mut le_spacings = Vec::new();
+    let mut mid_spacings = Vec::new();
+
+    for i in 1..paned.x_c.len() {
+        let dx = (paned.x_c[i] - paned.x_c[i - 1]).abs();
+        let dy = (paned.y_c[i] - paned.y_c[i - 1]).abs();
+        let ds = (dx * dx + dy * dy).sqrt();
+
+        let avg_x = (paned.x_c[i] + paned.x_c[i - 1]) / 2.0;
+
+        if avg_x < 0.1 {
+            le_spacings.push(ds);
+        } else if avg_x > 0.4 && avg_x < 0.6 {
+            mid_spacings.push(ds);
+        }
+    }
+
+    if !le_spacings.is_empty() && !mid_spacings.is_empty() {
+        let avg_le: f64 = le_spacings.iter().sum::<f64>() / le_spacings.len() as f64;
+        let avg_mid: f64 = mid_spacings.iter().sum::<f64>() / mid_spacings.len() as f64;
+
+        // LE spacing should be smaller than mid-chord spacing
+        assert!(
+            avg_le < avg_mid,
+            "LE spacing {:.6} should be smaller than mid spacing {:.6}",
+            avg_le,
+            avg_mid
+        );
+    }
+}
+
+/// Test that PANE config parameters affect the output
+#[test]
+fn test_pane_config_affects_output() {
+    let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
+
+    let config_low_te = PaneConfig {
+        cterat: 0.10,
+        ..Default::default()
+    };
+    let config_high_te = PaneConfig {
+        cterat: 0.50,
+        ..Default::default()
+    };
+
+    let paned_low = repanel_xfoil(&original, 160, &config_low_te);
+    let paned_high = repanel_xfoil(&original, 160, &config_high_te);
+
+    // Count panels in TE region (x > 0.9)
+    let te_count_low = paned_low.x_c.iter().filter(|&&x| x > 0.9).count();
+    let te_count_high = paned_high.x_c.iter().filter(|&&x| x > 0.9).count();
+
+    // Higher CTERAT should produce more panels at TE (more TE bunching)
+    println!(
+        "TE panel count: CTERAT=0.10 -> {}, CTERAT=0.50 -> {}",
+        te_count_low, te_count_high
+    );
+
+    // The distributions should be different
+    assert!(
+        te_count_low != te_count_high || {
+            // If counts are same, check that positions differ
+            let mut diff_count = 0;
+            for i in 0..paned_low.x_c.len().min(paned_high.x_c.len()) {
+                if (paned_low.x_c[i] - paned_high.x_c[i]).abs() > 0.001 {
+                    diff_count += 1;
+                }
+            }
+            diff_count > 10
+        },
+        "Different CTERAT values should produce different distributions"
+    );
 }

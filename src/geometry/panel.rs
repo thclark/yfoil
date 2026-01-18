@@ -47,7 +47,7 @@ impl Default for PaneConfig {
 ///
 /// # Returns
 /// New geometry with redistributed points matching XFOIL's PANE output
-pub fn pane(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
+pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
     let nb = geometry.x_c.len();
     if nb < 2 {
         return geometry.clone();
@@ -445,7 +445,7 @@ fn trisol_curvature(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
 ///
 /// Redistributes points along the airfoil surface with higher density
 /// near the leading edge. This is a simpler alternative to the XFOIL PANE
-/// algorithm (use `pane()` for exact XFOIL matching).
+/// algorithm (use [`repanel_xfoil`] for exact XFOIL matching).
 ///
 /// # Arguments
 /// * `geometry` - Input geometry
@@ -456,7 +456,7 @@ fn trisol_curvature(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
 ///
 /// # Returns
 /// New geometry with redistributed points
-pub fn repanel(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) -> Geometry {
+pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) -> Geometry {
     let n = geometry.x_c.len();
 
     // Calculate arc length along the surface
@@ -887,7 +887,7 @@ mod tests {
         use crate::geometry::naca::naca_4digit;
 
         let original = naca_4digit("0012", 100).unwrap();
-        let repaneled = repanel(&original, 150, 0.15);
+        let repaneled = repanel_cosine(&original, 150, 0.15);
 
         // Should have approximately the target number of points
         assert!(repaneled.x_c.len() > 140 && repaneled.x_c.len() < 160);
@@ -912,7 +912,7 @@ mod tests {
         use crate::geometry::naca::naca_4digit;
 
         let original = naca_4digit("0012", 100).unwrap();
-        let repaneled = repanel(&original, 100, 0.15);
+        let repaneled = repanel_cosine(&original, 100, 0.15);
 
         // Cosine spacing should cluster points near LE and TE
         // Points near x=0 and x=1 should be closer together than at mid-chord

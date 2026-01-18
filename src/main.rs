@@ -8,7 +8,7 @@ use yfoil::bl::FlowConditions;
 use yfoil::forces::{calculate_cp, integrate_forces};
 use yfoil::geometry::{
     create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
-    repanel, write_dat_file, write_geometry_to_json, Geometry,
+    repanel_cosine, repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
 use yfoil::panel::solve_inviscid;
 use yfoil::output::PolarOutput;
@@ -146,7 +146,11 @@ enum GeomAction {
         #[arg(short = 'n', long, default_value_t = 160)]
         panels: usize,
 
-        /// LE/TE panel density ratio
+        /// Repaneling method: xfoil (curvature-based PANE) or cosine (modified cosine spacing)
+        #[arg(long, default_value = "xfoil")]
+        method: String,
+
+        /// LE/TE panel density ratio (for cosine method only)
         #[arg(long, default_value_t = 0.15)]
         le_ratio: f64,
 
@@ -463,11 +467,27 @@ fn handle_geom(action: GeomAction) {
         GeomAction::Repanel {
             input,
             panels,
+            method,
             le_ratio,
             output,
         } => {
             let geometry = read_geometry_auto(&input);
-            let repaneled = repanel(&geometry, panels, le_ratio);
+
+            let repaneled = match method.to_lowercase().as_str() {
+                "xfoil" | "pane" => {
+                    // Use XFOIL's curvature-based PANE algorithm
+                    let config = PaneConfig::default();
+                    repanel_xfoil(&geometry, panels, &config)
+                }
+                "cosine" => {
+                    // Use modified cosine spacing
+                    repanel_cosine(&geometry, panels, le_ratio)
+                }
+                _ => {
+                    eprintln!("Unknown repaneling method: {}. Use 'xfoil' or 'cosine'", method);
+                    std::process::exit(1);
+                }
+            };
 
             let output_path = output.unwrap_or_else(|| {
                 let mut p = input.clone();
@@ -482,9 +502,10 @@ fn handle_geom(action: GeomAction) {
             }
 
             println!(
-                "Repaneled from {} to {} points",
+                "Repaneled from {} to {} points using {} method",
                 geometry.x_c.len(),
-                repaneled.x_c.len()
+                repaneled.x_c.len(),
+                method
             );
             println!("Wrote to {}", output_path.display());
         }

@@ -5,7 +5,7 @@ use tempfile::NamedTempFile;
 
 use yfoil::geometry::{
     create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
-    repanel, write_dat_file, write_geometry_to_json,
+    repanel_cosine, write_dat_file, write_geometry_to_json,
 };
 
 /// Test NACA 0012 against the standard NACA formula from external reference.
@@ -171,7 +171,7 @@ fn test_format_conversion() {
 #[test]
 fn test_repanel_shape_preservation() {
     let original = naca_4digit("0012", 100).unwrap();
-    let repaneled = repanel(&original, 200, 0.15);
+    let repaneled = repanel_cosine(&original, 200, 0.15);
 
     // Maximum thickness should be preserved
     let orig_max_y = original.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -191,7 +191,7 @@ fn test_full_geometry_pipeline() {
     let raw = naca_5digit("23012", 100).unwrap();
 
     // Repanel with finer distribution
-    let repaneled = repanel(&raw, 160, 0.15);
+    let repaneled = repanel_cosine(&raw, 160, 0.15);
 
     // Create paneled airfoil with all derived quantities
     let paneled = create_paneled_airfoil(&repaneled);
