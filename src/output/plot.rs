@@ -974,3 +974,748 @@ fn nice_step(range: f64, target_ticks: usize) -> f64 {
 
     nice * magnitude
 }
+
+// ============================================================================
+// Polar Plotting
+// ============================================================================
+
+/// Configuration for polar plots
+#[derive(Debug, Clone)]
+pub struct PolarPlotConfig {
+    /// Image width in pixels
+    pub width: u32,
+    /// Image height in pixels
+    pub height: u32,
+    /// First data series color (RGB) - default blue
+    pub color_1: (u8, u8, u8),
+    /// Second data series color (RGB) - default red (for comparison)
+    pub color_2: (u8, u8, u8),
+    /// Background color (RGB)
+    pub background: (u8, u8, u8),
+    /// Title for the plot
+    pub title: Option<String>,
+    /// Label for first data series
+    pub label_1: String,
+    /// Label for second data series (for comparison)
+    pub label_2: String,
+}
+
+impl Default for PolarPlotConfig {
+    fn default() -> Self {
+        Self {
+            width: 1400,
+            height: 600,
+            color_1: (0, 100, 200),      // Blue
+            color_2: (200, 50, 50),      // Red
+            background: (255, 255, 255), // White
+            title: None,
+            label_1: "YFoil".to_string(),
+            label_2: "XFOIL".to_string(),
+        }
+    }
+}
+
+/// Data for a single polar curve
+#[derive(Debug, Clone)]
+pub struct PolarData {
+    /// Angle of attack values (degrees)
+    pub alpha: Vec<f64>,
+    /// Lift coefficient values
+    pub cl: Vec<f64>,
+    /// Drag coefficient values
+    pub cd: Vec<f64>,
+}
+
+impl PolarData {
+    /// Create from PolarOutput
+    pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
+        let alpha: Vec<f64> = polar.points.iter().map(|p| p.alpha_deg).collect();
+        let cl: Vec<f64> = polar.points.iter().map(|p| p.cl).collect();
+        let cd: Vec<f64> = polar.points.iter().map(|p| p.cd).collect();
+        Self { alpha, cl, cd }
+    }
+
+    /// Create from raw data vectors
+    pub fn new(alpha: Vec<f64>, cl: Vec<f64>, cd: Vec<f64>) -> Self {
+        Self { alpha, cl, cd }
+    }
+}
+
+/// Plot a polar comparison to SVG
+///
+/// Creates a two-panel plot comparing two polars:
+/// - Left panel: CL vs Alpha
+/// - Right panel: CD vs Alpha
+pub fn plot_polar_comparison_svg<P: AsRef<Path>>(
+    polar_1: &PolarData,
+    polar_2: &PolarData,
+    output_path: P,
+    config: &PolarPlotConfig,
+) -> Result<(), PlotError> {
+    let mut file = std::fs::File::create(output_path)?;
+
+    // Calculate data ranges
+    let alpha_min = polar_1.alpha.iter().chain(polar_2.alpha.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let alpha_max = polar_1.alpha.iter().chain(polar_2.alpha.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let alpha_range = alpha_max - alpha_min;
+    let alpha_padding = 0.05 * alpha_range;
+
+    let cl_min = polar_1.cl.iter().chain(polar_2.cl.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let cl_max = polar_1.cl.iter().chain(polar_2.cl.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cl_range = cl_max - cl_min;
+    let cl_padding = 0.1 * cl_range;
+
+    let cd_min = polar_1.cd.iter().chain(polar_2.cd.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let cd_max = polar_1.cd.iter().chain(polar_2.cd.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cd_range = cd_max - cd_min;
+    let cd_padding = 0.1 * cd_range;
+
+    // Padded ranges
+    let alpha_min_p = alpha_min - alpha_padding;
+    let alpha_max_p = alpha_max + alpha_padding;
+    let cl_min_p = cl_min - cl_padding;
+    let cl_max_p = cl_max + cl_padding;
+    let cd_min_p = cd_min - cd_padding;
+    let cd_max_p = cd_max + cd_padding;
+
+    // Layout
+    let width = config.width as f64;
+    let height = config.height as f64;
+    let margin_left = 70.0;
+    let margin_right = 20.0;
+    let margin_top = 50.0;
+    let margin_bottom = 50.0;
+    let gap = 60.0;
+
+    let plot_width = (width - margin_left - margin_right - gap) / 2.0;
+    let plot_height = height - margin_top - margin_bottom;
+
+    // Plot regions
+    let cl_plot_left = margin_left;
+    let cd_plot_left = margin_left + plot_width + gap;
+
+    // Colors
+    let color_1 = format!("rgb({},{},{})", config.color_1.0, config.color_1.1, config.color_1.2);
+    let color_2 = format!("rgb({},{},{})", config.color_2.0, config.color_2.1, config.color_2.2);
+    let grid_color = "#DDDDDD";
+
+    // Coordinate transforms
+    let to_svg_alpha_cl = |alpha: f64| -> f64 {
+        cl_plot_left + (alpha - alpha_min_p) / (alpha_max_p - alpha_min_p) * plot_width
+    };
+    let to_svg_cl = |cl: f64| -> f64 {
+        margin_top + plot_height - (cl - cl_min_p) / (cl_max_p - cl_min_p) * plot_height
+    };
+    let to_svg_alpha_cd = |alpha: f64| -> f64 {
+        cd_plot_left + (alpha - alpha_min_p) / (alpha_max_p - alpha_min_p) * plot_width
+    };
+    let to_svg_cd = |cd: f64| -> f64 {
+        margin_top + plot_height - (cd - cd_min_p) / (cd_max_p - cd_min_p) * plot_height
+    };
+
+    // SVG header
+    writeln!(
+        file,
+        r#"<svg width="{}" height="{}" viewBox="0 0 {} {}" xmlns="http://www.w3.org/2000/svg">"#,
+        config.width, config.height, config.width, config.height
+    )?;
+
+    // Background
+    writeln!(
+        file,
+        r#"<rect width="100%" height="100%" fill="rgb({},{},{})"/>"#,
+        config.background.0, config.background.1, config.background.2
+    )?;
+
+    // Title
+    let title = config.title.clone().unwrap_or_else(|| "Polar Comparison".to_string());
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="30" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="bold">{}</text>"#,
+        width / 2.0,
+        title
+    )?;
+
+    // ===== CL vs Alpha Plot (left) =====
+
+    // Plot border
+    writeln!(
+        file,
+        r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        cl_plot_left, margin_top, plot_width, plot_height
+    )?;
+
+    // Gridlines
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    let alpha_step = nice_step(alpha_max_p - alpha_min_p, 8);
+    let alpha_start = (alpha_min_p / alpha_step).ceil() * alpha_step;
+    let mut alpha_val = alpha_start;
+    while alpha_val <= alpha_max_p {
+        let sx = to_svg_alpha_cl(alpha_val);
+        if sx > cl_plot_left && sx < cl_plot_left + plot_width {
+            writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+                sx, margin_top, sx, margin_top + plot_height)?;
+        }
+        alpha_val += alpha_step;
+    }
+    let cl_step = nice_step(cl_max_p - cl_min_p, 8);
+    let cl_start = (cl_min_p / cl_step).ceil() * cl_step;
+    let mut cl_val = cl_start;
+    while cl_val <= cl_max_p {
+        let sy = to_svg_cl(cl_val);
+        if sy > margin_top && sy < margin_top + plot_height {
+            writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+                cl_plot_left, sy, cl_plot_left + plot_width, sy)?;
+        }
+        cl_val += cl_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Axis labels
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="14">Alpha (deg)</text>"#,
+        cl_plot_left + plot_width / 2.0,
+        margin_top + plot_height + 40.0
+    )?;
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="14" transform="rotate(-90 {:.1} {:.1})">CL</text>"#,
+        cl_plot_left - 50.0,
+        margin_top + plot_height / 2.0,
+        cl_plot_left - 50.0,
+        margin_top + plot_height / 2.0
+    )?;
+
+    // Tick labels for CL plot
+    writeln!(file, r#"<g font-family="sans-serif" font-size="11" text-anchor="end">"#)?;
+    cl_val = cl_start;
+    while cl_val <= cl_max_p {
+        let sy = to_svg_cl(cl_val);
+        if sy > margin_top + 5.0 && sy < margin_top + plot_height - 5.0 {
+            writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.2}</text>"#,
+                cl_plot_left - 5.0, sy + 4.0, cl_val)?;
+        }
+        cl_val += cl_step;
+    }
+    writeln!(file, "</g>")?;
+
+    writeln!(file, r#"<g font-family="sans-serif" font-size="11" text-anchor="middle">"#)?;
+    alpha_val = alpha_start;
+    while alpha_val <= alpha_max_p {
+        let sx = to_svg_alpha_cl(alpha_val);
+        if sx > cl_plot_left + 10.0 && sx < cl_plot_left + plot_width - 10.0 {
+            writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.0}</text>"#,
+                sx, margin_top + plot_height + 18.0, alpha_val)?;
+        }
+        alpha_val += alpha_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Data series 1 (CL)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_1)?;
+    for (i, (&alpha, &cl)) in polar_1.alpha.iter().zip(polar_1.cl.iter()).enumerate() {
+        let sx = to_svg_alpha_cl(alpha);
+        let sy = to_svg_cl(cl);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Data markers for series 1
+    for (&alpha, &cl) in polar_1.alpha.iter().zip(polar_1.cl.iter()) {
+        let sx = to_svg_alpha_cl(alpha);
+        let sy = to_svg_cl(cl);
+        writeln!(file, r#"<circle cx="{:.6}" cy="{:.6}" r="3" fill="{}" />"#, sx, sy, color_1)?;
+    }
+
+    // Data series 2 (CL)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_2)?;
+    for (i, (&alpha, &cl)) in polar_2.alpha.iter().zip(polar_2.cl.iter()).enumerate() {
+        let sx = to_svg_alpha_cl(alpha);
+        let sy = to_svg_cl(cl);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Data markers for series 2
+    for (&alpha, &cl) in polar_2.alpha.iter().zip(polar_2.cl.iter()) {
+        let sx = to_svg_alpha_cl(alpha);
+        let sy = to_svg_cl(cl);
+        writeln!(file, r#"<rect x="{:.6}" y="{:.6}" width="6" height="6" fill="{}" transform="rotate(45 {:.6} {:.6})"/>"#,
+            sx - 3.0, sy - 3.0, color_2, sx, sy)?;
+    }
+
+    // ===== CD vs Alpha Plot (right) =====
+
+    // Plot border
+    writeln!(
+        file,
+        r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        cd_plot_left, margin_top, plot_width, plot_height
+    )?;
+
+    // Gridlines
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    alpha_val = alpha_start;
+    while alpha_val <= alpha_max_p {
+        let sx = to_svg_alpha_cd(alpha_val);
+        if sx > cd_plot_left && sx < cd_plot_left + plot_width {
+            writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+                sx, margin_top, sx, margin_top + plot_height)?;
+        }
+        alpha_val += alpha_step;
+    }
+    let cd_step = nice_step(cd_max_p - cd_min_p, 8);
+    let cd_start = (cd_min_p / cd_step).ceil() * cd_step;
+    let mut cd_val = cd_start;
+    while cd_val <= cd_max_p {
+        let sy = to_svg_cd(cd_val);
+        if sy > margin_top && sy < margin_top + plot_height {
+            writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+                cd_plot_left, sy, cd_plot_left + plot_width, sy)?;
+        }
+        cd_val += cd_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Axis labels
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="14">Alpha (deg)</text>"#,
+        cd_plot_left + plot_width / 2.0,
+        margin_top + plot_height + 40.0
+    )?;
+    writeln!(
+        file,
+        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="14" transform="rotate(-90 {:.1} {:.1})">CD</text>"#,
+        cd_plot_left - 50.0,
+        margin_top + plot_height / 2.0,
+        cd_plot_left - 50.0,
+        margin_top + plot_height / 2.0
+    )?;
+
+    // Tick labels for CD plot
+    writeln!(file, r#"<g font-family="sans-serif" font-size="11" text-anchor="end">"#)?;
+    cd_val = cd_start;
+    while cd_val <= cd_max_p {
+        let sy = to_svg_cd(cd_val);
+        if sy > margin_top + 5.0 && sy < margin_top + plot_height - 5.0 {
+            writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.4}</text>"#,
+                cd_plot_left - 5.0, sy + 4.0, cd_val)?;
+        }
+        cd_val += cd_step;
+    }
+    writeln!(file, "</g>")?;
+
+    writeln!(file, r#"<g font-family="sans-serif" font-size="11" text-anchor="middle">"#)?;
+    alpha_val = alpha_start;
+    while alpha_val <= alpha_max_p {
+        let sx = to_svg_alpha_cd(alpha_val);
+        if sx > cd_plot_left + 10.0 && sx < cd_plot_left + plot_width - 10.0 {
+            writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.0}</text>"#,
+                sx, margin_top + plot_height + 18.0, alpha_val)?;
+        }
+        alpha_val += alpha_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Data series 1 (CD)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_1)?;
+    for (i, (&alpha, &cd)) in polar_1.alpha.iter().zip(polar_1.cd.iter()).enumerate() {
+        let sx = to_svg_alpha_cd(alpha);
+        let sy = to_svg_cd(cd);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Data markers for series 1
+    for (&alpha, &cd) in polar_1.alpha.iter().zip(polar_1.cd.iter()) {
+        let sx = to_svg_alpha_cd(alpha);
+        let sy = to_svg_cd(cd);
+        writeln!(file, r#"<circle cx="{:.6}" cy="{:.6}" r="3" fill="{}" />"#, sx, sy, color_1)?;
+    }
+
+    // Data series 2 (CD)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_2)?;
+    for (i, (&alpha, &cd)) in polar_2.alpha.iter().zip(polar_2.cd.iter()).enumerate() {
+        let sx = to_svg_alpha_cd(alpha);
+        let sy = to_svg_cd(cd);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Data markers for series 2
+    for (&alpha, &cd) in polar_2.alpha.iter().zip(polar_2.cd.iter()) {
+        let sx = to_svg_alpha_cd(alpha);
+        let sy = to_svg_cd(cd);
+        writeln!(file, r#"<rect x="{:.6}" y="{:.6}" width="6" height="6" fill="{}" transform="rotate(45 {:.6} {:.6})"/>"#,
+            sx - 3.0, sy - 3.0, color_2, sx, sy)?;
+    }
+
+    // Legend (centered at bottom)
+    let legend_x = width / 2.0 - 100.0;
+    let legend_y = height - 25.0;
+
+    // Series 1
+    writeln!(file, r#"<circle cx="{:.1}" cy="{:.1}" r="4" fill="{}" />"#,
+        legend_x, legend_y, color_1)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x - 15.0, legend_y, legend_x + 15.0, legend_y, color_1)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="12">{}</text>"#,
+        legend_x + 25.0, legend_y + 4.0, config.label_1)?;
+
+    // Series 2
+    let legend_x2 = legend_x + 120.0;
+    writeln!(file, r#"<rect x="{:.1}" y="{:.1}" width="8" height="8" fill="{}" transform="rotate(45 {:.1} {:.1})"/>"#,
+        legend_x2 - 4.0, legend_y - 4.0, color_2, legend_x2, legend_y)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x2 - 15.0, legend_y, legend_x2 + 15.0, legend_y, color_2)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="12">{}</text>"#,
+        legend_x2 + 25.0, legend_y + 4.0, config.label_2)?;
+
+    writeln!(file, "</svg>")?;
+
+    Ok(())
+}
+
+/// Parse an XFOIL polar file and extract alpha, CL, CD data
+pub fn parse_xfoil_polar_file<P: AsRef<Path>>(path: P) -> Result<PolarData, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let mut alphas = Vec::new();
+    let mut cls = Vec::new();
+    let mut cds = Vec::new();
+
+    let mut in_data = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("------") {
+            in_data = true;
+            continue;
+        }
+        if in_data && !line.is_empty() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                if let (Ok(alpha), Ok(cl), Ok(cd)) = (
+                    parts[0].parse::<f64>(),
+                    parts[1].parse::<f64>(),
+                    parts[2].parse::<f64>(),
+                ) {
+                    alphas.push(alpha);
+                    cls.push(cl);
+                    cds.push(cd);
+                }
+            }
+        }
+    }
+
+    Ok(PolarData::new(alphas, cls, cds))
+}
+
+/// Stitch two polars together in ascending alpha order
+///
+/// Used for combining positive and negative alpha sweeps into a single polar.
+/// Removes duplicate alpha values (keeps first occurrence).
+pub fn stitch_polars(polar_pos: &PolarData, polar_neg: &PolarData) -> PolarData {
+    // Reverse negative polar to get ascending order
+    let mut neg_alpha: Vec<f64> = polar_neg.alpha.iter().copied().rev().collect();
+    let mut neg_cl: Vec<f64> = polar_neg.cl.iter().copied().rev().collect();
+    let mut neg_cd: Vec<f64> = polar_neg.cd.iter().copied().rev().collect();
+
+    // Concatenate
+    neg_alpha.extend(polar_pos.alpha.iter().copied());
+    neg_cl.extend(polar_pos.cl.iter().copied());
+    neg_cd.extend(polar_pos.cd.iter().copied());
+
+    // Sort by alpha and remove duplicates
+    let mut combined: Vec<(f64, f64, f64)> = neg_alpha.into_iter()
+        .zip(neg_cl.into_iter())
+        .zip(neg_cd.into_iter())
+        .map(|((a, c), d)| (a, c, d))
+        .collect();
+
+    combined.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+    // Remove duplicates (keep first occurrence of each alpha)
+    let mut seen_alphas = std::collections::HashSet::new();
+    let combined: Vec<(f64, f64, f64)> = combined.into_iter()
+        .filter(|(a, _, _)| {
+            let key = (*a * 1000.0).round() as i64; // Round to 0.001 precision
+            seen_alphas.insert(key)
+        })
+        .collect();
+
+    let alphas: Vec<f64> = combined.iter().map(|(a, _, _)| *a).collect();
+    let cls: Vec<f64> = combined.iter().map(|(_, c, _)| *c).collect();
+    let cds: Vec<f64> = combined.iter().map(|(_, _, d)| *d).collect();
+
+    PolarData::new(alphas, cls, cds)
+}
+
+/// Parse a YFoil polar JSON file into PolarData
+pub fn parse_yfoil_polar_file<P: AsRef<Path>>(path: P) -> Result<PolarData, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let polar: crate::output::PolarOutput = serde_json::from_str(&content)
+        .map_err(|e| PlotError::Drawing(format!("Failed to parse YFoil polar JSON: {}", e)))?;
+    Ok(PolarData::from_polar_output(&polar))
+}
+
+// ============================================================================
+// Geometry Comparison Plotting
+// ============================================================================
+
+/// Configuration for geometry comparison plots
+#[derive(Debug, Clone)]
+pub struct GeometryComparisonPlotConfig {
+    /// Image width in pixels
+    pub width: u32,
+    /// Image height in pixels
+    pub height: u32,
+    /// First series color (RGB) - XFOIL reference
+    pub series1_color: (u8, u8, u8),
+    /// Second series color (RGB) - YFoil generated
+    pub series2_color: (u8, u8, u8),
+    /// Marker size for data points
+    pub marker_size: f64,
+    /// Background color (RGB)
+    pub background: (u8, u8, u8),
+    /// Title for the plot
+    pub title: Option<String>,
+    /// Label for first series
+    pub label_1: String,
+    /// Label for second series
+    pub label_2: String,
+}
+
+impl Default for GeometryComparisonPlotConfig {
+    fn default() -> Self {
+        Self {
+            width: 1200,
+            height: 400,
+            series1_color: (0, 100, 200),     // Blue for XFOIL
+            series2_color: (200, 50, 50),     // Red for YFoil
+            marker_size: 4.0,
+            background: (255, 255, 255),      // White
+            title: None,
+            label_1: "XFOIL".to_string(),
+            label_2: "YFoil".to_string(),
+        }
+    }
+}
+
+/// Plot geometry comparison to SVG
+///
+/// Creates an overlay plot comparing two sets of coordinates:
+/// - Series 1 (XFOIL): blue line with circle markers
+/// - Series 2 (YFoil): red line with cross markers
+///
+/// Uses high-precision SVG output for smooth curves.
+pub fn plot_geometry_comparison_svg<P: AsRef<Path>>(
+    coords1: &[(f64, f64)],
+    coords2: &[(f64, f64)],
+    output_path: P,
+    config: &GeometryComparisonPlotConfig,
+) -> Result<(), PlotError> {
+    let mut file = std::fs::File::create(output_path)?;
+
+    // Calculate combined bounds
+    let x_min = coords1.iter().chain(coords2.iter())
+        .map(|(x, _)| *x)
+        .fold(f64::INFINITY, f64::min);
+    let x_max = coords1.iter().chain(coords2.iter())
+        .map(|(x, _)| *x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let y_min = coords1.iter().chain(coords2.iter())
+        .map(|(_, y)| *y)
+        .fold(f64::INFINITY, f64::min);
+    let y_max = coords1.iter().chain(coords2.iter())
+        .map(|(_, y)| *y)
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    let x_range = x_max - x_min;
+    let padding = 0.1;
+    let x_min_padded = x_min - padding * x_range;
+    let x_max_padded = x_max + padding * x_range;
+
+    // Equal aspect ratio
+    let aspect = config.width as f64 / config.height as f64;
+    let y_center = (y_min + y_max) / 2.0;
+    let y_half_range = (x_max_padded - x_min_padded) / aspect / 2.0;
+    let y_min_padded = y_center - y_half_range;
+    let y_max_padded = y_center + y_half_range;
+
+    let data_width = x_max_padded - x_min_padded;
+    let data_height = y_max_padded - y_min_padded;
+
+    // Coordinate transform: data coords to SVG coords
+    let margin = 50.0;
+    let plot_width = config.width as f64 - 2.0 * margin;
+    let plot_height = config.height as f64 - 2.0 * margin;
+
+    let to_svg_x = |x: f64| -> f64 { margin + (x - x_min_padded) / data_width * plot_width };
+    let to_svg_y = |y: f64| -> f64 { margin + (y_max_padded - y) / data_height * plot_height };
+
+    // Colors
+    let color_1 = format!("rgb({},{},{})", config.series1_color.0, config.series1_color.1, config.series1_color.2);
+    let color_2 = format!("rgb({},{},{})", config.series2_color.0, config.series2_color.1, config.series2_color.2);
+    let grid_color = "#CCCCCC";
+
+    // SVG header
+    writeln!(
+        file,
+        r#"<svg width="{}" height="{}" viewBox="0 0 {} {}" xmlns="http://www.w3.org/2000/svg">"#,
+        config.width, config.height, config.width, config.height
+    )?;
+
+    // Background
+    writeln!(
+        file,
+        r#"<rect width="100%" height="100%" fill="rgb({},{},{})"/>"#,
+        config.background.0, config.background.1, config.background.2
+    )?;
+
+    // Title
+    let title = config.title.clone().unwrap_or_else(|| "Geometry Comparison".to_string());
+    writeln!(
+        file,
+        r#"<text x="{}" y="25" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold">{}</text>"#,
+        config.width as f64 / 2.0,
+        title
+    )?;
+
+    // Axis labels
+    writeln!(
+        file,
+        r#"<text x="{}" y="{}" text-anchor="middle" font-family="sans-serif" font-size="12">x/c</text>"#,
+        config.width as f64 / 2.0,
+        config.height as f64 - 10.0
+    )?;
+    writeln!(
+        file,
+        r#"<text x="15" y="{}" text-anchor="middle" font-family="sans-serif" font-size="12" transform="rotate(-90 15 {})">y/c</text>"#,
+        config.height as f64 / 2.0,
+        config.height as f64 / 2.0
+    )?;
+
+    // Grid lines (light gray)
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    for i in 0..=10 {
+        let x = x_min_padded + (i as f64 / 10.0) * data_width;
+        let sx = to_svg_x(x);
+        writeln!(file, r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}"/>"#,
+            sx, margin, sx, config.height as f64 - margin)?;
+    }
+    for i in 0..=5 {
+        let y = y_min_padded + (i as f64 / 5.0) * data_height;
+        let sy = to_svg_y(y);
+        writeln!(file, r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}"/>"#,
+            margin, sy, config.width as f64 - margin, sy)?;
+    }
+    writeln!(file, "</g>")?;
+
+    // Plot border
+    writeln!(
+        file,
+        r##"<rect x="{}" y="{}" width="{}" height="{}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        margin, margin, plot_width, plot_height
+    )?;
+
+    // Series 1 (XFOIL) - blue line with circle markers
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_1)?;
+    for (i, (x, y)) in coords1.iter().enumerate() {
+        let sx = to_svg_x(*x);
+        let sy = to_svg_y(*y);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Circle markers for series 1
+    for (x, y) in coords1.iter() {
+        let sx = to_svg_x(*x);
+        let sy = to_svg_y(*y);
+        writeln!(file, r#"<circle cx="{:.6}" cy="{:.6}" r="{}" fill="none" stroke="{}" stroke-width="1.5"/>"#,
+            sx, sy, config.marker_size, color_1)?;
+    }
+
+    // Series 2 (YFoil) - red line with cross markers
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_2)?;
+    for (i, (x, y)) in coords2.iter().enumerate() {
+        let sx = to_svg_x(*x);
+        let sy = to_svg_y(*y);
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", sx, sy)?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Cross markers for series 2
+    let m = config.marker_size;
+    for (x, y) in coords2.iter() {
+        let sx = to_svg_x(*x);
+        let sy = to_svg_y(*y);
+        writeln!(file, r#"<line x1="{:.6}" y1="{:.6}" x2="{:.6}" y2="{:.6}" stroke="{}" stroke-width="1.5"/>"#,
+            sx - m, sy - m, sx + m, sy + m, color_2)?;
+        writeln!(file, r#"<line x1="{:.6}" y1="{:.6}" x2="{:.6}" y2="{:.6}" stroke="{}" stroke-width="1.5"/>"#,
+            sx - m, sy + m, sx + m, sy - m, color_2)?;
+    }
+
+    // Legend
+    let legend_x = config.width as f64 - 150.0;
+    let legend_y = margin + 15.0;
+    writeln!(file, r#"<rect x="{:.1}" y="{:.1}" width="130" height="50" fill="white" fill-opacity="0.9" stroke="black" stroke-width="0.5"/>"#,
+        legend_x, legend_y)?;
+
+    // Series 1 legend
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x + 10.0, legend_y + 15.0, legend_x + 30.0, legend_y + 15.0, color_1)?;
+    writeln!(file, r#"<circle cx="{:.1}" cy="{:.1}" r="{}" fill="none" stroke="{}" stroke-width="1.5"/>"#,
+        legend_x + 20.0, legend_y + 15.0, config.marker_size, color_1)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">{}</text>"#,
+        legend_x + 40.0, legend_y + 19.0, config.label_1)?;
+
+    // Series 2 legend
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x + 10.0, legend_y + 35.0, legend_x + 30.0, legend_y + 35.0, color_2)?;
+    writeln!(file, r#"<line x1="{:.6}" y1="{:.6}" x2="{:.6}" y2="{:.6}" stroke="{}" stroke-width="1.5"/>"#,
+        legend_x + 20.0 - m, legend_y + 35.0 - m, legend_x + 20.0 + m, legend_y + 35.0 + m, color_2)?;
+    writeln!(file, r#"<line x1="{:.6}" y1="{:.6}" x2="{:.6}" y2="{:.6}" stroke="{}" stroke-width="1.5"/>"#,
+        legend_x + 20.0 - m, legend_y + 35.0 + m, legend_x + 20.0 + m, legend_y + 35.0 - m, color_2)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">{}</text>"#,
+        legend_x + 40.0, legend_y + 39.0, config.label_2)?;
+
+    writeln!(file, "</svg>")?;
+
+    Ok(())
+}
+
+/// Parse an XFOIL plain coordinate file (.dat format)
+///
+/// Returns coordinates as Vec<(x, y)>.
+pub fn parse_xfoil_dat_file<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64)>, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let mut coords = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 {
+            if let (Ok(x), Ok(y)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
+                coords.push((x, y));
+            }
+        }
+    }
+
+    Ok(coords)
+}
