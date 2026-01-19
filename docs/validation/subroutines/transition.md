@@ -11,6 +11,7 @@ the eN transition prediction method.
 - **Passed:** 200
 - **Max Relative Error:** 2.11e-13
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/dampl/`](../../../tests/fixtures/subroutines/dampl/)
 
 ### Sample Cases
 

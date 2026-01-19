@@ -2,9 +2,8 @@
 
 This directory contains detailed documentation of XFOIL 6.99 for the purpose of:
 
-1. Creating a scientific paper appendix documenting the analysis method
-2. Validating YFoil produces numerically identical results
-3. Understanding the algorithm flow for debugging
+1. Validating YFoil produces numerically identical results
+2. Understanding the algorithm flow for debugging
 
 ## Overview
 

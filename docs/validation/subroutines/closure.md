@@ -8,6 +8,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 - **Passed:** 200
 - **Max Relative Error:** 3.66e-16
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/hkin/`](../../../tests/fixtures/subroutines/hkin/)
 
 ### Sample Cases
 
@@ -50,6 +51,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 - **Passed:** 200
 - **Max Relative Error:** 2.63e-15
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/cfl/`](../../../tests/fixtures/subroutines/cfl/)
 
 ### Sample Cases
 
@@ -92,6 +94,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 - **Passed:** 200
 - **Max Relative Error:** 2.77e-14
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/hsl/`](../../../tests/fixtures/subroutines/hsl/)
 
 ### Sample Cases
 
@@ -124,6 +127,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 - **Passed:** 200
 - **Max Relative Error:** 6.00e-15
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/dil/`](../../../tests/fixtures/subroutines/dil/)
 
 ### Sample Cases
 
@@ -166,6 +170,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 - **Passed:** 200
 - **Max Relative Error:** 6.51e-15
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/hst/`](../../../tests/fixtures/subroutines/hst/)
 
 ### Sample Cases
 
@@ -208,6 +213,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 - **Passed:** 200
 - **Max Relative Error:** 2.14e-15
 - **Status:** ✓ PASS
+- **Fixtures:** [`tests/fixtures/subroutines/cft/`](../../../tests/fixtures/subroutines/cft/)
 
 ### Sample Cases
 
