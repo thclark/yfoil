@@ -160,20 +160,47 @@ This is non-negotiable. Different paneling produces different results, making an
 4. Run YFoil with the same geometry.json
 
 **NEVER do this:**
+
 - Use `NACA 0012` + `PANE` in XFOIL while using `naca_4digit("0012", N)` in YFoil
 - Compare results without verifying panel coordinates match exactly
 - Assume similar panel counts mean identical geometry
 
-**Verification:** Before any comparison, print the first few panel coordinates from both XFOIL and YFoil and confirm they match to machine precision.
+**Verification:** Before any comparison, print the first few panel coordinates from both XFOIL and YFoil and confirm
+they match to machine precision.
 
 ## Testing Strategy
 
-- Unit tests for pure functions (closures, splines, influence)
-- Integration tests comparing against XFOIL results with EXACT numerical matching
+- Tests for pure functions (closures, splines, influence)
+- Tests comparing against XFOIL results with EXACT numerical matching
     - Run instrumented XFOIL to get input and output values to create fixtures
 - Regression tests with stored known-good outputs
 - Test airfoils: NACA 0012 (symmetric), NACA 4412 (cambered)
 - Instrumented comparison tests at each solver stage
+
+### Test File Naming Convention
+
+All test files in `tests/` must be suffixed with `_tests.rs` so they are easily identifiable from filename tabs.
+
+**Structure:**
+
+```
+tests/
+├── utilities/                        - Shared test utilities (not run as tests)
+│   └── mod.rs
+├── fixtures/                         - XFOIL-generated test fixture data
+│   └── mod.rs                        - Fixture loading utilities
+├── cli_*_tests.rs                    - CLI command tests (yfoil geom, analyze, etc.)
+├── integration_*_tests.rs            - Library module integration tests
+├── xfoil_*_tests.rs                  - XFOIL validation tests (exact numeric comparison)
+└── ...
+```
+
+**Naming patterns:**
+
+- `cli_` prefix: Tests for CLI commands (e.g., `cli_geom_tests.rs`, `cli_analyze_tests.rs`)
+- `integration_` prefix: Integration tests for library modules (e.g., `integration_geometry_tests.rs`)
+- `xfoil_` prefix: Tests that validate against XFOIL output (exact numeric matching)
+- `_errors` suffix: Tests specifically for error handling
 
 ## Conventions
 
@@ -208,6 +235,6 @@ For every validation, test comparison output or debugging run of xfoil, it's imp
 now we have the geometry working, do that by generating the geometry then repaneling it using the xfoil-based paneler (
 this can be done with yfoil geom).
 
-
-
-
+This is likely because XFOIL uses XSSI (arc-length based) indexing that's
+different                                           
+from panel indices.                                                                              

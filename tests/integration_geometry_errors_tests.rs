@@ -1,6 +1,6 @@
 use yfoil::geometry::read_geometry_from_file;
 use yfoil::geometry::InvalidGeometryError;
-mod _utils;
+mod utilities;
 
 #[test]
 fn panic_on_erroneous_point() {
