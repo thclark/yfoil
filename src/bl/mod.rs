@@ -10,15 +10,20 @@
 //! - `march` - BL marching algorithms (direct and mixed modes)
 //! - `newton` - Newton iteration system
 //! - `system` - BL Newton system data structures (XFOIL-compatible)
+//! - `blsolv` - BLSOLV block solver for coupled Newton system
 //! - `wake` - Wake boundary layer model
 
+pub mod blsolv;
 mod closure;
+pub mod gauss;
 mod march;
+pub mod mrchdu;
 mod newton;
 mod state;
 pub mod system;
 mod wake;
 
+pub use blsolv::*;
 pub use closure::*;
 pub use march::*;
 pub use newton::*;

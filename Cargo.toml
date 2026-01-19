@@ -33,3 +33,14 @@ tempfile = "3.10"
 [features]
 default = []
 plotting = ["plotters"]
+
+# Binaries that require plotting feature
+[[bin]]
+name = "generate_geometry_validation"
+path = "src/bin/generate_geometry_validation.rs"
+required-features = ["plotting"]
+
+[[bin]]
+name = "generate_analysis_validation"
+path = "src/bin/generate_analysis_validation.rs"
+required-features = ["plotting"]

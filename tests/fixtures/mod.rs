@@ -3,6 +3,8 @@
 //! This module provides structures and functions for loading XFOIL-generated
 //! test fixtures for numerical validation of YFoil.
 
+pub mod blsolv_fixtures;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;

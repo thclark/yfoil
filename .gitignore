@@ -3,3 +3,7 @@
 *.html
 .DS_Store
 /xfoil/
+*.dat
+fort.*
+*.bl
+*.log

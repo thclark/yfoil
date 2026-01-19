@@ -214,6 +214,50 @@ tests/
 For temporary files and debug scripts, use the `.tmp/` directory in the repo root instead of `/tmp`. This avoids
 permission issues and keeps debug artifacts with the project.
 
+## Polar Sweep Procedure
+
+**CRITICAL: The correct order to run a polar sweep is:**
+
+1. **Start at α = 0°** - this provides a good initial condition
+2. **Sweep upward** in increments of +1° from 0° to +15° (or desired max)
+3. **Reinitialize** the solution at α = -1° - this prevents non-converged high-alpha results from polluting the negative sweep
+4. **Sweep downward** in increments of -1° from -1° to -15° (or desired min)
+5. **Stitch results** in ascending order from -15° to +15° for clean output
+
+This procedure ensures:
+- Each point uses the previous converged solution as initialization (good for convergence)
+- The negative alpha sweep starts fresh, not from a potentially diverged high-alpha state
+- Final output appears as a single continuous polar
+
+**For XFOIL (non-interactive):**
+```
+PLOP
+G F
+
+LOAD geometry.dat
+PCOP
+OPER
+VISC 1000000
+PACC
+polar_pos.txt
+
+ALFA 0
+ASEQ 1 15 1
+
+PACC
+
+INIT
+PACC
+polar_neg.txt
+
+ALFA -1
+ASEQ -2 -15 -1
+
+QUIT
+```
+
+Then stitch `polar_neg.txt` (reversed) + α=0 from `polar_pos.txt` + rest of `polar_pos.txt`.
+
 ## Full validation against XFOIL
 
 There should be a set of validations maintained in the final documentation (these cases may also be useful for debugging
@@ -227,7 +271,7 @@ purposes).
 - NACA4412 at 0-15 degrees, then reinitialised at 0, then -1--15 as a complete polar to test beyond limits of divergence
 
 Each of these cases should be tabulated and plotted, including differences between all boundary layer variable
-distributions,.
+distributions.
 
 All xfoil runs should be run with the same default number of iterations as yfoil has.
 
@@ -235,6 +279,87 @@ For every validation, test comparison output or debugging run of xfoil, it's imp
 now we have the geometry working, do that by generating the geometry then repaneling it using the xfoil-based paneler (
 this can be done with yfoil geom).
 
-This is likely because XFOIL uses XSSI (arc-length based) indexing that's
-different                                           
-from panel indices.                                                                              
+### Validation Tool Locations
+
+Validation generators are binaries in `src/bin/`, NOT examples. These tools must be re-run whenever YFoil changes to
+verify correctness.
+
+**Source code:**
+```
+src/bin/
+├── generate_geometry_validation.rs    - Geometry validation (paneling)
+├── generate_analysis_validation.rs    - Analysis validation (viscous solver)
+├── generate_subroutine_validation.rs  - Subroutine validation (BL closures)
+└── ...
+```
+
+**Running validation generators:**
+```bash
+# Geometry validation
+cargo run --bin generate_geometry_validation --features plotting
+
+# Analysis validation (regenerate YFoil data and plots)
+cargo run --bin generate_analysis_validation --features plotting
+
+# Analysis validation (also regenerate XFOIL baseline data)
+cargo run --bin generate_analysis_validation --features plotting -- --run-xfoil
+
+# Subroutine validation (BL closure relations)
+cargo run --bin generate_subroutine_validation
+```
+
+**XFOIL scripts and assets:**
+```
+docs/validation/assets/
+├── geometry/
+│   ├── xfoil/           - XFOIL reference .dat files
+│   ├── yfoil/           - YFoil generated .json files
+│   └── plots/           - Comparison SVG plots
+└── analysis/
+    ├── geometry/        - Shared geometry files for analysis
+    ├── scripts/         - XFOIL .xfoil scripts (sweep scripts only)
+    ├── xfoil/           - XFOIL output (polars, BL dumps, Cp files)
+    ├── yfoil/           - YFoil output
+    └── plots/           - Comparison SVG plots
+```
+
+**Generated documentation:**
+```
+docs/validation/
+├── geometry/
+│   └── README.md        - Geometry validation report
+├── analysis/
+│   ├── README.md        - Analysis validation overview
+│   ├── naca0012.md      - NACA 0012 detailed results
+│   └── naca4412.md      - NACA 4412 detailed results
+└── subroutines/
+    ├── README.md        - Subroutine validation overview
+    ├── closure.md       - Closure functions (HKIN, HSL, etc.)
+    └── transition.md    - Transition (DAMPL)
+```
+
+**Subroutine validation fixtures** (used by tests and validation):
+```
+tests/fixtures/subroutines/
+├── hkin/     - Kinematic shape factor fixtures
+├── hsl/      - Laminar energy shape factor fixtures
+├── hst/      - Turbulent energy shape factor fixtures
+├── cfl/      - Laminar skin friction fixtures
+├── cft/      - Turbulent skin friction fixtures
+├── dil/      - Laminar dissipation fixtures
+└── dampl/    - Amplification rate fixtures
+```
+
+These fixtures were generated from instrumented XFOIL (see `docs/validation/subroutines/README.md`
+for details on the instrumentation added to `xfoil/xfoil6.99/src/xbl.f`).
+
+### Analysis Validation Methodology
+
+Analysis validation uses proper polar sweeps to ensure solutions are correctly initialized:
+
+1. **Positive sweep**: 0° → 1° → 2° → ... → 15° (each angle initialized from previous)
+2. **Reinitialize** at α = -1°
+3. **Negative sweep**: -1° → -2° → ... → -15° (each angle initialized from previous)
+
+BL distributions are extracted only at validation angles (0°, ±5°, ±10°, ±15°), but ALL intermediate angles are computed
+to ensure proper initialization. This applies to both XFOIL scripts and YFoil code.                                                                              

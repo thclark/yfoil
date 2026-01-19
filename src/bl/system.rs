@@ -1672,16 +1672,48 @@ impl BLLocalSystem {
             }
             BLFlowType::Laminar => {
                 // Laminar amplification equation
-                // Would need AXSET implementation - placeholder for now
                 // REZC = AMPL2 - AMPL1 - AX*(X2-X1)
                 let dxi = s2.x - s1.x;
-                // Simplified: assume AX = 0 at low Rtheta
-                let ax = 0.0;
+
+                // Compute amplification rate using AXSET
+                // Note: We use a fixed ACRIT of 9.0 here (default value)
+                // This should ideally be passed as a parameter
+                let acrit = 9.0;
+                let ax_result = axset(
+                    s1.hk, s1.theta, s1.rt, s1.ampl,
+                    s2.hk, s2.theta, s2.rt, s2.ampl,
+                    acrit,
+                );
+
+                let ax = ax_result.ax;
                 let rezc = s2.ampl - s1.ampl - ax * dxi;
-                self.vs1[0][0] = -1.0; // dAMPL1
-                self.vs2[0][0] = 1.0; // dAMPL2
-                self.vs1[0][4] = ax; // dX1
-                self.vs2[0][4] = -ax; // dX2
+
+                // Jacobian entries
+                // d(REZC)/dAMPL1 = -1 - AX_A1*DXI
+                // d(REZC)/dAMPL2 = 1 - AX_A2*DXI
+                self.vs1[0][0] = -1.0 - ax_result.ax_a1 * dxi;
+                self.vs2[0][0] = 1.0 - ax_result.ax_a2 * dxi;
+
+                // d(REZC)/dT1, d(REZC)/dT2
+                self.vs1[0][1] = -ax_result.ax_t1 * dxi;
+                self.vs2[0][1] = -ax_result.ax_t2 * dxi;
+
+                // d(REZC)/dHk via T and D (need chain rule through Hk)
+                // AX_HK1, AX_HK2 need to be converted to AX_T, AX_D
+                self.vs1[0][1] += -ax_result.ax_hk1 * s1.hk_t * dxi;
+                self.vs1[0][2] = -ax_result.ax_hk1 * s1.hk_d * dxi;
+                self.vs2[0][1] += -ax_result.ax_hk2 * s2.hk_t * dxi;
+                self.vs2[0][2] = -ax_result.ax_hk2 * s2.hk_d * dxi;
+
+                // d(REZC)/dU via Rt (Rt = Re*U*theta)
+                self.vs1[0][3] = -ax_result.ax_rt1 * s1.rt_u * dxi;
+                self.vs2[0][3] = -ax_result.ax_rt2 * s2.rt_u * dxi;
+
+                // d(REZC)/dX1 = AX (sign because REZC has -AX*DXI)
+                // d(REZC)/dX2 = -AX
+                self.vs1[0][4] = ax;
+                self.vs2[0][4] = -ax;
+
                 self.vsrez[0] = -rezc;
             }
             BLFlowType::Turbulent | BLFlowType::Wake => {
@@ -2007,6 +2039,7 @@ impl BLLocalSystem {
     /// * `trans` - Transition location and derivatives
     /// * `acrit` - Critical amplification factor
     /// * `params` - Global BL parameters
+    #[allow(clippy::too_many_lines)]
     pub fn trdif(
         &mut self,
         s1: &BLStationState,
@@ -2335,6 +2368,7 @@ impl BLLocalSystem {
                 self.vs2[k][l] = bl2[k][l] + bt2[k][l];
             }
         }
+
     }
 }
 
@@ -3724,6 +3758,83 @@ mod tests {
         assert_relative_eq!(result.ax, 2.168, epsilon = 0.01);
         assert_relative_eq!(result.ax_hk, 7.416, epsilon = 0.1);
         assert_relative_eq!(result.ax_th, -867.4, epsilon = 1.0);
+    }
+
+    // ========================================================================
+    // DAMPL Exact Fixture Tests - machine precision comparison with XFOIL
+    // These fixtures were extracted from instrumented XFOIL NACA0012 at Re=1e6
+    // ========================================================================
+
+    #[test]
+    fn test_dampl_xfoil_fixture_1() {
+        // XFOIL fixture: near critical transition (in ramp region)
+        // HK=0.2580689064632752E+01 TH=0.2202254221917420E-03 RT=0.2615260734070808E+03
+        // AX=0.4909634245555000E-01 AX_HK=0.5787501799836026E+02 AX_TH=-0.2229367616459996E+03 AX_RT=0.2419961491556620E-01
+        let hk = 0.2580689064632752e+01;
+        let th = 0.2202254221917420e-03;
+        let rt = 0.2615260734070808e+03;
+
+        let result = dampl(hk, th, rt);
+
+        let rel_tol = 1e-10;
+        assert_relative_eq!(result.ax, 0.4909634245555000e-01, epsilon = rel_tol);
+        assert_relative_eq!(result.ax_hk, 0.5787501799836026e+02, epsilon = rel_tol * 100.0);
+        assert_relative_eq!(result.ax_th, -0.2229367616459996e+03, epsilon = rel_tol * 1000.0);
+        assert_relative_eq!(result.ax_rt, 0.2419961491556620e-01, epsilon = rel_tol);
+    }
+
+    #[test]
+    fn test_dampl_xfoil_fixture_2() {
+        // XFOIL fixture: early amplification region
+        // HK=0.2593152760810387E+01 TH=0.2328303859189811E-03 RT=0.2761529642099222E+03
+        // AX=0.4728845409931889E+01 AX_HK=0.3642605131865983E+03 AX_TH=-0.2031025886620058E+05 AX_RT=0.1445021321701126E+00
+        let hk = 0.2593152760810387e+01;
+        let th = 0.2328303859189811e-03;
+        let rt = 0.2761529642099222e+03;
+
+        let result = dampl(hk, th, rt);
+
+        let rel_tol = 1e-10;
+        assert_relative_eq!(result.ax, 0.4728845409931889e+01, epsilon = rel_tol);
+        assert_relative_eq!(result.ax_hk, 0.3642605131865983e+03, epsilon = rel_tol * 1000.0);
+        assert_relative_eq!(result.ax_th, -0.2031025886620058e+05, epsilon = rel_tol * 100000.0);
+        assert_relative_eq!(result.ax_rt, 0.1445021321701126e+00, epsilon = rel_tol);
+    }
+
+    #[test]
+    fn test_dampl_xfoil_fixture_3() {
+        // XFOIL fixture: mid amplification region
+        // HK=0.2606142972624875E+01 TH=0.2455695046420016E-03 RT=0.2907803892252000E+03
+        // AX=0.9712213028497693E+01 AX_HK=0.1409468673226392E+03 AX_TH=-0.3954975208610060E+05 AX_RT=0.4082874225503037E-01
+        let hk = 0.2606142972624875e+01;
+        let th = 0.2455695046420016e-03;
+        let rt = 0.2907803892252000e+03;
+
+        let result = dampl(hk, th, rt);
+
+        let rel_tol = 1e-10;
+        assert_relative_eq!(result.ax, 0.9712213028497693e+01, epsilon = rel_tol);
+        assert_relative_eq!(result.ax_hk, 0.1409468673226392e+03, epsilon = rel_tol * 1000.0);
+        assert_relative_eq!(result.ax_th, -0.3954975208610060e+05, epsilon = rel_tol * 100000.0);
+        assert_relative_eq!(result.ax_rt, 0.4082874225503037e-01, epsilon = rel_tol);
+    }
+
+    #[test]
+    fn test_dampl_xfoil_fixture_4() {
+        // XFOIL fixture: above ramp (AX_RT = 0)
+        // HK=0.2619759006090018E+01 TH=0.2584472817606003E-03 RT=0.3054087290294926E+03
+        // AX=0.1002497313242920E+02 AX_HK=0.4715318465087587E+02 AX_TH=-0.3878923803778030E+05 AX_RT=0.0
+        let hk = 0.2619759006090018e+01;
+        let th = 0.2584472817606003e-03;
+        let rt = 0.3054087290294926e+03;
+
+        let result = dampl(hk, th, rt);
+
+        let rel_tol = 1e-10;
+        assert_relative_eq!(result.ax, 0.1002497313242920e+02, epsilon = rel_tol);
+        assert_relative_eq!(result.ax_hk, 0.4715318465087587e+02, epsilon = rel_tol * 100.0);
+        assert_relative_eq!(result.ax_th, -0.3878923803778030e+05, epsilon = rel_tol * 100000.0);
+        assert_eq!(result.ax_rt, 0.0); // Above ramp
     }
 
     // ========================================================================

@@ -1719,3 +1719,877 @@ pub fn parse_xfoil_dat_file<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64)>, 
 
     Ok(coords)
 }
+
+// ============================================================================
+// Extended Polar Data (with CM)
+// ============================================================================
+
+/// Extended polar data including moment coefficient
+#[derive(Debug, Clone)]
+pub struct PolarDataWithCm {
+    /// Angle of attack values (degrees)
+    pub alpha: Vec<f64>,
+    /// Lift coefficient values
+    pub cl: Vec<f64>,
+    /// Drag coefficient values
+    pub cd: Vec<f64>,
+    /// Moment coefficient values (about quarter chord)
+    pub cm: Vec<f64>,
+}
+
+impl PolarDataWithCm {
+    /// Create from PolarOutput
+    pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
+        Self {
+            alpha: polar.points.iter().map(|p| p.alpha_deg).collect(),
+            cl: polar.points.iter().map(|p| p.cl).collect(),
+            cd: polar.points.iter().map(|p| p.cd).collect(),
+            cm: polar.points.iter().map(|p| p.cm).collect(),
+        }
+    }
+
+    /// Create from raw data vectors
+    pub fn new(alpha: Vec<f64>, cl: Vec<f64>, cd: Vec<f64>, cm: Vec<f64>) -> Self {
+        Self { alpha, cl, cd, cm }
+    }
+
+    /// Convert to basic PolarData (without CM)
+    pub fn to_polar_data(&self) -> PolarData {
+        PolarData::new(self.alpha.clone(), self.cl.clone(), self.cd.clone())
+    }
+}
+
+/// Parse an XFOIL polar file and extract alpha, CL, CD, CM data
+pub fn parse_xfoil_polar_file_with_cm<P: AsRef<Path>>(path: P) -> Result<PolarDataWithCm, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let mut alphas = Vec::new();
+    let mut cls = Vec::new();
+    let mut cds = Vec::new();
+    let mut cms = Vec::new();
+
+    let mut in_data = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("------") {
+            in_data = true;
+            continue;
+        }
+        if in_data && !line.is_empty() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 5 {
+                if let (Ok(alpha), Ok(cl), Ok(cd), Ok(cm)) = (
+                    parts[0].parse::<f64>(),
+                    parts[1].parse::<f64>(),
+                    parts[2].parse::<f64>(),
+                    parts[4].parse::<f64>(), // CM is column 5 (index 4)
+                ) {
+                    alphas.push(alpha);
+                    cls.push(cl);
+                    cds.push(cd);
+                    cms.push(cm);
+                }
+            }
+        }
+    }
+
+    Ok(PolarDataWithCm::new(alphas, cls, cds, cms))
+}
+
+/// Parse a YFoil polar JSON file into PolarDataWithCm
+pub fn parse_yfoil_polar_file_with_cm<P: AsRef<Path>>(path: P) -> Result<PolarDataWithCm, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let polar: crate::output::PolarOutput = serde_json::from_str(&content)
+        .map_err(|e| PlotError::Drawing(format!("Failed to parse YFoil polar JSON: {}", e)))?;
+    Ok(PolarDataWithCm::from_polar_output(&polar))
+}
+
+/// Stitch two polars (with CM) together in ascending alpha order
+pub fn stitch_polars_with_cm(
+    polar_pos: &PolarDataWithCm,
+    polar_neg: &PolarDataWithCm,
+) -> PolarDataWithCm {
+    let mut neg_alpha: Vec<f64> = polar_neg.alpha.iter().copied().rev().collect();
+    let mut neg_cl: Vec<f64> = polar_neg.cl.iter().copied().rev().collect();
+    let mut neg_cd: Vec<f64> = polar_neg.cd.iter().copied().rev().collect();
+    let mut neg_cm: Vec<f64> = polar_neg.cm.iter().copied().rev().collect();
+
+    neg_alpha.extend(polar_pos.alpha.iter().copied());
+    neg_cl.extend(polar_pos.cl.iter().copied());
+    neg_cd.extend(polar_pos.cd.iter().copied());
+    neg_cm.extend(polar_pos.cm.iter().copied());
+
+    let mut combined: Vec<(f64, f64, f64, f64)> = neg_alpha
+        .into_iter()
+        .zip(neg_cl.into_iter())
+        .zip(neg_cd.into_iter())
+        .zip(neg_cm.into_iter())
+        .map(|(((a, c), d), m)| (a, c, d, m))
+        .collect();
+
+    combined.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+    let mut seen = std::collections::HashSet::new();
+    let combined: Vec<_> = combined
+        .into_iter()
+        .filter(|(a, _, _, _)| seen.insert((*a * 1000.0).round() as i64))
+        .collect();
+
+    PolarDataWithCm::new(
+        combined.iter().map(|(a, _, _, _)| *a).collect(),
+        combined.iter().map(|(_, c, _, _)| *c).collect(),
+        combined.iter().map(|(_, _, d, _)| *d).collect(),
+        combined.iter().map(|(_, _, _, m)| *m).collect(),
+    )
+}
+
+// ============================================================================
+// XFOIL DUMP Parsing
+// ============================================================================
+
+/// Boundary layer data from XFOIL DUMP command
+#[derive(Debug, Clone)]
+pub struct XfoilDump {
+    /// Arc length
+    pub s: Vec<f64>,
+    /// X coordinate
+    pub x: Vec<f64>,
+    /// Y coordinate
+    pub y: Vec<f64>,
+    /// Edge velocity (Ue/Vinf)
+    pub ue: Vec<f64>,
+    /// Displacement thickness
+    pub dstar: Vec<f64>,
+    /// Momentum thickness
+    pub theta: Vec<f64>,
+    /// Skin friction coefficient
+    pub cf: Vec<f64>,
+    /// Shape factor (H = δ*/θ)
+    pub h: Vec<f64>,
+    /// Energy shape factor (H*)
+    pub hs: Vec<f64>,
+}
+
+impl XfoilDump {
+    /// Create empty XfoilDump
+    pub fn new() -> Self {
+        Self {
+            s: Vec::new(),
+            x: Vec::new(),
+            y: Vec::new(),
+            ue: Vec::new(),
+            dstar: Vec::new(),
+            theta: Vec::new(),
+            cf: Vec::new(),
+            h: Vec::new(),
+            hs: Vec::new(),
+        }
+    }
+}
+
+impl Default for XfoilDump {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Parse an XFOIL DUMP file
+///
+/// DUMP file format:
+/// #    s        x        y     Ue/Vinf    Dstar     Theta      Cf       H       H*   ...
+pub fn parse_xfoil_dump_file<P: AsRef<Path>>(path: P) -> Result<XfoilDump, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let mut dump = XfoilDump::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 9 {
+            if let (Ok(s), Ok(x), Ok(y), Ok(ue), Ok(dstar), Ok(theta), Ok(cf), Ok(h), Ok(hs)) = (
+                parts[0].parse::<f64>(),
+                parts[1].parse::<f64>(),
+                parts[2].parse::<f64>(),
+                parts[3].parse::<f64>(),
+                parts[4].parse::<f64>(),
+                parts[5].parse::<f64>(),
+                parts[6].parse::<f64>(),
+                parts[7].parse::<f64>(),
+                parts[8].parse::<f64>(),
+            ) {
+                dump.s.push(s);
+                dump.x.push(x);
+                dump.y.push(y);
+                dump.ue.push(ue);
+                dump.dstar.push(dstar);
+                dump.theta.push(theta);
+                dump.cf.push(cf);
+                dump.h.push(h);
+                dump.hs.push(hs);
+            }
+        }
+    }
+
+    Ok(dump)
+}
+
+// ============================================================================
+// XFOIL CP Parsing
+// ============================================================================
+
+/// Pressure coefficient data from XFOIL CPWR command
+#[derive(Debug, Clone)]
+pub struct XfoilCp {
+    /// X coordinate
+    pub x: Vec<f64>,
+    /// Pressure coefficient
+    pub cp: Vec<f64>,
+}
+
+impl XfoilCp {
+    /// Create empty XfoilCp
+    pub fn new() -> Self {
+        Self {
+            x: Vec::new(),
+            cp: Vec::new(),
+        }
+    }
+}
+
+impl Default for XfoilCp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Parse an XFOIL CPWR file
+///
+/// CPWR file format:
+/// #      x          Cp
+pub fn parse_xfoil_cp_file<P: AsRef<Path>>(path: P) -> Result<XfoilCp, PlotError> {
+    let content = std::fs::read_to_string(path)?;
+    let mut cp_data = XfoilCp::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 {
+            if let (Ok(x), Ok(cp)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
+                cp_data.x.push(x);
+                cp_data.cp.push(cp);
+            }
+        }
+    }
+
+    Ok(cp_data)
+}
+
+// ============================================================================
+// 3-Panel Polar Plot (CL, CD, CM)
+// ============================================================================
+
+/// Plot a polar comparison with 3 horizontal panels: CL vs α, CD vs α, CM vs α
+pub fn plot_polar_3panel_svg<P: AsRef<Path>>(
+    polar_1: &PolarDataWithCm,
+    polar_2: &PolarDataWithCm,
+    output_path: P,
+    config: &PolarPlotConfig,
+) -> Result<(), PlotError> {
+    let mut file = std::fs::File::create(output_path)?;
+
+    // Calculate data ranges for alpha (shared x-axis)
+    let alpha_min = polar_1.alpha.iter().chain(polar_2.alpha.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let alpha_max = polar_1.alpha.iter().chain(polar_2.alpha.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let alpha_range = alpha_max - alpha_min;
+    let alpha_padding = 0.05 * alpha_range.max(1.0);
+    let alpha_min_p = alpha_min - alpha_padding;
+    let alpha_max_p = alpha_max + alpha_padding;
+
+    // CL range
+    let cl_min = polar_1.cl.iter().chain(polar_2.cl.iter()).cloned().fold(f64::INFINITY, f64::min);
+    let cl_max = polar_1.cl.iter().chain(polar_2.cl.iter()).cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cl_range = (cl_max - cl_min).max(0.1);
+    let cl_padding = 0.1 * cl_range;
+    let cl_min_p = cl_min - cl_padding;
+    let cl_max_p = cl_max + cl_padding;
+
+    // CD range
+    let cd_min = polar_1.cd.iter().chain(polar_2.cd.iter()).cloned().fold(f64::INFINITY, f64::min);
+    let cd_max = polar_1.cd.iter().chain(polar_2.cd.iter()).cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cd_range = (cd_max - cd_min).max(0.001);
+    let cd_padding = 0.1 * cd_range;
+    let cd_min_p = cd_min - cd_padding;
+    let cd_max_p = cd_max + cd_padding;
+
+    // CM range
+    let cm_min = polar_1.cm.iter().chain(polar_2.cm.iter()).cloned().fold(f64::INFINITY, f64::min);
+    let cm_max = polar_1.cm.iter().chain(polar_2.cm.iter()).cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cm_range = (cm_max - cm_min).max(0.01);
+    let cm_padding = 0.1 * cm_range;
+    let cm_min_p = cm_min - cm_padding;
+    let cm_max_p = cm_max + cm_padding;
+
+    // Layout: 3 panels side by side
+    let width = config.width as f64;
+    let height = config.height as f64;
+    let margin_left = 70.0;
+    let margin_right = 20.0;
+    let margin_top = 50.0;
+    let margin_bottom = 60.0;
+    let gap = 50.0;
+
+    let total_gap = 2.0 * gap;
+    let plot_width = (width - margin_left - margin_right - total_gap) / 3.0;
+    let plot_height = height - margin_top - margin_bottom;
+
+    // Panel x positions
+    let panel1_x = margin_left;
+    let panel2_x = margin_left + plot_width + gap;
+    let panel3_x = margin_left + 2.0 * (plot_width + gap);
+
+    // Colors
+    let color_1 = format!("rgb({},{},{})", config.color_1.0, config.color_1.1, config.color_1.2);
+    let color_2 = format!("rgb({},{},{})", config.color_2.0, config.color_2.1, config.color_2.2);
+    let grid_color = "#DDDDDD";
+
+    // SVG header
+    writeln!(file, r#"<svg width="{}" height="{}" viewBox="0 0 {} {}" xmlns="http://www.w3.org/2000/svg">"#,
+        config.width, config.height, config.width, config.height)?;
+
+    // Background
+    writeln!(file, r#"<rect width="100%" height="100%" fill="rgb({},{},{})"/>"#,
+        config.background.0, config.background.1, config.background.2)?;
+
+    // Title
+    let title = config.title.clone().unwrap_or_else(|| "Polar Comparison".to_string());
+    writeln!(file, r#"<text x="{:.1}" y="30" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="bold">{}</text>"#,
+        width / 2.0, title)?;
+
+    // Helper function for coordinate transforms
+    let to_svg_x = |x: f64, panel_x: f64| -> f64 {
+        panel_x + (x - alpha_min_p) / (alpha_max_p - alpha_min_p) * plot_width
+    };
+
+    // Draw each panel
+    let panels = [
+        (panel1_x, cl_min_p, cl_max_p, &polar_1.cl, &polar_2.cl, "CL"),
+        (panel2_x, cd_min_p, cd_max_p, &polar_1.cd, &polar_2.cd, "CD"),
+        (panel3_x, cm_min_p, cm_max_p, &polar_1.cm, &polar_2.cm, "CM"),
+    ];
+
+    for (panel_x, y_min, y_max, data_1, data_2, label) in panels {
+        let y_range = y_max - y_min;
+
+        let to_svg_y = |y: f64| -> f64 {
+            margin_top + plot_height - (y - y_min) / y_range * plot_height
+        };
+
+        // Plot border
+        writeln!(file, r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+            panel_x, margin_top, plot_width, plot_height)?;
+
+        // Gridlines
+        writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+
+        // Vertical gridlines (alpha)
+        let alpha_step = nice_step(alpha_max_p - alpha_min_p, 6);
+        let alpha_start = (alpha_min_p / alpha_step).ceil() * alpha_step;
+        let mut alpha_val = alpha_start;
+        while alpha_val <= alpha_max_p {
+            let sx = to_svg_x(alpha_val, panel_x);
+            if sx > panel_x && sx < panel_x + plot_width {
+                writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+                    sx, margin_top, sx, margin_top + plot_height)?;
+            }
+            alpha_val += alpha_step;
+        }
+
+        // Horizontal gridlines
+        let y_step = nice_step(y_range, 6);
+        let y_start = (y_min / y_step).ceil() * y_step;
+        let mut y_val = y_start;
+        while y_val <= y_max {
+            let sy = to_svg_y(y_val);
+            if sy > margin_top && sy < margin_top + plot_height {
+                writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+                    panel_x, sy, panel_x + plot_width, sy)?;
+            }
+            y_val += y_step;
+        }
+        writeln!(file, "</g>")?;
+
+        // Y-axis label
+        writeln!(file, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="14" transform="rotate(-90 {:.1} {:.1})">{}</text>"#,
+            panel_x - 50.0, margin_top + plot_height / 2.0, panel_x - 50.0, margin_top + plot_height / 2.0, label)?;
+
+        // X-axis label
+        writeln!(file, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12">Alpha (deg)</text>"#,
+            panel_x + plot_width / 2.0, margin_top + plot_height + 40.0)?;
+
+        // Y tick labels
+        writeln!(file, r#"<g font-family="sans-serif" font-size="10" text-anchor="end">"#)?;
+        y_val = y_start;
+        let decimals = if label == "CD" { 4 } else { 2 };
+        while y_val <= y_max {
+            let sy = to_svg_y(y_val);
+            if sy > margin_top + 5.0 && sy < margin_top + plot_height - 5.0 {
+                writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.decimals$}</text>"#,
+                    panel_x - 5.0, sy + 4.0, y_val, decimals = decimals)?;
+            }
+            y_val += y_step;
+        }
+        writeln!(file, "</g>")?;
+
+        // X tick labels
+        writeln!(file, r#"<g font-family="sans-serif" font-size="10" text-anchor="middle">"#)?;
+        alpha_val = alpha_start;
+        while alpha_val <= alpha_max_p {
+            let sx = to_svg_x(alpha_val, panel_x);
+            if sx > panel_x + 10.0 && sx < panel_x + plot_width - 10.0 {
+                writeln!(file, r#"<text x="{:.1}" y="{:.1}">{:.0}</text>"#,
+                    sx, margin_top + plot_height + 18.0, alpha_val)?;
+            }
+            alpha_val += alpha_step;
+        }
+        writeln!(file, "</g>")?;
+
+        // Data series 1
+        write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_1)?;
+        for (i, (&alpha, &y)) in polar_1.alpha.iter().zip(data_1.iter()).enumerate() {
+            let sx = to_svg_x(alpha, panel_x);
+            let sy = to_svg_y(y);
+            if i > 0 { write!(file, " ")?; }
+            write!(file, "{:.6},{:.6}", sx, sy)?;
+        }
+        writeln!(file, r#""/>"#)?;
+
+        // Data markers for series 1
+        for (&alpha, &y) in polar_1.alpha.iter().zip(data_1.iter()) {
+            let sx = to_svg_x(alpha, panel_x);
+            let sy = to_svg_y(y);
+            writeln!(file, r#"<circle cx="{:.6}" cy="{:.6}" r="3" fill="{}" />"#, sx, sy, color_1)?;
+        }
+
+        // Data series 2
+        write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, color_2)?;
+        for (i, (&alpha, &y)) in polar_2.alpha.iter().zip(data_2.iter()).enumerate() {
+            let sx = to_svg_x(alpha, panel_x);
+            let sy = to_svg_y(y);
+            if i > 0 { write!(file, " ")?; }
+            write!(file, "{:.6},{:.6}", sx, sy)?;
+        }
+        writeln!(file, r#""/>"#)?;
+
+        // Data markers for series 2
+        for (&alpha, &y) in polar_2.alpha.iter().zip(data_2.iter()) {
+            let sx = to_svg_x(alpha, panel_x);
+            let sy = to_svg_y(y);
+            writeln!(file, r#"<rect x="{:.6}" y="{:.6}" width="6" height="6" fill="{}" transform="rotate(45 {:.6} {:.6})"/>"#,
+                sx - 3.0, sy - 3.0, color_2, sx, sy)?;
+        }
+    }
+
+    // Legend (centered at bottom)
+    let legend_x = width / 2.0 - 100.0;
+    let legend_y = height - 20.0;
+
+    // Series 1
+    writeln!(file, r#"<circle cx="{:.1}" cy="{:.1}" r="4" fill="{}" />"#, legend_x, legend_y, color_1)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x - 15.0, legend_y, legend_x + 15.0, legend_y, color_1)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="12">{}</text>"#,
+        legend_x + 25.0, legend_y + 4.0, config.label_1)?;
+
+    // Series 2
+    let legend_x2 = legend_x + 120.0;
+    writeln!(file, r#"<rect x="{:.1}" y="{:.1}" width="8" height="8" fill="{}" transform="rotate(45 {:.1} {:.1})"/>"#,
+        legend_x2 - 4.0, legend_y - 4.0, color_2, legend_x2, legend_y)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x2 - 15.0, legend_y, legend_x2 + 15.0, legend_y, color_2)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="12">{}</text>"#,
+        legend_x2 + 25.0, legend_y + 4.0, config.label_2)?;
+
+    writeln!(file, "</svg>")?;
+    Ok(())
+}
+
+// ============================================================================
+// Cp/Ue Comparison Plot (2 vertical subplots)
+// ============================================================================
+
+/// Plot Cp and Ue comparison (2 stacked vertical subplots)
+pub fn plot_cp_ue_comparison_svg<P: AsRef<Path>>(
+    yfoil_x: &[f64],
+    yfoil_cp: &[f64],
+    yfoil_ue: &[f64],
+    xfoil_cp: &XfoilCp,
+    xfoil_dump: &XfoilDump,
+    alpha_deg: f64,
+    airfoil: &str,
+    output_path: P,
+) -> Result<(), PlotError> {
+    let mut file = std::fs::File::create(output_path)?;
+
+    let width = 1200.0;
+    let height = 800.0;
+    let margin_left = 70.0;
+    let margin_right = 30.0;
+    let margin_top = 50.0;
+    let margin_bottom = 50.0;
+    let gap = 30.0;
+
+    let plot_width = width - margin_left - margin_right;
+    let plot_height = (height - margin_top - margin_bottom - gap) / 2.0;
+
+    // Cp ranges
+    let cp_min = yfoil_cp.iter().chain(xfoil_cp.cp.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let cp_max = yfoil_cp.iter().chain(xfoil_cp.cp.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cp_range = (cp_max - cp_min).max(0.1);
+    let cp_padding = 0.1 * cp_range;
+    let cp_min_p = cp_min - cp_padding;
+    let cp_max_p = cp_max + cp_padding;
+
+    // Ue ranges (using XFOIL dump for Ue)
+    let ue_min = yfoil_ue.iter().chain(xfoil_dump.ue.iter())
+        .cloned().fold(f64::INFINITY, f64::min);
+    let ue_max = yfoil_ue.iter().chain(xfoil_dump.ue.iter())
+        .cloned().fold(f64::NEG_INFINITY, f64::max);
+    let ue_range = (ue_max - ue_min).max(0.1);
+    let ue_padding = 0.1 * ue_range;
+    let ue_min_p = ue_min - ue_padding;
+    let ue_max_p = ue_max + ue_padding;
+
+    // X range
+    let x_min = -0.05;
+    let x_max = 1.1;
+
+    // Colors
+    let yfoil_color = "rgb(0,100,200)";
+    let xfoil_color = "rgb(200,50,50)";
+    let grid_color = "#DDDDDD";
+
+    // Coordinate transforms
+    let cp_plot_top = margin_top;
+    let cp_plot_bottom = margin_top + plot_height;
+    let ue_plot_top = cp_plot_bottom + gap;
+    let ue_plot_bottom = ue_plot_top + plot_height;
+
+    let to_svg_x = |x: f64| -> f64 {
+        margin_left + (x - x_min) / (x_max - x_min) * plot_width
+    };
+    // Cp: inverted y-axis (more negative at top)
+    let to_svg_cp_y = |cp: f64| -> f64 {
+        cp_plot_top + (cp - cp_min_p) / (cp_max_p - cp_min_p) * plot_height
+    };
+    let to_svg_ue_y = |ue: f64| -> f64 {
+        ue_plot_bottom - (ue - ue_min_p) / (ue_max_p - ue_min_p) * plot_height
+    };
+
+    // SVG header
+    writeln!(file, r#"<svg width="{}" height="{}" viewBox="0 0 {} {}" xmlns="http://www.w3.org/2000/svg">"#,
+        width as u32, height as u32, width as u32, height as u32)?;
+    writeln!(file, r#"<rect width="100%" height="100%" fill="white"/>"#)?;
+
+    // Title
+    writeln!(file, r#"<text x="{:.1}" y="30" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold">{} at α = {:.1}°</text>"#,
+        width / 2.0, airfoil, alpha_deg)?;
+
+    // ===== Cp Plot (top) =====
+    writeln!(file, r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        margin_left, cp_plot_top, plot_width, plot_height)?;
+
+    // Cp gridlines
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    for i in 0..=10 {
+        let x = i as f64 / 10.0;
+        let sx = to_svg_x(x);
+        writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+            sx, cp_plot_top, sx, cp_plot_bottom)?;
+    }
+    let cp_step = nice_step(cp_max_p - cp_min_p, 6);
+    let mut cp_val = (cp_min_p / cp_step).ceil() * cp_step;
+    while cp_val <= cp_max_p {
+        let sy = to_svg_cp_y(cp_val);
+        writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+            margin_left, sy, margin_left + plot_width, sy)?;
+        cp_val += cp_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Cp axis labels
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12">x/c</text>"#,
+        margin_left + plot_width / 2.0, cp_plot_bottom + 35.0)?;
+    writeln!(file, r#"<text x="20" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12" transform="rotate(-90 20 {:.1})">Cp</text>"#,
+        cp_plot_top + plot_height / 2.0, cp_plot_top + plot_height / 2.0)?;
+
+    // YFoil Cp
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, yfoil_color)?;
+    for (i, (&x, &cp)) in yfoil_x.iter().zip(yfoil_cp.iter()).enumerate() {
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", to_svg_x(x), to_svg_cp_y(cp))?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // XFOIL Cp
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" stroke-dasharray="5,3" points=""#, xfoil_color)?;
+    for (i, (&x, &cp)) in xfoil_cp.x.iter().zip(xfoil_cp.cp.iter()).enumerate() {
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", to_svg_x(x), to_svg_cp_y(cp))?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // ===== Ue Plot (bottom) =====
+    writeln!(file, r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+        margin_left, ue_plot_top, plot_width, plot_height)?;
+
+    // Ue gridlines
+    writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+    for i in 0..=10 {
+        let x = i as f64 / 10.0;
+        let sx = to_svg_x(x);
+        writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+            sx, ue_plot_top, sx, ue_plot_bottom)?;
+    }
+    let ue_step = nice_step(ue_max_p - ue_min_p, 6);
+    let mut ue_val = (ue_min_p / ue_step).ceil() * ue_step;
+    while ue_val <= ue_max_p {
+        let sy = to_svg_ue_y(ue_val);
+        writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+            margin_left, sy, margin_left + plot_width, sy)?;
+        ue_val += ue_step;
+    }
+    writeln!(file, "</g>")?;
+
+    // Ue axis labels
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12">x/c</text>"#,
+        margin_left + plot_width / 2.0, ue_plot_bottom + 35.0)?;
+    writeln!(file, r#"<text x="20" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12" transform="rotate(-90 20 {:.1})">Ue/U∞</text>"#,
+        ue_plot_top + plot_height / 2.0, ue_plot_top + plot_height / 2.0)?;
+
+    // YFoil Ue
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#, yfoil_color)?;
+    for (i, (&x, &ue)) in yfoil_x.iter().zip(yfoil_ue.iter()).enumerate() {
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", to_svg_x(x), to_svg_ue_y(ue))?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // XFOIL Ue (from dump, use x coordinate)
+    write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="2" stroke-dasharray="5,3" points=""#, xfoil_color)?;
+    for (i, (&x, &ue)) in xfoil_dump.x.iter().zip(xfoil_dump.ue.iter()).enumerate() {
+        if i > 0 { write!(file, " ")?; }
+        write!(file, "{:.6},{:.6}", to_svg_x(x), to_svg_ue_y(ue))?;
+    }
+    writeln!(file, r#""/>"#)?;
+
+    // Legend
+    let legend_x = margin_left + plot_width - 150.0;
+    let legend_y = cp_plot_top + 15.0;
+    writeln!(file, r#"<rect x="{:.1}" y="{:.1}" width="140" height="45" fill="white" fill-opacity="0.9" stroke="black" stroke-width="0.5"/>"#,
+        legend_x, legend_y)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x + 10.0, legend_y + 15.0, legend_x + 35.0, legend_y + 15.0, yfoil_color)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">YFoil</text>"#,
+        legend_x + 45.0, legend_y + 19.0)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2" stroke-dasharray="5,3"/>"#,
+        legend_x + 10.0, legend_y + 32.0, legend_x + 35.0, legend_y + 32.0, xfoil_color)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">XFOIL</text>"#,
+        legend_x + 45.0, legend_y + 36.0)?;
+
+    writeln!(file, "</svg>")?;
+    Ok(())
+}
+
+// ============================================================================
+// BL Comparison Plot (6 vertical subplots)
+// ============================================================================
+
+/// YFoil BL distribution data for plotting
+#[derive(Debug, Clone)]
+pub struct YfoilBLDist {
+    /// X coordinate
+    pub x: Vec<f64>,
+    /// Arc length
+    pub s: Vec<f64>,
+    /// Momentum thickness
+    pub theta: Vec<f64>,
+    /// Displacement thickness
+    pub dstar: Vec<f64>,
+    /// Shape factor
+    pub h: Vec<f64>,
+    /// Energy shape factor
+    pub hs: Vec<f64>,
+    /// Skin friction coefficient
+    pub cf: Vec<f64>,
+    /// Edge velocity
+    pub ue: Vec<f64>,
+}
+
+/// Plot BL comparison with 6 stacked vertical subplots
+pub fn plot_bl_comparison_svg<P: AsRef<Path>>(
+    yfoil_bl: &YfoilBLDist,
+    xfoil_dump: &XfoilDump,
+    alpha_deg: f64,
+    airfoil: &str,
+    output_path: P,
+) -> Result<(), PlotError> {
+    let mut file = std::fs::File::create(output_path)?;
+
+    let width = 1200.0;
+    let height = 1000.0;  // Taller for 6 panels
+    let margin_left = 80.0;
+    let margin_right = 30.0;
+    let margin_top = 50.0;
+    let margin_bottom = 40.0;
+    let gap = 10.0;
+    let n_panels = 6;
+
+    let plot_width = width - margin_left - margin_right;
+    let total_gap = (n_panels - 1) as f64 * gap;
+    let plot_height = (height - margin_top - margin_bottom - total_gap) / n_panels as f64;
+
+    // X range (using x/c)
+    let x_min = -0.05;
+    let x_max = 1.1;
+
+    let to_svg_x = |x: f64| -> f64 {
+        margin_left + (x - x_min) / (x_max - x_min) * plot_width
+    };
+
+    // Colors
+    let yfoil_color = "rgb(0,100,200)";
+    let xfoil_color = "rgb(200,50,50)";
+    let grid_color = "#DDDDDD";
+
+    // Define panels: (yfoil data, xfoil data, label, index)
+    let panels: Vec<(&[f64], &[f64], &str)> = vec![
+        (&yfoil_bl.theta, &xfoil_dump.theta, "θ"),
+        (&yfoil_bl.dstar, &xfoil_dump.dstar, "δ*"),
+        (&yfoil_bl.h, &xfoil_dump.h, "H"),
+        (&yfoil_bl.hs, &xfoil_dump.hs, "H*"),
+        (&yfoil_bl.cf, &xfoil_dump.cf, "Cf"),
+        (&yfoil_bl.ue, &xfoil_dump.ue, "Ue/U∞"),
+    ];
+
+    // SVG header
+    writeln!(file, r#"<svg width="{}" height="{}" viewBox="0 0 {} {}" xmlns="http://www.w3.org/2000/svg">"#,
+        width as u32, height as u32, width as u32, height as u32)?;
+    writeln!(file, r#"<rect width="100%" height="100%" fill="white"/>"#)?;
+
+    // Title
+    writeln!(file, r#"<text x="{:.1}" y="30" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold">{} BL Variables at α = {:.1}°</text>"#,
+        width / 2.0, airfoil, alpha_deg)?;
+
+    for (panel_idx, (yfoil_data, xfoil_data, label)) in panels.iter().enumerate() {
+        let panel_top = margin_top + panel_idx as f64 * (plot_height + gap);
+        let panel_bottom = panel_top + plot_height;
+
+        // Calculate y range
+        let y_min = yfoil_data.iter().chain(xfoil_data.iter())
+            .cloned().fold(f64::INFINITY, f64::min);
+        let y_max = yfoil_data.iter().chain(xfoil_data.iter())
+            .cloned().fold(f64::NEG_INFINITY, f64::max);
+        let y_range = (y_max - y_min).max(1e-6);
+        let y_padding = 0.1 * y_range;
+        let y_min_p = y_min - y_padding;
+        let y_max_p = y_max + y_padding;
+
+        let to_svg_y = |y: f64| -> f64 {
+            panel_bottom - (y - y_min_p) / (y_max_p - y_min_p) * plot_height
+        };
+
+        // Plot border
+        writeln!(file, r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="none" stroke="#000000" stroke-width="1"/>"##,
+            margin_left, panel_top, plot_width, plot_height)?;
+
+        // Gridlines
+        writeln!(file, r#"<g stroke="{}" stroke-width="0.5">"#, grid_color)?;
+        for i in 0..=10 {
+            let x = i as f64 / 10.0;
+            let sx = to_svg_x(x);
+            writeln!(file, r#"<line x1="{:.6}" y1="{:.1}" x2="{:.6}" y2="{:.1}"/>"#,
+                sx, panel_top, sx, panel_bottom)?;
+        }
+        let y_step = nice_step(y_max_p - y_min_p, 4);
+        let mut y_val = (y_min_p / y_step).ceil() * y_step;
+        while y_val <= y_max_p {
+            let sy = to_svg_y(y_val);
+            if sy > panel_top && sy < panel_bottom {
+                writeln!(file, r#"<line x1="{:.1}" y1="{:.6}" x2="{:.1}" y2="{:.6}"/>"#,
+                    margin_left, sy, margin_left + plot_width, sy)?;
+            }
+            y_val += y_step;
+        }
+        writeln!(file, "</g>")?;
+
+        // Y-axis label
+        writeln!(file, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="11" transform="rotate(-90 {:.1} {:.1})">{}</text>"#,
+            margin_left - 55.0, panel_top + plot_height / 2.0, margin_left - 55.0, panel_top + plot_height / 2.0, label)?;
+
+        // Y tick labels (only show a couple)
+        writeln!(file, r#"<g font-family="sans-serif" font-size="9" text-anchor="end">"#)?;
+        y_val = (y_min_p / y_step).ceil() * y_step;
+        while y_val <= y_max_p {
+            let sy = to_svg_y(y_val);
+            if sy > panel_top + 5.0 && sy < panel_bottom - 5.0 {
+                // Format based on magnitude
+                let formatted = if y_val.abs() < 0.001 && y_val.abs() > 1e-10 {
+                    format!("{:.2e}", y_val)
+                } else if y_val.abs() < 1.0 {
+                    format!("{:.4}", y_val)
+                } else {
+                    format!("{:.2}", y_val)
+                };
+                writeln!(file, r#"<text x="{:.1}" y="{:.1}">{}</text>"#,
+                    margin_left - 5.0, sy + 3.0, formatted)?;
+            }
+            y_val += y_step;
+        }
+        writeln!(file, "</g>")?;
+
+        // YFoil data
+        write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="1.5" points=""#, yfoil_color)?;
+        for (i, (&x, &y)) in yfoil_bl.x.iter().zip(yfoil_data.iter()).enumerate() {
+            if i > 0 { write!(file, " ")?; }
+            write!(file, "{:.6},{:.6}", to_svg_x(x), to_svg_y(y))?;
+        }
+        writeln!(file, r#""/>"#)?;
+
+        // XFOIL data
+        write!(file, r#"<polyline fill="none" stroke="{}" stroke-width="1.5" stroke-dasharray="4,2" points=""#, xfoil_color)?;
+        for (i, (&x, &y)) in xfoil_dump.x.iter().zip(xfoil_data.iter()).enumerate() {
+            if i > 0 { write!(file, " ")?; }
+            write!(file, "{:.6},{:.6}", to_svg_x(x), to_svg_y(y))?;
+        }
+        writeln!(file, r#""/>"#)?;
+    }
+
+    // X-axis label at bottom
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="sans-serif" font-size="12">x/c</text>"#,
+        margin_left + plot_width / 2.0, height - 10.0)?;
+
+    // Legend at bottom right
+    let legend_x = margin_left + plot_width - 140.0;
+    let legend_y = height - 35.0;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2"/>"#,
+        legend_x, legend_y, legend_x + 25.0, legend_y, yfoil_color)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">YFoil</text>"#,
+        legend_x + 30.0, legend_y + 4.0)?;
+    writeln!(file, r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{}" stroke-width="2" stroke-dasharray="4,2"/>"#,
+        legend_x + 70.0, legend_y, legend_x + 95.0, legend_y, xfoil_color)?;
+    writeln!(file, r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">XFOIL</text>"#,
+        legend_x + 100.0, legend_y + 4.0)?;
+
+    writeln!(file, "</svg>")?;
+    Ok(())
+}
