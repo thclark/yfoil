@@ -6,10 +6,13 @@
 //!
 //! # Components
 //! - `viscal` - Main coupling iteration loop
+//! - `setbl` - SETBL Newton system setup (XFOIL-compatible)
 //! - `polar` - Alpha sweep for polar generation
 
 mod polar;
+pub mod setbl;
 mod viscal;
 
 pub use polar::*;
+pub use setbl::*;
 pub use viscal::*;

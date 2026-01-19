@@ -23,7 +23,7 @@ fn main() {
 
     // Calculate inviscid CL
     let cp_inv = calculate_cp(&qinv, cond.mach);
-    let coeffs_inv = integrate_forces(&airfoil, &cp_inv, alpha_rad);
+    let coeffs_inv = integrate_forces(&airfoil, &cp_inv, alpha_rad, cond.mach);
     println!("Inviscid CL: {:.6}", coeffs_inv.cl);
 
     // Find stagnation
@@ -72,7 +72,7 @@ fn main() {
 
     // Calculate CL with corrected velocity
     let cp_corr = calculate_cp(&velocity_corrected, cond.mach);
-    let coeffs_corr = integrate_forces(&airfoil, &cp_corr, alpha_rad);
+    let coeffs_corr = integrate_forces(&airfoil, &cp_corr, alpha_rad, cond.mach);
     println!("\nCL with v = qinv - dq_new: {:.6}", coeffs_corr.cl);
 
     // Try the other sign
@@ -81,7 +81,7 @@ fn main() {
         velocity_corrected2[i] = qinv[i] + dq_new[i];
     }
     let cp_corr2 = calculate_cp(&velocity_corrected2, cond.mach);
-    let coeffs_corr2 = integrate_forces(&airfoil, &cp_corr2, alpha_rad);
+    let coeffs_corr2 = integrate_forces(&airfoil, &cp_corr2, alpha_rad, cond.mach);
     println!("CL with v = qinv + dq_new: {:.6}", coeffs_corr2.cl);
 
     println!("\nXFOIL viscous CL at alpha=2°: 0.2009");
