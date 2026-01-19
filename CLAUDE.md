@@ -146,6 +146,26 @@ Any deviation from XFOIL's actual implementation is wrong and must be fixed, not
 4. Parse output and compare against yfoil values
 5. Any discrepancy > 1e-10 relative error indicates a bug to fix
 
+## HARD RULE: Identical Geometry for XFOIL vs YFoil Comparisons
+
+**When comparing XFOIL and YFoil results, you MUST use the EXACT SAME panel coordinates.**
+
+This is non-negotiable. Different paneling produces different results, making any comparison meaningless.
+
+**Required workflow for any XFOIL vs YFoil comparison:**
+
+1. Generate geometry with YFoil: `yfoil geom naca 0012 --paneler xfoil -o geometry.json`
+2. Export to .dat format: `yfoil geom convert geometry.json -o geometry.dat`
+3. Run XFOIL with that .dat file: `LOAD geometry.dat` (do NOT use `NACA 0012` then `PANE`)
+4. Run YFoil with the same geometry.json
+
+**NEVER do this:**
+- Use `NACA 0012` + `PANE` in XFOIL while using `naca_4digit("0012", N)` in YFoil
+- Compare results without verifying panel coordinates match exactly
+- Assume similar panel counts mean identical geometry
+
+**Verification:** Before any comparison, print the first few panel coordinates from both XFOIL and YFoil and confirm they match to machine precision.
+
 ## Testing Strategy
 
 - Unit tests for pure functions (closures, splines, influence)

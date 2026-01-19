@@ -121,6 +121,59 @@ pub struct BLSolution {
     pub s_tr_lower: f64,
 }
 
+/// Compute interpolated stagnation arc length (SST) matching XFOIL's STFIND
+///
+/// XFOIL computes an interpolated arc length at the exact stagnation point
+/// by linearly interpolating between the two panels where the velocity changes sign.
+/// This is used as the origin for BL arc length computation on both surfaces.
+///
+/// # Arguments
+/// * `airfoil` - Paneled airfoil with arc lengths
+/// * `velocity` - Velocity distribution at panel nodes
+/// * `stag_idx` - Stagnation point index (first panel with non-positive velocity)
+///
+/// # Returns
+/// Interpolated arc length at stagnation point
+pub fn compute_stagnation_arc_length(
+    airfoil: &PaneledAirfoil,
+    velocity: &[f64],
+    stag_idx: usize,
+) -> f64 {
+    // XFOIL convention:
+    // - stag_idx (IST in XFOIL, 1-based) is where GAM(I) >= 0 and GAM(I+1) < 0
+    // - In YFoil, stag_idx is the first panel with non-positive velocity (IST+1 in XFOIL terms)
+    // - So stag_idx-1 has positive velocity (upper side), stag_idx has non-positive (lower side)
+
+    if stag_idx == 0 || stag_idx >= airfoil.n {
+        return airfoil.s[stag_idx.min(airfoil.n - 1)];
+    }
+
+    // XFOIL uses panels IST and IST+1, which in our 0-based indexing is stag_idx-1 and stag_idx
+    let i = stag_idx - 1; // Panel with positive velocity (XFOIL's IST)
+    let gam_i = velocity[i];
+    let gam_i1 = velocity[stag_idx];
+    let dgam = gam_i1 - gam_i;
+    let ds = airfoil.s[stag_idx] - airfoil.s[i];
+
+    // XFOIL formula: evaluate to minimize roundoff for very small GAM values
+    // See STFIND in xpanel.f
+    let mut sst = if gam_i < -gam_i1 {
+        airfoil.s[i] - ds * (gam_i / dgam)
+    } else {
+        airfoil.s[stag_idx] - ds * (gam_i1 / dgam)
+    };
+
+    // Tweak stagnation point if it falls right on a node (very unlikely)
+    if sst <= airfoil.s[i] {
+        sst = airfoil.s[i] + 1.0e-7;
+    }
+    if sst >= airfoil.s[stag_idx] {
+        sst = airfoil.s[stag_idx] - 1.0e-7;
+    }
+
+    sst
+}
+
 /// Find stagnation point from velocity distribution
 ///
 /// The stagnation point is where the surface velocity changes sign.
@@ -169,7 +222,8 @@ pub fn find_stagnation_point(airfoil: &PaneledAirfoil, velocity: &[f64]) -> usiz
 
 /// Extract upper surface data from airfoil (from stagnation to TE)
 ///
-/// Returns (x, y, s, ue) arrays for the upper surface
+/// Returns (x, y, s, ue) arrays for the upper surface.
+/// Arc lengths are computed as XSSI = SST - S(i), matching XFOIL's XICALC.
 pub fn extract_upper_surface(
     airfoil: &PaneledAirfoil,
     velocity: &[f64],
@@ -192,65 +246,68 @@ pub fn extract_upper_surface(
     let start_idx = stag_idx.saturating_sub(1);
     let n_stations = start_idx + 1;
 
-    // XFOIL initializes BL with arc length from stagnation, not s=0.
-    // The first upper station (start_idx) is at some distance from stag (stag_idx).
-    // Initialize arc_len as the distance from stag_idx to start_idx.
-    let mut arc_len = {
-        let dx = airfoil.x[start_idx] - airfoil.x[stag_idx];
-        let dy = airfoil.y[start_idx] - airfoil.y[stag_idx];
-        (dx * dx + dy * dy).sqrt()
-    };
+    // Compute XEPS: minimum arc length near stagnation (XFOIL uses 1e-7 * total)
+    let total_arc = airfoil.s[airfoil.n - 1] - airfoil.s[0];
+    let xeps = 1e-7 * total_arc;
 
+    // Compute SST: interpolated stagnation arc length
+    let sst = compute_stagnation_arc_length(airfoil, velocity, stag_idx);
+
+    // XFOIL XICALC: XSSI(IBL,IS) = MAX( SST - S(I) , XEPS )
+    // Upper surface goes backward from stagnation, so S(I) < SST and XSSI > 0
     for j in 0..n_stations {
         let i = start_idx - j; // Node index (start_idx, start_idx-1, ..., 0)
         x.push(airfoil.x[i]);
         y.push(airfoil.y[i]);
+
+        // Arc length from stagnation point (SST - S[i])
+        let arc_len = (sst - airfoil.s[i]).max(xeps);
         s.push(arc_len);
 
         // For node-based velocities, use velocity[i] directly at each node.
         ue.push(velocity[i].abs());
-
-        if i > 0 {
-            let dx = airfoil.x[i - 1] - airfoil.x[i];
-            let dy = airfoil.y[i - 1] - airfoil.y[i];
-            arc_len += (dx * dx + dy * dy).sqrt();
-        }
     }
 
     (x, y, s, ue)
 }
 
 /// Extract lower surface data from airfoil (from stagnation to TE)
+///
+/// Returns (x, y, s, ue) arrays for the lower surface.
+/// Arc lengths are computed as XSSI = S(i) - SST, matching XFOIL's XICALC.
 pub fn extract_lower_surface(
     airfoil: &PaneledAirfoil,
     velocity: &[f64],
     stag_idx: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     // Lower surface goes from stagnation towards TE at index n-1
-    // Uses velocity[i] directly at each node for consistent treatment
-    // with upper surface.
     let mut x = Vec::new();
     let mut y = Vec::new();
     let mut s = Vec::new();
     let mut ue = Vec::new();
 
+    // Compute XEPS: minimum arc length near stagnation (XFOIL uses 1e-7 * total)
+    let total_arc = airfoil.s[airfoil.n - 1] - airfoil.s[0];
+    let xeps = 1e-7 * total_arc;
+
+    // Compute SST: interpolated stagnation arc length
+    let sst = compute_stagnation_arc_length(airfoil, velocity, stag_idx);
+
     let n = airfoil.n;
-    let mut arc_len = 0.0;
     let end_idx = n - 1; // Lower TE node
 
+    // XFOIL XICALC: XSSI(IBL,IS) = MAX( S(I) - SST , XEPS )
+    // Lower surface goes forward from stagnation, so S(I) > SST and XSSI > 0
     for i in stag_idx..=end_idx {
         x.push(airfoil.x[i]);
         y.push(airfoil.y[i]);
+
+        // Arc length from stagnation point (S[i] - SST)
+        let arc_len = (airfoil.s[i] - sst).max(xeps);
         s.push(arc_len);
 
         // Use velocity[i] directly (same as upper surface)
         ue.push(velocity[i].abs());
-
-        if i < end_idx {
-            let dx = airfoil.x[i + 1] - airfoil.x[i];
-            let dy = airfoil.y[i + 1] - airfoil.y[i];
-            arc_len += (dx * dx + dy * dy).sqrt();
-        }
     }
 
     (x, y, s, ue)
@@ -937,5 +994,251 @@ mod tests {
         // Pressure drag sign is affected by numerical issues near TE
         // Just verify it's finite
         assert!(coeffs.cdp.is_finite(), "CDp should be finite");
+    }
+
+    /// Test that stagnation index matches XFOIL's IST
+    ///
+    /// XFOIL reference (from instrumented run with 160-panel NACA 0012):
+    /// - IST = 80 (1-based), meaning panel 80 has positive velocity
+    /// - stag_idx in YFoil should be the first lower surface panel (IST+1 equivalent)
+    #[test]
+    fn test_stagnation_index_matches_xfoil() {
+        use crate::geometry::{repanel_xfoil, PaneConfig};
+
+        // Generate geometry matching the XFOIL test case
+        let geom = naca_4digit("0012", 160).unwrap();
+        let config = PaneConfig::default();
+        let repaneled = repanel_xfoil(&geom, 160, &config);
+        let airfoil = create_paneled_airfoil(&repaneled);
+
+        let inviscid = solve_inviscid(&airfoil);
+        let velocity = inviscid.velocity_at_nodes(0.0);
+
+        let stag_idx = find_stagnation_point(&airfoil, &velocity);
+
+        // XFOIL IST = 80 (1-based), meaning index 79 (0-based) has positive velocity
+        // YFoil stag_idx should be 80 (0-based) = first panel with non-positive velocity
+        // This is IST+1 in XFOIL's 1-based indexing = 81
+        // So stag_idx should be 80 (0-based)
+        assert_eq!(
+            stag_idx, 80,
+            "stag_idx should be 80 (0-based), matching XFOIL IST+1=81 (1-based)"
+        );
+
+        // Verify the sign change: velocity[stag_idx-1] > 0 and velocity[stag_idx] <= 0
+        assert!(
+            velocity[stag_idx - 1] > 0.0,
+            "Panel before stag should have positive velocity: {}",
+            velocity[stag_idx - 1]
+        );
+        assert!(
+            velocity[stag_idx] <= 0.0,
+            "Panel at stag should have non-positive velocity: {}",
+            velocity[stag_idx]
+        );
+    }
+
+    /// Test SST computation matches XFOIL's STFIND
+    ///
+    /// XFOIL reference:
+    /// - SST = 1.019621842270175
+    /// - S(IST=80) = 1.019418602014701
+    /// - S(IST+1=81) = 1.021246928567578
+    /// - GAM(IST) = 0.01676756915... (positive)
+    /// - GAM(IST+1) = -0.13407160... (negative)
+    #[test]
+    fn test_stagnation_arc_length_matches_xfoil() {
+        use crate::geometry::{repanel_xfoil, PaneConfig};
+
+        let geom = naca_4digit("0012", 160).unwrap();
+        let config = PaneConfig::default();
+        let repaneled = repanel_xfoil(&geom, 160, &config);
+        let airfoil = create_paneled_airfoil(&repaneled);
+
+        let inviscid = solve_inviscid(&airfoil);
+        let velocity = inviscid.velocity_at_nodes(0.0);
+
+        let stag_idx = find_stagnation_point(&airfoil, &velocity);
+        let sst = compute_stagnation_arc_length(&airfoil, &velocity, stag_idx);
+
+        // XFOIL reference value (first iteration, inviscid)
+        let xfoil_sst = 1.019621842270175;
+
+        // Compare - should match within floating point tolerance
+        // Note: The exact match depends on having identical geometry
+        let rel_err = (sst - xfoil_sst).abs() / xfoil_sst;
+        assert!(
+            rel_err < 1e-6,
+            "SST should match XFOIL: yfoil={:.15e} xfoil={:.15e} rel_err={:.2e}",
+            sst,
+            xfoil_sst,
+            rel_err
+        );
+    }
+
+    /// Test upper surface arc lengths match XFOIL's XICALC
+    ///
+    /// XFOIL reference (first few stations):
+    /// IBL  IPAN        S(IPAN)              XSSI
+    ///  2    80   1.019418602014701e+00   2.032402554739132e-04
+    ///  3    79   1.017517698063360e+00   2.104144206815040e-03
+    ///  4    78   1.015530615921399e+00   4.091226348776011e-03
+    #[test]
+    fn test_upper_surface_arc_lengths_match_xfoil() {
+        use crate::geometry::{repanel_xfoil, PaneConfig};
+
+        let geom = naca_4digit("0012", 160).unwrap();
+        let config = PaneConfig::default();
+        let repaneled = repanel_xfoil(&geom, 160, &config);
+        let airfoil = create_paneled_airfoil(&repaneled);
+
+        let inviscid = solve_inviscid(&airfoil);
+        let velocity = inviscid.velocity_at_nodes(0.0);
+
+        let stag_idx = find_stagnation_point(&airfoil, &velocity);
+        let (_, _, s_upper, _) = extract_upper_surface(&airfoil, &velocity, stag_idx);
+
+        // XFOIL reference values for first few stations
+        let xfoil_xssi_upper = [
+            2.032402554739132e-04, // IBL=2, IPAN=80
+            2.104144206815040e-03, // IBL=3, IPAN=79
+            4.091226348776011e-03, // IBL=4, IPAN=78
+            6.157629882446392e-03, // IBL=5, IPAN=77
+            8.319496927608583e-03, // IBL=6, IPAN=76
+        ];
+
+        // Note: s_upper[0] corresponds to IBL=2 (first actual station after stagnation)
+        for (i, &xfoil_val) in xfoil_xssi_upper.iter().enumerate() {
+            let rel_err = (s_upper[i] - xfoil_val).abs() / xfoil_val;
+            assert!(
+                rel_err < 1e-6,
+                "Upper XSSI[{}] mismatch: yfoil={:.15e} xfoil={:.15e} rel_err={:.2e}",
+                i,
+                s_upper[i],
+                xfoil_val,
+                rel_err
+            );
+        }
+    }
+
+    /// Test lower surface arc lengths match XFOIL's XICALC
+    ///
+    /// XFOIL reference (first few stations):
+    /// IBL  IPAN        S(IPAN)              XSSI
+    ///  2    81   1.021246928567578e+00   1.625086297402545e-03
+    ///  3    82   1.023074108325968e+00   3.452266055793185e-03
+    ///  4    83   1.024980294773205e+00   5.358452503029687e-03
+    #[test]
+    fn test_lower_surface_arc_lengths_match_xfoil() {
+        use crate::geometry::{repanel_xfoil, PaneConfig};
+
+        let geom = naca_4digit("0012", 160).unwrap();
+        let config = PaneConfig::default();
+        let repaneled = repanel_xfoil(&geom, 160, &config);
+        let airfoil = create_paneled_airfoil(&repaneled);
+
+        let inviscid = solve_inviscid(&airfoil);
+        let velocity = inviscid.velocity_at_nodes(0.0);
+
+        let stag_idx = find_stagnation_point(&airfoil, &velocity);
+        let (_, _, s_lower, _) = extract_lower_surface(&airfoil, &velocity, stag_idx);
+
+        // XFOIL reference values for first few stations
+        let xfoil_xssi_lower = [
+            1.625086297402545e-03, // IBL=2, IPAN=81
+            3.452266055793185e-03, // IBL=3, IPAN=82
+            5.358452503029687e-03, // IBL=4, IPAN=83
+            7.369101817904955e-03, // IBL=5, IPAN=84
+            9.478965571405595e-03, // IBL=6, IPAN=85
+        ];
+
+        // Note: s_lower[0] corresponds to IBL=2 (first station at stag_idx)
+        for (i, &xfoil_val) in xfoil_xssi_lower.iter().enumerate() {
+            let rel_err = (s_lower[i] - xfoil_val).abs() / xfoil_val;
+            assert!(
+                rel_err < 1e-6,
+                "Lower XSSI[{}] mismatch: yfoil={:.15e} xfoil={:.15e} rel_err={:.2e}",
+                i,
+                s_lower[i],
+                xfoil_val,
+                rel_err
+            );
+        }
+    }
+
+    /// Test XEPS calculation matches XFOIL
+    ///
+    /// XFOIL reference: XEPS = 2.039242600293527e-07
+    #[test]
+    fn test_xeps_matches_xfoil() {
+        use crate::geometry::{repanel_xfoil, PaneConfig};
+
+        let geom = naca_4digit("0012", 160).unwrap();
+        let config = PaneConfig::default();
+        let repaneled = repanel_xfoil(&geom, 160, &config);
+        let airfoil = create_paneled_airfoil(&repaneled);
+
+        // Compute XEPS the same way as in extract_upper_surface
+        let total_arc = airfoil.s[airfoil.n - 1] - airfoil.s[0];
+        let xeps = 1e-7 * total_arc;
+
+        let xfoil_xeps = 2.039242600293527e-07;
+
+        let rel_err = (xeps - xfoil_xeps).abs() / xfoil_xeps;
+        assert!(
+            rel_err < 1e-6,
+            "XEPS mismatch: yfoil={:.15e} xfoil={:.15e} rel_err={:.2e}",
+            xeps,
+            xfoil_xeps,
+            rel_err
+        );
+    }
+
+    /// Test that IBLTE counts match XFOIL
+    ///
+    /// XFOIL reference:
+    /// - IBLTE(1) = 81 (upper surface stations including stagnation)
+    /// - IBLTE(2) = 81 (lower surface stations including stagnation)
+    #[test]
+    fn test_surface_station_counts_match_xfoil() {
+        use crate::geometry::{repanel_xfoil, PaneConfig};
+
+        let geom = naca_4digit("0012", 160).unwrap();
+        let config = PaneConfig::default();
+        let repaneled = repanel_xfoil(&geom, 160, &config);
+        let airfoil = create_paneled_airfoil(&repaneled);
+
+        let inviscid = solve_inviscid(&airfoil);
+        let velocity = inviscid.velocity_at_nodes(0.0);
+
+        let stag_idx = find_stagnation_point(&airfoil, &velocity);
+        let (_, _, s_upper, _) = extract_upper_surface(&airfoil, &velocity, stag_idx);
+        let (_, _, s_lower, _) = extract_lower_surface(&airfoil, &velocity, stag_idx);
+
+        // XFOIL has IBLTE(1) = 81 and IBLTE(2) = 81
+        // This includes IBL=1 (stagnation) plus the surface stations
+        // Our arrays don't include the stagnation point explicitly,
+        // so we should have IBLTE - 1 = 80 stations
+        // But actually XFOIL's IPAN starts at IBL=2 with IPAN=IST, so there are 80 actual panels
+
+        // Upper surface: from stag_idx-1 down to 0, that's stag_idx stations
+        // XFOIL: IBLTE(1) = IST + 1 = 81 (includes IBL=1 which has XSSI=0)
+        // YFoil: s_upper has stag_idx entries
+        assert_eq!(
+            s_upper.len(),
+            80,
+            "Upper surface should have 80 stations (IST=80, from panel 79 to 0)"
+        );
+
+        // Lower surface: from stag_idx to n-1
+        // XFOIL: IBLTE(2) = N - IST = 160 - 80 = 80, plus 1 for IBL=1 = 81
+        // But wait, let's check: in IBLPAN, lower goes from IST+1 to N, that's N-IST panels
+        // N=160, IST=80, so 160-80=80 panels, plus IBL=1 = 81 total
+        // YFoil: from stag_idx to n-1, that's n - stag_idx = 160 - 80 = 80 stations
+        assert_eq!(
+            s_lower.len(),
+            80,
+            "Lower surface should have 80 stations (from panel 80 to 159)"
+        );
     }
 }
