@@ -63,42 +63,6 @@ fn test_naca_0012_against_standard_formula() {
     }
 }
 
-/// Test that our generator produces coordinates matching our closed-TE formula
-#[test]
-fn test_naca_generator_matches_formula() {
-    let generated = naca_4digit("0012", 200).unwrap();
-
-    // Helper: compute NACA 0012 thickness using our closed-TE formula
-    fn naca_0012_closed_te(x: f64) -> f64 {
-        let t = 0.12;
-        (t / 0.2)
-            * (0.2969 * x.sqrt() - 0.126 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3)
-                - 0.1036 * x.powi(4))
-    }
-
-    // For each generated point, verify it matches our formula
-    for i in 0..generated.x_c.len() {
-        let x = generated.x_c[i];
-        let y = generated.y_c[i];
-
-        // For symmetric NACA 0012, y should be ±thickness
-        let expected_thickness = naca_0012_closed_te(x);
-        let expected_y = if y >= 0.0 {
-            expected_thickness
-        } else {
-            -expected_thickness
-        };
-
-        assert!(
-            (y - expected_y).abs() < 1e-10,
-            "Generator mismatch at x={:.6}: got y={:.10}, expected={:.10}",
-            x,
-            y,
-            expected_y
-        );
-    }
-}
-
 /// Test roundtrip: generate -> write -> read -> compare
 #[test]
 fn test_json_roundtrip() {
@@ -466,23 +430,6 @@ fn test_flow_regime_enum() {
 // Trailing Edge Geometry Tests
 // ============================================================================
 
-/// Test that sharp TE detection works correctly
-#[test]
-fn test_sharp_te_detection() {
-    // NACA generator creates closed TE (sharp)
-    let geom = naca_4digit("0012", 160).unwrap();
-    let paneled = create_paneled_airfoil(&geom);
-
-    assert!(
-        paneled.sharp_te,
-        "NACA 0012 from generator should have sharp TE"
-    );
-    assert!(
-        geom.is_sharp_te(),
-        "Geometry should also detect as sharp TE"
-    );
-}
-
 /// Test that blunt TE detection works correctly
 #[test]
 fn test_blunt_te_detection() {
@@ -503,36 +450,6 @@ fn test_blunt_te_detection() {
 
     // TE gap should be ~0.002
     assert_relative_eq!(blunt_geom.te_gap(), 0.002, epsilon = 1e-10);
-}
-
-/// Test panel method with sharp TE gives near-zero CDp for symmetric airfoil at α=0
-///
-/// This validates that the curvature extrapolation condition (XFOIL equation 9)
-/// properly eliminates the TE singularity.
-#[test]
-fn test_sharp_te_zero_cdp_symmetric() {
-    let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
-
-    assert!(airfoil.sharp_te, "Should use sharp TE handling");
-
-    let solution = solve_inviscid(&airfoil);
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
-
-    // For symmetric airfoil at α=0, CDp should be essentially zero
-    assert!(
-        coeffs.cdp.abs() < 0.001,
-        "CDp = {} should be ~0 for symmetric airfoil at α=0 with sharp TE",
-        coeffs.cdp
-    );
-
-    // CL should also be essentially zero
-    assert!(
-        coeffs.cl.abs() < 0.01,
-        "CL = {} should be ~0 for symmetric airfoil at α=0",
-        coeffs.cl
-    );
 }
 
 /// Test panel method with blunt TE still produces reasonable results

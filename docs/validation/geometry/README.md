@@ -210,7 +210,7 @@ yfoil geom naca 4412 --paneler xfoil -n 160 -o naca4412-160.json
 To regenerate this validation after code changes:
 
 ```bash
-cargo run --bin generate_validation --features plotting
+cargo run --bin generate_geometry_validation --features plotting
 ```
 
 This will:

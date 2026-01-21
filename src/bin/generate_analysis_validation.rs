@@ -27,7 +27,7 @@ use yfoil::output::{
     plot_bl_comparison_svg, plot_cp_ue_comparison_svg, plot_polar_3panel_svg, stitch_polars_with_cm,
     PolarDataWithCm, PolarPlotConfig, YfoilBLDist,
 };
-use yfoil::solver::{solve_viscous_with_init, ViscalConfig};
+use yfoil::solver::{solve_viscous, ViscalConfig};
 
 const BASE_DIR: &str = "docs/validation/assets/analysis";
 const XFOIL_BIN: &str = "xfoil/xfoil6.99/bin/xfoil";
@@ -219,17 +219,17 @@ fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn
     let mut bl_distributions: HashMap<i32, YfoilAnalysisResult> = HashMap::new();
 
     // Positive sweep: 0° to 15°
-    let mut prev_dq: Option<Vec<f64>> = None;
+    // Note: Currently each angle starts fresh (no state carried forward).
+    // XFOIL carries forward UEDG (edge velocities) via LBLINI flag.
+    // TODO: Implement proper BL state initialization for polar sweeps.
     for alpha_deg in 0..=15 {
         let alpha_rad = (alpha_deg as f64).to_radians();
-        let result =
-            solve_viscous_with_init(&paneled, alpha_rad, &conditions, &config, prev_dq.as_deref());
+        let result = solve_viscous(&paneled, alpha_rad, &conditions, &config);
         if result.converged {
             alphas.push(alpha_deg as f64);
             cls.push(result.cl);
             cds.push(result.cd);
             cms.push(result.cm);
-            prev_dq = Some(result.dq_source.clone());
 
             // Collect BL distribution at validation angles
             if VALIDATION_ANGLES.contains(&alpha_deg) {
@@ -244,18 +244,15 @@ fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn
         }
     }
 
-    // Negative sweep (reinitialize): -1° to -15°
-    prev_dq = None;
+    // Negative sweep: -1° to -15°
     for alpha_deg in (-15..0).rev() {
         let alpha_rad = (alpha_deg as f64).to_radians();
-        let result =
-            solve_viscous_with_init(&paneled, alpha_rad, &conditions, &config, prev_dq.as_deref());
+        let result = solve_viscous(&paneled, alpha_rad, &conditions, &config);
         if result.converged {
             alphas.insert(0, alpha_deg as f64);
             cls.insert(0, result.cl);
             cds.insert(0, result.cd);
             cms.insert(0, result.cm);
-            prev_dq = Some(result.dq_source.clone());
 
             // Collect BL distribution at validation angles
             if VALIDATION_ANGLES.contains(&alpha_deg) {

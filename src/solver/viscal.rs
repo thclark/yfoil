@@ -448,13 +448,26 @@ fn solve_viscous_impl(
 
         rmsbl = result.rmsbl;
 
-        // Update edge velocities from new mass defect
+        // Update edge velocities from new mass defect (separate step)
         ue_mag = update_edge_velocities(
             &setbl_state,
             &inviscid,
             &qinv_mag,
-            airfoil.le_index,
+            &config.setbl,
         );
+
+        // Update mass arrays with new edge velocities for consistency
+        // Mass = dstar * Ue, and we need to use the NEW Ue values
+        for (ibl, &ipan) in setbl_state.ipan_upper.iter().enumerate() {
+            if ibl < setbl_state.nbl_upper {
+                setbl_state.upper.mass[ibl] = setbl_state.stations_upper[ibl].dstar * ue_mag[ipan];
+            }
+        }
+        for (ibl, &ipan) in setbl_state.ipan_lower.iter().enumerate() {
+            if ibl < setbl_state.nbl_lower {
+                setbl_state.lower.mass[ibl] = setbl_state.stations_lower[ibl].dstar * ue_mag[ipan];
+            }
+        }
 
         // Check convergence
         if rmsbl < config.tol_rmsbl {
