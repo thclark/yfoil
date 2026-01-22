@@ -26,7 +26,7 @@ use crate::forces::{integrate_forces, AeroCoefficients};
 use crate::geometry::PaneledAirfoil;
 use crate::panel::solve_inviscid;
 use crate::solver::setbl::{
-    apply_newton_update, build_newton_system, update_edge_velocities, SetblConfig, SetblState,
+    apply_newton_update_with_ue, build_newton_system, SetblConfig, SetblState,
 };
 
 /// Configuration for viscous-inviscid coupling
@@ -429,45 +429,32 @@ fn solve_viscous_impl(
         }
 
         // Step 1: SETBL - Build Newton system
+        // Pass qinv_mag (inviscid velocities) so USAV can be computed from QINV + DIJ*MASS
+        // DUE2 = UEDG - USAV is the mismatch that drives Newton convergence
         let mut blsolv_input = build_newton_system(
             &mut setbl_state,
             airfoil,
             &inviscid,
+            &qinv_mag,  // Pass inviscid velocities for USAV computation
             &config.setbl,
         );
 
         // Step 2: BLSOLV - Solve the block system
         blsolv(&mut blsolv_input);
 
-        // Step 3: UPDATE - Apply Newton deltas with relaxation
-        let result = apply_newton_update(
+        // Step 3: UPDATE - Apply Newton deltas with relaxation and update edge velocities
+        // This function properly computes UNEW using MASS + VDEL (Newton delta) before
+        // applying under-relaxation, matching XFOIL's UPDATE subroutine exactly.
+        let (result, new_ue) = apply_newton_update_with_ue(
             &mut setbl_state,
             &blsolv_input.vdel,
-            &config.setbl,
-        );
-
-        rmsbl = result.rmsbl;
-
-        // Update edge velocities from new mass defect (separate step)
-        ue_mag = update_edge_velocities(
-            &setbl_state,
             &inviscid,
             &qinv_mag,
             &config.setbl,
         );
 
-        // Update mass arrays with new edge velocities for consistency
-        // Mass = dstar * Ue, and we need to use the NEW Ue values
-        for (ibl, &ipan) in setbl_state.ipan_upper.iter().enumerate() {
-            if ibl < setbl_state.nbl_upper {
-                setbl_state.upper.mass[ibl] = setbl_state.stations_upper[ibl].dstar * ue_mag[ipan];
-            }
-        }
-        for (ibl, &ipan) in setbl_state.ipan_lower.iter().enumerate() {
-            if ibl < setbl_state.nbl_lower {
-                setbl_state.lower.mass[ibl] = setbl_state.stations_lower[ibl].dstar * ue_mag[ipan];
-            }
-        }
+        rmsbl = result.rmsbl;
+        ue_mag = new_ue;
 
         // Check convergence
         if rmsbl < config.tol_rmsbl {

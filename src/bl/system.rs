@@ -1666,7 +1666,8 @@ impl BLLocalSystem {
         // Equation 1: Amplification (laminar) or Shear lag (turbulent/wake)
         match flow_type {
             BLFlowType::Laminar if is_similarity => {
-                // LE point: set zero amplification factor
+                // LE point: set zero amplification factor (XFOIL: VS2(1,1) = 1.0)
+                // This ensures the pivot in BLSOLV is well-conditioned
                 self.vs2[0][0] = 1.0;
                 self.vsrez[0] = -s2.ampl;
             }

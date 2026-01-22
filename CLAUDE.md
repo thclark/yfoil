@@ -146,6 +146,44 @@ Any deviation from XFOIL's actual implementation is wrong and must be fixed, not
 4. Parse output and compare against yfoil values
 5. Any discrepancy > 1e-10 relative error indicates a bug to fix
 
+**HARD RULE: Never Alter the Algorithm to Debug**
+
+Diagnosing issues by attempting to alter the algorithm away from XFOIL - such as implementing simpler approaches, adding
+relaxation where it's not present in XFOIL, or using "temporary workarounds" - **ALWAYS confuses the issue further**.
+This approach is FORBIDDEN.
+
+**DO NOT:**
+- Add under-relaxation factors not present in XFOIL
+- Implement "simplified" versions of XFOIL algorithms
+- Add iteration limits or convergence bailouts not in XFOIL
+- Use approximate formulas instead of exact XFOIL formulas
+- Add clamping, limiting, or safeguards not in XFOIL
+
+**DO INSTEAD:**
+1. Strategically isolate smaller areas - individual subroutines, variable updates, even single numeric operations
+2. Instrument XFOIL to output values at the specific step being investigated
+3. Create a unit test fixture from XFOIL's output
+4. Write a test that compares YFoil's computation against the fixture
+5. Fix YFoil to match XFOIL exactly, then move to the next step
+
+This bottom-up approach of matching XFOIL at progressively larger scopes (operation → statement → subroutine → module)
+is the ONLY reliable way to debug discrepancies. Any "quick fix" that deviates from XFOIL will mask the real bug and
+create new ones.
+
+**NEVER Rely on End-to-End Results for Progress:**
+
+Do NOT use end-to-end metrics (like CD error reduction) as indicators of progress during debugging. The VISCAL solver
+is highly nonlinear - fixing one bug may temporarily make overall results worse before they get better. Multiple bugs
+can cancel out, making broken code appear to work.
+
+Instead:
+1. Fix one computation at a time
+2. Create an isolated test that validates JUST that computation against an XFOIL fixture
+3. Ensure the test passes with machine-precision accuracy before moving on
+4. Progress systematically through the computation chain: MASS → DIJ coupling → DUI → UNEW → relaxation → UPDATE
+
+Only after ALL intermediate computations match XFOIL should you expect end-to-end results to match.
+
 ## HARD RULE: Identical Geometry for XFOIL vs YFoil Comparisons
 
 **When comparing XFOIL and YFoil results, you MUST use the EXACT SAME panel coordinates.**
