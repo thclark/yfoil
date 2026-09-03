@@ -38,7 +38,7 @@
  C---- set the CL used to define Mach, Reynolds numbers
        IF(LALFA) THEN
         CLMR = CL
-@@ -88,10 +107,54 @@
+@@ -88,10 +107,60 @@
        ENDIF
  C
        WRITE(*,*)
@@ -55,6 +55,12 @@
 +       WRITE(95,'(A,ES24.16)') 'REINF=', REINF
 +       WRITE(95,'(A,ES24.16)') 'ACRIT1=', ACRIT(1)
 +       WRITE(95,'(A,ES24.16)') 'ACRIT2=', ACRIT(2)
++       WRITE(95,'(A,I5)') 'ITRAN1=', ITRAN(1)
++       WRITE(95,'(A,I5)') 'ITRAN2=', ITRAN(2)
++       WRITE(95,'(A,ES24.16)') 'REYBL=', REYBL
++       WRITE(95,'(A,ES24.16)') 'HSTINV=', HSTINV
++       WRITE(95,'(A,ES24.16)') 'GM1BL=', GM1BL
++       WRITE(95,'(A,ES24.16)') 'ANTE=', ANTE
 +       DO 8001 IS=1, 2
 +         DO 8002 IBL=1, NBL(IS)
 +           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
@@ -93,7 +99,7 @@
        DO 5 IS=1, 2
          DO 6 IBL=2, NBL(IS)
            USAV(IBL,IS) = UEDG(IBL,IS)
-@@ -238,6 +301,22 @@
+@@ -238,6 +307,22 @@
         DTE = DSTR(IBLTE(1),1) + DSTR(IBLTE(2),2) + ANTE
         CTE = ( CTAU(IBLTE(1),1)*THET(IBLTE(1),1)
       &       + CTAU(IBLTE(2),2)*THET(IBLTE(2),2) ) / TTE
@@ -116,7 +122,7 @@
         CALL TESYS(CTE,TTE,DTE)
  C
         TTE_TTE1 = 1.0
-@@ -273,7 +352,26 @@
+@@ -273,7 +358,26 @@
  C
        ENDIF
  C
@@ -143,7 +149,7 @@
  C---- Save wall shear and equil. max shear coefficient for plotting output
        TAU(IBL,IS) = 0.5*R2*U2*U2*CF2
        DIS(IBL,IS) =     R2*U2*U2*U2*DI2*HS2*0.5
-@@ -512,6 +610,11 @@
+@@ -512,6 +616,11 @@
  C---- next airfoil side
   2000 CONTINUE
  C
@@ -155,7 +161,7 @@
        RETURN
        END
  
-@@ -535,6 +638,68 @@
+@@ -535,6 +644,68 @@
        NSYS = IV
        IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
  C
@@ -224,7 +230,7 @@
        RETURN
        END
  
-@@ -552,6 +717,19 @@
+@@ -552,6 +723,19 @@
        LOGICAL DIRECT
        REAL MSQ
  C
@@ -244,7 +250,7 @@
  C---- shape parameters for separation criteria
        HLMAX = 3.8
        HTMAX = 2.5
-@@ -618,6 +796,11 @@
+@@ -618,6 +802,11 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
@@ -256,7 +262,7 @@
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -646,7 +829,17 @@
+@@ -646,7 +835,17 @@
             CALL BLSYS
            ENDIF
  C
@@ -275,7 +281,7 @@
            IF(DIRECT) THEN
  C
  C--------- try direct mode (set dUe = 0 in currently empty 4th line)
-@@ -659,6 +852,10 @@
+@@ -659,6 +858,10 @@
  C--------- solve Newton system for current "2" station
             CALL GAUSS(4,4,VS2,VSREZ,1)
  C
@@ -286,7 +292,7 @@
  C--------- determine max changes and underrelax if necessary
             DMAX = MAX( ABS(VSREZ(2)/THI),
       &                 ABS(VSREZ(3)/DSI)  )
-@@ -668,6 +865,9 @@
+@@ -668,6 +871,9 @@
             RLX = 1.0
             IF(DMAX.GT.0.3) RLX = 0.3/DMAX
  C
@@ -296,22 +302,23 @@
  C--------- see if direct mode is not applicable
             IF(IBL .NE. IBLTE(IS)+1) THEN
  C
-@@ -773,7 +973,13 @@
+@@ -773,8 +979,14 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
 -          IF(DMAX.LE.1.0E-5) GO TO 110
 +C-------- DEBUG: Output updated values
 +          WRITE(78,'(A,4ES24.16)') 'UPDATED:', CTI, THI, DSI, UEI
-+C
+ C
 +          IF(DMAX.LE.1.0E-5) THEN
 +           WRITE(78,'(A,I4,ES24.16)') 'CONVERGED:', ITBL, DMAX
 +           GO TO 110
 +          ENDIF
- C
++C
    100   CONTINUE
          WRITE(*,1350) IBL, IS, DMAX 
-@@ -842,6 +1048,10 @@
+  1350   FORMAT(' MRCHUE: Convergence failed at',I4,'  side',I2,
+@@ -842,6 +1054,10 @@
          DELT(IBL,IS) = DE2
          TSTR(IBL,IS) = HS2*T2
  C
@@ -322,7 +329,7 @@
  C------ set "1" variables to "2" variables for next streamwise station
          CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
          CALL BLKIN
-@@ -868,10 +1078,13 @@
+@@ -868,10 +1084,13 @@
   1000 CONTINUE
   2000 CONTINUE
  C
@@ -338,21 +345,21 @@
        SUBROUTINE MRCHDU
  C----------------------------------------------------
  C     Marches the BLs and wake in mixed mode using
-@@ -887,6 +1100,13 @@
-       REAL VTMP(4,5), VZTMP(4)
+@@ -888,6 +1107,13 @@
        REAL MSQ
  ccc   REAL MDI
-+C
+ C
 +C---- INSTRUMENTATION: Save VS2 matrix before GAUSS for test station
 +      REAL VS2_SAVE(4,5)
 +      INTEGER ITEST_STN, ITEST_IS
 +      LOGICAL FIRST_ITER_LOGGED
 +      DATA ITEST_STN / 10 /
 +      DATA ITEST_IS / 1 /
- C
++C
        DATA DEPS / 5.0E-6 /
  C
-@@ -966,6 +1186,12 @@
+ C---- constant controlling how far Hk is allowed to deviate
+@@ -966,6 +1192,12 @@
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
             AMI = AMPL2
@@ -365,12 +372,10 @@
             IF(     TRAN) ITRAN(IS) = IBL
             IF(.NOT.TRAN) ITRAN(IS) = IBL+2
            ENDIF
-@@ -1057,11 +1283,54 @@
-            VSREZ(4) = -(HKREF**2)*(HK2 / HKREF - 1.0)
-      &                     - SENS*(U2  / UEREF - 1.0)
+@@ -1059,8 +1291,51 @@
  C
-+          ENDIF
-+C
+           ENDIF
+ C
 +C-------- INSTRUMENTATION: Save VS2 and VSREZ before GAUSS for test station
 +          IF(IBL.EQ.ITEST_STN .AND. IS.EQ.ITEST_IS .AND. ITBL.EQ.1) THEN
 +           OPEN(96, FILE='mrchdu_newton.dat', STATUS='UNKNOWN')
@@ -405,22 +410,21 @@
 +               VS2_SAVE(K,L) = VS2(K,L)
 + 8102        CONTINUE
 + 8101      CONTINUE
-           ENDIF
- C
++          ENDIF
++C
  C-------- solve Newton system for current "2" station
            CALL GAUSS(4,4,VS2,VSREZ,1)
- C
++C
 +C-------- INSTRUMENTATION: Log solution after GAUSS
 +          IF(IBL.EQ.ITEST_STN .AND. IS.EQ.ITEST_IS .AND. ITBL.EQ.1) THEN
 +           WRITE(96,'(A)') '--- Solution from GAUSS ---'
 +           WRITE(96,'(A,4ES24.16)') 'VSREZ_SOL=', (VSREZ(K), K=1,4)
 +           CLOSE(96)
 +          ENDIF
-+C
+ C
  C-------- determine max changes and underrelax if necessary
  C-------- (added Ue clamp   MD  3 Apr 03)
-           DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -1281,6 +1550,12 @@
+@@ -1281,6 +1556,12 @@
  C
  C---- calculate new Ue distribution assuming no under-relaxation
  C-    also set the sensitivity of Ue wrt to alpha or Re
@@ -433,7 +437,7 @@
        DO 1 IS=1, 2
          DO 10 IBL=2, NBL(IS)
            I = IPAN(IBL,IS)
-@@ -1307,9 +1582,28 @@
+@@ -1307,9 +1588,28 @@
            UNEW(IBL,IS) = UINV(IBL,IS) + DUI
            U_AC(IBL,IS) = UINV_AC      + DUI_AC
  C
@@ -462,7 +466,7 @@
  C---- set new Qtan from new Ue with appropriate sign change
        DO 2 IS=1, 2
          DO 20 IBL=2, IBLTE(IS)
-@@ -1479,6 +1773,32 @@
+@@ -1479,6 +1779,32 @@
  C---- set true rms change
        RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
  C
