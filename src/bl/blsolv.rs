@@ -66,32 +66,67 @@ impl Default for BlsolvInput {
     }
 }
 
+/// Optional trace of BLSOLV's branch decisions and intermediate state, mirroring the
+/// instrumentation in the reference build (xsolve.f) so the two can be diffed station by
+/// station (CLAUDE.md Rule 3). Zero cost when not requested.
+#[derive(Debug, Default, Clone)]
+pub struct BlsolvTrace {
+    /// Every sparse-elimination comparison `|VTMP| > VACC`: (iv, kv, k, |vtmp|, vacc, taken).
+    pub skips: Vec<(usize, usize, usize, f64, f64, bool)>,
+    /// Full VDEL after the forward sweep, before back-substitution.
+    pub vdel_after_forward: Vec<[[f64; 2]; 3]>,
+}
+
+impl BlsolvTrace {
+    /// The comparison closest to its threshold, as a relative margin `(|vtmp| - vacc) / vacc`.
+    pub fn tightest_skip_margin(&self) -> Option<(usize, usize, usize, f64)> {
+        self.skips
+            .iter()
+            .map(|&(iv, kv, k, v, vacc, _)| (iv, kv, k, (v - vacc) / vacc))
+            .min_by(|a, b| a.3.abs().partial_cmp(&b.3.abs()).unwrap())
+    }
+}
+
+/// The Newton deltas produced by [`blsolv`].
+///
+/// This is a separate type on purpose: XFOIL's UPDATE aliases `UNEW` onto `VA` and `QNEW`
+/// onto `VB` via EQUIVALENCE (xbl.f), so after BLSOLV the factored VA/VB/VM blocks are dead.
+/// Consuming the [`BlsolvInput`] makes it impossible to read them by accident.
+#[derive(Debug, Clone)]
+pub struct BlsolvSolution {
+    /// Number of system rows
+    pub nsys: usize,
+    /// VDEL[iv][k][l]: column 0 is the Newton delta, column 1 the Re/alpha sensitivity
+    pub vdel: Vec<[[f64; 2]; 3]>,
+}
+
 /// Solve the coupled BL Newton system using XFOIL's BLSOLV algorithm
 ///
-/// This is a direct translation of XFOIL's BLSOLV subroutine.
-/// The algorithm performs block Gaussian elimination with special handling
-/// for the dense mass defect coupling (VM matrix).
-///
-/// # Arguments
-/// * `input` - Mutable reference to the input matrices (modified in place during solve)
-///
-/// # Returns
-/// The solution is stored in input.vdel after the solve completes.
-pub fn blsolv(input: &mut BlsolvInput) {
+/// This is a direct translation of XFOIL's BLSOLV subroutine (xsolve.f). The algorithm
+/// performs block Gaussian elimination with special handling for the dense mass defect
+/// coupling (VM matrix). Verified bit-identical to XFOIL on the tracked reference fixture
+/// (all three calls, both columns) — see tests/xfoil_blsolv_tests.rs.
+pub fn blsolv(input: BlsolvInput) -> BlsolvSolution {
+    blsolv_traced(input, None)
+}
+
+/// `blsolv` with an optional [`BlsolvTrace`] collector.
+pub fn blsolv_traced(input: BlsolvInput, mut trace: Option<&mut BlsolvTrace>) -> BlsolvSolution {
+    let mut input = input;
     let nsys = input.nsys;
     if nsys == 0 {
-        return;
+        return BlsolvSolution { nsys, vdel: input.vdel };
     }
 
     // Compute acceleration thresholds
     // XFOIL: VACC1 = VACCEL, VACC2 = VACC3 = VACCEL * 2.0 / (S(N) - S(1))
+    // Association must match the Fortran exactly — (VACCEL*2.0)/(S(N)-S(1)) — because these
+    // thresholds gate branches; a 1-ULP difference in VACC2 can flip a skip decision.
     let vacc1 = input.vaccel;
-    let vacc_scale = match input.arc_length {
-        Some(arc_len) if arc_len > 0.0 => 2.0 / arc_len,
-        _ => 1.0, // Default to no scaling if arc length not provided
+    let (vacc2, vacc3) = match input.arc_length {
+        Some(arc_len) if arc_len > 0.0 => (input.vaccel * 2.0 / arc_len, input.vaccel * 2.0 / arc_len),
+        _ => (input.vaccel, input.vaccel),
     };
-    let vacc2 = input.vaccel * vacc_scale;
-    let vacc3 = input.vaccel * vacc_scale;
 
     // Forward sweep: IV = 0 to NSYS-1
     for iv in 0..nsys {
@@ -206,6 +241,11 @@ pub fn blsolv(input: &mut BlsolvInput) {
             let vtmp1 = input.vm[kv][iv][0];
             let vtmp2 = input.vm[kv][iv][1];
             let vtmp3 = input.vm[kv][iv][2];
+            if let Some(t) = trace.as_mut() {
+                t.skips.push((iv, kv, 0, vtmp1.abs(), vacc1, vtmp1.abs() > vacc1));
+                t.skips.push((iv, kv, 1, vtmp2.abs(), vacc2, vtmp2.abs() > vacc2));
+                t.skips.push((iv, kv, 2, vtmp3.abs(), vacc3, vtmp3.abs() > vacc3));
+            }
 
             if vtmp1.abs() > vacc1 {
                 for l in ivp..nsys {
@@ -233,6 +273,10 @@ pub fn blsolv(input: &mut BlsolvInput) {
         }
     }
 
+    if let Some(t) = trace.as_mut() {
+        t.vdel_after_forward = input.vdel.clone();
+    }
+
     // Backward sweep: IV = NSYS-1 down to 1
     for iv in (1..nsys).rev() {
         // Eliminate upper VM columns
@@ -250,6 +294,8 @@ pub fn blsolv(input: &mut BlsolvInput) {
             input.vdel[kv][2][1] -= input.vm[kv][iv][2] * vtmp;
         }
     }
+
+    BlsolvSolution { nsys, vdel: input.vdel }
 }
 
 #[cfg(test)]
@@ -279,7 +325,7 @@ mod tests {
             input.vm[iv][iv][2] = 1.0;
         }
 
-        blsolv(&mut input);
+        let input = blsolv(input);
 
         // Solution should be [1, 2, 3] at each station
         for iv in 0..nsys {
@@ -327,7 +373,7 @@ mod tests {
         // Add some coupling from station 0 to station 1
         input.vm[1][0] = [0.1, 0.1, 0.1];
 
-        blsolv(&mut input);
+        let input = blsolv(input);
 
         // Solution should satisfy the system equations
         // This is a basic sanity check - actual values depend on the coupling

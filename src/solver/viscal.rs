@@ -424,7 +424,7 @@ fn solve_viscous_impl(
         // Step 1: SETBL - Build Newton system
         // Pass qinv_mag (inviscid velocities) so USAV can be computed from QINV + DIJ*MASS
         // DUE2 = UEDG - USAV is the mismatch that drives Newton convergence
-        let mut blsolv_input = build_newton_system(
+        let blsolv_input = build_newton_system(
             &mut setbl_state,
             airfoil,
             &inviscid,
@@ -432,19 +432,15 @@ fn solve_viscous_impl(
             &config.setbl,
         );
 
-        // Step 2: BLSOLV - Solve the block system
-        blsolv(&mut blsolv_input);
+        // Step 2: BLSOLV - Solve the block system. The factored input is consumed: after
+        // BLSOLV, XFOIL's VA/VB hold UNEW/QNEW (EQUIVALENCE in UPDATE), never system blocks.
+        let solution = blsolv(blsolv_input);
 
         // Step 3: UPDATE - Apply Newton deltas with relaxation and update edge velocities
         // This function properly computes UNEW using MASS + VDEL (Newton delta) before
         // applying under-relaxation, matching XFOIL's UPDATE subroutine exactly.
-        let (result, new_ue) = apply_newton_update_with_ue(
-            &mut setbl_state,
-            &blsolv_input.vdel,
-            &inviscid,
-            &qinv_mag,
-            &config.setbl,
-        );
+        let (result, new_ue) =
+            apply_newton_update_with_ue(&mut setbl_state, &solution.vdel, &inviscid, &qinv_mag, &config.setbl);
 
         rmsbl = result.rmsbl;
         ue_mag = new_ue;
