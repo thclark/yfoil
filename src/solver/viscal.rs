@@ -22,7 +22,7 @@ use crate::bl::{blsolv, integrate_friction, squire_young_drag, system::BLStation
 use crate::forces::{integrate_forces, AeroCoefficients};
 use crate::geometry::PaneledAirfoil;
 use crate::panel::solve_inviscid;
-use crate::solver::setbl::{apply_newton_update_with_ue, build_newton_system, SetblConfig, SetblState};
+use crate::solver::setbl_legacy::{apply_newton_update_with_ue, build_newton_system, SetblConfig, SetblState};
 
 /// Configuration for viscous-inviscid coupling
 #[derive(Debug, Clone)]

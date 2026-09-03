@@ -7,9 +7,7 @@
 use crate::bl::blsys::{blsys, tesys, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
 use crate::bl::hkin;
-use crate::bl::system::{
-    dslim, trchek, BLFlowType, BLGlobalParams, BLLocalSystem, TransitionLocation, TransitionResult,
-};
+use crate::bl::system::{dslim, trchek, BLFlowType, BLGlobalParams, BLLocalSystem, TransitionResult};
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
 
@@ -67,13 +65,12 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
     // MRCHDU locals never re-initialised per side: all persist across sides and stations.
     let mut s1 = std::mem::take(&mut st.com1);
     let mut s2 = std::mem::take(&mut st.com2);
-    let mut xt = st.xt;
+    let mut trloc = std::mem::take(&mut st.trloc);
     let mut ami = 0.0;
     let (mut sens, mut sennew) = (0.0, 0.0);
     let (mut ueref, mut hkref) = (0.0, 0.0);
     let (mut cte, mut tte, mut dte) = (0.0, 0.0, 0.0);
     let mut sys = BLLocalSystem::default();
-    let mut trans_loc: Option<TransitionLocation> = None;
     let mut trforc = false;
 
     for is in 1..=2 {
@@ -133,7 +130,7 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                 // (the "1" station coefficients will be ignored)
                 s2.blprv(xsi, ami, cti, thi, dsi, dswaki, uei, params);
                 s2.blkin(params);
-                let pre = ([s1.ampl, s2.ampl, xt, amcrit], tran, st.itran[is]);
+                let pre = ([s1.ampl, s2.ampl, trloc.xt, amcrit], tran, st.itran[is]);
 
                 // check for transition and set appropriate flags and things
                 if !simi && !turb {
@@ -141,22 +138,20 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         TransitionResult::NoTransition { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            xt = s2.x;
+                            trloc.xt = s2.x;
                             st.itran[is] = ibl + 2;
                         }
                         TransitionResult::FreeTransition { location, ampl2 } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                         }
                         TransitionResult::ForcedTransition { location } => {
                             tran = true;
                             trforc = true;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                         }
                     }
@@ -172,7 +167,7 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         / tte;
                     tesys(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
-                    blsys(&mut sys, &mut s1, &mut s2, flags, trans_loc.as_ref(), amcrit, params);
+                    blsys(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, params);
                 }
 
                 let mut rec = MrchduIter {
@@ -368,22 +363,20 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         TransitionResult::NoTransition { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            xt = s2.x;
+                            trloc.xt = s2.x;
                             st.itran[is] = ibl + 2;
                         }
                         TransitionResult::FreeTransition { location, ampl2 } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                         }
                         TransitionResult::ForcedTransition { location } => {
                             tran = true;
                             trforc = true;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                         }
                     }
@@ -428,12 +421,12 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                 turb = true;
                 // save transition location
                 st.tforce[is] = trforc;
-                st.xssitr[is] = xt;
+                st.xssitr[is] = trloc.xt;
             }
             tran = false;
         }
     }
     st.com1 = s1;
     st.com2 = s2;
-    st.xt = xt;
+    st.trloc = trloc;
 }

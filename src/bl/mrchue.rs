@@ -4,7 +4,7 @@
 
 use crate::bl::blsys::{blsys, tesys, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
-use crate::bl::system::{dslim, trchek, BLGlobalParams, BLLocalSystem, TransitionLocation, TransitionResult};
+use crate::bl::system::{dslim, trchek, BLGlobalParams, BLLocalSystem, TransitionResult};
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
 
@@ -56,7 +56,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
     // rather than algorithmic).
     let mut s1 = std::mem::take(&mut st.com1);
     let mut s2 = std::mem::take(&mut st.com2);
-    let mut xt = st.xt;
+    let mut trloc = std::mem::take(&mut st.trloc);
     for is in 1..=2 {
         let amcrit = acrit[is];
 
@@ -82,7 +82,6 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
         st.itran[is] = st.iblte[is];
 
         let mut sys = BLLocalSystem::default();
-        let mut trans_loc: Option<TransitionLocation> = None;
         let mut trforc = false;
         // TE quantities defined at the first wake station (used again by the fallback)
         let (mut cte, mut tte, mut dte) = (0.0, 0.0, 0.0);
@@ -110,7 +109,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                 s2.blprv(xsi, ami, cti, thi, dsi, dswaki, uei, params);
                 s2.blkin(params);
                 // the reference trace records AMPL1/AMPL2/XT/TRAN/ITRAN here, before TRCHEK
-                let pre = ([s1.ampl, s2.ampl, xt, amcrit], tran, st.itran[is]);
+                let pre = ([s1.ampl, s2.ampl, trloc.xt, amcrit], tran, st.itran[is]);
 
                 // check for transition and set appropriate flags and things
                 if !simi && !turb {
@@ -118,15 +117,14 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         TransitionResult::NoTransition { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            xt = s2.x; // TRCHEK2: "If N2<Ncrit: NT=N2, XT=X2 (no transition)"
+                            trloc.xt = s2.x; // TRCHEK2 leaves XT = X2 (and the XT_* as they were)
                             st.itran[is] = ibl + 2;
                         }
                         TransitionResult::FreeTransition { location, ampl2 } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                             if cti <= 0.0 {
                                 cti = 0.03;
@@ -136,8 +134,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         TransitionResult::ForcedTransition { location } => {
                             tran = true;
                             trforc = true;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                             if cti <= 0.0 {
                                 cti = 0.03;
@@ -157,7 +154,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         / tte;
                     tesys(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
-                    blsys(&mut sys, &mut s1, &mut s2, flags, trans_loc.as_ref(), amcrit, params);
+                    blsys(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, params);
                 }
                 hk2_snapshot = s2.hk;
 
@@ -244,7 +241,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                             s1.hk + 0.03 * (s2.x - s1.x) / s1.theta
                         } else if ibl == st.itran[is] {
                             // transition interval: weighted laminar and turbulent case
-                            s1.hk + (0.03 * (xt - s1.x) - 0.15 * (s2.x - xt)) / s1.theta
+                            s1.hk + (0.03 * (trloc.xt - s1.x) - 0.15 * (s2.x - trloc.xt)) / s1.theta
                         } else if wake {
                             // turbulent wake case: asymptotic wake behavior with approximate Backward Euler
                             let cnst = 0.03 * (s2.x - s1.x) / s1.theta;
@@ -351,22 +348,20 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         TransitionResult::NoTransition { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            xt = s2.x;
+                            trloc.xt = s2.x;
                             st.itran[is] = ibl + 2;
                         }
                         TransitionResult::FreeTransition { location, ampl2 } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                         }
                         TransitionResult::ForcedTransition { location } => {
                             tran = true;
                             trforc = true;
-                            xt = location.xt;
-                            trans_loc = Some(location);
+                            trloc = location;
                             st.itran[is] = ibl;
                         }
                     }
@@ -406,7 +401,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
             if tran || ibl == st.iblte[is] {
                 turb = true;
                 // save transition location (TFORCE, XSSITR)
-                let _ = (trforc, xt);
+                let _ = trforc;
             }
             tran = false;
 
@@ -418,5 +413,5 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
     }
     st.com1 = s1;
     st.com2 = s2;
-    st.xt = xt;
+    st.trloc = trloc;
 }

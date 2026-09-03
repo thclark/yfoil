@@ -243,7 +243,7 @@ Velocity-layer subroutines (`src/solver/velocity.rs`): `QISET → qiset`, `UICAL
 `(N+NW)×(N+NW)` DIJ, 0-based storage), `DSSET → dsset`.
 
 The legacy `SetblState` in `src/solver/setbl.rs` (two 0-based sides, no wake stations) is
-superseded by `BlState` and is deleted when the new SETBL lands (stage S7).
+superseded by `BlState` and is deleted with the legacy VISCAL (stage S9).
 
 Inviscid / wake subroutines on `BlState` (stages S3–S4): `PSILIN → solver::psilin::psilin`
 (returns `Psilin { psi, psi_ni, qtan1, qtan2, qtanm, dzdg, dqdg, dzdm, dqdm, z_qinf, z_alfa }`),
@@ -275,3 +275,15 @@ persists across MRCHUE/MRCHDU/SETBL calls, so they live on `BlState` as `com1`, 
 each march takes them out and puts them back (`std::mem::take`). `XSSITR(IS)`, `TFORCE(IS)` →
 `st.xssitr[is]`, `st.tforce[is]`. The pre-S6 station-at-a-time march is `bl::march_legacy`
 (used only by the legacy `SetblState` path; both go with the S7 SETBL rewrite).
+
+Stage S7: `SETBL → solver::setbl::setbl(&mut st) -> SetblResult { sys: BlsolvInput, params,
+re_clmr, msq_clmr, dule }` — MRCL/COMSET/parameter setup, MRCHUE (if `!st.lblini`), MRCHDU, the
+USAV/UESET swap, ULE/UTE sensitivities from DIJ, the assembly sweep with the full VM chain rule,
+the VDEL Re/Mach column, the VZ block, TAU/DIS/CTQ/DELT/USLP, XOCTR/YOCTR/TINDEX. `MRCL →
+solver::setbl::mrcl`. The XFOIL.INC controls it reads live on `BlState`: `LALFA, CL, CLSPEC,
+MATYP, RETYP, MINF1/REINF1, MINF/REINF, LBLINI, ACRIT(IS), VACCEL, GAMMA`. `XT` and the `XT_*`
+sensitivities (TRCHEK2's COMMON outputs) are `st.trloc: TransitionLocation`, taken out and put
+back by every march like `com1`/`com2`. `IDAMPV` is pinned at 0. `BLGlobalParams::new` forms
+TKLAM exactly as COMSET (was `1/beta - 1`; dead at M = 0). The legacy `SetblState` path is
+`solver::setbl_legacy` (with `bl::march_legacy`, `bl::wake`), used only by the legacy VISCAL and
+deleted with the S9 rewrite.

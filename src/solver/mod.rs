@@ -17,10 +17,11 @@ mod polar;
 pub mod psilin;
 pub mod qdcalc;
 pub mod setbl;
+pub mod setbl_legacy;
 pub mod velocity;
 mod viscal;
 pub mod xywake;
 
 pub use polar::*;
-pub use setbl::*;
+pub use setbl_legacy::*;
 pub use viscal::*;

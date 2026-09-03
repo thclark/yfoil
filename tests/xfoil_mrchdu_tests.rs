@@ -8,100 +8,19 @@
 mod fixtures;
 mod utilities;
 
-use fixtures::mrchdu_fixtures::{parse_bl_dump, parse_mrchdu_trace, BlDump};
-use fixtures::pointers_fixtures::parse_pointers;
+use fixtures::mrchdu_fixtures::{parse_bl_dump, parse_mrchdu_trace};
+
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
 use yfoil::bl::mrchdu::{mrchdu, MrchduTrace};
-use yfoil::bl::mrchue::mrchue;
-use yfoil::bl::system::BLGlobalParams;
-use yfoil::solver::blstate::BlState;
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
-/// XFOIL's complete MRCHDU input on SETBL call `k`: the pointer layer (geometry, IPAN, WGAP —
-/// unchanged while IST is unchanged, which the NBL check below asserts) and the BL arrays
-/// exactly as SETBL had them.
-fn state_before_mrchdu(k: usize) -> (BlState, BLGlobalParams, [f64; 3], BlDump) {
-    let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
-    let d = parse_bl_dump(&fixture_path(&format!("mrchdu_input_{k}.dat")));
-    assert_eq!(
-        [d.int("NBL1"), d.int("NBL2")],
-        [f.nbl[1], f.nbl[2]],
-        "call {k}: NBL vs pointer dump"
-    );
-    assert_eq!(
-        [d.int("IBLTE1"), d.int("IBLTE2")],
-        [f.iblte[1], f.iblte[2]],
-        "call {k}: IBLTE"
-    );
-    let mut st = BlState::empty(f.n, f.nw);
-    st.x = f.x.clone();
-    st.y = f.y.clone();
-    st.s = f.s.clone();
-    st.ist = f.ist;
-    st.sst = f.sst;
-    st.nbl = f.nbl;
-    st.iblte = f.iblte;
-    st.ipan = f.ipan.clone();
-    st.vti = f.vti.clone();
-    st.isys = f.isys.clone();
-    st.wgap = f.wgap.clone();
-    st.ante = f.ante;
-    st.aste = f.aste;
-    st.dste = f.dste;
-    st.sharp = f.sharp;
-    st.chord = f.chord;
-    st.sle = f.sle;
-    st.xle = f.xle;
-    st.yle = f.yle;
-    st.xte = f.xte;
-    st.yte = f.yte;
-    st.xstrip = [0.0, d.real("XSTRIP1"), d.real("XSTRIP2")];
-    st.itran = [0, d.int("ITRAN1"), d.int("ITRAN2")];
-    for is in 1..=2 {
-        for ibl in 1..=f.nbl[is] {
-            let r = d.bl[is][ibl];
-            st.xssi[is][ibl] = r[0];
-            st.uedg[is][ibl] = r[1];
-            st.thet[is][ibl] = r[2];
-            st.dstr[is][ibl] = r[3];
-            st.ctau[is][ibl] = r[4];
-            st.mass[is][ibl] = r[5];
-            // STMOVE recomputes XSSI every VISCAL iteration (SST moves); the pointer dump is
-            // from the first IBLSYS call, so only call 1 can be checked against it.
-            if k == 1 {
-                assert_eq!(
-                    f.xssi[is][ibl].to_bits(),
-                    r[0].to_bits(),
-                    "call {k}: XSSI({ibl},{is}) differs between the pointer dump and the BL dump"
-                );
-            }
-        }
-    }
-    let params = BLGlobalParams::new(d.real("MINF"), d.real("REINF"), 1.4);
-    assert_eq!(params.reybl.to_bits(), d.real("REYBL").to_bits(), "REYBL");
-    assert_eq!(params.hstinv.to_bits(), d.real("HSTINV").to_bits(), "HSTINV");
-    assert_eq!(params.gm1.to_bits(), d.real("GM1BL").to_bits(), "GM1BL");
-    let acrit = [0.0, d.real("ACRIT1"), d.real("ACRIT2")];
-    if k == 1 {
-        // Chained replay: XFOIL's COM1/COM2/XT COMMON state entering the first MRCHDU is what
-        // MRCHUE left behind, so run MRCHUE from its own gated input and take that state
-        // (the BL arrays it produces equal the dump to 1e-10 — the S5 gate — but the dump is
-        // authoritative for the arrays themselves).
-        let (mut pre, p2, a2) = fixtures::state_before_mrchue();
-        mrchue(&mut pre, &p2, a2, None);
-        st.com1 = pre.com1;
-        st.com2 = pre.com2;
-        st.xt = pre.xt;
-    }
-    (st, params, acrit, d)
-}
-
 fn check_state_after(k: usize) {
-    let (mut st, params, acrit, _) = state_before_mrchdu(k);
+    let (mut st, params, _) = fixtures::state_before_setbl_march(k);
+    let acrit = st.acrit;
     let o = parse_bl_dump(&fixture_path(&format!("mrchdu_output_{k}.dat")));
     mrchdu(&mut st, &params, acrit, None);
     assert_eq!(st.itran[1..], [o.int("ITRAN1"), o.int("ITRAN2")], "call {k}: ITRAN");
@@ -198,7 +117,8 @@ fn chk(mism: &mut Vec<String>, ctx: &str, a: &[f64], b: &[f64], what: &str, floo
 
 #[test]
 fn test_mrchdu_newton_trace_matches_xfoil_iteration_by_iteration() {
-    let (mut st, params, acrit, _) = state_before_mrchdu(1);
+    let (mut st, params, _) = fixtures::state_before_setbl_march(1);
+    let acrit = st.acrit;
     let xf = parse_mrchdu_trace(&fixture_path("xfoil_mrchdu_trace.dat"));
     let mut tr = MrchduTrace::default();
     mrchdu(&mut st, &params, acrit, Some(&mut tr));

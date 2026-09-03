@@ -1,5 +1,6 @@
 src/bl/system.rs: #[ignore = "S9: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
 src/bl/system.rs: #[ignore = "S9: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
+src/bl/system.rs: #[ignore = "S9: expected values were unsourced (derived with TKBL = 1/beta - 1, not COMSET's TKLAM) — regenerate from the M=0.3 coverage case"]
 src/solver/viscal.rs: #[ignore = "S9: VISCAL loop closure"]
 src/solver/viscal.rs: #[ignore = "S9: VISCAL loop closure"]
 src/solver/viscal.rs: #[ignore = "S9: VISCAL loop closure"]

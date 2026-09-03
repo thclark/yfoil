@@ -8,7 +8,7 @@
 //!
 //! Nothing here computes anything; the translated subroutines live beside it.
 
-use crate::bl::system::BLStationState;
+use crate::bl::system::{BLStationState, TransitionLocation};
 use crate::geometry::PaneledAirfoil;
 
 /// BL and panel state (see module docs for indexing).
@@ -104,7 +104,29 @@ pub struct BlState {
     /// calls in XFOIL; the marches take them from here and put them back.
     pub com1: BLStationState,
     pub com2: BLStationState,
-    pub xt: f64,
+    /// XT and its XT_* sensitivities (TRCHEK2's COMMON outputs)
+    pub trloc: TransitionLocation,
+    /// MINF1/REINF1 (unit-CL values), MATYP/RETYP, and the current MINF/REINF set by MRCL
+    pub minf1: f64,
+    pub reinf1: f64,
+    pub matyp: usize,
+    pub retyp: usize,
+    pub minf: f64,
+    pub reinf: f64,
+    /// LALFA (fixed alpha; else fixed CL = CLSPEC), CL, CLSPEC
+    pub lalfa: bool,
+    pub cl: f64,
+    pub clspec: f64,
+    /// LBLINI: BL arrays initialised (MRCHUE done)
+    pub lblini: bool,
+    /// ACRIT(IS), VACCEL, GAMMA
+    pub acrit: [f64; 3],
+    pub vaccel: f64,
+    pub gamma: f64,
+    /// XOCTR/YOCTR/TINDEX (transition x/c, y/c and station index, per side)
+    pub xoctr: [f64; 3],
+    pub yoctr: [f64; 3],
+    pub tindex: [f64; 3],
 }
 
 impl BlState {
@@ -184,7 +206,23 @@ impl BlState {
             tforce: [false; 3],
             com1: BLStationState::default(),
             com2: BLStationState::default(),
-            xt: 0.0,
+            trloc: TransitionLocation::default(),
+            minf1: 0.0,
+            reinf1: 0.0,
+            matyp: 1,
+            retyp: 1,
+            minf: 0.0,
+            reinf: 0.0,
+            lalfa: true,
+            cl: 0.0,
+            clspec: 0.0,
+            lblini: false,
+            acrit: [0.0, 9.0, 9.0],
+            vaccel: 0.01,
+            gamma: 1.4,
+            xoctr: [0.0; 3],
+            yoctr: [0.0; 3],
+            tindex: [0.0; 3],
         }
     }
 
