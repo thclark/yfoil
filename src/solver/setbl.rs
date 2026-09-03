@@ -28,7 +28,7 @@
 //! - xoper.f: VISCAL (coupling iteration)
 
 use crate::bl::{
-    mrchdu::{march_station, SurfaceBLData, SurfaceMarchState},
+    march_legacy::{march_station, SurfaceBLData, SurfaceMarchState},
     system::{BLFlowType, BLGlobalParams, BLLocalSystem, BLStationState, MidpointCf},
     BlsolvInput, FlowConditions,
 };

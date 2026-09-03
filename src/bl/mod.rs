@@ -17,6 +17,7 @@ pub mod blsolv;
 pub mod blsys;
 mod closure;
 pub mod gauss;
+pub mod march_legacy;
 pub mod mrchdu;
 pub mod mrchue;
 mod newton;

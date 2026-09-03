@@ -266,3 +266,12 @@ it), `BLVAR/BLKIN/BLPRV → BLStationState::{blvar, blkin, blprv}`, `BLDIF → B
 `s1 = s2.clone()`. XFOIL quirks reproduced: `HVRAT` is never assigned on the analysis path
 (`BLGlobalParams.hvrat = 0.0`); `BLVAR` clamps `HK2` in COMMON without recomputing its
 derivatives (`blvar` writes the clamped `hk` back); `BLDIF` forms `UQ_T1..UQ_RE` but never uses them.
+
+Stage S6: `MRCHDU → bl::mrchdu::mrchdu(&mut st, &params, acrit, trace)` (mixed-mode march on the
+Ue–Hk characteristic: `SENSWT`, `UEREF/HKREF`, the `ITROLD` re-laminarisation/re-turbulisation
+logic, the 25-iteration Newton with `DEPS = 5e-6`, `DSLIM`, and the extrapolation fallback;
+`MrchduTrace` mirrors `xfoil_mrchdu_trace.dat`). XFOIL's `COM1`, `COM2` and `XT` COMMON state
+persists across MRCHUE/MRCHDU/SETBL calls, so they live on `BlState` as `com1`, `com2`, `xt` and
+each march takes them out and puts them back (`std::mem::take`). `XSSITR(IS)`, `TFORCE(IS)` →
+`st.xssitr[is]`, `st.tforce[is]`. The pre-S6 station-at-a-time march is `bl::march_legacy`
+(used only by the legacy `SetblState` path; both go with the S7 SETBL rewrite).

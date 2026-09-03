@@ -4,7 +4,13 @@
 //! This module provides structures and functions for loading XFOIL-generated
 //! test fixtures for numerical validation of YFoil.
 
+use mrchue_fixtures::parse_bl_state;
+use pointers_fixtures::{parse_pointers, parse_uinv};
+use yfoil::bl::system::BLGlobalParams;
+use yfoil::solver::blstate::BlState;
+
 pub mod blsolv_fixtures;
+pub mod mrchdu_fixtures;
 pub mod mrchue_fixtures;
 pub mod pointers_fixtures;
 
@@ -276,3 +282,47 @@ pub fn require_fixture(rel: &str) -> std::path::PathBuf {
 
 /// The tracked CI reference case (NACA 0012, N=60, alpha=2, Re=1e6, M=0, Ncrit=9, ITER 20).
 pub const REF_CASE: &str = "tests/fixtures/xfoil/naca0012_n60_a2_re1e6";
+
+/// XFOIL's complete state at the start of MRCHUE on the reference case: the pointer layer,
+/// UEDG = UINV, and the BL parameters SETBL derives (asserted bitwise against the dump).
+#[allow(dead_code)]
+pub fn state_before_mrchue() -> (BlState, BLGlobalParams, [f64; 3]) {
+    let f = parse_pointers(&require_fixture(&format!("{}/{}", REF_CASE, "xfoil_pointers.dat")), 1);
+    let u = parse_uinv(&require_fixture(&format!("{}/{}", REF_CASE, "xfoil_uinv.dat")), 1);
+    let d = parse_bl_state(&require_fixture(&format!("{}/{}", REF_CASE, "mrchdu_input_1.dat")));
+    let mut st = BlState::empty(f.n, f.nw);
+    st.x = f.x.clone();
+    st.y = f.y.clone();
+    st.s = f.s.clone();
+    st.ist = f.ist;
+    st.sst = f.sst;
+    st.nbl = f.nbl;
+    st.iblte = f.iblte;
+    st.ipan = f.ipan.clone();
+    st.vti = f.vti.clone();
+    st.isys = f.isys.clone();
+    st.xssi = f.xssi.clone();
+    st.wgap = f.wgap.clone();
+    st.ante = f.ante;
+    st.aste = f.aste;
+    st.dste = f.dste;
+    st.sharp = f.sharp;
+    st.chord = f.chord;
+    st.sle = f.sle;
+    st.xle = f.xle;
+    st.yle = f.yle;
+    st.xte = f.xte;
+    st.yte = f.yte;
+    for is in 1..=2 {
+        for ibl in 1..=f.nbl[is] {
+            st.uinv[is][ibl] = u.uinv[is][ibl];
+            st.uedg[is][ibl] = u.uinv[is][ibl];
+        }
+    }
+    let params = BLGlobalParams::new(d.minf, d.reinf, 1.4);
+    // the BL parameters SETBL derives must match the reference bitwise before marching
+    assert_eq!(params.reybl.to_bits(), d.reybl.to_bits(), "REYBL");
+    assert_eq!(params.hstinv.to_bits(), d.hstinv.to_bits(), "HSTINV");
+    assert_eq!(params.gm1.to_bits(), d.gm1bl.to_bits(), "GM1BL");
+    (st, params, [0.0, d.acrit[1], d.acrit[2]])
+}

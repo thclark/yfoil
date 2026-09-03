@@ -4,9 +4,7 @@
 
 use crate::bl::blsys::{blsys, tesys, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
-use crate::bl::system::{
-    dslim, trchek, BLGlobalParams, BLLocalSystem, BLStationState, TransitionLocation, TransitionResult,
-};
+use crate::bl::system::{dslim, trchek, BLGlobalParams, BLLocalSystem, TransitionLocation, TransitionResult};
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
 
@@ -56,9 +54,9 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
     // COM1/COM2 and XT are COMMON in XFOIL: they persist across sides (the side-2 similarity
     // station's BLSYS copies COM2 into COM1 before anything reads it, so this is trace-faithful
     // rather than algorithmic).
-    let mut s1 = BLStationState::default();
-    let mut s2 = BLStationState::default();
-    let mut xt = 0.0;
+    let mut s1 = std::mem::take(&mut st.com1);
+    let mut s2 = std::mem::take(&mut st.com2);
+    let mut xt = st.xt;
     for is in 1..=2 {
         let amcrit = acrit[is];
 
@@ -418,4 +416,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
             }
         }
     }
+    st.com1 = s1;
+    st.com2 = s2;
+    st.xt = xt;
 }

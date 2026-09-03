@@ -8,4 +8,4 @@ src/solver/setbl.rs:TEMPORARILY DISABLED    # S7 SETBL VM assembly
 src/solver/setbl.rs:coupling_scale          # S8 UPDATE
 src/solver/viscal.rs:causes divergence      # S4 extended DIJ re-enabled
 src/solver/setbl.rs:for stability           # S7 DHI/DLO restored with VM
-src/bl/mrchdu.rs:for stability              # S6 MRCHDU standalone pass
+src/bl/march_legacy.rs:for stability        # S7 legacy march deleted with the SETBL rewrite

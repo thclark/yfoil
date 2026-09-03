@@ -8,6 +8,7 @@
 //!
 //! Nothing here computes anything; the translated subroutines live beside it.
 
+use crate::bl::system::BLStationState;
 use crate::geometry::PaneledAirfoil;
 
 /// BL and panel state (see module docs for indexing).
@@ -96,6 +97,14 @@ pub struct BlState {
     pub dij: Vec<Vec<f64>>,
     /// Forced-transition x/c per side (XSTRIP); >= 1.0 means free transition
     pub xstrip: [f64; 3],
+    /// XSSITR(IS): arc length of transition, TFORCE(IS): transition was forced (set by MRCHDU/MRCHUE)
+    pub xssitr: [f64; 3],
+    pub tforce: [bool; 3],
+    /// COM1/COM2 (the "1" and "2" station COMMON blocks) and XT persist across MRCHUE/MRCHDU/SETBL
+    /// calls in XFOIL; the marches take them from here and put them back.
+    pub com1: BLStationState,
+    pub com2: BLStationState,
+    pub xt: f64,
 }
 
 impl BlState {
@@ -171,6 +180,11 @@ impl BlState {
             wgap: vec![0.0; nw + 1],
             dij: Vec::new(),
             xstrip: [0.0, 1.0, 1.0],
+            xssitr: [0.0; 3],
+            tforce: [false; 3],
+            com1: BLStationState::default(),
+            com2: BLStationState::default(),
+            xt: 0.0,
         }
     }
 

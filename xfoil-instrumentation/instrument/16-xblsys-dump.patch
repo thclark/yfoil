@@ -1,49 +1,10 @@
 --- a/src/xblsys.f
 +++ b/src/xblsys.f
-@@ -39,6 +39,9 @@
- C----------------------------------------------------------
- C     Returns average amplification AX over interval 1..2
- C----------------------------------------------------------
-+C---- INSTRUMENTATION: Access flags from common block
-+      LOGICAL FIRST_MRCHDU_DONE, MRCHDU_OUTPUT_DONE
-+      COMMON/V_INST/ FIRST_MRCHDU_DONE, MRCHDU_OUTPUT_DONE
- C
- cC==========================
- cC---- 1st-order -- based on "1" quantities only
-@@ -140,6 +143,29 @@
-       AX_RT2 = AXA_AX2*AX2_RT2
-       AX_A2  =                   DAX_A2
- C
-+C---- INSTRUMENTATION: Log AXSET inputs/outputs
-+      IF(FIRST_MRCHDU_DONE .AND. (.NOT.MRCHDU_OUTPUT_DONE)) THEN
-+        WRITE(99,'(A)') '=== AXSET ==='
-+        WRITE(99,'(A,ES24.16)') 'HK1=', HK1
-+        WRITE(99,'(A,ES24.16)') 'T1=', T1
-+        WRITE(99,'(A,ES24.16)') 'RT1=', RT1
-+        WRITE(99,'(A,ES24.16)') 'A1=', A1
-+        WRITE(99,'(A,ES24.16)') 'HK2=', HK2
-+        WRITE(99,'(A,ES24.16)') 'T2=', T2
-+        WRITE(99,'(A,ES24.16)') 'RT2=', RT2
-+        WRITE(99,'(A,ES24.16)') 'A2=', A2
-+        WRITE(99,'(A,ES24.16)') 'ACRIT=', ACRIT
-+        WRITE(99,'(A,ES24.16)') 'AX=', AX
-+        WRITE(99,'(A,ES24.16)') 'AX_HK1=', AX_HK1
-+        WRITE(99,'(A,ES24.16)') 'AX_T1=', AX_T1
-+        WRITE(99,'(A,ES24.16)') 'AX_RT1=', AX_RT1
-+        WRITE(99,'(A,ES24.16)') 'AX_A1=', AX_A1
-+        WRITE(99,'(A,ES24.16)') 'AX_HK2=', AX_HK2
-+        WRITE(99,'(A,ES24.16)') 'AX_T2=', AX_T2
-+        WRITE(99,'(A,ES24.16)') 'AX_RT2=', AX_RT2
-+        WRITE(99,'(A,ES24.16)') 'AX_A2=', AX_A2
-+      ENDIF
-+C
-       RETURN
-       END
- 
-@@ -576,6 +602,16 @@
+@@ -575,6 +575,16 @@
+       XT_MS =       - (XT_A2/Z_A2)*Z_MS
        XT_RE =       - (XT_A2/Z_A2)*Z_RE
        XT_XF = 0.0
- C
++C
 +C---- INSTRUMENTATION: Log TRCHEK2 outputs
 +      WRITE(98,'(A)') '=== TRCHEK2 ==='
 +      WRITE(98,'(A,ES24.16)') 'X1=', X1
@@ -53,11 +14,10 @@
 +      WRITE(98,'(A,ES24.16)') 'XT=', XT
 +      WRITE(98,'(A,L1)') 'TRAN=', TRAN
 +      WRITE(98,'(A,L1)') 'TURB=', TURB
-+C
+ C
        RETURN
        END
- 
-@@ -657,10 +693,27 @@
+@@ -657,10 +667,27 @@
          VSM(K)   = RES_U1*U1_MS + RES_U2*U2_MS  + RES_MS
     20 CONTINUE
  C
@@ -86,7 +46,7 @@
        SUBROUTINE TESYS(CTE,TTE,DTE)
  C--------------------------------------------------------
  C     Sets up "dummy" BL system between airfoil TE point 
-@@ -775,6 +828,26 @@
+@@ -775,6 +802,26 @@
        RT2_T2 = RT2/T2
        RT2_MS = RT2*(         R2_MS/R2 - V2_MS/V2)
        RT2_RE = RT2*(                  - V2_RE/V2)
@@ -113,11 +73,10 @@
  C
        RETURN
        END ! BLKIN
-@@ -1116,11 +1189,27 @@
-        DE2_D2 =  0.0
+@@ -1117,10 +1164,26 @@
         DE2_MS =  0.0
        ENDIF
-+C
+ C
 +C---- INSTRUMENTATION: Log BLVAR inputs/outputs
 +      WRITE(98,'(A)') '=== BLVAR ==='
 +      WRITE(98,'(A,I5)') 'ITYP=', ITYP
@@ -133,7 +92,7 @@
 +      WRITE(98,'(A,ES24.16)') 'US2=', US2
 +      WRITE(98,'(A,ES24.16)') 'CQ2=', CQ2
 +      WRITE(98,'(A,ES24.16)') 'DE2=', DE2
- C
++C
        RETURN
        END
 - 
@@ -142,7 +101,7 @@
        SUBROUTINE BLMID(ITYP)
  C----------------------------------------------------
  C     Calculates midpoint skin friction CFM
-@@ -1203,6 +1292,9 @@
+@@ -1203,6 +1266,9 @@
        IMPLICIT REAL(M)
        INCLUDE 'XBL.INC'
        REAL  BL1(4,5), BL2(4,5), BLREZ(4), BLM(4), BLR(4), BLX(4)
@@ -152,7 +111,7 @@
       &    , BT1(4,5), BT2(4,5), BTREZ(4), BTM(4), BTR(4), BTX(4)
  C
  C---- save variables and sensitivities for future restoration
-@@ -1309,6 +1401,20 @@
+@@ -1309,6 +1375,20 @@
  C
  C---- set up Newton system for dAm, dTh, dDs, dUe, dXi  at  X1 and XT
        CALL BLDIF(1)
@@ -173,7 +132,7 @@
  C
  C---- The current Newton system is in terms of "1" and "T" variables,
  C-    so calculate its equivalent in terms of "1" and "2" variables.
-@@ -1421,9 +1527,29 @@
+@@ -1421,9 +1501,29 @@
  C
        AMPL2 = 0.
        S2 = ST
@@ -203,7 +162,7 @@
  C
  C---- set "1" variables to "T" variables and reset "2" variables
  C-    to their saved turbulent values
-@@ -1437,6 +1563,16 @@
+@@ -1437,6 +1537,16 @@
  C
  C---- set up Newton system for dCt, dTh, dDs, dUe, dXi  at  XT and X2
        CALL BLDIF(2)
@@ -220,7 +179,7 @@
  C
  C---- convert sensitivities wrt "T" variables into sensitivities
  C-    wrt "1" and "2" variables as done before for the laminar part
-@@ -1989,10 +2125,10 @@
+@@ -1989,10 +2099,10 @@
  C
  C     NEW VERSION.   March 1991       (latest bug fix  July 93)
  C          - m(H) correlation made more accurate up to H=20
@@ -235,7 +194,7 @@
  C            separation bubble profiles.
  C--------------------------------------------------------------
  C
-@@ -2018,6 +2154,7 @@
+@@ -2018,6 +2128,7 @@
  C            when N(x) reaches Ncrit (Ncrit= 9 is "standard").
  C==============================================================
        IMPLICIT REAL (A-H,M,O-Z)
@@ -243,26 +202,7 @@
  ccc   DATA DGR / 0.04 /
        DATA DGR / 0.08 /
  C
-@@ -2089,6 +2226,18 @@
-        AX_TH = -AX/TH
-        AX_RT = (AF   *DADR/TH                ) * RFAC_RT
- C
-+      ENDIF
-+C
-+C---- INSTRUMENTATION: Log DAMPL inputs/outputs (first iteration only)
-+      IF(FIRST_MRCHDU_DONE .AND. (.NOT.MRCHDU_OUTPUT_DONE)) THEN
-+        WRITE(98,'(A)') '=== DAMPL ==='
-+        WRITE(98,'(A,ES24.16)') 'HK=', HK
-+        WRITE(98,'(A,ES24.16)') 'TH=', TH
-+        WRITE(98,'(A,ES24.16)') 'RT=', RT
-+        WRITE(98,'(A,ES24.16)') 'AX=', AX
-+        WRITE(98,'(A,ES24.16)') 'AX_HK=', AX_HK
-+        WRITE(98,'(A,ES24.16)') 'AX_TH=', AX_TH
-+        WRITE(98,'(A,ES24.16)') 'AX_RT=', AX_RT
-       ENDIF
- C
-       RETURN
-@@ -2282,6 +2431,14 @@
+@@ -2282,6 +2393,14 @@
        HK_H   =     1.0          /(1.0 + 0.113*MSQ)
        HK_MSQ = (-.29 - 0.113*HK)/(1.0 + 0.113*MSQ)
  C
@@ -277,7 +217,7 @@
        RETURN
        END
   
-@@ -2301,6 +2458,14 @@
+@@ -2301,6 +2420,14 @@
        ENDIF
        DI_RT = -DI/RT
  C
@@ -292,10 +232,11 @@
        RETURN
        END
  
-@@ -2347,6 +2512,16 @@
+@@ -2346,6 +2473,16 @@
+ C
        HS_RT  = 0.
        HS_MSQ = 0.
- C
++C
 +C---- INSTRUMENTATION: Log HSL inputs/outputs
 +      WRITE(98,'(A)') '=== HSL ==='
 +      WRITE(98,'(A,ES24.16)') 'HK=', HK
@@ -305,11 +246,10 @@
 +      WRITE(98,'(A,ES24.16)') 'HS_HK=', HS_HK
 +      WRITE(98,'(A,ES24.16)') 'HS_RT=', HS_RT
 +      WRITE(98,'(A,ES24.16)') 'HS_MSQ=', HS_MSQ
-+C
+ C
        RETURN
        END
- 
-@@ -2367,6 +2542,16 @@
+@@ -2367,6 +2504,16 @@
        CF_RT = -CF/RT
        CF_MSQ = 0.0
  C
@@ -326,7 +266,7 @@
        RETURN
        END
  
-@@ -2381,6 +2566,18 @@
+@@ -2381,6 +2528,18 @@
        DI_CF =  ( 0.5   *US                  ) * 2.0/HS
        DI_ST =  (            2.0*ST*(1.0-US) ) * 2.0/HS
  C
@@ -345,7 +285,7 @@
        RETURN
        END
  
-@@ -2475,11 +2672,21 @@
+@@ -2475,11 +2634,21 @@
        HS_RT  = ( HS_RT          ) / FM
        HS_MSQ = 0.028/FM  -  0.014*HS/FM
  C
@@ -370,7 +310,7 @@
        SUBROUTINE CFT( HK, RT, MSQ, CF, CF_HK, CF_RT, CF_MSQ )
        IMPLICIT REAL (A-H,M,O-Z)
        INCLUDE 'BLPAR.INC'
-@@ -2506,6 +2713,16 @@
+@@ -2506,6 +2675,16 @@
        CF_RT  = GEX*CFO/(FC*GRT) / RT
        CF_MSQ = GEX*CFO/(FC*GRT) * (-0.25*GM1/FC**2) - 0.25*GM1*CF/FC**2
  C

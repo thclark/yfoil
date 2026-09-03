@@ -1,6 +1,6 @@
 //! S5 gate: MRCHUE (first-pass direct march with Ue prescribed) against the reference.
 //!
-//! Two views of the same run: the final BL state after MRCHUE (`mrchdu_input.dat`, which the
+//! Two views of the same run: the final BL state after MRCHUE (`mrchdu_input_1.dat`, which the
 //! instrumentation writes just before the first MRCHDU) and the per-iteration Newton trace
 //! (`xfoil_newton_trace.dat`), which lets the march be forward-stepped station by station so
 //! the *first* divergent quantity is reported, per CLAUDE.md Rule 3.
@@ -9,12 +9,9 @@ mod fixtures;
 mod utilities;
 
 use fixtures::mrchue_fixtures::{parse_bl_state, parse_newton_trace};
-use fixtures::pointers_fixtures::{parse_pointers, parse_uinv};
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
 use yfoil::bl::mrchue::{mrchue, MrchueTrace};
-use yfoil::bl::system::BLGlobalParams;
-use yfoil::solver::blstate::BlState;
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -22,51 +19,12 @@ fn fixture_path(name: &str) -> PathBuf {
 
 /// State exactly as VISCAL hands it to SETBL/MRCHUE on the first call: pointer layer and wake
 /// from the reference, UEDG = UINV, transition free.
-fn state_before_mrchue() -> (BlState, BLGlobalParams, [f64; 3]) {
-    let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
-    let u = parse_uinv(&fixture_path("xfoil_uinv.dat"), 1);
-    let d = parse_bl_state(&fixture_path("mrchdu_input.dat"));
-    let mut st = BlState::empty(f.n, f.nw);
-    st.x = f.x.clone();
-    st.y = f.y.clone();
-    st.s = f.s.clone();
-    st.ist = f.ist;
-    st.sst = f.sst;
-    st.nbl = f.nbl;
-    st.iblte = f.iblte;
-    st.ipan = f.ipan.clone();
-    st.vti = f.vti.clone();
-    st.isys = f.isys.clone();
-    st.xssi = f.xssi.clone();
-    st.wgap = f.wgap.clone();
-    st.ante = f.ante;
-    st.aste = f.aste;
-    st.dste = f.dste;
-    st.sharp = f.sharp;
-    st.chord = f.chord;
-    st.sle = f.sle;
-    st.xle = f.xle;
-    st.yle = f.yle;
-    st.xte = f.xte;
-    st.yte = f.yte;
-    for is in 1..=2 {
-        for ibl in 1..=f.nbl[is] {
-            st.uinv[is][ibl] = u.uinv[is][ibl];
-            st.uedg[is][ibl] = u.uinv[is][ibl];
-        }
-    }
-    let params = BLGlobalParams::new(d.minf, d.reinf, 1.4);
-    // the BL parameters SETBL derives must match the reference bitwise before marching
-    assert_eq!(params.reybl.to_bits(), d.reybl.to_bits(), "REYBL");
-    assert_eq!(params.hstinv.to_bits(), d.hstinv.to_bits(), "HSTINV");
-    assert_eq!(params.gm1.to_bits(), d.gm1bl.to_bits(), "GM1BL");
-    (st, params, [0.0, d.acrit[1], d.acrit[2]])
-}
+use fixtures::state_before_mrchue;
 
 #[test]
 fn test_mrchue_reproduces_xfoil_state_after_first_march() {
     let (mut st, params, acrit) = state_before_mrchue();
-    let d = parse_bl_state(&fixture_path("mrchdu_input.dat"));
+    let d = parse_bl_state(&fixture_path("mrchdu_input_1.dat"));
     mrchue(&mut st, &params, acrit, None);
     assert_eq!(st.itran[1..], d.itran[1..], "ITRAN");
     let names = ["XSSI", "UEDG", "THET", "DSTR", "CTAU", "MASS"];
