@@ -9,8 +9,11 @@
 //! - `setbl` - SETBL Newton system setup (XFOIL-compatible)
 //! - `polar` - Alpha sweep for polar generation
 
+pub mod blstate;
+pub mod pointers;
 mod polar;
 pub mod setbl;
+pub mod velocity;
 mod viscal;
 
 pub use polar::*;

@@ -34,10 +34,12 @@
          RX1 = XI - X(JO)
          RY1 = YI - Y(JO)
          RX2 = XI - X(JP)
-@@ -224,6 +244,18 @@
+@@ -222,6 +242,18 @@
+         ELSE
+          G2 = 0.0
           T2 = 0.0
-         ENDIF
- C
++        ENDIF
++C
 +C---- DEBUG: Output intermediate values for I=1, first 5 panels
 +        IF(IO.EQ.1 .AND. JO.LE.5 .AND. SIGLIN) THEN
 +          WRITE(97,'(A,4ES24.16)') 'RX1,RY1,RX2,RY2 = ',
@@ -48,11 +50,9 @@
 +          WRITE(97,'(A,ES24.16)') 'SGN = ', SGN
 +          WRITE(97,'(A,2ES24.16)') 'G1, T1 = ', G1, T1
 +          WRITE(97,'(A,2ES24.16)') 'G2, T2 = ', G2, T2
-+        ENDIF
-+C
+         ENDIF
+ C
          X1I = SX*NXI + SY*NYI
-         X2I = SX*NXI + SY*NYI
-         YYI = SX*NYI - SY*NXI
 @@ -269,6 +301,21 @@
           DSM = SQRT((X(JP)-X(JM))**2 + (Y(JP)-Y(JM))**2)
           DSIM = 1.0/DSM
@@ -75,10 +75,11 @@
  CCC      SIG0 = (SIG(JP) - SIG(JO))*DSIO
  CCC      SIG1 = (SIG(JP) - SIG(JM))*DSIM
  CCC      SSUM = SIG0 + SIG1
-@@ -315,6 +362,18 @@
+@@ -314,6 +361,18 @@
+ C
           DSP = SQRT((X(JQ)-X(JO))**2 + (Y(JQ)-Y(JO))**2)
           DSIP = 1.0/DSP
- C
++C
 +C---- DEBUG: Output second half-panel values for I=1, first 5 panels
 +         IF(IO.EQ.1 .AND. JO.LE.5) THEN
 +           WRITE(97,'(A)') '  --- Second half-panel (0-2) ---'
@@ -90,10 +91,9 @@
 +     &          QOPI*(PSUM*DSIO - PDIF*DSIO),
 +     &          QOPI*(PSUM*DSIP + PDIF*DSIP)
 +         ENDIF
-+C
+ C
  CCC         SIG2 = (SIG(JQ) - SIG(JO))*DSIP
  CCC         SIG0 = (SIG(JP) - SIG(JO))*DSIO
- CCC         SSUM = SIG2 + SIG0
 @@ -470,6 +529,17 @@
  C
     12 CONTINUE
@@ -112,19 +112,20 @@
  C**** Freestream terms
        PSI = PSI + QINF*(COSA*YI - SINA*XI)
  C
-@@ -992,6 +1062,12 @@
+@@ -992,7 +1062,13 @@
  C     in SPECAL or SPECCL for specified alpha or CL.
  C--------------------------------------------------------------
        INCLUDE 'XFOIL.INC'
 +      INCLUDE 'XLOG.INC'
-+C
+ C
 +C---- INSTRUMENTATION: Log subroutine entry
 +      CALL LOGENTER('GGCALC')
 +      CALL LOGINT('N', N)
 +      CALL LOGBOOL('SHARP', SHARP)
- C
++C
  C---- distance of internal control point ahead of sharp TE
  C-    (fraction of smaller panel length adjacent to TE)
+       BWT = 0.1
 @@ -1028,6 +1104,18 @@
          DO 202 J=1, N
            BIJ(I,J) = -DZDM(J)
@@ -216,10 +217,11 @@
        LIPAN = .TRUE.
        RETURN
        END
-@@ -1501,6 +1633,41 @@
+@@ -1500,6 +1632,41 @@
+         XSSI(IBL1,IS1) = XSSI(IBL1-1,IS1) + DXSSI
          XSSI(IBL2,IS2) = XSSI(IBL2-1,IS2) + DXSSI
     25 CONTINUE
- C
++C
 +C---- YFoil instrumentation: output XICALC data
 +      WRITE(*,'(A)') '=== XICALC OUTPUT ==='
 +      WRITE(*,'(A,ES24.16)') 'XEPS =', XEPS
@@ -254,7 +256,46 @@
 +        WRITE(*,'(A,I6,A)') '... (', IBLTE(2)-20, ' more stations)'
 +      ENDIF
 +      WRITE(*,'(A)') '=== END XICALC ==='
-+C
+ C
  C---- trailing edge flap length to TE gap ratio
        TELRAT = 2.50
+@@ -1544,6 +1711,9 @@
+ C     Sets inviscid Ue from panel inviscid tangential velocity
+ C--------------------------------------------------------------
+       INCLUDE 'XFOIL.INC'
++      INTEGER NUCALL
++      SAVE NUCALL
++      DATA NUCALL / 0 /
  C
+       DO 10 IS=1, 2
+         UINV  (1,IS) = 0.
+@@ -1555,6 +1725,29 @@
+   110   CONTINUE
+    10 CONTINUE
+ C
++C---- INSTRUMENTATION (S2): QINV/QINV_A per node and UINV/UINV_A per station
++      NUCALL = NUCALL + 1
++      IF(NUCALL.EQ.1) THEN
++       OPEN(92, FILE='xfoil_uinv.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(92, FILE='xfoil_uinv.dat', STATUS='OLD', ACCESS='APPEND')
++      ENDIF
++      WRITE(92,'(A,I5)') '=== UICALC_CALL', NUCALL
++      WRITE(92,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(92,'(A,2I6)') 'N NW=', N, NW
++      WRITE(92,'(A)') '--- NODES I QINV QINV_A QINVU1 QINVU2'
++      DO 120 I=1, N+NW
++        WRITE(92,'(I6,4ES24.16)') I, QINV(I), QINV_A(I),
++     &    QINVU(I,1), QINVU(I,2)
++  120 CONTINUE
++      DO 130 IS=1, 2
++        WRITE(92,'(A,I2,A)') '--- SIDE', IS, ' IBL UINV UINV_A'
++        DO 135 IBL=1, NBL(IS)
++          WRITE(92,'(I6,2ES24.16)') IBL, UINV(IBL,IS), UINV_A(IBL,IS)
++  135   CONTINUE
++  130 CONTINUE
++      CLOSE(92)
++C
+       RETURN
+       END
+ 

@@ -214,3 +214,33 @@ This matches XFOIL's BLKIN + BLVAR approach exactly.
 ### Matrix Storage
 - **XFOIL**: Dense 2D arrays with fixed maximum dimensions
 - **YFoil**: `nalgebra::DMatrix` with dynamic sizing
+
+## BL state (`src/solver/blstate.rs`) — stages S2 onward
+
+`BlState` mirrors the BL COMMON blocks one-to-one and keeps XFOIL's indexing: **1-based with a
+dummy slot 0**, sides `is = 1, 2`, wake appended to side 2 (`NBL(2) = IBLTE(2) + NW`). The field
+names *are* the Fortran names, lower-cased, so the table is only the exceptions and shapes.
+
+| XFOIL | YFoil | Notes |
+|---|---|---|
+| `N`, `NW` | `st.n`, `st.nw` | |
+| `X(I)`, `Y(I)`, `S(I)` for `I = 1..N+NW` | `st.x[i]`, `st.y[i]`, `st.s[i]` | wake nodes `n+1..=n+nw` |
+| `XP(I)`, `YP(I)` (airfoil spline derivatives) | `st.xp[i]`, `st.yp[i]` | `1..=n` |
+| `GAM(I)`, `GAM_A(I)` | `st.gam[i]`, `st.gam_a[i]` | |
+| `QINVU(I,1)`, `QINVU(I,2)` | `st.qinvu[1][i]`, `st.qinvu[2][i]` | |
+| `QINV(I)`, `QINV_A(I)`, `QVIS(I)` | `st.qinv[i]`, `st.qinv_a[i]`, `st.qvis[i]` | |
+| `CHORD, SLE, XLE, YLE, XTE, YTE` | same names | |
+| `ANTE, ASTE, DSTE, SHARP` (TECALC) | same names | `pointers::tecalc` |
+| `IST, SST, SST_GO, SST_GP` (STFIND) | same names | `pointers::stfind` |
+| `NBL(IS)`, `IBLTE(IS)`, `ITRAN(IS)`, `NSYS` | `st.nbl[is]`, `st.iblte[is]`, `st.itran[is]`, `st.nsys` | `[_; 3]`, index 0 unused |
+| `IPAN(IBL,IS)`, `VTI(IBL,IS)`, `ISYS(IBL,IS)` | `st.ipan[is][ibl]`, `st.vti[is][ibl]`, `st.isys[is][ibl]` | `pointers::{iblpan, iblsys}` |
+| `XSSI, UEDG, UINV, UINV_A, MASS, THET, DSTR, CTAU, DELT, TSTR, USLP, GUXQ, GUXD, TAU, DIS, CTQ (IBL,IS)` | `st.<name>[is][ibl]` | |
+| `WGAP(IW)` | `st.wgap[iw]` | `1..=nw`, set by `pointers::xicalc` |
+| `XSTRIP(IS)` | `st.xstrip[is]` | `XIFORC` is returned by `pointers::xifset(&st, is)` |
+
+Velocity-layer subroutines (`src/solver/velocity.rs`): `QISET → qiset`, `UICALC → uicalc`,
+`UECALC → uecalc`, `QVFUE → qvfue`, `GAMQV → gamqv`, `UESET → ueset` (takes the
+`(N+NW)×(N+NW)` DIJ, 0-based storage), `DSSET → dsset`.
+
+The legacy `SetblState` in `src/solver/setbl.rs` (two 0-based sides, no wake stations) is
+superseded by `BlState` and is deleted when the new SETBL lands (stage S7).

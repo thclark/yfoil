@@ -65,6 +65,8 @@ const RAW_KEEP: &[&str] = &[
     "blsolv_vz_trace.dat",
     "xfoil_bl_debug.dat",
     "xfoil_newton_trace.dat",
+    "xfoil_pointers.dat",
+    "xfoil_uinv.dat",
 ];
 /// Tracked-fixture budget per case (bytes). CLAUDE.md Rule 7.
 const TRACK_BUDGET: u64 = 8 * 1024 * 1024;
