@@ -5,6 +5,7 @@
 //! test fixtures for numerical validation of YFoil.
 
 pub mod blsolv_fixtures;
+pub mod mrchue_fixtures;
 pub mod pointers_fixtures;
 
 use serde::{Deserialize, Serialize};

@@ -496,12 +496,12 @@ pub fn march_station(
                 } else {
                     // Fallback to turbulent if no transition location
                     let cfm = MidpointCf::compute(s1_for_bldif, &s2, flow_type, is_simi);
-                    local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi);
+                    local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi, march.acrit);
                 }
             } else {
                 // Calculate midpoint Cf
                 let cfm = MidpointCf::compute(s1_for_bldif, &s2, flow_type, is_simi);
-                local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi);
+                local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi, march.acrit);
             }
         } else if march.tran {
             // Transition interval: use TRDIF
@@ -510,11 +510,11 @@ pub fn march_station(
             } else {
                 // Fallback to turbulent if no transition location
                 let cfm = MidpointCf::compute(s1_for_bldif, &s2, flow_type, is_simi);
-                local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi);
+                local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi, march.acrit);
             }
         } else {
             let cfm = MidpointCf::compute(s1_for_bldif, &s2, flow_type, is_simi);
-            local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi);
+            local_sys.bldif(s1_for_bldif, &s2, &cfm, flow_type, is_simi, march.acrit);
         }
 
         // For similarity station, combine Jacobians: VS2 = VS1 + VS2, VS1 = 0 (XFOIL BLSYS lines 646-654)

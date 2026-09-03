@@ -457,7 +457,7 @@ fn build_surface_system(state: &mut SetblState, input: &mut BlsolvInput, is_uppe
         let is_simi = ibl == 1;
         let s1_for_sys = if is_simi { &s2 } else { &s1 };
         let cfm = MidpointCf::compute(s1_for_sys, &s2, flow_type, is_simi);
-        local_sys.bldif(s1_for_sys, &s2, &cfm, flow_type, is_simi);
+        local_sys.bldif(s1_for_sys, &s2, &cfm, flow_type, is_simi, march.acrit);
         copy_to_global_system(&local_sys, &s2, input, iv, is_simi, due2);
 
         // Store marched solution

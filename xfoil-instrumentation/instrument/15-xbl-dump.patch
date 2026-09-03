@@ -38,11 +38,10 @@
  C---- set the CL used to define Mach, Reynolds numbers
        IF(LALFA) THEN
         CLMR = CL
-@@ -88,10 +107,60 @@
-       ENDIF
+@@ -89,9 +108,59 @@
  C
        WRITE(*,*)
-+C
+ C
 +C---- INSTRUMENTATION: Output state before MRCHDU (first iteration only)
 +      IF(.NOT.FIRST_MRCHDU_DONE) THEN
 +       FIRST_MRCHDU_DONE = .TRUE.
@@ -70,7 +69,7 @@
 + 8001  CONTINUE
 +       CLOSE(95)
 +      ENDIF
- C
++C
 +C---- INSTRUMENTATION: Open amplification log for first iteration
 +      IF(FIRST_MRCHDU_DONE .AND. .NOT.MRCHDU_OUTPUT_DONE) THEN
 +       OPEN(97, FILE='mrchdu_ampl.dat', STATUS='UNKNOWN')
@@ -161,17 +160,17 @@
        RETURN
        END
  
-@@ -535,6 +644,68 @@
+@@ -535,10 +644,72 @@
        NSYS = IV
        IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
  C
 +C---- INSTRUMENTATION (S2): pointer layer after STFIND/IBLPAN/XICALC/IBLSYS
 +      CALL DUMPPTR
 +C
-+      RETURN
-+      END
-+
-+
+       RETURN
+       END
+ 
+ 
 +      SUBROUTINE DUMPPTR
 +C---------------------------------------------------------------
 +C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
@@ -227,10 +226,20 @@
 +        WRITE(93,'(I6,ES24.16)') IW, WGAP(IW)
 +   30 CONTINUE
 +      CLOSE(93)
-       RETURN
-       END
- 
-@@ -552,6 +723,19 @@
++      RETURN
++      END
++
++
+       SUBROUTINE MRCHUE
+ C----------------------------------------------------
+ C     Marches the BLs and wake in direct mode using
+@@ -549,9 +720,26 @@
+ C----------------------------------------------------
+       INCLUDE 'XFOIL.INC'
+       INCLUDE 'XBL.INC'
++C---- INSTRUMENTATION: enable TRDIF dumps while MRCHUE's trace is open
++      LOGICAL LTRDIF
++      COMMON/TRD_INST/ LTRDIF
        LOGICAL DIRECT
        REAL MSQ
  C
@@ -239,6 +248,7 @@
 +      WRITE(77,'(A)') '# IBL IS TURB X S THETA DSTAR HK UE CF RT AMPL'
 +C---- DEBUG: Open Newton iteration trace file
 +      OPEN(78, FILE='xfoil_newton_trace.dat', STATUS='REPLACE')
++      LTRDIF = .TRUE.
 +      WRITE(78,'(A)') '# Newton iteration trace'
 +      WRITE(78,'(A)') '# FORMAT: STATION IBL IS ITBL'
 +      WRITE(78,'(A)') '# PRIMARY: X2 U2 T2 D2 S2'
@@ -250,19 +260,21 @@
  C---- shape parameters for separation criteria
        HLMAX = 3.8
        HTMAX = 2.5
-@@ -618,6 +802,11 @@
+@@ -618,6 +806,13 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
 +C-------- DEBUG: Output primary and kinematic variables
 +          WRITE(78,'(A,3I4)') 'STATION', IBL, IS, ITBL
++          WRITE(78,'(A,4ES24.16,L2,I4)') 'AMPL:', AMPL1, AMPL2, XT,
++     &       AMCRIT, TRAN, ITRAN(IS)
 +          WRITE(78,'(A,5ES24.16)') 'PRIMARY:', X2, U2, T2, D2, S2
 +          WRITE(78,'(A,5ES24.16)') 'KINEMATIC:', M2, H2, HK2, RT2, V2
 +C
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -646,7 +835,17 @@
+@@ -646,7 +841,17 @@
             CALL BLSYS
            ENDIF
  C
@@ -281,7 +293,7 @@
            IF(DIRECT) THEN
  C
  C--------- try direct mode (set dUe = 0 in currently empty 4th line)
-@@ -659,6 +858,10 @@
+@@ -659,6 +864,10 @@
  C--------- solve Newton system for current "2" station
             CALL GAUSS(4,4,VS2,VSREZ,1)
  C
@@ -292,7 +304,7 @@
  C--------- determine max changes and underrelax if necessary
             DMAX = MAX( ABS(VSREZ(2)/THI),
       &                 ABS(VSREZ(3)/DSI)  )
-@@ -668,6 +871,9 @@
+@@ -668,6 +877,9 @@
             RLX = 1.0
             IF(DMAX.GT.0.3) RLX = 0.3/DMAX
  C
@@ -302,7 +314,26 @@
  C--------- see if direct mode is not applicable
             IF(IBL .NE. IBLTE(IS)+1) THEN
  C
-@@ -773,8 +979,14 @@
+@@ -738,6 +950,9 @@
+            VSREZ(4) = HTARG - HK2
+ C
+            CALL GAUSS(4,4,VS2,VSREZ,1)
++C--------- DEBUG: Output Newton solution (inverse branch)
++           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
++     &        VSREZ(3),VSREZ(4)
+ C
+ C--------- added Ue clamp   MD  3 Apr 03
+            DMAX = MAX( ABS(VSREZ(2)/THI),
+@@ -750,6 +965,8 @@
+ C
+ C--------- update variables
+ ccc           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
++C--------- DEBUG: Output relaxation (inverse branch)
++           WRITE(78,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
+            IF(IBL.GE.ITRAN(IS)) CTI = CTI + RLX*VSREZ(1)
+            THI = THI + RLX*VSREZ(2)
+            DSI = DSI + RLX*VSREZ(3)
+@@ -773,8 +990,14 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
@@ -318,7 +349,7 @@
    100   CONTINUE
          WRITE(*,1350) IBL, IS, DMAX 
   1350   FORMAT(' MRCHUE: Convergence failed at',I4,'  side',I2,
-@@ -842,6 +1054,10 @@
+@@ -842,6 +1065,10 @@
          DELT(IBL,IS) = DE2
          TSTR(IBL,IS) = HS2*T2
  C
@@ -329,13 +360,14 @@
  C------ set "1" variables to "2" variables for next streamwise station
          CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
          CALL BLKIN
-@@ -868,10 +1084,13 @@
+@@ -868,10 +1095,14 @@
   1000 CONTINUE
   2000 CONTINUE
  C
 +C---- DEBUG: Close output file
 +      CLOSE(77)
 +C
++      LTRDIF = .FALSE.
        RETURN
        END
 -  
@@ -345,7 +377,7 @@
        SUBROUTINE MRCHDU
  C----------------------------------------------------
  C     Marches the BLs and wake in mixed mode using
-@@ -888,6 +1107,13 @@
+@@ -888,6 +1119,13 @@
        REAL MSQ
  ccc   REAL MDI
  C
@@ -359,7 +391,7 @@
        DATA DEPS / 5.0E-6 /
  C
  C---- constant controlling how far Hk is allowed to deviate
-@@ -966,6 +1192,12 @@
+@@ -966,6 +1204,12 @@
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
             AMI = AMPL2
@@ -372,7 +404,7 @@
             IF(     TRAN) ITRAN(IS) = IBL
             IF(.NOT.TRAN) ITRAN(IS) = IBL+2
            ENDIF
-@@ -1059,8 +1291,51 @@
+@@ -1059,9 +1303,52 @@
  C
            ENDIF
  C
@@ -414,17 +446,18 @@
 +C
  C-------- solve Newton system for current "2" station
            CALL GAUSS(4,4,VS2,VSREZ,1)
-+C
+ C
 +C-------- INSTRUMENTATION: Log solution after GAUSS
 +          IF(IBL.EQ.ITEST_STN .AND. IS.EQ.ITEST_IS .AND. ITBL.EQ.1) THEN
 +           WRITE(96,'(A)') '--- Solution from GAUSS ---'
 +           WRITE(96,'(A,4ES24.16)') 'VSREZ_SOL=', (VSREZ(K), K=1,4)
 +           CLOSE(96)
 +          ENDIF
- C
++C
  C-------- determine max changes and underrelax if necessary
  C-------- (added Ue clamp   MD  3 Apr 03)
-@@ -1281,6 +1556,12 @@
+           DMAX = MAX( ABS(VSREZ(2)/THI),
+@@ -1281,6 +1568,12 @@
  C
  C---- calculate new Ue distribution assuming no under-relaxation
  C-    also set the sensitivity of Ue wrt to alpha or Re
@@ -437,15 +470,16 @@
        DO 1 IS=1, 2
          DO 10 IBL=2, NBL(IS)
            I = IPAN(IBL,IS)
-@@ -1307,9 +1588,28 @@
+@@ -1306,10 +1599,29 @@
+ C
            UNEW(IBL,IS) = UINV(IBL,IS) + DUI
            U_AC(IBL,IS) = UINV_AC      + DUI_AC
- C
++C
 +C---- INSTRUMENTATION: Log DUI computation for each station
 +          WRITE(95,'(A,I2,A,I3,A,I4,6ES24.16)') 'DUI IS=', IS,
 +     &      ' IBL=', IBL, ' I=', I, UINV(IBL,IS), DUI,
 +     &      UNEW(IBL,IS), UEDG(IBL,IS), MASS(IBL,IS), DSTR(IBL,IS)
-+C
+ C
     10   CONTINUE
      1 CONTINUE
  C
@@ -466,7 +500,7 @@
  C---- set new Qtan from new Ue with appropriate sign change
        DO 2 IS=1, 2
          DO 20 IBL=2, IBLTE(IS)
-@@ -1479,6 +1779,32 @@
+@@ -1479,6 +1791,32 @@
  C---- set true rms change
        RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
  C

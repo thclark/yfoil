@@ -368,6 +368,24 @@ pub fn rtheta_crit(hk: f64) -> f64 {
     aa + 0.7 * (bb + 1.0)
 }
 
+/// DILW (xblsys.f): laminar wake dissipation function 2*CD/H* and its Hk, Rt sensitivities.
+pub fn dilw(hk: f64, rt: f64) -> ClosureResult {
+    let msq = 0.0;
+    let hs = hs_lam(hk, rt, msq);
+    // Laminar wake dissipation function  ( 2 CD/H* )
+    let rcd = 1.10 * ((1.0 - 1.0 / hk) * (1.0 - 1.0 / hk)) / hk;
+    let rcd_hk = -1.10 * (1.0 - 1.0 / hk) * 2.0 / ((hk * hk) * hk) - rcd / hk;
+    let di = 2.0 * rcd / (hs.val * rt);
+    let di_hk = 2.0 * rcd_hk / (hs.val * rt) - (di / hs.val) * hs.val_hk;
+    let di_rt = -di / rt - (di / hs.val) * hs.val_rt;
+    ClosureResult {
+        val: di,
+        val_hk: di_hk,
+        val_rt: di_rt,
+        val_msq: 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

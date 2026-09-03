@@ -40,11 +40,10 @@
        RETURN
        END
  
-@@ -575,6 +601,16 @@
-       XT_MS =       - (XT_A2/Z_A2)*Z_MS
+@@ -576,6 +602,16 @@
        XT_RE =       - (XT_A2/Z_A2)*Z_RE
        XT_XF = 0.0
-+C
+ C
 +C---- INSTRUMENTATION: Log TRCHEK2 outputs
 +      WRITE(98,'(A)') '=== TRCHEK2 ==='
 +      WRITE(98,'(A,ES24.16)') 'X1=', X1
@@ -54,14 +53,14 @@
 +      WRITE(98,'(A,ES24.16)') 'XT=', XT
 +      WRITE(98,'(A,L1)') 'TRAN=', TRAN
 +      WRITE(98,'(A,L1)') 'TURB=', TURB
- C
++C
        RETURN
        END
-@@ -656,11 +692,28 @@
-         VS2(K,4) =                RES_U2*U2_UEI
+ 
+@@ -657,10 +693,27 @@
          VSM(K)   = RES_U1*U1_MS + RES_U2*U2_MS  + RES_MS
     20 CONTINUE
-+C
+ C
 +C---- INSTRUMENTATION: Log BLSYS outputs
 +      WRITE(98,'(A)') '=== BLSYS ==='
 +      WRITE(98,'(A,4ES24.16)') 'VSREZ=', VSREZ(1),VSREZ(2),VSREZ(3),
@@ -78,7 +77,7 @@
 +     &   VS2(2,4),VS2(2,5)
 +      WRITE(98,'(A,5ES24.16)') 'VS2_3=', VS2(3,1),VS2(3,2),VS2(3,3),
 +     &   VS2(3,4),VS2(3,5)
- C
++C
        RETURN
        END
 - 
@@ -114,7 +113,7 @@
  C
        RETURN
        END ! BLKIN
-@@ -1116,10 +1189,26 @@
+@@ -1116,11 +1189,27 @@
         DE2_D2 =  0.0
         DE2_MS =  0.0
        ENDIF
@@ -138,11 +137,90 @@
        RETURN
        END
 - 
-+
  
++
        SUBROUTINE BLMID(ITYP)
  C----------------------------------------------------
-@@ -1989,10 +2078,10 @@
+ C     Calculates midpoint skin friction CFM
+@@ -1203,6 +1292,9 @@
+       IMPLICIT REAL(M)
+       INCLUDE 'XBL.INC'
+       REAL  BL1(4,5), BL2(4,5), BLREZ(4), BLM(4), BLR(4), BLX(4)
++C---- INSTRUMENTATION: dump TRDIF internals to the MRCHUE trace (unit 78)
++      LOGICAL LTRDIF
++      COMMON/TRD_INST/ LTRDIF
+      &    , BT1(4,5), BT2(4,5), BTREZ(4), BTM(4), BTR(4), BTX(4)
+ C
+ C---- save variables and sensitivities for future restoration
+@@ -1309,6 +1401,20 @@
+ C
+ C---- set up Newton system for dAm, dTh, dDs, dUe, dXi  at  X1 and XT
+       CALL BLDIF(1)
++C---- INSTRUMENTATION: raw laminar (1..T) system and XT sensitivities
++      IF(LTRDIF) THEN
++       WRITE(78,'(A,6ES24.16)') 'TRDIF_XT:', XT, XT_A1, XT_T1, XT_D1,
++     &   XT_U1, XT_X1
++       WRITE(78,'(A,6ES24.16)') 'TRDIF_XT2:', XT_T2, XT_D2, XT_U2,
++     &   XT_X2, XT_MS, XT_RE
++       WRITE(78,'(A,5ES24.16)') 'TRDIF_TLAM:', TT, DT, UT, HK2, RT2
++       WRITE(78,'(A,5ES24.16)') 'TRDIF_LCLOS:', HS2, US2, CQ2, CF2, DI2
++       DO 91 K=2, 3
++        WRITE(78,'(A,I1,A,5ES24.16)') 'TRDIF_LVS1_',K,':',(VS1(K,L),L=1,5)
++        WRITE(78,'(A,I1,A,5ES24.16)') 'TRDIF_LVS2_',K,':',(VS2(K,L),L=1,5)
++   91  CONTINUE
++       WRITE(78,'(A,3ES24.16)') 'TRDIF_LREZ:', VSREZ(1),VSREZ(2),VSREZ(3)
++      ENDIF
+ C
+ C---- The current Newton system is in terms of "1" and "T" variables,
+ C-    so calculate its equivalent in terms of "1" and "2" variables.
+@@ -1421,9 +1527,29 @@
+ C
+       AMPL2 = 0.
+       S2 = ST
++C---- INSTRUMENTATION: transition-point initial shear and sensitivities
++      IF(LTRDIF) THEN
++       WRITE(78,'(A,6ES24.16)') 'TRDIF_ST:', HK2, CQ2, CTR, ST, ST_TT,
++     &   ST_DT
++       WRITE(78,'(A,6ES24.16)') 'TRDIF_ST2:', ST_UT, ST_A1, ST_T1, ST_D1,
++     &   ST_U1, ST_X1
++       WRITE(78,'(A,4ES24.16)') 'TRDIF_ST3:', ST_T2, ST_D2, ST_U2, ST_X2
++      ENDIF
+ C
+ C---- recalculate turbulent secondary "T" variables using proper CTI
+       CALL BLVAR(2)
++C---- INSTRUMENTATION: turbulent T-state closures and their derivatives
++      IF(LTRDIF) THEN
++       WRITE(78,'(A,4ES24.16)') 'TRDIF_TV_HS:', HS2, HS2_T2, HS2_D2, HS2_U2
++       WRITE(78,'(A,4ES24.16)') 'TRDIF_TV_US:', US2, US2_T2, US2_D2, US2_U2
++       WRITE(78,'(A,4ES24.16)') 'TRDIF_TV_CQ:', CQ2, CQ2_T2, CQ2_D2, CQ2_U2
++       WRITE(78,'(A,4ES24.16)') 'TRDIF_TV_CF:', CF2, CF2_T2, CF2_D2, CF2_U2
++       WRITE(78,'(A,5ES24.16)') 'TRDIF_TV_DI:', DI2, DI2_T2, DI2_D2, DI2_U2,
++     &   DI2_S2
++       WRITE(78,'(A,4ES24.16)') 'TRDIF_TV_DE:', DE2, DE2_T2, DE2_D2, DE2_U2
++       WRITE(78,'(A,6ES24.16)') 'TRDIF_TV_HK:', HK2, HK2_T2, HK2_D2, HK2_U2,
++     &   H2, H2_T2
++      ENDIF
+ C
+ C---- set "1" variables to "T" variables and reset "2" variables
+ C-    to their saved turbulent values
+@@ -1437,6 +1563,16 @@
+ C
+ C---- set up Newton system for dCt, dTh, dDs, dUe, dXi  at  XT and X2
+       CALL BLDIF(2)
++C---- INSTRUMENTATION: raw turbulent (T..2) system
++      IF(LTRDIF) THEN
++       WRITE(78,'(A,6ES24.16)') 'TRDIF_TCLOS:', HS1, US1, CQ1, CF1, DI1,
++     &   S1
++       DO 92 K=1, 3
++        WRITE(78,'(A,I1,A,5ES24.16)') 'TRDIF_TVS1_',K,':',(VS1(K,L),L=1,5)
++        WRITE(78,'(A,I1,A,5ES24.16)') 'TRDIF_TVS2_',K,':',(VS2(K,L),L=1,5)
++   92  CONTINUE
++       WRITE(78,'(A,3ES24.16)') 'TRDIF_TREZ:', VSREZ(1),VSREZ(2),VSREZ(3)
++      ENDIF
+ C
+ C---- convert sensitivities wrt "T" variables into sensitivities
+ C-    wrt "1" and "2" variables as done before for the laminar part
+@@ -1989,10 +2125,10 @@
  C
  C     NEW VERSION.   March 1991       (latest bug fix  July 93)
  C          - m(H) correlation made more accurate up to H=20
@@ -157,7 +235,7 @@
  C            separation bubble profiles.
  C--------------------------------------------------------------
  C
-@@ -2018,6 +2107,7 @@
+@@ -2018,6 +2154,7 @@
  C            when N(x) reaches Ncrit (Ncrit= 9 is "standard").
  C==============================================================
        IMPLICIT REAL (A-H,M,O-Z)
@@ -165,10 +243,12 @@
  ccc   DATA DGR / 0.04 /
        DATA DGR / 0.08 /
  C
-@@ -2091,6 +2181,18 @@
+@@ -2089,6 +2226,18 @@
+        AX_TH = -AX/TH
+        AX_RT = (AF   *DADR/TH                ) * RFAC_RT
  C
-       ENDIF
- C
++      ENDIF
++C
 +C---- INSTRUMENTATION: Log DAMPL inputs/outputs (first iteration only)
 +      IF(FIRST_MRCHDU_DONE .AND. (.NOT.MRCHDU_OUTPUT_DONE)) THEN
 +        WRITE(98,'(A)') '=== DAMPL ==='
@@ -179,16 +259,13 @@
 +        WRITE(98,'(A,ES24.16)') 'AX_HK=', AX_HK
 +        WRITE(98,'(A,ES24.16)') 'AX_TH=', AX_TH
 +        WRITE(98,'(A,ES24.16)') 'AX_RT=', AX_RT
-+      ENDIF
-+C
+       ENDIF
+ C
        RETURN
-       END ! DAMPL
- 
-@@ -2281,6 +2383,14 @@
-       HK     =    (H - 0.29*MSQ)/(1.0 + 0.113*MSQ)
+@@ -2282,6 +2431,14 @@
        HK_H   =     1.0          /(1.0 + 0.113*MSQ)
        HK_MSQ = (-.29 - 0.113*HK)/(1.0 + 0.113*MSQ)
-+C
+ C
 +C---- INSTRUMENTATION: Log HKIN inputs/outputs
 +      WRITE(98,'(A)') '=== HKIN ==='
 +      WRITE(98,'(A,ES24.16)') 'H=', H
@@ -196,10 +273,11 @@
 +      WRITE(98,'(A,ES24.16)') 'HK=', HK
 +      WRITE(98,'(A,ES24.16)') 'HK_H=', HK_H
 +      WRITE(98,'(A,ES24.16)') 'HK_MSQ=', HK_MSQ
- C
++C
        RETURN
        END
-@@ -2301,6 +2411,14 @@
+  
+@@ -2301,6 +2458,14 @@
        ENDIF
        DI_RT = -DI/RT
  C
@@ -214,7 +292,7 @@
        RETURN
        END
  
-@@ -2347,6 +2465,16 @@
+@@ -2347,6 +2512,16 @@
        HS_RT  = 0.
        HS_MSQ = 0.
  C
@@ -231,7 +309,7 @@
        RETURN
        END
  
-@@ -2367,6 +2495,16 @@
+@@ -2367,6 +2542,16 @@
        CF_RT = -CF/RT
        CF_MSQ = 0.0
  C
@@ -248,7 +326,7 @@
        RETURN
        END
  
-@@ -2381,6 +2519,18 @@
+@@ -2381,6 +2566,18 @@
        DI_CF =  ( 0.5   *US                  ) * 2.0/HS
        DI_ST =  (            2.0*ST*(1.0-US) ) * 2.0/HS
  C
@@ -267,7 +345,7 @@
        RETURN
        END
  
-@@ -2475,11 +2625,21 @@
+@@ -2475,11 +2672,21 @@
        HS_RT  = ( HS_RT          ) / FM
        HS_MSQ = 0.028/FM  -  0.014*HS/FM
  C
@@ -292,7 +370,7 @@
        SUBROUTINE CFT( HK, RT, MSQ, CF, CF_HK, CF_RT, CF_MSQ )
        IMPLICIT REAL (A-H,M,O-Z)
        INCLUDE 'BLPAR.INC'
-@@ -2506,6 +2666,16 @@
+@@ -2506,6 +2713,16 @@
        CF_RT  = GEX*CFO/(FC*GRT) / RT
        CF_MSQ = GEX*CFO/(FC*GRT) * (-0.25*GM1/FC**2) - 0.25*GM1*CF/FC**2
  C

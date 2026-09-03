@@ -14,9 +14,11 @@
 //! - `wake` - Wake boundary layer model
 
 pub mod blsolv;
+pub mod blsys;
 mod closure;
 pub mod gauss;
 pub mod mrchdu;
+pub mod mrchue;
 mod newton;
 mod state;
 pub mod system;

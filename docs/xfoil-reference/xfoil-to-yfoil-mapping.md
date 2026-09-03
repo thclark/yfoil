@@ -251,3 +251,18 @@ Inviscid / wake subroutines on `BlState` (stages S3–S4): `PSILIN → solver::p
 (returns `InviscidSystem { aij: LuFactors, bij, ladij }`), `LUDCMP/BAKSUB → solver::ludcmp`,
 `QDCALC → solver::qdcalc::qdcalc` (fills `st.dij`, 1-based (N+NW)²), `ATANC → solver::ggcalc::atanc`.
 `PI/HOPI/QOPI` are computed as XFOIL's INIT does (`4*atan(1)`), see `psilin::pi_consts`.
+
+BL march subroutines (stage S5): `MRCHUE → bl::mrchue::mrchue(&mut st, &params, acrit, trace)`
+(fills `THET/DSTR/CTAU/UEDG/MASS/TAU/DIS/CTQ/DELT/TSTR`, sets `ITRAN`; `MrchueTrace` mirrors the
+`xfoil_newton_trace.dat` records: `StationIter { ampl, primary, kinematic, closure, residual, vs2,
+solution, dmax, rlx, updated, converged }`), `BLSYS → bl::blsys::blsys(sys, s1, s2, IntervalFlags
+{simi, tran, turb, wake}, trans, acrit, params)`, `TESYS → bl::blsys::tesys`, `TRCHEK2 →
+bl::system::trchek` (returns `TransitionResult::{NoTransition{ampl2}, FreeTransition{location,
+ampl2}, ForcedTransition{location}}` with `TransitionLocation` = `XT` and its `XT_*`
+sensitivities; `ampl2` is the iterated `AMPL2`, which may exceed `AMCRIT` exactly as XFOIL leaves
+it), `BLVAR/BLKIN/BLPRV → BLStationState::{blvar, blkin, blprv}`, `BLDIF → BLLocalSystem::bldif`,
+`TRDIF → BLLocalSystem::trdif`, `BLMID → MidpointCf::compute`, `DILW → bl::closure::dilw`.
+`COM1/COM2` are `s1: BLStationState` / `s2: BLStationState`; the `COM1 = COM2` copies are
+`s1 = s2.clone()`. XFOIL quirks reproduced: `HVRAT` is never assigned on the analysis path
+(`BLGlobalParams.hvrat = 0.0`); `BLVAR` clamps `HK2` in COMMON without recomputing its
+derivatives (`blvar` writes the clamped `hk` back); `BLDIF` forms `UQ_T1..UQ_RE` but never uses them.
