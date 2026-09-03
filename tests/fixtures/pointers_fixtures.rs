@@ -14,6 +14,14 @@ pub struct PointersFixture {
     pub sst_go: f64,
     pub sst_gp: f64,
     pub ante: f64,
+    pub aste: f64,
+    pub dste: f64,
+    pub chord: f64,
+    pub sle: f64,
+    pub xle: f64,
+    pub yle: f64,
+    pub xte: f64,
+    pub yte: f64,
     pub sharp: bool,
     pub nbl: [usize; 3],
     pub iblte: [usize; 3],
@@ -22,6 +30,9 @@ pub struct PointersFixture {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
     pub s: Vec<f64>,
+    pub nx: Vec<f64>,
+    pub ny: Vec<f64>,
+    pub apanel: Vec<f64>,
     /// [is][ibl], 1-based, ibl in 1..=iblte[is]+nw
     pub ipan: [Vec<usize>; 3],
     pub vti: [Vec<f64>; 3],
@@ -64,6 +75,14 @@ pub fn parse_pointers(path: &Path, call: usize) -> PointersFixture {
     f.sst_go = val(lines.next().unwrap(), "SST_GO=").parse().unwrap();
     f.sst_gp = val(lines.next().unwrap(), "SST_GP=").parse().unwrap();
     f.ante = val(lines.next().unwrap(), "ANTE=").parse().unwrap();
+    f.aste = val(lines.next().unwrap(), "ASTE=").parse().unwrap();
+    f.dste = val(lines.next().unwrap(), "DSTE=").parse().unwrap();
+    f.chord = val(lines.next().unwrap(), "CHORD=").parse().unwrap();
+    f.sle = val(lines.next().unwrap(), "SLE=").parse().unwrap();
+    f.xle = val(lines.next().unwrap(), "XLE=").parse().unwrap();
+    f.yle = val(lines.next().unwrap(), "YLE=").parse().unwrap();
+    f.xte = val(lines.next().unwrap(), "XTE=").parse().unwrap();
+    f.yte = val(lines.next().unwrap(), "YTE=").parse().unwrap();
     f.sharp = val(lines.next().unwrap(), "SHARP=") == "T";
     let v = ints(val(lines.next().unwrap(), "NBL="));
     f.nbl = [0, v[0], v[1]];
@@ -76,12 +95,18 @@ pub fn parse_pointers(path: &Path, call: usize) -> PointersFixture {
     f.x = vec![0.0; np];
     f.y = vec![0.0; np];
     f.s = vec![0.0; np];
+    f.nx = vec![0.0; np];
+    f.ny = vec![0.0; np];
+    f.apanel = vec![0.0; np];
     for _ in 1..np {
         let p: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
         let i: usize = p[0].parse().unwrap();
         f.x[i] = p[1].parse().unwrap();
         f.y[i] = p[2].parse().unwrap();
         f.s[i] = p[3].parse().unwrap();
+        f.nx[i] = p[4].parse().unwrap();
+        f.ny[i] = p[5].parse().unwrap();
+        f.apanel[i] = p[6].parse().unwrap();
     }
     let ivx = f.n + f.nw + 2;
     f.ipan = [Vec::new(), vec![0; ivx], vec![0; ivx]];

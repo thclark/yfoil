@@ -25,6 +25,15 @@ pub struct BlState {
     /// Spline derivatives dX/dS, dY/dS at airfoil nodes (1..=n)
     pub xp: Vec<f64>,
     pub yp: Vec<f64>,
+    /// Node unit normals NX/NY and panel angles APANEL (1..=n+nw; wake part set by XYWAKE)
+    pub nx: Vec<f64>,
+    pub ny: Vec<f64>,
+    pub apanel: Vec<f64>,
+    /// Viscous source strengths SIG(I) (1..=n+nw)
+    pub sig: Vec<f64>,
+    /// Freestream speed QINF (1.0) and angle of attack ALFA (radians)
+    pub qinf: f64,
+    pub alfa: f64,
     /// Surface vorticity / tangential velocity GAM(I), GAM_A(I) (1..=n)
     pub gam: Vec<f64>,
     pub gam_a: Vec<f64>,
@@ -108,6 +117,12 @@ impl BlState {
             s: vec![0.0; np],
             xp: vec![0.0; n + 1],
             yp: vec![0.0; n + 1],
+            nx: vec![0.0; np],
+            ny: vec![0.0; np],
+            apanel: vec![0.0; np],
+            sig: vec![0.0; np],
+            qinf: 1.0,
+            alfa: 0.0,
             gam: vec![0.0; n + 1],
             gam_a: vec![0.0; n + 1],
             qinvu: [Vec::new(), vec![0.0; np], vec![0.0; np]],
@@ -167,6 +182,9 @@ impl BlState {
             st.s[i] = airfoil.s[i - 1];
             st.xp[i] = airfoil.xp[i - 1];
             st.yp[i] = airfoil.yp[i - 1];
+            st.nx[i] = airfoil.nx[i - 1];
+            st.ny[i] = airfoil.ny[i - 1];
+            st.apanel[i] = airfoil.apanel[i - 1];
         }
         st.chord = airfoil.chord;
         st.sle = airfoil.sle;

@@ -12,9 +12,11 @@
 pub mod blstate;
 pub mod pointers;
 mod polar;
+pub mod psilin;
 pub mod setbl;
 pub mod velocity;
 mod viscal;
+pub mod xywake;
 
 pub use polar::*;
 pub use setbl::*;

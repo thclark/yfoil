@@ -1,14 +1,13 @@
 //! The only tolerance constants used by XFOIL-equivalence tests (CLAUDE.md Rule 1).
 //!
 //! Derived from the measured noise floor (`scripts/noise-floor.sh`, recorded in
-//! `docs/validation/noise-floor.md`, 2026-09-03): perturbing every panel coordinate by +1 ULP on the
-//! tracked reference case, with identical branch trace and iteration count, moves
-//! - geometry-derived quantities by ≤ 5e-14 relative,
-//! - inviscid GAM/QINV by ≤ 6e-11 (median 5e-14),
-//! - BL state after MRCHUE/MRCHDU by ≤ 2e-11,
-//! - per-iteration CL/CD/RMSBL by ≤ 2.2e-10 (median 1e-12).
-//! Element-wise relative spread of DIJ (≤ 5e-6) and SETBL Jacobian entries (≤ 9e-4) is dominated by
-//! near-zero entries: those matrices must be gated with a row-scaled `scale`, never bare relative.
+//! `docs/validation/noise-floor.md`, 2026-09-03). Perturbing every panel coordinate by +1 ULP on
+//! the tracked reference case, with identical branch trace and iteration count, moves
+//! geometry-derived quantities by at most 5e-14 relative, inviscid GAM/QINV by 6e-11 (median
+//! 5e-14), BL state after MRCHUE/MRCHDU by 2e-11, and per-iteration CL/CD/RMSBL by 2.2e-10
+//! (median 1e-12). Element-wise relative spread of DIJ (up to 5e-6) and SETBL Jacobian entries
+//! (up to 9e-4) is dominated by near-zero entries: those matrices must be gated with a
+//! row-scaled `scale`, never bare relative error.
 
 /// Pure closure functions and other single-expression translations.
 pub const TOL_PURE: f64 = 1e-12;

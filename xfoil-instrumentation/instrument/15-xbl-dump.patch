@@ -155,17 +155,17 @@
        RETURN
        END
  
-@@ -535,10 +638,63 @@
+@@ -535,6 +638,68 @@
        NSYS = IV
        IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
  C
 +C---- INSTRUMENTATION (S2): pointer layer after STFIND/IBLPAN/XICALC/IBLSYS
 +      CALL DUMPPTR
 +C
-       RETURN
-       END
- 
- 
++      RETURN
++      END
++
++
 +      SUBROUTINE DUMPPTR
 +C---------------------------------------------------------------
 +C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
@@ -192,13 +192,22 @@
 +      WRITE(93,'(A,ES24.16)') 'SST_GO=', SST_GO
 +      WRITE(93,'(A,ES24.16)') 'SST_GP=', SST_GP
 +      WRITE(93,'(A,ES24.16)') 'ANTE=', ANTE
++      WRITE(93,'(A,ES24.16)') 'ASTE=', ASTE
++      WRITE(93,'(A,ES24.16)') 'DSTE=', DSTE
++      WRITE(93,'(A,ES24.16)') 'CHORD=', CHORD
++      WRITE(93,'(A,ES24.16)') 'SLE=', SLE
++      WRITE(93,'(A,ES24.16)') 'XLE=', XLE
++      WRITE(93,'(A,ES24.16)') 'YLE=', YLE
++      WRITE(93,'(A,ES24.16)') 'XTE=', XTE
++      WRITE(93,'(A,ES24.16)') 'YTE=', YTE
 +      WRITE(93,'(A,L2)') 'SHARP=', SHARP
 +      WRITE(93,'(A,2I6)') 'NBL=', NBL(1), NBL(2)
 +      WRITE(93,'(A,2I6)') 'IBLTE=', IBLTE(1), IBLTE(2)
 +      WRITE(93,'(A,2I6)') 'ITRAN=', ITRAN(1), ITRAN(2)
-+      WRITE(93,'(A)') '--- NODES I X Y S'
++      WRITE(93,'(A)') '--- NODES I X Y S NX NY APANEL'
 +      DO 10 I=1, N+NW
-+        WRITE(93,'(I6,3ES24.16)') I, X(I), Y(I), S(I)
++        WRITE(93,'(I6,6ES24.16)') I, X(I), Y(I), S(I),
++     &    NX(I), NY(I), APANEL(I)
 +   10 CONTINUE
 +      DO 20 IS=1, 2
 +        WRITE(93,'(A,I2,A)') '--- SIDE', IS, ' IBL IPAN VTI ISYS XSSI'
@@ -212,14 +221,10 @@
 +        WRITE(93,'(I6,ES24.16)') IW, WGAP(IW)
 +   30 CONTINUE
 +      CLOSE(93)
-+      RETURN
-+      END
-+
-+
-       SUBROUTINE MRCHUE
- C----------------------------------------------------
- C     Marches the BLs and wake in direct mode using
-@@ -552,6 +708,19 @@
+       RETURN
+       END
+ 
+@@ -552,6 +717,19 @@
        LOGICAL DIRECT
        REAL MSQ
  C
@@ -239,7 +244,7 @@
  C---- shape parameters for separation criteria
        HLMAX = 3.8
        HTMAX = 2.5
-@@ -618,6 +787,11 @@
+@@ -618,6 +796,11 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
@@ -251,7 +256,7 @@
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -646,7 +820,17 @@
+@@ -646,7 +829,17 @@
             CALL BLSYS
            ENDIF
  C
@@ -270,7 +275,7 @@
            IF(DIRECT) THEN
  C
  C--------- try direct mode (set dUe = 0 in currently empty 4th line)
-@@ -659,6 +843,10 @@
+@@ -659,6 +852,10 @@
  C--------- solve Newton system for current "2" station
             CALL GAUSS(4,4,VS2,VSREZ,1)
  C
@@ -281,7 +286,7 @@
  C--------- determine max changes and underrelax if necessary
             DMAX = MAX( ABS(VSREZ(2)/THI),
       &                 ABS(VSREZ(3)/DSI)  )
-@@ -668,6 +856,9 @@
+@@ -668,6 +865,9 @@
             RLX = 1.0
             IF(DMAX.GT.0.3) RLX = 0.3/DMAX
  C
@@ -291,7 +296,7 @@
  C--------- see if direct mode is not applicable
             IF(IBL .NE. IBLTE(IS)+1) THEN
  C
-@@ -773,7 +964,13 @@
+@@ -773,7 +973,13 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
@@ -306,7 +311,7 @@
  C
    100   CONTINUE
          WRITE(*,1350) IBL, IS, DMAX 
-@@ -842,6 +1039,10 @@
+@@ -842,6 +1048,10 @@
          DELT(IBL,IS) = DE2
          TSTR(IBL,IS) = HS2*T2
  C
@@ -317,7 +322,7 @@
  C------ set "1" variables to "2" variables for next streamwise station
          CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
          CALL BLKIN
-@@ -868,10 +1069,13 @@
+@@ -868,10 +1078,13 @@
   1000 CONTINUE
   2000 CONTINUE
  C
@@ -333,21 +338,21 @@
        SUBROUTINE MRCHDU
  C----------------------------------------------------
  C     Marches the BLs and wake in mixed mode using
-@@ -888,6 +1092,13 @@
+@@ -887,6 +1100,13 @@
+       REAL VTMP(4,5), VZTMP(4)
        REAL MSQ
  ccc   REAL MDI
- C
++C
 +C---- INSTRUMENTATION: Save VS2 matrix before GAUSS for test station
 +      REAL VS2_SAVE(4,5)
 +      INTEGER ITEST_STN, ITEST_IS
 +      LOGICAL FIRST_ITER_LOGGED
 +      DATA ITEST_STN / 10 /
 +      DATA ITEST_IS / 1 /
-+C
+ C
        DATA DEPS / 5.0E-6 /
  C
- C---- constant controlling how far Hk is allowed to deviate
-@@ -966,6 +1177,12 @@
+@@ -966,6 +1186,12 @@
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
             AMI = AMPL2
@@ -360,7 +365,7 @@
             IF(     TRAN) ITRAN(IS) = IBL
             IF(.NOT.TRAN) ITRAN(IS) = IBL+2
            ENDIF
-@@ -1057,11 +1274,54 @@
+@@ -1057,11 +1283,54 @@
             VSREZ(4) = -(HKREF**2)*(HK2 / HKREF - 1.0)
       &                     - SENS*(U2  / UEREF - 1.0)
  C
@@ -415,7 +420,7 @@
  C-------- determine max changes and underrelax if necessary
  C-------- (added Ue clamp   MD  3 Apr 03)
            DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -1281,6 +1541,12 @@
+@@ -1281,6 +1550,12 @@
  C
  C---- calculate new Ue distribution assuming no under-relaxation
  C-    also set the sensitivity of Ue wrt to alpha or Re
@@ -428,7 +433,7 @@
        DO 1 IS=1, 2
          DO 10 IBL=2, NBL(IS)
            I = IPAN(IBL,IS)
-@@ -1307,9 +1573,28 @@
+@@ -1307,9 +1582,28 @@
            UNEW(IBL,IS) = UINV(IBL,IS) + DUI
            U_AC(IBL,IS) = UINV_AC      + DUI_AC
  C
@@ -457,7 +462,7 @@
  C---- set new Qtan from new Ue with appropriate sign change
        DO 2 IS=1, 2
          DO 20 IBL=2, IBLTE(IS)
-@@ -1479,6 +1764,32 @@
+@@ -1479,6 +1773,32 @@
  C---- set true rms change
        RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
  C

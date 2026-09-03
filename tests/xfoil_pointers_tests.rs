@@ -208,3 +208,17 @@ fn test_prologue_from_yfoil_geometry_matches_xfoil() {
         st.nsys
     );
 }
+
+/// NCALC / APCALC: YFoil's node normals and panel angles for the airfoil against XFOIL's.
+/// Normals come from spline derivatives, angles from atan2 — both held to TOL_PURE.
+#[test]
+fn test_airfoil_normals_and_panel_angles_match_xfoil() {
+    let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
+    let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
+    let af = create_paneled_airfoil(&geom);
+    for i in 1..=f.n {
+        assert_within(af.nx[i - 1], f.nx[i], TOL_PURE, 1.0, &format!("NX({i})"));
+        assert_within(af.ny[i - 1], f.ny[i], TOL_PURE, 1.0, &format!("NY({i})"));
+        assert_within(af.apanel[i - 1], f.apanel[i], TOL_PURE, 1.0, &format!("APANEL({i})"));
+    }
+}

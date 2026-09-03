@@ -553,25 +553,29 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
     let x = geometry.x_c.clone();
     let y = geometry.y_c.clone();
 
-    // Calculate arc length
+    // SCALC / SEGSPL
     let s = calculate_arc_length(&x, &y);
-
-    // Create splines
     let xp = spline(&x, &s);
     let yp = spline(&y, &s);
 
-    // Calculate normal vectors and panel angles
-    let (nx, ny, apanel) = calculate_normals_and_angles(&x, &y, &xp, &yp, &s);
+    // NCALC: node normals from the spline derivative arrays
+    let (nx, ny) = ncalc(&xp, &yp, &s);
 
-    // Find leading edge using XFOIL's chord-perpendicular criterion
+    // LEFIND / GEOPAR: leading edge on the spline; chord is the LE–TE distance (XFOIL's
+    // definition — for a NACA section whose nodes straddle the LE this is slightly under 1)
     let (sle, le_index) = find_leading_edge(&x, &y, &s, &xp, &yp);
+    let xle = seval(sle, &x, &xp, &s);
+    let yle = seval(sle, &y, &yp, &s);
+    let xte = 0.5 * (x[0] + x[n - 1]);
+    let yte = 0.5 * (y[0] + y[n - 1]);
+    let chord = ((xte - xle).powi(2) + (yte - yle).powi(2)).sqrt();
 
-    // Calculate chord length
-    let chord = calculate_chord(&x, &y);
+    // TECALC: SHARP = DSTE < 0.0001*CHORD
+    let dste = ((x[0] - x[n - 1]).powi(2) + (y[0] - y[n - 1]).powi(2)).sqrt();
+    let sharp_te = dste < 0.0001 * chord;
 
-    // Check for sharp trailing edge
-    let te_gap = ((x[0] - x[n - 1]).powi(2) + (y[0] - y[n - 1]).powi(2)).sqrt();
-    let sharp_te = te_gap < 0.0001 * chord;
+    // APCALC: panel angles (needs SHARP for the TE panel)
+    let apanel = apcalc(&x, &y, &nx, &ny, sharp_te);
 
     PaneledAirfoil {
         x,
@@ -591,41 +595,74 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
     }
 }
 
-/// Calculate normal vectors and panel angles
-fn calculate_normals_and_angles(
-    x: &[f64],
-    y: &[f64],
-    xp: &[f64],
-    yp: &[f64],
-    s: &[f64],
-) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-    let n = x.len();
-    let mut nx = vec![0.0; n];
-    let mut ny = vec![0.0; n];
-    let mut apanel = vec![0.0; n];
-
-    for i in 0..n {
-        // Get tangent vector from spline derivatives
-        let dx_ds = deval(s[i], x, xp, s);
-        let dy_ds = deval(s[i], y, yp, s);
-
-        // Tangent magnitude
-        let ds = (dx_ds * dx_ds + dy_ds * dy_ds).sqrt();
-
-        // Unit tangent
-        let tx = dx_ds / ds;
-        let ty = dy_ds / ds;
-
-        // Normal is perpendicular to tangent (pointing outward for CCW ordering)
-        // For TE->upper->LE->lower->TE ordering, normal points outward with this sign
-        nx[i] = ty;
-        ny[i] = -tx;
-
-        // Panel angle (angle of tangent from horizontal)
-        apanel[i] = ty.atan2(tx);
+/// NCALC (xpanel.f): unit normal vector components at airfoil panel nodes, from the spline
+/// derivative arrays (SEGSPL output), with corner-point averaging where S(I) == S(I+1).
+fn ncalc(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let n = xp.len();
+    let mut xn = vec![0.0; n];
+    let mut yn = vec![0.0; n];
+    if n <= 1 {
+        return (xn, yn);
     }
+    for i in 0..n {
+        let sx = yp[i];
+        let sy = -xp[i];
+        let smod = (sx * sx + sy * sy).sqrt();
+        if smod == 0.0 {
+            xn[i] = -1.0;
+            yn[i] = 0.0;
+        } else {
+            xn[i] = sx / smod;
+            yn[i] = sy / smod;
+        }
+    }
+    // average normal vectors at corner points
+    for i in 0..n - 1 {
+        if s[i] == s[i + 1] {
+            let sx = 0.5 * (xn[i] + xn[i + 1]);
+            let sy = 0.5 * (yn[i] + yn[i + 1]);
+            let smod = (sx * sx + sy * sy).sqrt();
+            if smod == 0.0 {
+                xn[i] = -1.0;
+                yn[i] = 0.0;
+                xn[i + 1] = -1.0;
+                yn[i + 1] = 0.0;
+            } else {
+                xn[i] = sx / smod;
+                yn[i] = sy / smod;
+                xn[i + 1] = sx / smod;
+                yn[i + 1] = sy / smod;
+            }
+        }
+    }
+    (xn, yn)
+}
 
-    (nx, ny, apanel)
+/// APCALC (xpanel.f): angle of each airfoil panel (panel `i` runs from node `i` to `i+1`;
+/// the TE panel `n-1` closes from node `n-1` back to node 0).
+fn apcalc(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64> {
+    let n = x.len();
+    let pi = 4.0 * (1.0_f64).atan();
+    let mut apanel = vec![0.0; n];
+    for i in 0..n - 1 {
+        let sx = x[i + 1] - x[i];
+        let sy = y[i + 1] - y[i];
+        apanel[i] = if sx == 0.0 && sy == 0.0 {
+            (-ny[i]).atan2(-nx[i])
+        } else {
+            sx.atan2(-sy)
+        };
+    }
+    // TE panel
+    let (i, ip) = (n - 1, 0);
+    apanel[i] = if sharp {
+        pi
+    } else {
+        let sx = x[ip] - x[i];
+        let sy = y[ip] - y[i];
+        (-sx).atan2(sy) + pi
+    };
+    apanel
 }
 
 /// Find leading edge arc length parameter and index
@@ -701,25 +738,6 @@ fn find_leading_edge(x: &[f64], y: &[f64], s: &[f64], xp: &[f64], yp: &[f64]) ->
     (s_le, i_le)
 }
 
-/// Calculate chord length (TE to LE distance)
-fn calculate_chord(x: &[f64], y: &[f64]) -> f64 {
-    // TE is at first/last points
-    let x_te = (x[0] + x[x.len() - 1]) / 2.0;
-    let y_te = (y[0] + y[y.len() - 1]) / 2.0;
-
-    // LE is at minimum x
-    let (i_le, _) = x
-        .iter()
-        .enumerate()
-        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        .unwrap();
-
-    let x_le = x[i_le];
-    let y_le = y[i_le];
-
-    ((x_te - x_le).powi(2) + (y_te - y_le).powi(2)).sqrt()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -765,7 +783,7 @@ mod tests {
         let x = vec![1.0, 0.8, 0.5, 0.2, 0.0, 0.2, 0.5, 0.8, 1.0];
         let y = vec![0.0, 0.05, 0.08, 0.06, 0.0, -0.06, -0.08, -0.05, 0.0];
 
-        let chord = calculate_chord(&x, &y);
+        let chord = x.iter().cloned().fold(f64::MIN, f64::max) - x.iter().cloned().fold(f64::MAX, f64::min);
         assert_relative_eq!(chord, 1.0, epsilon = 0.01);
     }
 
