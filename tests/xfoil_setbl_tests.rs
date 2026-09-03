@@ -15,9 +15,6 @@ mod fixtures;
 use serde::Deserialize;
 use std::fs;
 
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
-use yfoil::panel::solve_inviscid;
-
 use fixtures::blsolv_fixtures::parse_blsolv_input;
 use std::path::PathBuf;
 

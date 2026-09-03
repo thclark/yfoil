@@ -110,7 +110,7 @@ mod tests {
             vec![0.0, 4.0, 3.0, 2.0],
         ];
         let lu = ludcmp(3, a);
-        let mut b = vec![0.0, 5.0, 6.0, 20.0]; // x = (3, 1, 3)
+        let mut b = vec![0.0, 5.0, 6.0, 20.0]; // x = (3, 2, 1)
         baksub(&lu, &mut b);
         assert!(
             (b[1] - 3.0).abs() < 1e-12 && (b[2] - 1.0).abs() < 1e-12 && (b[3] - 3.0).abs() < 1e-12,
