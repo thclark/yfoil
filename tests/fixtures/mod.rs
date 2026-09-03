@@ -1,3 +1,4 @@
+#![allow(dead_code)] // shared test-support module; each test crate uses a subset
 //! Fixture loading utilities for validation tests
 //!
 //! This module provides structures and functions for loading XFOIL-generated
@@ -148,9 +149,7 @@ fn load_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, Box<dyn std
     Ok(data)
 }
 
-fn load_json_opt<T: for<'de> Deserialize<'de>>(
-    path: &Path,
-) -> Result<Option<T>, Box<dyn std::error::Error>> {
+fn load_json_opt<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>, Box<dyn std::error::Error>> {
     if path.exists() {
         Ok(Some(load_json(path)?))
     } else {
@@ -159,13 +158,7 @@ fn load_json_opt<T: for<'de> Deserialize<'de>>(
 }
 
 /// Assert that two values match within tolerance
-pub fn assert_xfoil_match(
-    name: &str,
-    yfoil_val: f64,
-    xfoil_val: f64,
-    rel_tol: f64,
-    abs_tol: f64,
-) {
+pub fn assert_xfoil_match(name: &str, yfoil_val: f64, xfoil_val: f64, rel_tol: f64, abs_tol: f64) {
     let diff = (yfoil_val - xfoil_val).abs();
     let max_val = xfoil_val.abs().max(abs_tol);
     let rel_err = diff / max_val;
@@ -266,3 +259,18 @@ impl WakeFixture {
         load_json(path)
     }
 }
+
+/// Resolve a fixture path under the tracked reference case and **fail** if it is missing.
+/// Never skip silently (CLAUDE.md Rule 7). Regenerate with `cargo xtask fixtures`.
+pub fn require_fixture(rel: &str) -> std::path::PathBuf {
+    let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+    assert!(
+        p.exists(),
+        "fixture missing: {} — regenerate with `cargo xtask fixtures` (see fixtures/cases.toml)",
+        p.display()
+    );
+    p
+}
+
+/// The tracked CI reference case (NACA 0012, N=60, alpha=2, Re=1e6, M=0, Ncrit=9, ITER 20).
+pub const REF_CASE: &str = "tests/fixtures/xfoil/naca0012_n60_a2_re1e6";

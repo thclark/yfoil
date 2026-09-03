@@ -44,11 +44,7 @@ impl OperatingPoint {
             cm: result.cm,
             cdf: result.cdf,
             cdp: result.cdp,
-            ld: if result.cd > 1e-10 {
-                result.cl / result.cd
-            } else {
-                0.0
-            },
+            ld: if result.cd > 1e-10 { result.cl / result.cd } else { 0.0 },
             xtr_upper: result.xtr_upper,
             xtr_lower: result.xtr_lower,
             converged: result.converged,
@@ -116,23 +112,12 @@ pub struct PolarSummary {
 
 impl PolarOutput {
     /// Create from PolarResult
-    pub fn from_polar(
-        result: &crate::solver::PolarResult,
-        airfoil_name: &str,
-    ) -> Self {
-        let points: Vec<OperatingPoint> = result
-            .points
-            .iter()
-            .map(OperatingPoint::from_viscous)
-            .collect();
+    pub fn from_polar(result: &crate::solver::PolarResult, airfoil_name: &str) -> Self {
+        let points: Vec<OperatingPoint> = result.points.iter().map(OperatingPoint::from_viscous).collect();
 
-        let (cl_max, alpha_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| {
-            (Some(cl), Some(a))
-        });
+        let (cl_max, alpha_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| (Some(cl), Some(a)));
 
-        let (ld_max, cl_at_ld_max) = result.ld_max().map_or((None, None), |(ld, cl)| {
-            (Some(ld), Some(cl))
-        });
+        let (ld_max, cl_at_ld_max) = result.ld_max().map_or((None, None), |(ld, cl)| (Some(ld), Some(cl)));
 
         let summary = PolarSummary {
             cl_max,
@@ -375,16 +360,11 @@ impl GeometryInfo {
         let max_y = airfoil.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
         // Calculate TE gap
-        let te_gap = ((airfoil.x[0] - airfoil.x[n - 1]).powi(2)
-            + (airfoil.y[0] - airfoil.y[n - 1]).powi(2))
-        .sqrt();
+        let te_gap = ((airfoil.x[0] - airfoil.x[n - 1]).powi(2) + (airfoil.y[0] - airfoil.y[n - 1]).powi(2)).sqrt();
 
         // Calculate curvature at each point
         let curvature = Self::calculate_curvature(airfoil);
-        let max_curvature = curvature
-            .iter()
-            .cloned()
-            .fold(0.0_f64, |m, v| m.max(v.abs()));
+        let max_curvature = curvature.iter().cloned().fold(0.0_f64, |m, v| m.max(v.abs()));
 
         let total_arc_length = airfoil.s[n - 1];
 
@@ -415,10 +395,7 @@ impl GeometryInfo {
             ny: airfoil.ny.clone(),
         };
 
-        Self {
-            summary,
-            distributions,
-        }
+        Self { summary, distributions }
     }
 
     /// Calculate curvature at each node

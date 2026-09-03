@@ -8,8 +8,8 @@ mod fixtures;
 use fixtures::{assert_xfoil_match, TestFixture};
 use std::path::Path;
 use yfoil::bl::FlowConditions;
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
-use yfoil::solver::{solve_viscous, ViscalConfig, BLSolution};
+use yfoil::geometry::{create_paneled_airfoil, naca_4digit, repanel_xfoil, PaneConfig};
+use yfoil::solver::{solve_viscous, BLSolution, ViscalConfig};
 
 /// Helper to run YFoil and compare against fixture
 fn validate_against_fixture(fixture_path: &str) {
@@ -19,33 +19,25 @@ fn validate_against_fixture(fixture_path: &str) {
     let fixture = match TestFixture::load(&path) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!(
-                "Skipping test: fixture not found at {} ({})",
+            panic!(
+                "never skip silently (CLAUDE.md Rule 7): fixture not found at {} ({})",
                 path.display(),
                 e
             );
-            return;
         }
     };
 
     // Extract NACA code from airfoil name
-    let naca_code = fixture
-        .input
-        .airfoil
-        .replace("NACA ", "")
-        .trim()
-        .to_string();
+    let naca_code = fixture.input.airfoil.replace("NACA ", "").trim().to_string();
 
-    // Create airfoil and run YFoil
+    // Create airfoil with XFOIL-style paneling to match fixtures
+    // CRITICAL: Must use repanel_xfoil to get identical panel coordinates as XFOIL
     let geom = naca_4digit(&naca_code, fixture.input.n_panels).expect("Failed to create airfoil");
-    let airfoil = create_paneled_airfoil(&geom);
+    let config = PaneConfig::default();
+    let repaneled = repanel_xfoil(&geom, fixture.input.n_panels, &config);
+    let airfoil = create_paneled_airfoil(&repaneled);
 
-    let cond = FlowConditions::new(
-        fixture.input.reynolds,
-        fixture.input.mach,
-        fixture.input.n_crit,
-        1.0,
-    );
+    let cond = FlowConditions::new(fixture.input.reynolds, fixture.input.mach, fixture.input.n_crit, 1.0);
 
     let config = ViscalConfig::default();
     let alpha = fixture.input.alpha_deg.to_radians();
@@ -74,35 +66,17 @@ fn validate_against_fixture(fixture_path: &str) {
 
         assert_xfoil_match("CL", result.cl, final_fixture.cl, coeff_rel_tol, coeff_abs_tol);
         assert_xfoil_match("CD", result.cd, final_fixture.cd, coeff_rel_tol, coeff_abs_tol);
-        assert_xfoil_match(
-            "CDF",
-            result.cdf,
-            final_fixture.cdf,
-            coeff_rel_tol,
-            coeff_abs_tol,
-        );
+        assert_xfoil_match("CDF", result.cdf, final_fixture.cdf, coeff_rel_tol, coeff_abs_tol);
 
         // Transition locations - allow 5% tolerance
         if final_fixture.xtr_upper > 0.0 {
             let xtr_tol = 0.05;
-            assert_xfoil_match(
-                "xtr_upper",
-                result.xtr_upper,
-                final_fixture.xtr_upper,
-                xtr_tol,
-                0.01,
-            );
+            assert_xfoil_match("xtr_upper", result.xtr_upper, final_fixture.xtr_upper, xtr_tol, 0.01);
         }
 
         if final_fixture.xtr_lower > 0.0 {
             let xtr_tol = 0.05;
-            assert_xfoil_match(
-                "xtr_lower",
-                result.xtr_lower,
-                final_fixture.xtr_lower,
-                xtr_tol,
-                0.01,
-            );
+            assert_xfoil_match("xtr_lower", result.xtr_lower, final_fixture.xtr_lower, xtr_tol, 0.01);
         }
     }
 
@@ -113,10 +87,7 @@ fn validate_against_fixture(fixture_path: &str) {
 
     // Compare iteration history if available
     if let Some(ref viscal_fixture) = fixture.viscal_iters {
-        println!(
-            "  XFOIL converged in {} iterations",
-            viscal_fixture.n_iterations
-        );
+        println!("  XFOIL converged in {} iterations", viscal_fixture.n_iterations);
         println!(
             "  YFoil converged: {} in {} iterations",
             result.converged, result.iterations
@@ -124,18 +95,12 @@ fn validate_against_fixture(fixture_path: &str) {
 
         // YFoil should converge if XFOIL did
         if viscal_fixture.converged {
-            assert!(
-                result.converged,
-                "YFoil failed to converge when XFOIL did"
-            );
+            assert!(result.converged, "YFoil failed to converge when XFOIL did");
         }
     }
 }
 
-fn validate_bl_stations(
-    _yfoil_bl: &BLSolution,
-    _xfoil_bl: &fixtures::BLFixture,
-) {
+fn validate_bl_stations(_yfoil_bl: &BLSolution, _xfoil_bl: &fixtures::BLFixture) {
     // TODO: Implement station-by-station comparison
     // This requires matching station indices between YFoil and XFOIL
 }
@@ -145,19 +110,19 @@ fn validate_bl_stations(
 // ============================================================================
 
 #[test]
-#[ignore] // VISCAL solver not converging correctly - needs debugging
+#[ignore = "S9: VISCAL loop closure"]
 fn test_naca0012_alpha_0() {
     validate_against_fixture("naca0012/alpha_0_re_1e6");
 }
 
 #[test]
-#[ignore] // VISCAL solver not converging correctly - needs debugging
+#[ignore = "S9: VISCAL loop closure"]
 fn test_naca0012_alpha_2() {
     validate_against_fixture("naca0012/alpha_2_re_1e6");
 }
 
 #[test]
-#[ignore] // VISCAL solver not converging correctly - needs debugging
+#[ignore = "S9: VISCAL loop closure"]
 fn test_naca0012_alpha_5() {
     validate_against_fixture("naca0012/alpha_5_re_1e6");
 }
@@ -167,13 +132,13 @@ fn test_naca0012_alpha_5() {
 // ============================================================================
 
 #[test]
-#[ignore] // VISCAL solver not converging correctly - needs debugging
+#[ignore = "S9: VISCAL loop closure"]
 fn test_naca4412_alpha_0() {
     validate_against_fixture("naca4412/alpha_0_re_1e6");
 }
 
 #[test]
-#[ignore] // VISCAL solver not converging correctly - needs debugging
+#[ignore = "S9: VISCAL loop closure"]
 fn test_naca4412_alpha_4() {
     validate_against_fixture("naca4412/alpha_4_re_1e6");
 }
@@ -184,11 +149,10 @@ fn test_naca4412_alpha_4() {
 
 #[cfg(test)]
 mod subroutine_tests {
-    use super::*;
 
     /// Test BLKIN closure relations against XFOIL values
     #[test]
-    #[ignore] // Enable when fixtures have BLKIN data
+    #[ignore = "S6: BLKIN fixtures from pipeline"]
     fn test_blkin_matches_xfoil() {
         // This test will compare the kinematic secondary variables
         // computed by YFoil's closure module against XFOIL's BLKIN output
@@ -197,21 +161,21 @@ mod subroutine_tests {
 
     /// Test BLVAR closure relations against XFOIL values
     #[test]
-    #[ignore]
+    #[ignore = "S6: closure fixtures from pipeline (blvar/trchek/blsys)"]
     fn test_blvar_matches_xfoil() {
         todo!("Implement when BLVAR fixture data is available")
     }
 
     /// Test transition detection against XFOIL
     #[test]
-    #[ignore]
+    #[ignore = "S6: closure fixtures from pipeline (blvar/trchek/blsys)"]
     fn test_trchek_matches_xfoil() {
         todo!("Implement when TRCHEK fixture data is available")
     }
 
     /// Test Newton system assembly against XFOIL
     #[test]
-    #[ignore]
+    #[ignore = "S6: closure fixtures from pipeline (blvar/trchek/blsys)"]
     fn test_blsys_matches_xfoil() {
         todo!("Implement when BLSYS fixture data is available")
     }
@@ -227,7 +191,7 @@ mod tolerance_tests {
 
     /// Verify that all fixture tests achieve the required precision
     #[test]
-    #[ignore] // Run manually to check all fixtures
+    #[ignore = "S9: manual full-fixture sweep"]
     fn verify_all_fixtures_precision() {
         let fixture_paths = [
             "naca0012/alpha_0_re_1e6",

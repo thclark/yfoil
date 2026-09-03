@@ -235,8 +235,8 @@ mod spline;
 
 pub use airfoil::{Geometry, InvalidGeometryError, PaneledAirfoil};
 pub use io::{
-    read_dat_file, read_geometry_auto, read_geometry_from_file, write_dat_file,
-    write_geometry_to_json, GeometryReadError,
+    read_dat_file, read_geometry_auto, read_geometry_from_file, write_dat_file, write_geometry_to_json,
+    GeometryReadError,
 };
 pub use naca::{naca_4digit, naca_5digit, NacaError};
 pub use panel::{create_paneled_airfoil, repanel_cosine, repanel_xfoil, PaneConfig};

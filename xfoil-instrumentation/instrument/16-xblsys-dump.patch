@@ -1,0 +1,311 @@
+--- a/src/xblsys.f
++++ b/src/xblsys.f
+@@ -39,6 +39,9 @@
+ C----------------------------------------------------------
+ C     Returns average amplification AX over interval 1..2
+ C----------------------------------------------------------
++C---- INSTRUMENTATION: Access flags from common block
++      LOGICAL FIRST_MRCHDU_DONE, MRCHDU_OUTPUT_DONE
++      COMMON/V_INST/ FIRST_MRCHDU_DONE, MRCHDU_OUTPUT_DONE
+ C
+ cC==========================
+ cC---- 1st-order -- based on "1" quantities only
+@@ -140,6 +143,29 @@
+       AX_RT2 = AXA_AX2*AX2_RT2
+       AX_A2  =                   DAX_A2
+ C
++C---- INSTRUMENTATION: Log AXSET inputs/outputs
++      IF(FIRST_MRCHDU_DONE .AND. (.NOT.MRCHDU_OUTPUT_DONE)) THEN
++        WRITE(99,'(A)') '=== AXSET ==='
++        WRITE(99,'(A,ES24.16)') 'HK1=', HK1
++        WRITE(99,'(A,ES24.16)') 'T1=', T1
++        WRITE(99,'(A,ES24.16)') 'RT1=', RT1
++        WRITE(99,'(A,ES24.16)') 'A1=', A1
++        WRITE(99,'(A,ES24.16)') 'HK2=', HK2
++        WRITE(99,'(A,ES24.16)') 'T2=', T2
++        WRITE(99,'(A,ES24.16)') 'RT2=', RT2
++        WRITE(99,'(A,ES24.16)') 'A2=', A2
++        WRITE(99,'(A,ES24.16)') 'ACRIT=', ACRIT
++        WRITE(99,'(A,ES24.16)') 'AX=', AX
++        WRITE(99,'(A,ES24.16)') 'AX_HK1=', AX_HK1
++        WRITE(99,'(A,ES24.16)') 'AX_T1=', AX_T1
++        WRITE(99,'(A,ES24.16)') 'AX_RT1=', AX_RT1
++        WRITE(99,'(A,ES24.16)') 'AX_A1=', AX_A1
++        WRITE(99,'(A,ES24.16)') 'AX_HK2=', AX_HK2
++        WRITE(99,'(A,ES24.16)') 'AX_T2=', AX_T2
++        WRITE(99,'(A,ES24.16)') 'AX_RT2=', AX_RT2
++        WRITE(99,'(A,ES24.16)') 'AX_A2=', AX_A2
++      ENDIF
++C
+       RETURN
+       END
+ 
+@@ -575,6 +601,16 @@
+       XT_MS =       - (XT_A2/Z_A2)*Z_MS
+       XT_RE =       - (XT_A2/Z_A2)*Z_RE
+       XT_XF = 0.0
++C
++C---- INSTRUMENTATION: Log TRCHEK2 outputs
++      WRITE(98,'(A)') '=== TRCHEK2 ==='
++      WRITE(98,'(A,ES24.16)') 'X1=', X1
++      WRITE(98,'(A,ES24.16)') 'X2=', X2
++      WRITE(98,'(A,ES24.16)') 'AMPL1=', AMPL1
++      WRITE(98,'(A,ES24.16)') 'AMPL2=', AMPL2
++      WRITE(98,'(A,ES24.16)') 'XT=', XT
++      WRITE(98,'(A,L1)') 'TRAN=', TRAN
++      WRITE(98,'(A,L1)') 'TURB=', TURB
+ C
+       RETURN
+       END
+@@ -656,11 +692,28 @@
+         VS2(K,4) =                RES_U2*U2_UEI
+         VSM(K)   = RES_U1*U1_MS + RES_U2*U2_MS  + RES_MS
+    20 CONTINUE
++C
++C---- INSTRUMENTATION: Log BLSYS outputs
++      WRITE(98,'(A)') '=== BLSYS ==='
++      WRITE(98,'(A,4ES24.16)') 'VSREZ=', VSREZ(1),VSREZ(2),VSREZ(3),
++     &   VSREZ(4)
++      WRITE(98,'(A,5ES24.16)') 'VS1_1=', VS1(1,1),VS1(1,2),VS1(1,3),
++     &   VS1(1,4),VS1(1,5)
++      WRITE(98,'(A,5ES24.16)') 'VS1_2=', VS1(2,1),VS1(2,2),VS1(2,3),
++     &   VS1(2,4),VS1(2,5)
++      WRITE(98,'(A,5ES24.16)') 'VS1_3=', VS1(3,1),VS1(3,2),VS1(3,3),
++     &   VS1(3,4),VS1(3,5)
++      WRITE(98,'(A,5ES24.16)') 'VS2_1=', VS2(1,1),VS2(1,2),VS2(1,3),
++     &   VS2(1,4),VS2(1,5)
++      WRITE(98,'(A,5ES24.16)') 'VS2_2=', VS2(2,1),VS2(2,2),VS2(2,3),
++     &   VS2(2,4),VS2(2,5)
++      WRITE(98,'(A,5ES24.16)') 'VS2_3=', VS2(3,1),VS2(3,2),VS2(3,3),
++     &   VS2(3,4),VS2(3,5)
+ C
+       RETURN
+       END
+- 
+ 
++
+       SUBROUTINE TESYS(CTE,TTE,DTE)
+ C--------------------------------------------------------
+ C     Sets up "dummy" BL system between airfoil TE point 
+@@ -775,6 +828,26 @@
+       RT2_T2 = RT2/T2
+       RT2_MS = RT2*(         R2_MS/R2 - V2_MS/V2)
+       RT2_RE = RT2*(                  - V2_RE/V2)
++C
++C---- INSTRUMENTATION: Log BLKIN inputs/outputs
++      WRITE(98,'(A)') '=== BLKIN ==='
++      WRITE(98,'(A,ES24.16)') 'T2=', T2
++      WRITE(98,'(A,ES24.16)') 'D2=', D2
++      WRITE(98,'(A,ES24.16)') 'U2=', U2
++      WRITE(98,'(A,ES24.16)') 'HSTINV=', HSTINV
++      WRITE(98,'(A,ES24.16)') 'GM1BL=', GM1BL
++      WRITE(98,'(A,ES24.16)') 'RSTBL=', RSTBL
++      WRITE(98,'(A,ES24.16)') 'HVRAT=', HVRAT
++      WRITE(98,'(A,ES24.16)') 'REYBL=', REYBL
++      WRITE(98,'(A,ES24.16)') 'M2=', M2
++      WRITE(98,'(A,ES24.16)') 'H2=', H2
++      WRITE(98,'(A,ES24.16)') 'HK2=', HK2
++      WRITE(98,'(A,ES24.16)') 'RT2=', RT2
++      WRITE(98,'(A,ES24.16)') 'HK2_T2=', HK2_T2
++      WRITE(98,'(A,ES24.16)') 'HK2_D2=', HK2_D2
++      WRITE(98,'(A,ES24.16)') 'HK2_U2=', HK2_U2
++      WRITE(98,'(A,ES24.16)') 'RT2_T2=', RT2_T2
++      WRITE(98,'(A,ES24.16)') 'RT2_U2=', RT2_U2
+ C
+       RETURN
+       END ! BLKIN
+@@ -1116,10 +1189,26 @@
+        DE2_D2 =  0.0
+        DE2_MS =  0.0
+       ENDIF
++C
++C---- INSTRUMENTATION: Log BLVAR inputs/outputs
++      WRITE(98,'(A)') '=== BLVAR ==='
++      WRITE(98,'(A,I5)') 'ITYP=', ITYP
++      WRITE(98,'(A,ES24.16)') 'HK2=', HK2
++      WRITE(98,'(A,ES24.16)') 'RT2=', RT2
++      WRITE(98,'(A,ES24.16)') 'M2=', M2
++      WRITE(98,'(A,ES24.16)') 'T2=', T2
++      WRITE(98,'(A,ES24.16)') 'D2=', D2
++      WRITE(98,'(A,ES24.16)') 'S2=', S2
++      WRITE(98,'(A,ES24.16)') 'HS2=', HS2
++      WRITE(98,'(A,ES24.16)') 'CF2=', CF2
++      WRITE(98,'(A,ES24.16)') 'DI2=', DI2
++      WRITE(98,'(A,ES24.16)') 'US2=', US2
++      WRITE(98,'(A,ES24.16)') 'CQ2=', CQ2
++      WRITE(98,'(A,ES24.16)') 'DE2=', DE2
+ C
+       RETURN
+       END
+- 
++
+ 
+       SUBROUTINE BLMID(ITYP)
+ C----------------------------------------------------
+@@ -1989,10 +2078,10 @@
+ C
+ C     NEW VERSION.   March 1991       (latest bug fix  July 93)
+ C          - m(H) correlation made more accurate up to H=20
+-C          - for H > 5, non-similar profiles are used 
+-C            instead of Falkner-Skan profiles.  These 
+-C            non-similar profiles have smaller reverse 
+-C            velocities, are more representative of typical 
++C          - for H > 5, non-similar profiles are used
++C            instead of Falkner-Skan profiles.  These
++C            non-similar profiles have smaller reverse
++C            velocities, are more representative of typical
+ C            separation bubble profiles.
+ C--------------------------------------------------------------
+ C
+@@ -2018,6 +2107,7 @@
+ C            when N(x) reaches Ncrit (Ncrit= 9 is "standard").
+ C==============================================================
+       IMPLICIT REAL (A-H,M,O-Z)
++      INCLUDE 'XBL.INC'
+ ccc   DATA DGR / 0.04 /
+       DATA DGR / 0.08 /
+ C
+@@ -2091,6 +2181,18 @@
+ C
+       ENDIF
+ C
++C---- INSTRUMENTATION: Log DAMPL inputs/outputs (first iteration only)
++      IF(FIRST_MRCHDU_DONE .AND. (.NOT.MRCHDU_OUTPUT_DONE)) THEN
++        WRITE(98,'(A)') '=== DAMPL ==='
++        WRITE(98,'(A,ES24.16)') 'HK=', HK
++        WRITE(98,'(A,ES24.16)') 'TH=', TH
++        WRITE(98,'(A,ES24.16)') 'RT=', RT
++        WRITE(98,'(A,ES24.16)') 'AX=', AX
++        WRITE(98,'(A,ES24.16)') 'AX_HK=', AX_HK
++        WRITE(98,'(A,ES24.16)') 'AX_TH=', AX_TH
++        WRITE(98,'(A,ES24.16)') 'AX_RT=', AX_RT
++      ENDIF
++C
+       RETURN
+       END ! DAMPL
+ 
+@@ -2281,6 +2383,14 @@
+       HK     =    (H - 0.29*MSQ)/(1.0 + 0.113*MSQ)
+       HK_H   =     1.0          /(1.0 + 0.113*MSQ)
+       HK_MSQ = (-.29 - 0.113*HK)/(1.0 + 0.113*MSQ)
++C
++C---- INSTRUMENTATION: Log HKIN inputs/outputs
++      WRITE(98,'(A)') '=== HKIN ==='
++      WRITE(98,'(A,ES24.16)') 'H=', H
++      WRITE(98,'(A,ES24.16)') 'MSQ=', MSQ
++      WRITE(98,'(A,ES24.16)') 'HK=', HK
++      WRITE(98,'(A,ES24.16)') 'HK_H=', HK_H
++      WRITE(98,'(A,ES24.16)') 'HK_MSQ=', HK_MSQ
+ C
+       RETURN
+       END
+@@ -2301,6 +2411,14 @@
+       ENDIF
+       DI_RT = -DI/RT
+ C
++C---- INSTRUMENTATION: Log DIL inputs/outputs
++      WRITE(98,'(A)') '=== DIL ==='
++      WRITE(98,'(A,ES24.16)') 'HK=', HK
++      WRITE(98,'(A,ES24.16)') 'RT=', RT
++      WRITE(98,'(A,ES24.16)') 'DI=', DI
++      WRITE(98,'(A,ES24.16)') 'DI_HK=', DI_HK
++      WRITE(98,'(A,ES24.16)') 'DI_RT=', DI_RT
++C
+       RETURN
+       END
+ 
+@@ -2347,6 +2465,16 @@
+       HS_RT  = 0.
+       HS_MSQ = 0.
+ C
++C---- INSTRUMENTATION: Log HSL inputs/outputs
++      WRITE(98,'(A)') '=== HSL ==='
++      WRITE(98,'(A,ES24.16)') 'HK=', HK
++      WRITE(98,'(A,ES24.16)') 'RT=', RT
++      WRITE(98,'(A,ES24.16)') 'MSQ=', MSQ
++      WRITE(98,'(A,ES24.16)') 'HS=', HS
++      WRITE(98,'(A,ES24.16)') 'HS_HK=', HS_HK
++      WRITE(98,'(A,ES24.16)') 'HS_RT=', HS_RT
++      WRITE(98,'(A,ES24.16)') 'HS_MSQ=', HS_MSQ
++C
+       RETURN
+       END
+ 
+@@ -2367,6 +2495,16 @@
+       CF_RT = -CF/RT
+       CF_MSQ = 0.0
+ C
++C---- INSTRUMENTATION: Log CFL inputs/outputs
++      WRITE(98,'(A)') '=== CFL ==='
++      WRITE(98,'(A,ES24.16)') 'HK=', HK
++      WRITE(98,'(A,ES24.16)') 'RT=', RT
++      WRITE(98,'(A,ES24.16)') 'MSQ=', MSQ
++      WRITE(98,'(A,ES24.16)') 'CF=', CF
++      WRITE(98,'(A,ES24.16)') 'CF_HK=', CF_HK
++      WRITE(98,'(A,ES24.16)') 'CF_RT=', CF_RT
++      WRITE(98,'(A,ES24.16)') 'CF_MSQ=', CF_MSQ
++C
+       RETURN
+       END
+ 
+@@ -2381,6 +2519,18 @@
+       DI_CF =  ( 0.5   *US                  ) * 2.0/HS
+       DI_ST =  (            2.0*ST*(1.0-US) ) * 2.0/HS
+ C
++C---- INSTRUMENTATION: Log DIT inputs/outputs
++      WRITE(98,'(A)') '=== DIT ==='
++      WRITE(98,'(A,ES24.16)') 'HS=', HS
++      WRITE(98,'(A,ES24.16)') 'US=', US
++      WRITE(98,'(A,ES24.16)') 'CF=', CF
++      WRITE(98,'(A,ES24.16)') 'ST=', ST
++      WRITE(98,'(A,ES24.16)') 'DI=', DI
++      WRITE(98,'(A,ES24.16)') 'DI_HS=', DI_HS
++      WRITE(98,'(A,ES24.16)') 'DI_US=', DI_US
++      WRITE(98,'(A,ES24.16)') 'DI_CF=', DI_CF
++      WRITE(98,'(A,ES24.16)') 'DI_ST=', DI_ST
++C
+       RETURN
+       END
+ 
+@@ -2475,11 +2625,21 @@
+       HS_RT  = ( HS_RT          ) / FM
+       HS_MSQ = 0.028/FM  -  0.014*HS/FM
+ C
++C---- INSTRUMENTATION: Log HST inputs/outputs
++      WRITE(98,'(A)') '=== HST ==='
++      WRITE(98,'(A,ES24.16)') 'HK=', HK
++      WRITE(98,'(A,ES24.16)') 'RT=', RT
++      WRITE(98,'(A,ES24.16)') 'MSQ=', MSQ
++      WRITE(98,'(A,ES24.16)') 'HS=', HS
++      WRITE(98,'(A,ES24.16)') 'HS_HK=', HS_HK
++      WRITE(98,'(A,ES24.16)') 'HS_RT=', HS_RT
++      WRITE(98,'(A,ES24.16)') 'HS_MSQ=', HS_MSQ
++C
+       RETURN
+       END
+- 
+- 
+- 
++
++
++
+       SUBROUTINE CFT( HK, RT, MSQ, CF, CF_HK, CF_RT, CF_MSQ )
+       IMPLICIT REAL (A-H,M,O-Z)
+       INCLUDE 'BLPAR.INC'
+@@ -2506,6 +2666,16 @@
+       CF_RT  = GEX*CFO/(FC*GRT) / RT
+       CF_MSQ = GEX*CFO/(FC*GRT) * (-0.25*GM1/FC**2) - 0.25*GM1*CF/FC**2
+ C
++C---- INSTRUMENTATION: Log CFT inputs/outputs
++      WRITE(98,'(A)') '=== CFT ==='
++      WRITE(98,'(A,ES24.16)') 'HK=', HK
++      WRITE(98,'(A,ES24.16)') 'RT=', RT
++      WRITE(98,'(A,ES24.16)') 'MSQ=', MSQ
++      WRITE(98,'(A,ES24.16)') 'CF=', CF
++      WRITE(98,'(A,ES24.16)') 'CF_HK=', CF_HK
++      WRITE(98,'(A,ES24.16)') 'CF_RT=', CF_RT
++      WRITE(98,'(A,ES24.16)') 'CF_MSQ=', CF_MSQ
++C
+       RETURN
+       END ! CFT
+ 

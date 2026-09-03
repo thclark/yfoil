@@ -1,3 +1,4 @@
+#![allow(dead_code)] // fixture structs deserialise every XFOIL field; tests read a subset
 //! Tests for SETBL Newton system against XFOIL fixture data
 //!
 //! These tests validate that yfoil's SETBL implementation produces
@@ -21,9 +22,7 @@ use fixtures::blsolv_fixtures::parse_blsolv_input;
 use std::path::PathBuf;
 
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(".tmp")
-        .join(name)
+    fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
 /// Test that NSYS is computed correctly according to XFOIL's IBLSYS
@@ -33,13 +32,6 @@ fn fixture_path(name: &str) -> PathBuf {
 #[test]
 fn test_nsys_calculation_matches_xfoil() {
     let input_path = fixture_path("blsolv_input.dat");
-
-    if !input_path.exists() {
-        eprintln!(
-            "Skipping test: fixture file not found. Run instrumented XFOIL to generate it."
-        );
-        return;
-    }
 
     // Parse XFOIL fixture data
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse BLSOLV input");
@@ -103,10 +95,6 @@ fn test_nsys_calculation_matches_xfoil() {
 fn test_ivte1_calculation_matches_xfoil() {
     let input_path = fixture_path("blsolv_input.dat");
 
-    if !input_path.exists() {
-        return;
-    }
-
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse BLSOLV input");
 
     let xfoil_iblte1 = xfoil_input.iblte1;
@@ -120,10 +108,7 @@ fn test_ivte1_calculation_matches_xfoil() {
     // For 0-based: ivte1_0based = IBLTE1 - 2
     let xfoil_ivte1_0based = xfoil_input.ivte1_0based();
 
-    println!(
-        "XFOIL IVTE1 (0-based) = {} (computed from IBLTE1)",
-        xfoil_ivte1_0based
-    );
+    println!("XFOIL IVTE1 (0-based) = {} (computed from IBLTE1)", xfoil_ivte1_0based);
 
     // Current yfoil implementation uses: ivte1 = nbl_upper - 1
     // This would give: 67 - 1 = 66 for the fixture data
@@ -171,10 +156,6 @@ fn test_ivte1_calculation_matches_xfoil() {
 fn test_lower_surface_start_index() {
     let input_path = fixture_path("blsolv_input.dat");
 
-    if !input_path.exists() {
-        return;
-    }
-
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse BLSOLV input");
 
     let xfoil_nbl1 = xfoil_input.nbl1;
@@ -191,10 +172,7 @@ fn test_lower_surface_start_index() {
     let yfoil_offset_correct = n_upper_sys;
 
     println!("\nYFoil lower surface offset calculations:");
-    println!(
-        "  Current (nbl_upper): {} (would be WRONG)",
-        yfoil_offset_current
-    );
+    println!("  Current (nbl_upper): {} (would be WRONG)", yfoil_offset_current);
     println!(
         "  Correct (n_upper_sys = nbl_upper - 1): {} (CORRECT)",
         yfoil_offset_correct
@@ -222,10 +200,6 @@ fn test_lower_surface_start_index() {
 fn test_ivz_wake_coupling_index() {
     let input_path = fixture_path("blsolv_input.dat");
 
-    if !input_path.exists() {
-        return;
-    }
-
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse BLSOLV input");
 
     // IVZ is the system index for the first wake station
@@ -235,7 +209,10 @@ fn test_ivz_wake_coupling_index() {
     println!("XFOIL parameters for VZ block:");
     println!("  NBL1 = {} (upper surface stations)", xfoil_input.nbl1);
     println!("  IBLTE2 = {} (lower TE station index)", xfoil_input.iblte2);
-    println!("  IVZ (0-based) = {} (first wake station system index)", xfoil_ivz_0based);
+    println!(
+        "  IVZ (0-based) = {} (first wake station system index)",
+        xfoil_ivz_0based
+    );
 
     // IVZ formula: IVZ = ISYS(IBLTE2+1, 2) = (NBL1-1) + (IBLTE2+1-1) = NBL1 + IBLTE2 - 1 (1-based)
     // For 0-based: ivz = NBL1 + IBLTE2 - 2
@@ -261,10 +238,6 @@ fn test_ivz_wake_coupling_index() {
 #[test]
 fn test_station_to_system_index_mapping() {
     let input_path = fixture_path("blsolv_input.dat");
-
-    if !input_path.exists() {
-        return;
-    }
 
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse BLSOLV input");
 
@@ -308,12 +281,7 @@ fn test_station_to_system_index_mapping() {
     for ibl in 1..nbl2 {
         let iv = n_upper_sys + (ibl - 1); // System index
         println!("  ibl={} -> iv={}", ibl, iv);
-        assert!(
-            iv < nsys,
-            "Lower surface iv={} should be < nsys={}",
-            iv,
-            nsys
-        );
+        assert!(iv < nsys, "Lower surface iv={} should be < nsys={}", iv, nsys);
     }
 
     println!("\nAll index mappings verified successfully!");
@@ -389,8 +357,7 @@ fn test_xfoil_mass_equals_dstr_times_uedg() {
     let fixture = match load_iter1_fixture() {
         Some(f) => f,
         None => {
-            eprintln!("Skipping test: fixture not found");
-            return;
+            panic!("never skip silently (CLAUDE.md Rule 7): fixture not found");
         }
     };
 
@@ -415,8 +382,10 @@ fn test_xfoil_mass_equals_dstr_times_uedg() {
 
             // Only print mismatches beyond fixture output precision (~1e-7)
             if rel_err > 1e-6 {
-                println!("  IBL={}: DSTR*UEDG={:.10e}, MASS={:.10e}, rel_err={:.2e} MISMATCH",
-                    station.ibl, computed_mass, xfoil_mass, rel_err);
+                println!(
+                    "  IBL={}: DSTR*UEDG={:.10e}, MASS={:.10e}, rel_err={:.2e} MISMATCH",
+                    station.ibl, computed_mass, xfoil_mass, rel_err
+                );
             }
         }
     }
@@ -434,8 +403,10 @@ fn test_xfoil_mass_equals_dstr_times_uedg() {
 
             // Only print mismatches beyond fixture output precision (~1e-7)
             if rel_err > 1e-6 {
-                println!("  IBL={}: DSTR*UEDG={:.10e}, MASS={:.10e}, rel_err={:.2e} MISMATCH",
-                    station.ibl, computed_mass, xfoil_mass, rel_err);
+                println!(
+                    "  IBL={}: DSTR*UEDG={:.10e}, MASS={:.10e}, rel_err={:.2e} MISMATCH",
+                    station.ibl, computed_mass, xfoil_mass, rel_err
+                );
             }
         }
     }
@@ -463,8 +434,7 @@ fn test_print_xfoil_iter1_bl_state_summary() {
     let fixture = match load_iter1_fixture() {
         Some(f) => f,
         None => {
-            eprintln!("Skipping test: fixture not found");
-            return;
+            panic!("never skip silently (CLAUDE.md Rule 7): fixture not found");
         }
     };
 
@@ -477,26 +447,34 @@ fn test_print_xfoil_iter1_bl_state_summary() {
     println!("Upper surface ({} stations):", fixture.nbl_upper);
     println!("  {:>4} {:>12} {:>12} {:>12}", "IBL", "UEDG", "DSTR", "MASS");
     for station in fixture.upper_surface.iter().take(5) {
-        println!("  {:>4} {:>12.6e} {:>12.6e} {:>12.6e}",
-            station.ibl, station.uedg, station.dstr, station.mass);
+        println!(
+            "  {:>4} {:>12.6e} {:>12.6e} {:>12.6e}",
+            station.ibl, station.uedg, station.dstr, station.mass
+        );
     }
     println!("  ...");
     if let Some(te) = fixture.upper_surface.last() {
-        println!("  {:>4} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
-            te.ibl, te.uedg, te.dstr, te.mass);
+        println!(
+            "  {:>4} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
+            te.ibl, te.uedg, te.dstr, te.mass
+        );
     }
 
     // Lower surface summary
     println!("\nLower surface ({} stations):", fixture.nbl_lower);
     println!("  {:>4} {:>12} {:>12} {:>12}", "IBL", "UEDG", "DSTR", "MASS");
     for station in fixture.lower_surface.iter().take(5) {
-        println!("  {:>4} {:>12.6e} {:>12.6e} {:>12.6e}",
-            station.ibl, station.uedg, station.dstr, station.mass);
+        println!(
+            "  {:>4} {:>12.6e} {:>12.6e} {:>12.6e}",
+            station.ibl, station.uedg, station.dstr, station.mass
+        );
     }
     println!("  ...");
     if let Some(te) = fixture.lower_surface.last() {
-        println!("  {:>4} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
-            te.ibl, te.uedg, te.dstr, te.mass);
+        println!(
+            "  {:>4} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
+            te.ibl, te.uedg, te.dstr, te.mass
+        );
     }
 
     // Key values for debugging
@@ -561,8 +539,7 @@ fn test_xfoil_unew_equals_uinv_plus_dui() {
     let fixture = match load_update_fixture() {
         Some(f) => f,
         None => {
-            eprintln!("Skipping test: UPDATE fixture not found");
-            return;
+            panic!("never skip silently (CLAUDE.md Rule 7): UPDATE fixture not found");
         }
     };
 
@@ -584,8 +561,10 @@ fn test_xfoil_unew_equals_uinv_plus_dui() {
             max_rel_err_upper = max_rel_err_upper.max(rel_err);
 
             if rel_err > 1e-6 {
-                println!("  IBL={}: UINV+DUI={:.10e}, UNEW={:.10e}, rel_err={:.2e} MISMATCH",
-                    station.ibl, computed_unew, xfoil_unew, rel_err);
+                println!(
+                    "  IBL={}: UINV+DUI={:.10e}, UNEW={:.10e}, rel_err={:.2e} MISMATCH",
+                    station.ibl, computed_unew, xfoil_unew, rel_err
+                );
             }
         }
     }
@@ -602,8 +581,10 @@ fn test_xfoil_unew_equals_uinv_plus_dui() {
             max_rel_err_lower = max_rel_err_lower.max(rel_err);
 
             if rel_err > 1e-6 {
-                println!("  IBL={}: UINV+DUI={:.10e}, UNEW={:.10e}, rel_err={:.2e} MISMATCH",
-                    station.ibl, computed_unew, xfoil_unew, rel_err);
+                println!(
+                    "  IBL={}: UINV+DUI={:.10e}, UNEW={:.10e}, rel_err={:.2e} MISMATCH",
+                    station.ibl, computed_unew, xfoil_unew, rel_err
+                );
             }
         }
     }
@@ -630,8 +611,7 @@ fn test_print_xfoil_update_summary() {
     let fixture = match load_update_fixture() {
         Some(f) => f,
         None => {
-            eprintln!("Skipping test: UPDATE fixture not found");
-            return;
+            panic!("never skip silently (CLAUDE.md Rule 7): UPDATE fixture not found");
         }
     };
 
@@ -641,35 +621,53 @@ fn test_print_xfoil_update_summary() {
 
     // Upper surface summary
     println!("Upper surface ({} stations):", fixture.upper_surface.len());
-    println!("  {:>4} {:>5} {:>12} {:>12} {:>12} {:>12}", "IBL", "IPAN", "UINV", "DUI", "UNEW", "MASS");
+    println!(
+        "  {:>4} {:>5} {:>12} {:>12} {:>12} {:>12}",
+        "IBL", "IPAN", "UINV", "DUI", "UNEW", "MASS"
+    );
     for station in fixture.upper_surface.iter().take(5) {
-        println!("  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e}",
-            station.ibl, station.ipan, station.uinv, station.dui, station.unew, station.mass);
+        println!(
+            "  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e}",
+            station.ibl, station.ipan, station.uinv, station.dui, station.unew, station.mass
+        );
     }
     println!("  ...");
     if let Some(te) = fixture.upper_surface.last() {
-        println!("  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
-            te.ibl, te.ipan, te.uinv, te.dui, te.unew, te.mass);
+        println!(
+            "  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
+            te.ibl, te.ipan, te.uinv, te.dui, te.unew, te.mass
+        );
     }
 
     // Lower surface summary
     println!("\nLower surface ({} stations):", fixture.lower_surface.len());
-    println!("  {:>4} {:>5} {:>12} {:>12} {:>12} {:>12}", "IBL", "IPAN", "UINV", "DUI", "UNEW", "MASS");
+    println!(
+        "  {:>4} {:>5} {:>12} {:>12} {:>12} {:>12}",
+        "IBL", "IPAN", "UINV", "DUI", "UNEW", "MASS"
+    );
     for station in fixture.lower_surface.iter().take(5) {
-        println!("  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e}",
-            station.ibl, station.ipan, station.uinv, station.dui, station.unew, station.mass);
+        println!(
+            "  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e}",
+            station.ibl, station.ipan, station.uinv, station.dui, station.unew, station.mass
+        );
     }
     println!("  ...");
     if let Some(te) = fixture.lower_surface.last() {
-        println!("  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
-            te.ibl, te.ipan, te.uinv, te.dui, te.unew, te.mass);
+        println!(
+            "  {:>4} {:>5} {:>12.6e} {:>12.6e} {:>12.6e} {:>12.6e} (TE)",
+            te.ibl, te.ipan, te.uinv, te.dui, te.unew, te.mass
+        );
     }
 
     // Statistics
-    let upper_dui_range: (f64, f64) = fixture.upper_surface.iter()
+    let upper_dui_range: (f64, f64) = fixture
+        .upper_surface
+        .iter()
         .map(|s| s.dui)
         .fold((f64::MAX, f64::MIN), |(min, max), v| (min.min(v), max.max(v)));
-    let lower_dui_range: (f64, f64) = fixture.lower_surface.iter()
+    let lower_dui_range: (f64, f64) = fixture
+        .lower_surface
+        .iter()
         .map(|s| s.dui)
         .fold((f64::MAX, f64::MIN), |(min, max), v| (min.min(v), max.max(v)));
 
@@ -687,16 +685,11 @@ fn test_print_xfoil_update_summary() {
 /// NOTE: YFoil's current inviscid solver only computes 160×160 DIJ (no wake),
 /// so this test loads XFOIL's DIJ directly to isolate the DUI computation.
 #[test]
-#[ignore] // Run with: cargo test test_dui_computation -- --ignored --nocapture
+#[ignore = "S4: DUI needs extended DIJ"]
 fn test_dui_computation_matches_xfoil() {
     // Load geometry
     let geom_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("docs/validation/assets/analysis/geometry/naca0012.json");
-
-    if !geom_path.exists() {
-        eprintln!("Skipping test: geometry file not found at {:?}", geom_path);
-        return;
-    }
 
     let geometry = read_geometry_from_file(&geom_path).expect("Failed to load geometry");
     let airfoil = create_paneled_airfoil(&geometry);
@@ -706,8 +699,7 @@ fn test_dui_computation_matches_xfoil() {
     let update_fixture = match load_update_fixture() {
         Some(f) => f,
         None => {
-            eprintln!("Skipping test: UPDATE fixture not found");
-            return;
+            panic!("never skip silently (CLAUDE.md Rule 7): UPDATE fixture not found");
         }
     };
 
@@ -753,9 +745,7 @@ fn test_dui_computation_matches_xfoil() {
 
     // Compute VTI for each panel
     // VTI = +1 for upper surface (panels < stag_idx), -1 for lower surface (panels >= stag_idx)
-    let vti: Vec<f64> = (0..n)
-        .map(|i| if i < stag_idx { 1.0 } else { -1.0 })
-        .collect();
+    let vti: Vec<f64> = (0..n).map(|i| if i < stag_idx { 1.0 } else { -1.0 }).collect();
 
     // Compute DUI for each panel using the formula:
     // DUI[i] = sum_j(-VTI[i] * VTI[j] * DIJ[i,j] * MASS[j])
@@ -792,9 +782,18 @@ fn test_dui_computation_matches_xfoil() {
         }
     }
     println!("\nMASS distribution debug:");
-    println!("  Total: {} panels with non-zero MASS, sum={:.6e}", mass_count, mass_sum);
-    println!("  Upper (panels 0-79): {} panels, sum={:.6e}", upper_mass_count, upper_mass_sum);
-    println!("  Lower (panels 80-159): {} panels, sum={:.6e}", lower_mass_count, lower_mass_sum);
+    println!(
+        "  Total: {} panels with non-zero MASS, sum={:.6e}",
+        mass_count, mass_sum
+    );
+    println!(
+        "  Upper (panels 0-79): {} panels, sum={:.6e}",
+        upper_mass_count, upper_mass_sum
+    );
+    println!(
+        "  Lower (panels 80-159): {} panels, sum={:.6e}",
+        lower_mass_count, lower_mass_sum
+    );
 
     // Print MASS values for specific panels
     println!("\n  Sample MASS values (upper surface):");
@@ -829,8 +828,16 @@ fn test_dui_computation_matches_xfoil() {
             }
             // Print a few specific contributions
             if j == debug_i || j == debug_i - 1 || j == debug_i + 1 || j == 80 || j == 0 || j == 159 {
-                println!("    j={:3}: VTI[j]={:+.0}, DIJ[{},{}]={:+.6e}, MASS={:.6e}, contrib={:+.6e}",
-                    j, vti[j], debug_i, j, dij[(debug_i, j)], mass_by_panel[j], contrib);
+                println!(
+                    "    j={:3}: VTI[j]={:+.0}, DIJ[{},{}]={:+.6e}, MASS={:.6e}, contrib={:+.6e}",
+                    j,
+                    vti[j],
+                    debug_i,
+                    j,
+                    dij[(debug_i, j)],
+                    mass_by_panel[j],
+                    contrib
+                );
             }
         }
     }
@@ -841,7 +848,10 @@ fn test_dui_computation_matches_xfoil() {
 
     // Compare against XFOIL's DUI values
     println!("\n=== Upper Surface DUI Comparison ===");
-    println!("{:>4} {:>5} {:>14} {:>14} {:>12}", "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR");
+    println!(
+        "{:>4} {:>5} {:>14} {:>14} {:>12}",
+        "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR"
+    );
 
     let mut max_rel_err_upper: f64 = 0.0;
     let mut max_err_station_upper = 0;
@@ -864,15 +874,27 @@ fn test_dui_computation_matches_xfoil() {
 
         // Print first few and any mismatches
         if station.ibl <= 5 || rel_err > 0.01 {
-            println!("{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
-                station.ibl, station.ipan, xfoil_dui, yfoil_dui, rel_err,
-                if rel_err > 0.01 { " MISMATCH" } else { "" });
+            println!(
+                "{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
+                station.ibl,
+                station.ipan,
+                xfoil_dui,
+                yfoil_dui,
+                rel_err,
+                if rel_err > 0.01 { " MISMATCH" } else { "" }
+            );
         }
     }
-    println!("Max rel error: {:.2e} at IBL={}", max_rel_err_upper, max_err_station_upper);
+    println!(
+        "Max rel error: {:.2e} at IBL={}",
+        max_rel_err_upper, max_err_station_upper
+    );
 
     println!("\n=== Lower Surface DUI Comparison (airfoil only, no wake) ===");
-    println!("{:>4} {:>5} {:>14} {:>14} {:>12}", "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR");
+    println!(
+        "{:>4} {:>5} {:>14} {:>14} {:>12}",
+        "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR"
+    );
 
     let mut max_rel_err_lower: f64 = 0.0;
     let mut max_err_station_lower = 0;
@@ -898,12 +920,21 @@ fn test_dui_computation_matches_xfoil() {
 
         // Print first few and any mismatches
         if station.ibl <= 5 || rel_err > 0.01 {
-            println!("{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
-                station.ibl, station.ipan, xfoil_dui, yfoil_dui, rel_err,
-                if rel_err > 0.01 { " MISMATCH" } else { "" });
+            println!(
+                "{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
+                station.ibl,
+                station.ipan,
+                xfoil_dui,
+                yfoil_dui,
+                rel_err,
+                if rel_err > 0.01 { " MISMATCH" } else { "" }
+            );
         }
     }
-    println!("Max rel error: {:.2e} at IBL={}", max_rel_err_lower, max_err_station_lower);
+    println!(
+        "Max rel error: {:.2e} at IBL={}",
+        max_rel_err_lower, max_err_station_lower
+    );
 
     // Assert with tolerance for fixture precision (~1e-7)
     // The DUI values are small (1e-3 to 1e-4), so we allow some tolerance
@@ -912,12 +943,16 @@ fn test_dui_computation_matches_xfoil() {
     assert!(
         max_rel_err_upper < tolerance,
         "Upper surface DUI mismatch: max rel err = {:.2e} at IBL={} (tolerance = {:.0e})",
-        max_rel_err_upper, max_err_station_upper, tolerance
+        max_rel_err_upper,
+        max_err_station_upper,
+        tolerance
     );
     assert!(
         max_rel_err_lower < tolerance,
         "Lower surface DUI mismatch: max rel err = {:.2e} at IBL={} (tolerance = {:.0e})",
-        max_rel_err_lower, max_err_station_lower, tolerance
+        max_rel_err_lower,
+        max_err_station_lower,
+        tolerance
     );
 
     println!("\nSUCCESS: DUI computation matches XFOIL within {:.0e}", tolerance);
@@ -929,16 +964,11 @@ fn test_dui_computation_matches_xfoil() {
 /// XFOIL uses 1-indexed panels, YFoil uses 0-indexed.
 /// XFOIL DIJ(i,j) corresponds to YFoil dij[(i-1, j-1)]
 #[test]
-#[ignore] // Run with: cargo test test_dij_matrix_matches_xfoil -- --ignored --nocapture
+#[ignore = "S4: extended DIJ"]
 fn test_dij_matrix_matches_xfoil() {
     // Load geometry (same as DUI test)
     let geom_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("docs/validation/assets/analysis/geometry/naca0012.json");
-
-    if !geom_path.exists() {
-        eprintln!("Skipping test: geometry file not found at {:?}", geom_path);
-        return;
-    }
 
     let geometry = read_geometry_from_file(&geom_path).expect("Failed to load geometry");
     let airfoil = create_paneled_airfoil(&geometry);
@@ -954,12 +984,7 @@ fn test_dij_matrix_matches_xfoil() {
 
     // Load XFOIL DIJ fixture (generated by instrumented XFOIL)
     // Format: row col value (1-indexed)
-    let dij_path = std::path::Path::new("/tmp/xfoil_dij.dat");
-    if !dij_path.exists() {
-        eprintln!("XFOIL DIJ fixture not found at {:?}", dij_path);
-        eprintln!("Run instrumented XFOIL first to generate it");
-        return;
-    }
+    let dij_path = fixture_path("xfoil_dij.dat");
 
     let content = fs::read_to_string(dij_path).expect("Failed to read DIJ fixture");
     let lines: Vec<&str> = content.lines().collect();
@@ -973,7 +998,10 @@ fn test_dij_matrix_matches_xfoil() {
     // Compare specific DIJ entries
     // XFOIL row 80 (near LE, upper surface station IBL=2)
     println!("\n=== DIJ Row 80 (XFOIL 1-indexed) / Row 79 (YFoil 0-indexed) ===");
-    println!("{:>4} {:>4} {:>20} {:>20} {:>12}", "XROW", "XCOL", "XFOIL_DIJ", "YFOIL_DIJ", "REL_ERR");
+    println!(
+        "{:>4} {:>4} {:>20} {:>20} {:>12}",
+        "XROW", "XCOL", "XFOIL_DIJ", "YFOIL_DIJ", "REL_ERR"
+    );
 
     let mut max_rel_err: f64 = 0.0;
     let mut max_err_entry = (0, 0);
@@ -1023,9 +1051,15 @@ fn test_dij_matrix_matches_xfoil() {
 
         // Print row 80 entries (near LE)
         if row == 80 && col <= 10 {
-            println!("{:>4} {:>4} {:>20.10e} {:>20.10e} {:>12.2e}{}",
-                row, col, xfoil_val, yfoil_val, rel_err,
-                if rel_err > 1e-6 { " MISMATCH" } else { "" });
+            println!(
+                "{:>4} {:>4} {:>20.10e} {:>20.10e} {:>12.2e}{}",
+                row,
+                col,
+                xfoil_val,
+                yfoil_val,
+                rel_err,
+                if rel_err > 1e-6 { " MISMATCH" } else { "" }
+            );
         }
     }
 
@@ -1033,10 +1067,21 @@ fn test_dij_matrix_matches_xfoil() {
     println!("\n=== DIJ Row 1 (XFOIL 1-indexed) / Row 0 (YFoil 0-indexed) ===");
     for line in &lines {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() != 3 { continue; }
-        let row: usize = match parts[0].parse() { Ok(r) => r, Err(_) => continue };
-        let col: usize = match parts[1].parse() { Ok(c) => c, Err(_) => continue };
-        let xfoil_val: f64 = match parts[2].parse() { Ok(v) => v, Err(_) => continue };
+        if parts.len() != 3 {
+            continue;
+        }
+        let row: usize = match parts[0].parse() {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let col: usize = match parts[1].parse() {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let xfoil_val: f64 = match parts[2].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
 
         if row == 1 && col <= 10 {
             let yfoil_row = row - 1;
@@ -1047,14 +1092,23 @@ fn test_dij_matrix_matches_xfoil() {
             } else {
                 (yfoil_val - xfoil_val).abs()
             };
-            println!("{:>4} {:>4} {:>20.10e} {:>20.10e} {:>12.2e}{}",
-                row, col, xfoil_val, yfoil_val, rel_err,
-                if rel_err > 1e-6 { " MISMATCH" } else { "" });
+            println!(
+                "{:>4} {:>4} {:>20.10e} {:>20.10e} {:>12.2e}{}",
+                row,
+                col,
+                xfoil_val,
+                yfoil_val,
+                rel_err,
+                if rel_err > 1e-6 { " MISMATCH" } else { "" }
+            );
         }
     }
 
     println!("\nTotal entries checked: {}", entries_checked);
-    println!("Max relative error: {:.2e} at XFOIL entry ({}, {})", max_rel_err, max_err_entry.0, max_err_entry.1);
+    println!(
+        "Max relative error: {:.2e} at XFOIL entry ({}, {})",
+        max_rel_err, max_err_entry.0, max_err_entry.1
+    );
 
     // Check specific entry that had largest error in DUI test
     // Upper IBL=20 had 29x error, which is IPAN=61 (XFOIL 1-indexed)
@@ -1062,10 +1116,21 @@ fn test_dij_matrix_matches_xfoil() {
     let check_row = 61;
     for line in &lines {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() != 3 { continue; }
-        let row: usize = match parts[0].parse() { Ok(r) => r, Err(_) => continue };
-        let col: usize = match parts[1].parse() { Ok(c) => c, Err(_) => continue };
-        let xfoil_val: f64 = match parts[2].parse() { Ok(v) => v, Err(_) => continue };
+        if parts.len() != 3 {
+            continue;
+        }
+        let row: usize = match parts[0].parse() {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let col: usize = match parts[1].parse() {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let xfoil_val: f64 = match parts[2].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
 
         // Check a few columns for this row
         if row == check_row && (col <= 5 || col == 80 || col == 81 || col == 160) {
@@ -1077,9 +1142,15 @@ fn test_dij_matrix_matches_xfoil() {
             } else {
                 (yfoil_val - xfoil_val).abs()
             };
-            println!("  DIJ({}, {}): XFOIL={:+.10e}, YFOIL={:+.10e}, rel_err={:.2e}{}",
-                row, col, xfoil_val, yfoil_val, rel_err,
-                if rel_err > 1e-6 { " MISMATCH" } else { "" });
+            println!(
+                "  DIJ({}, {}): XFOIL={:+.10e}, YFOIL={:+.10e}, rel_err={:.2e}{}",
+                row,
+                col,
+                xfoil_val,
+                yfoil_val,
+                rel_err,
+                if rel_err > 1e-6 { " MISMATCH" } else { "" }
+            );
         }
     }
 
@@ -1088,7 +1159,10 @@ fn test_dij_matrix_matches_xfoil() {
     assert!(
         max_rel_err < tolerance,
         "DIJ matrix mismatch: max rel err = {:.2e} at ({}, {}) (tolerance = {:.0e})",
-        max_rel_err, max_err_entry.0, max_err_entry.1, tolerance
+        max_rel_err,
+        max_err_entry.0,
+        max_err_entry.1,
+        tolerance
     );
 
     println!("\nSUCCESS: DIJ matrix matches XFOIL within {:.0e}", tolerance);
@@ -1100,34 +1174,26 @@ fn test_dij_matrix_matches_xfoil() {
 /// that the DUI formula produces matching results. This isolates the DUI
 /// computation from YFoil's inviscid solver (which doesn't include wake).
 #[test]
-#[ignore] // Run with: cargo test test_dui_with_xfoil_dij -- --ignored --nocapture
+#[ignore = "S4: extended DIJ"]
 fn test_dui_with_xfoil_dij() {
     // Load XFOIL DIJ matrix from fixture
-    let dij_path = std::path::Path::new("/tmp/xfoil_dij.dat");
-    if !dij_path.exists() {
-        eprintln!("XFOIL DIJ fixture not found at {:?}", dij_path);
-        eprintln!("Run instrumented XFOIL first to generate it");
-        return;
-    }
+    let dij_path = fixture_path("xfoil_dij.dat");
 
     let content = fs::read_to_string(dij_path).expect("Failed to read DIJ fixture");
     let lines: Vec<&str> = content.lines().collect();
 
     // Parse header to get dimensions
-    let mut n_total = 0;
     let mut n_airfoil = 0;
     let mut n_wake = 0;
     for line in lines.iter().take(5) {
         if line.contains("N =") && !line.contains("NW") {
-            n_airfoil = line.split_whitespace().last()
-                .and_then(|s| s.parse().ok()).unwrap_or(0);
+            n_airfoil = line.split_whitespace().last().and_then(|s| s.parse().ok()).unwrap_or(0);
         }
         if line.contains("NW =") {
-            n_wake = line.split_whitespace().last()
-                .and_then(|s| s.parse().ok()).unwrap_or(0);
+            n_wake = line.split_whitespace().last().and_then(|s| s.parse().ok()).unwrap_or(0);
         }
     }
-    n_total = n_airfoil + n_wake;
+    let n_total = n_airfoil + n_wake;
 
     if n_total == 0 {
         eprintln!("Failed to parse DIJ dimensions");
@@ -1141,13 +1207,24 @@ fn test_dui_with_xfoil_dij() {
     let mut dij = vec![vec![0.0; n_total]; n_total];
     for line in &lines {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() != 3 { continue; }
-        let row: usize = match parts[0].parse() { Ok(r) => r, Err(_) => continue };
-        let col: usize = match parts[1].parse() { Ok(c) => c, Err(_) => continue };
-        let val: f64 = match parts[2].parse() { Ok(v) => v, Err(_) => continue };
+        if parts.len() != 3 {
+            continue;
+        }
+        let row: usize = match parts[0].parse() {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let col: usize = match parts[1].parse() {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let val: f64 = match parts[2].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
 
         if row >= 1 && row <= n_total && col >= 1 && col <= n_total {
-            dij[row - 1][col - 1] = val;  // Convert to 0-indexed
+            dij[row - 1][col - 1] = val; // Convert to 0-indexed
         }
     }
 
@@ -1155,8 +1232,7 @@ fn test_dui_with_xfoil_dij() {
     let update_fixture = match load_update_fixture() {
         Some(f) => f,
         None => {
-            eprintln!("Skipping test: UPDATE fixture not found");
-            return;
+            panic!("never skip silently (CLAUDE.md Rule 7): UPDATE fixture not found");
         }
     };
 
@@ -1165,7 +1241,7 @@ fn test_dui_with_xfoil_dij() {
 
     // Upper surface: maps to airfoil panels 0-79 (0-indexed)
     for station in &update_fixture.upper_surface {
-        let ipan = station.ipan - 1;  // 0-indexed
+        let ipan = station.ipan - 1; // 0-indexed
         if ipan < n_airfoil {
             mass_by_panel[ipan] = station.mass_plus_vdel.unwrap_or(station.mass);
         }
@@ -1173,7 +1249,7 @@ fn test_dui_with_xfoil_dij() {
 
     // Lower surface: includes airfoil (panels 80-159) AND wake (panels 160+)
     for station in &update_fixture.lower_surface {
-        let ipan = station.ipan - 1;  // 0-indexed
+        let ipan = station.ipan - 1; // 0-indexed
         if ipan < n_total {
             mass_by_panel[ipan] = station.mass_plus_vdel.unwrap_or(station.mass);
         }
@@ -1182,23 +1258,26 @@ fn test_dui_with_xfoil_dij() {
     // Count MASS entries
     let airfoil_mass_count = mass_by_panel[..n_airfoil].iter().filter(|&&m| m != 0.0).count();
     let wake_mass_count = mass_by_panel[n_airfoil..].iter().filter(|&&m| m != 0.0).count();
-    println!("MASS distribution: {} airfoil + {} wake = {} total",
-        airfoil_mass_count, wake_mass_count, airfoil_mass_count + wake_mass_count);
+    println!(
+        "MASS distribution: {} airfoil + {} wake = {} total",
+        airfoil_mass_count,
+        wake_mass_count,
+        airfoil_mass_count + wake_mass_count
+    );
 
     // VTI by panel:
     // - Airfoil upper (panels 0-79): +1
     // - Airfoil lower (panels 80-159): -1
     // - Wake (panels 160+): -1 (continuation of lower surface)
-    let stag_idx = 80;  // First lower surface panel (0-indexed)
-    let vti: Vec<f64> = (0..n_total)
-        .map(|i| if i < stag_idx { 1.0 } else { -1.0 })
-        .collect();
+    let stag_idx = 80; // First lower surface panel (0-indexed)
+    let vti: Vec<f64> = (0..n_total).map(|i| if i < stag_idx { 1.0 } else { -1.0 }).collect();
 
     // Compute DUI for each airfoil panel
     let mut dui_computed = vec![0.0; n_airfoil];
     for i in 0..n_airfoil {
         let mut dui = 0.0;
-        for j in 0..n_total {  // Sum over ALL panels including wake
+        for j in 0..n_total {
+            // Sum over ALL panels including wake
             if mass_by_panel[j] != 0.0 {
                 let ue_m = -vti[i] * vti[j] * dij[i][j];
                 dui += ue_m * mass_by_panel[j];
@@ -1209,14 +1288,19 @@ fn test_dui_with_xfoil_dij() {
 
     // Compare against XFOIL's DUI values
     println!("\n=== Upper Surface DUI Comparison (with wake) ===");
-    println!("{:>4} {:>5} {:>14} {:>14} {:>12}", "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR");
+    println!(
+        "{:>4} {:>5} {:>14} {:>14} {:>12}",
+        "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR"
+    );
 
     let mut max_rel_err_upper: f64 = 0.0;
     let mut max_err_station_upper = 0;
 
     for station in &update_fixture.upper_surface {
-        let ipan = station.ipan - 1;  // 0-indexed
-        if ipan >= n_airfoil { continue; }
+        let ipan = station.ipan - 1; // 0-indexed
+        if ipan >= n_airfoil {
+            continue;
+        }
 
         let xfoil_dui = station.dui;
         let yfoil_dui = dui_computed[ipan];
@@ -1234,23 +1318,37 @@ fn test_dui_with_xfoil_dij() {
 
         // Print first 10 and any mismatches > 1%
         if station.ibl <= 10 || rel_err > 0.01 {
-            println!("{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
-                station.ibl, station.ipan, xfoil_dui, yfoil_dui, rel_err,
-                if rel_err > 0.01 { " MISMATCH" } else { "" });
+            println!(
+                "{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
+                station.ibl,
+                station.ipan,
+                xfoil_dui,
+                yfoil_dui,
+                rel_err,
+                if rel_err > 0.01 { " MISMATCH" } else { "" }
+            );
         }
     }
-    println!("Max rel error: {:.2e} at IBL={}", max_rel_err_upper, max_err_station_upper);
+    println!(
+        "Max rel error: {:.2e} at IBL={}",
+        max_rel_err_upper, max_err_station_upper
+    );
 
     // Check lower surface (airfoil only)
     println!("\n=== Lower Surface DUI Comparison (with wake) ===");
-    println!("{:>4} {:>5} {:>14} {:>14} {:>12}", "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR");
+    println!(
+        "{:>4} {:>5} {:>14} {:>14} {:>12}",
+        "IBL", "IPAN", "XFOIL_DUI", "YFOIL_DUI", "REL_ERR"
+    );
 
     let mut max_rel_err_lower: f64 = 0.0;
     let mut max_err_station_lower = 0;
 
     for station in &update_fixture.lower_surface {
-        let ipan = station.ipan - 1;  // 0-indexed
-        if ipan >= n_airfoil { continue; }  // Skip wake
+        let ipan = station.ipan - 1; // 0-indexed
+        if ipan >= n_airfoil {
+            continue;
+        } // Skip wake
 
         let xfoil_dui = station.dui;
         let yfoil_dui = dui_computed[ipan];
@@ -1268,28 +1366,44 @@ fn test_dui_with_xfoil_dij() {
 
         // Print first 10 and any mismatches > 1%
         if station.ibl <= 10 || rel_err > 0.01 {
-            println!("{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
-                station.ibl, station.ipan, xfoil_dui, yfoil_dui, rel_err,
-                if rel_err > 0.01 { " MISMATCH" } else { "" });
+            println!(
+                "{:>4} {:>5} {:>14.6e} {:>14.6e} {:>12.2e}{}",
+                station.ibl,
+                station.ipan,
+                xfoil_dui,
+                yfoil_dui,
+                rel_err,
+                if rel_err > 0.01 { " MISMATCH" } else { "" }
+            );
         }
     }
-    println!("Max rel error: {:.2e} at IBL={}", max_rel_err_lower, max_err_station_lower);
+    println!(
+        "Max rel error: {:.2e} at IBL={}",
+        max_rel_err_lower, max_err_station_lower
+    );
 
     // Assert with tolerance
-    let tolerance = 1e-5;  // Allow 0.001% error (fixture precision)
+    let tolerance = 1e-5; // Allow 0.001% error (fixture precision)
 
     assert!(
         max_rel_err_upper < tolerance,
         "Upper surface DUI mismatch: max rel err = {:.2e} at IBL={} (tolerance = {:.0e})",
-        max_rel_err_upper, max_err_station_upper, tolerance
+        max_rel_err_upper,
+        max_err_station_upper,
+        tolerance
     );
     assert!(
         max_rel_err_lower < tolerance,
         "Lower surface DUI mismatch: max rel err = {:.2e} at IBL={} (tolerance = {:.0e})",
-        max_rel_err_lower, max_err_station_lower, tolerance
+        max_rel_err_lower,
+        max_err_station_lower,
+        tolerance
     );
 
-    println!("\nSUCCESS: DUI computation matches XFOIL within {:.0e} (using full DIJ with wake)", tolerance);
+    println!(
+        "\nSUCCESS: DUI computation matches XFOIL within {:.0e} (using full DIJ with wake)",
+        tolerance
+    );
 }
 
 /// Fixture for RLX under-relaxation computation
@@ -1320,8 +1434,8 @@ struct RlxStationFixture {
 }
 
 fn load_rlx_fixture() -> Option<RlxFixture> {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/subroutines/update/naca0012_rlx_iter1.json");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/subroutines/update/naca0012_rlx_iter1.json");
     let content = fs::read_to_string(&path).ok()?;
     serde_json::from_str(&content).ok()
 }
@@ -1335,7 +1449,7 @@ fn load_rlx_fixture() -> Option<RlxFixture> {
 ///    If RLX*DNi < DLO (-0.5), set RLX = DLO/DNi
 /// 4. The final RLX is the most restrictive bound
 #[test]
-#[ignore] // Run with: cargo test test_rlx_computation_matches_xfoil -- --ignored --nocapture
+#[ignore = "S8: UPDATE RLX"]
 fn test_rlx_computation_matches_xfoil() {
     let fixture = match load_rlx_fixture() {
         Some(f) => f,
@@ -1360,7 +1474,7 @@ fn test_rlx_computation_matches_xfoil() {
     let mut rmsbl_sum = 0.0_f64;
 
     let mut max_dn_value = 0.0_f64;
-    let mut max_dn_station = (0_usize, 0_usize);  // (surface, ibl)
+    let mut max_dn_station = (0_usize, 0_usize); // (surface, ibl)
     let mut max_dn_var = "";
 
     // Process all stations as XFOIL does
@@ -1380,25 +1494,39 @@ fn test_rlx_computation_matches_xfoil() {
         }
 
         // RMSBL accumulation (XFOIL does this with unrelaxed DN values)
-        rmsbl_sum += dn1*dn1 + dn2*dn2 + dn3*dn3 + dn4*dn4;
+        rmsbl_sum += dn1 * dn1 + dn2 * dn2 + dn3 * dn3 + dn4 * dn4;
 
         // Check RLX bounds (this is the key algorithm)
         // XFOIL: IF(RDN1 .GT. DHI) RLX = DHI/DN1
         //        IF(RDN1 .LT. DLO) RLX = DLO/DN1
         let rdn1 = rlx * dn1;
-        if rdn1 > dhi { rlx = dhi / dn1; }
-        if rdn1 < dlo { rlx = dlo / dn1; }
+        if rdn1 > dhi {
+            rlx = dhi / dn1;
+        }
+        if rdn1 < dlo {
+            rlx = dlo / dn1;
+        }
 
         let rdn2 = rlx * dn2;
-        if rdn2 > dhi { rlx = dhi / dn2; }
-        if rdn2 < dlo { rlx = dlo / dn2; }
+        if rdn2 > dhi {
+            rlx = dhi / dn2;
+        }
+        if rdn2 < dlo {
+            rlx = dlo / dn2;
+        }
 
         let rdn3 = rlx * dn3;
-        if rdn3 > dhi { rlx = dhi / dn3; }
-        if rdn3 < dlo { rlx = dlo / dn3; }
+        if rdn3 > dhi {
+            rlx = dhi / dn3;
+        }
+        if rdn3 < dlo {
+            rlx = dlo / dn3;
+        }
 
         let rdn4 = rlx * dn4;
-        if rdn4 > dhi { rlx = dhi / dn4; }
+        if rdn4 > dhi {
+            rlx = dhi / dn4;
+        }
         // Note: dn4 is always positive (it's |DUEDG|/0.25), so no DLO check needed
     }
 
@@ -1416,35 +1544,51 @@ fn test_rlx_computation_matches_xfoil() {
             }
         }
 
-        rmsbl_sum += dn1*dn1 + dn2*dn2 + dn3*dn3 + dn4*dn4;
+        rmsbl_sum += dn1 * dn1 + dn2 * dn2 + dn3 * dn3 + dn4 * dn4;
 
         let rdn1 = rlx * dn1;
-        if rdn1 > dhi { rlx = dhi / dn1; }
-        if rdn1 < dlo { rlx = dlo / dn1; }
+        if rdn1 > dhi {
+            rlx = dhi / dn1;
+        }
+        if rdn1 < dlo {
+            rlx = dlo / dn1;
+        }
 
         let rdn2 = rlx * dn2;
-        if rdn2 > dhi { rlx = dhi / dn2; }
-        if rdn2 < dlo { rlx = dlo / dn2; }
+        if rdn2 > dhi {
+            rlx = dhi / dn2;
+        }
+        if rdn2 < dlo {
+            rlx = dlo / dn2;
+        }
 
         let rdn3 = rlx * dn3;
-        if rdn3 > dhi { rlx = dhi / dn3; }
-        if rdn3 < dlo { rlx = dlo / dn3; }
+        if rdn3 > dhi {
+            rlx = dhi / dn3;
+        }
+        if rdn3 < dlo {
+            rlx = dlo / dn3;
+        }
 
         let rdn4 = rlx * dn4;
-        if rdn4 > dhi { rlx = dhi / dn4; }
+        if rdn4 > dhi {
+            rlx = dhi / dn4;
+        }
     }
 
     // Compute RMSBL
     // XFOIL uses NBL(1)+NBL(2) in divisor, not (NBL(1)-1)+(NBL(2)-1)
     // This is because RMSBL normalizes by total stations including stagnation
-    let n_stations = fixture.nbl_upper + fixture.nbl_lower;  // 81 + 104 = 185
+    let n_stations = fixture.nbl_upper + fixture.nbl_lower; // 81 + 104 = 185
     let rmsbl = (rmsbl_sum / (4.0 * n_stations as f64)).sqrt();
 
     println!("\nComputed values:");
     println!("  RLX = {:.10}", rlx);
     println!("  RMSBL = {:.10}", rmsbl);
-    println!("\nMax DN: {} = {:.6} at surface={}, IBL={}",
-        max_dn_var, max_dn_value, max_dn_station.0, max_dn_station.1);
+    println!(
+        "\nMax DN: {} = {:.6} at surface={}, IBL={}",
+        max_dn_var, max_dn_value, max_dn_station.0, max_dn_station.1
+    );
 
     // Verify RLX matches to machine precision
     let rlx_rel_err = (rlx - fixture.rlx).abs() / fixture.rlx.abs();
@@ -1453,11 +1597,13 @@ fn test_rlx_computation_matches_xfoil() {
     println!("  Computed: {:.10}", rlx);
     println!("  Rel err:  {:.2e}", rlx_rel_err);
 
-    let tolerance = 1e-8;  // Machine precision
+    let tolerance = 1e-8; // Machine precision
     assert!(
         rlx_rel_err < tolerance,
         "RLX mismatch: computed={:.10}, expected={:.10}, rel_err={:.2e}",
-        rlx, fixture.rlx, rlx_rel_err
+        rlx,
+        fixture.rlx,
+        rlx_rel_err
     );
 
     // Verify RMSBL matches to machine precision
@@ -1470,8 +1616,13 @@ fn test_rlx_computation_matches_xfoil() {
     assert!(
         rmsbl_rel_err < tolerance,
         "RMSBL mismatch: computed={:.10}, expected={:.10}, rel_err={:.2e}",
-        rmsbl, fixture.rmsbl, rmsbl_rel_err
+        rmsbl,
+        fixture.rmsbl,
+        rmsbl_rel_err
     );
 
-    println!("\nSUCCESS: RLX and RMSBL computations match XFOIL within {:.0e}", tolerance);
+    println!(
+        "\nSUCCESS: RLX and RMSBL computations match XFOIL within {:.0e}",
+        tolerance
+    );
 }

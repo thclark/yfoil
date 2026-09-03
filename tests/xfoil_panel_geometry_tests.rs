@@ -18,6 +18,7 @@ struct Coordinate {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // fixture metadata, kept for provenance
 struct PanelFixture {
     description: String,
     airfoil: String,
@@ -37,78 +38,97 @@ struct PanelFixture {
 #[test]
 fn test_naca_0012_te_coordinates() {
     // Load XFOIL fixture
-    let file = File::open("tests/fixtures/naca0012/panels.json")
-        .expect("Failed to open panel fixture");
+    let file = File::open("tests/fixtures/naca0012/panels.json").expect("Failed to open panel fixture");
     let reader = BufReader::new(file);
-    let fixture: PanelFixture = serde_json::from_reader(reader)
-        .expect("Failed to parse panel fixture");
-    
+    let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
+
     // Generate YFoil geometry
     let geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
     let airfoil = create_paneled_airfoil(&geom);
-    
+
     // Check panel count
-    assert_eq!(airfoil.n, fixture.n_panels, 
-        "Panel count mismatch: YFoil={}, XFOIL={}", airfoil.n, fixture.n_panels);
-    
+    assert_eq!(
+        airfoil.n, fixture.n_panels,
+        "Panel count mismatch: YFoil={}, XFOIL={}",
+        airfoil.n, fixture.n_panels
+    );
+
     // Check TE coordinates (first and last nodes)
     let xfoil_te_upper = &fixture.coordinates[0];
     let xfoil_te_lower = &fixture.coordinates[fixture.n_panels - 1];
-    
+
     println!("=== TE Coordinates Comparison ===");
     println!("Upper TE:");
     println!("  XFOIL: x={:.10}, y={:.10}", xfoil_te_upper.x, xfoil_te_upper.y);
     println!("  YFoil: x={:.10}, y={:.10}", airfoil.x[0], airfoil.y[0]);
     println!("Lower TE:");
     println!("  XFOIL: x={:.10}, y={:.10}", xfoil_te_lower.x, xfoil_te_lower.y);
-    println!("  YFoil: x={:.10}, y={:.10}", airfoil.x[airfoil.n-1], airfoil.y[airfoil.n-1]);
-    
+    println!(
+        "  YFoil: x={:.10}, y={:.10}",
+        airfoil.x[airfoil.n - 1],
+        airfoil.y[airfoil.n - 1]
+    );
+
     // TE x-coordinate should be exactly 1.0
-    assert!((airfoil.x[0] - 1.0).abs() < 0.001, 
-        "Upper TE x not at 1.0: {}", airfoil.x[0]);
-    assert!((airfoil.x[airfoil.n-1] - 1.0).abs() < 0.001, 
-        "Lower TE x not at 1.0: {}", airfoil.x[airfoil.n-1]);
-    
+    assert!(
+        (airfoil.x[0] - 1.0).abs() < 0.001,
+        "Upper TE x not at 1.0: {}",
+        airfoil.x[0]
+    );
+    assert!(
+        (airfoil.x[airfoil.n - 1] - 1.0).abs() < 0.001,
+        "Lower TE x not at 1.0: {}",
+        airfoil.x[airfoil.n - 1]
+    );
+
     // TE y-coordinate should match XFOIL (blunt TE gap = 0.00252)
-    let te_gap_yfoil = airfoil.y[0] - airfoil.y[airfoil.n-1];
+    let te_gap_yfoil = airfoil.y[0] - airfoil.y[airfoil.n - 1];
     let te_gap_xfoil = fixture.te_gap;
     println!("TE gap: YFoil={:.6}, XFOIL={:.6}", te_gap_yfoil, te_gap_xfoil);
-    
-    assert!((te_gap_yfoil - te_gap_xfoil).abs() < 0.0001, 
-        "TE gap mismatch: YFoil={}, XFOIL={}", te_gap_yfoil, te_gap_xfoil);
+
+    assert!(
+        (te_gap_yfoil - te_gap_xfoil).abs() < 0.0001,
+        "TE gap mismatch: YFoil={}, XFOIL={}",
+        te_gap_yfoil,
+        te_gap_xfoil
+    );
 }
 
 /// Test panel spacing comparison between YFoil and XFOIL
 #[test]
 fn test_naca_0012_panel_spacing() {
     // Load XFOIL fixture
-    let file = File::open("tests/fixtures/naca0012/panels.json")
-        .expect("Failed to open panel fixture");
+    let file = File::open("tests/fixtures/naca0012/panels.json").expect("Failed to open panel fixture");
     let reader = BufReader::new(file);
-    let fixture: PanelFixture = serde_json::from_reader(reader)
-        .expect("Failed to parse panel fixture");
-    
+    let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
+
     // Generate YFoil geometry
     let geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
     let airfoil = create_paneled_airfoil(&geom);
-    
+
     println!("=== Panel Spacing Comparison (first 10 panels) ===");
-    println!("{:>4} {:>14} {:>14} {:>14} {:>14}", 
-             "Idx", "XFOIL_x", "YFoil_x", "XFOIL_y", "YFoil_y");
-    
+    println!(
+        "{:>4} {:>14} {:>14} {:>14} {:>14}",
+        "Idx", "XFOIL_x", "YFoil_x", "XFOIL_y", "YFoil_y"
+    );
+
     for i in 0..10.min(fixture.n_panels) {
         let xfoil = &fixture.coordinates[i];
-        println!("{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
-                 i, xfoil.x, airfoil.x[i], xfoil.y, airfoil.y[i]);
+        println!(
+            "{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
+            i, xfoil.x, airfoil.x[i], xfoil.y, airfoil.y[i]
+        );
     }
-    
+
     println!("\n=== Panel Spacing (last 5 panels) ===");
     for i in (fixture.n_panels - 5)..fixture.n_panels {
         let xfoil = &fixture.coordinates[i];
-        println!("{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
-                 i, xfoil.x, airfoil.x[i], xfoil.y, airfoil.y[i]);
+        println!(
+            "{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
+            i, xfoil.x, airfoil.x[i], xfoil.y, airfoil.y[i]
+        );
     }
-    
+
     // Calculate RMS error in x-coordinates
     let mut sum_sq = 0.0;
     for i in 0..fixture.n_panels {
@@ -117,7 +137,7 @@ fn test_naca_0012_panel_spacing() {
     }
     let rms_x_error = (sum_sq / fixture.n_panels as f64).sqrt();
     println!("\nRMS x-coordinate error: {:.6}", rms_x_error);
-    
+
     // XFOIL uses curvature-based PANE with:
     //   - TE/LE panel density ratio = 0.15 (coarser at TE)
     //   - Curvature smoothing
@@ -145,11 +165,9 @@ fn test_naca_0012_panel_spacing() {
 #[test]
 fn test_naca_0012_pane_algorithm() {
     // Load XFOIL fixture
-    let file = File::open("tests/fixtures/naca0012/panels.json")
-        .expect("Failed to open panel fixture");
+    let file = File::open("tests/fixtures/naca0012/panels.json").expect("Failed to open panel fixture");
     let reader = BufReader::new(file);
-    let fixture: PanelFixture = serde_json::from_reader(reader)
-        .expect("Failed to parse panel fixture");
+    let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
     // Generate buffer geometry with high resolution for input to PANE
     // XFOIL's PANE takes a buffer airfoil with more points and redistributes
@@ -196,8 +214,8 @@ fn test_naca_0012_pane_algorithm() {
 
     // Print near LE (around midpoint)
     let le_idx = fixture.n_panels / 2;
-    println!("\n=== Near LE (idx {}-{}) ===", le_idx-2, le_idx+2);
-    for i in (le_idx-2).max(0)..(le_idx+3).min(fixture.n_panels) {
+    println!("\n=== Near LE (idx {}-{}) ===", le_idx - 2, le_idx + 2);
+    for i in (le_idx - 2).max(0)..(le_idx + 3).min(fixture.n_panels) {
         let xfoil_x = fixture.coordinates[i].x;
         let pane_x = if i < paned_airfoil.n { paned_airfoil.x[i] } else { 0.0 };
         let cosine_x = if i < cosine_airfoil.n { cosine_airfoil.x[i] } else { 0.0 };
@@ -214,16 +232,18 @@ fn test_naca_0012_pane_algorithm() {
 /// Helper function to test PANE with specific CTERAT value
 fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     // Load XFOIL fixture
-    let file = File::open(fixture_path)
-        .unwrap_or_else(|_| panic!("Failed to open fixture: {}", fixture_path));
+    let file = File::open(fixture_path).unwrap_or_else(|_| panic!("Failed to open fixture: {}", fixture_path));
     let reader = BufReader::new(file);
-    let fixture: PanelFixture = serde_json::from_reader(reader)
-        .expect("Failed to parse panel fixture");
+    let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
     // Verify fixture has expected CTERAT
     if let Some(expected_cterat) = fixture.cterat {
-        assert!((expected_cterat - cterat).abs() < 0.001,
-            "Fixture CTERAT mismatch: expected {}, got {}", cterat, expected_cterat);
+        assert!(
+            (expected_cterat - cterat).abs() < 0.001,
+            "Fixture CTERAT mismatch: expected {}, got {}",
+            cterat,
+            expected_cterat
+        );
     }
 
     // Generate buffer geometry with high resolution for input to PANE
@@ -266,11 +286,16 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
 
     // Print first 10 coordinates for comparison
     println!("\n=== First 10 Panel Coordinates ===");
-    println!("{:>4} {:>14} {:>14} {:>14} {:>14}", "Idx", "XFOIL_x", "YFoil_x", "XFOIL_y", "YFoil_y");
+    println!(
+        "{:>4} {:>14} {:>14} {:>14} {:>14}",
+        "Idx", "XFOIL_x", "YFoil_x", "XFOIL_y", "YFoil_y"
+    );
     for i in 0..10.min(n_compare) {
         let xf = &fixture.coordinates[i];
-        println!("{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
-                 i, xf.x, paned_airfoil.x[i], xf.y, paned_airfoil.y[i]);
+        println!(
+            "{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
+            i, xf.x, paned_airfoil.x[i], xf.y, paned_airfoil.y[i]
+        );
     }
 
     // Print near LE
@@ -278,16 +303,26 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     println!("\n=== Near LE (idx {}-{}) ===", le_idx.saturating_sub(2), le_idx + 2);
     for i in le_idx.saturating_sub(2)..(le_idx + 3).min(n_compare) {
         let xf = &fixture.coordinates[i];
-        println!("{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
-                 i, xf.x, paned_airfoil.x[i], xf.y, paned_airfoil.y[i]);
+        println!(
+            "{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
+            i, xf.x, paned_airfoil.x[i], xf.y, paned_airfoil.y[i]
+        );
     }
 
     // Assert RMS errors are small enough to indicate correct implementation
     // Allow up to 0.005 RMS error (implementation may not be exactly identical)
-    assert!(rms_x < 0.005,
-        "CTERAT={}: RMS x-error {:.6} exceeds threshold 0.005", cterat, rms_x);
-    assert!(rms_y < 0.005,
-        "CTERAT={}: RMS y-error {:.6} exceeds threshold 0.005", cterat, rms_y);
+    assert!(
+        rms_x < 0.005,
+        "CTERAT={}: RMS x-error {:.6} exceeds threshold 0.005",
+        cterat,
+        rms_x
+    );
+    assert!(
+        rms_y < 0.005,
+        "CTERAT={}: RMS y-error {:.6} exceeds threshold 0.005",
+        cterat,
+        rms_y
+    );
 }
 
 /// Test PANE algorithm with CTERAT=0.15 (default)

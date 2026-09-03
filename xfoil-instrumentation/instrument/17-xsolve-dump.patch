@@ -1,0 +1,195 @@
+--- a/src/xsolve.f
++++ b/src/xsolve.f
+@@ -294,13 +294,58 @@
+ C        |  |  |  |  |  |  B  A    d       R       S
+ C
+ C       A, B, Z  3x3  blocks containing linearized BL equation coefficients
+-C       |        3x1  vectors containing mass defect influence 
++C       |        3x1  vectors containing mass defect influence
+ C                     coefficients on Ue
+ C       d        3x1  unknown vectors (Newton deltas for Ctau, Theta, m)
+ C       R        3x1  residual vectors
+ C       S        3x1  Re influence vectors
+ C-----------------------------------------------------------------
+       INCLUDE 'XFOIL.INC'
++      INTEGER BLSOLV_CALL
++      SAVE BLSOLV_CALL
++      DATA BLSOLV_CALL / 0 /
++C
++C---- INSTRUMENTATION: Output matrices before solve (first call only)
++C---- Using full double precision ES24.16 format for accurate comparison
++      BLSOLV_CALL = BLSOLV_CALL + 1
++      IF(BLSOLV_CALL .LE. 3) THEN
++        OPEN(96, FILE='blsolv_input.dat', STATUS='UNKNOWN',
++     &       POSITION='APPEND')
++        WRITE(96,'(A,I5)') '=== BLSOLV_CALL ', BLSOLV_CALL
++        WRITE(96,'(A,I5)') 'NSYS=', NSYS
++        WRITE(96,'(A,I5)') 'IBLTE1=', IBLTE(1)
++        WRITE(96,'(A,I5)') 'IBLTE2=', IBLTE(2)
++        WRITE(96,'(A,I5)') 'NBL1=', NBL(1)
++        WRITE(96,'(A,I5)') 'NBL2=', NBL(2)
++        WRITE(96,'(A,ES24.16)') 'VACCEL=', VACCEL
++        WRITE(96,'(A,ES24.16)') 'ARC_LENGTH=', S(N) - S(1)
++C
++C------ Output VA, VB, VDEL for each station (full precision)
++        DO 901 IVV=1, NSYS
++          WRITE(96,'(A,I4)') '--- IV=', IVV
++          WRITE(96,'(A,6ES24.16)') 'VA=',
++     &      VA(1,1,IVV),VA(1,2,IVV),
++     &      VA(2,1,IVV),VA(2,2,IVV),
++     &      VA(3,1,IVV),VA(3,2,IVV)
++          WRITE(96,'(A,6ES24.16)') 'VB=',
++     &      VB(1,1,IVV),VB(1,2,IVV),
++     &      VB(2,1,IVV),VB(2,2,IVV),
++     &      VB(3,1,IVV),VB(3,2,IVV)
++          WRITE(96,'(A,6ES24.16)') 'VDEL=',
++     &      VDEL(1,1,IVV),VDEL(1,2,IVV),
++     &      VDEL(2,1,IVV),VDEL(2,2,IVV),
++     &      VDEL(3,1,IVV),VDEL(3,2,IVV)
++C-------- Output VM row for this station (all entries, full precision)
++          DO 902 JVV=1, NSYS
++              WRITE(96,'(A,I4,A,3ES24.16)') 'VM(',JVV,')=',
++     &          VM(1,JVV,IVV),VM(2,JVV,IVV),VM(3,JVV,IVV)
++  902     CONTINUE
++  901   CONTINUE
++C------ Output VZ block (full precision)
++        WRITE(96,'(A,6ES24.16)') 'VZ=',
++     &    VZ(1,1),VZ(1,2),VZ(2,1),VZ(2,2),VZ(3,1),VZ(3,2)
++        CLOSE(96)
++      ENDIF
+ C
+       IVTE1 = ISYS(IBLTE(1),1)
+ C
+@@ -382,6 +427,18 @@
+         VDEL(1,1,IV) = VDEL(1,1,IV) - VTMP*VDEL(2,1,IV)
+         VDEL(1,2,IV) = VDEL(1,2,IV) - VTMP*VDEL(2,2,IV)
+ C
++C---- TRACE: Output station 1 after inversion (first call only)
++        IF(BLSOLV_CALL.EQ.1 .AND. IV.EQ.1) THEN
++          OPEN(98, FILE='blsolv_trace.dat', STATUS='UNKNOWN')
++          WRITE(98,'(A)') '=== After forward sweep station 1 ==='
++          WRITE(98,'(A,3ES24.16)') 'VDEL[0]=',
++     &      VDEL(1,1,1),VDEL(2,1,1),VDEL(3,1,1)
++          WRITE(98,'(A,3ES24.16)') 'VM[0][0]=',
++     &      VM(1,1,1),VM(2,1,1),VM(3,1,1)
++          WRITE(98,'(A,3ES24.16)') 'VM[0][1]=',
++     &      VM(1,2,1),VM(2,2,1),VM(3,2,1)
++          CLOSE(98)
++        ENDIF
+ C
+         IF(IV.EQ.NSYS) GO TO 1000
+ C
+@@ -409,6 +466,26 @@
+         IF(IV.EQ.IVTE1) THEN
+ C------- eliminate VZ block
+          IVZ = ISYS(IBLTE(2)+1,2)
++C
++C---- TRACE: VZ block application (first call only)
++        IF(BLSOLV_CALL.EQ.1) THEN
++          OPEN(98, FILE='blsolv_vz_trace.dat', STATUS='UNKNOWN')
++          WRITE(98,'(A)') '=== VZ Block Application Trace ==='
++          WRITE(98,'(A,I4)') 'IV (1-based IVTE1) =', IV
++          WRITE(98,'(A,I4)') 'IVP =', IVP
++          WRITE(98,'(A,I4)') 'IVZ =', IVZ
++          WRITE(98,'(A,6ES24.16)') 'VZ =',
++     &      VZ(1,1),VZ(1,2),VZ(2,1),VZ(2,2),VZ(3,1),VZ(3,2)
++          WRITE(98,'(A,6ES24.16)') 'VDEL[IV] =',
++     &      VDEL(1,1,IV),VDEL(1,2,IV),
++     &      VDEL(2,1,IV),VDEL(2,2,IV),
++     &      VDEL(3,1,IV),VDEL(3,2,IV)
++          WRITE(98,'(A,6ES24.16)') 'VDEL[IVZ] before =',
++     &      VDEL(1,1,IVZ),VDEL(1,2,IVZ),
++     &      VDEL(2,1,IVZ),VDEL(2,2,IVZ),
++     &      VDEL(3,1,IVZ),VDEL(3,2,IVZ)
++          CLOSE(98)
++        ENDIF
+ C
+          DO 55 K=1, 3
+            VTMP1 = VZ(K,1)
+@@ -425,7 +502,19 @@
+      &         - (  VTMP1*VDEL(1,2,IV)
+      &            + VTMP2*VDEL(2,2,IV) )
+    55    CONTINUE
++C
++C---- TRACE: VZ block after (first call only)
++        IF(BLSOLV_CALL.EQ.1) THEN
++          OPEN(98, FILE='blsolv_vz_trace.dat', STATUS='UNKNOWN',
++     &         POSITION='APPEND')
++          WRITE(98,'(A,6ES24.16)') 'VDEL[IVZ] after =',
++     &      VDEL(1,1,IVZ),VDEL(1,2,IVZ),
++     &      VDEL(2,1,IVZ),VDEL(2,2,IVZ),
++     &      VDEL(3,1,IVZ),VDEL(3,2,IVZ)
++          WRITE(98,'(A)') '=== End VZ Trace ==='
++          CLOSE(98)
+         ENDIF
++        ENDIF
+ C
+         IF(IVP.EQ.NSYS) GO TO 1000
+ C
+@@ -463,8 +552,44 @@
+ C
+  1000 CONTINUE
+ C
++C---- TRACE: Output state after full forward sweep (first call only)
++        IF(BLSOLV_CALL.EQ.1) THEN
++          OPEN(98, FILE='blsolv_trace.dat', STATUS='UNKNOWN',
++     &         POSITION='APPEND')
++          WRITE(98,'(A)') '=== After complete forward sweep ==='
++          WRITE(98,'(A)') 'First 5 stations VDEL mass delta:'
++          DO 771 IVV=1, 5
++            WRITE(98,'(A,I4,A,ES24.16)') 'VDEL(',IVV,',3,1)=',
++     &        VDEL(3,1,IVV)
++  771     CONTINUE
++          WRITE(98,'(A)') 'Stations 85-95 VDEL mass delta:'
++          DO 773 IVV=85, 95
++            WRITE(98,'(A,I4,A,ES24.16)') 'VDEL(',IVV,',3,1)=',
++     &        VDEL(3,1,IVV)
++  773     CONTINUE
++          WRITE(98,'(A)') 'Stations 158-168 VDEL (near IVZ):'
++          DO 775 IVV=158, 168
++            WRITE(98,'(A,I4,A,ES24.16)') 'VDEL(',IVV,',3,1)=',
++     &        VDEL(3,1,IVV)
++  775     CONTINUE
++          WRITE(98,'(A)') 'Last 5 stations VDEL mass delta:'
++          DO 778 IVV=NSYS-4, NSYS
++            WRITE(98,'(A,I4,A,ES24.16)') 'VDEL(',IVV,',3,1)=',
++     &        VDEL(3,1,IVV)
++  778     CONTINUE
++          WRITE(98,'(A)') 'VM couplings for station 1 backsolve:'
++          DO 772 IVV=1, 5
++            WRITE(98,'(A,I4,A,3ES24.16)') 'VM(:,',IVV,',1)=',
++     &        VM(1,IVV,1),VM(2,IVV,1),VM(3,IVV,1)
++  772     CONTINUE
++          WRITE(98,'(A)') 'VM couplings for station 1 (last 5):'
++          DO 774 IVV=NSYS-4, NSYS
++            WRITE(98,'(A,I4,A,3ES24.16)') 'VM(:,',IVV,',1)=',
++     &        VM(1,IVV,1),VM(2,IVV,1),VM(3,IVV,1)
++  774     CONTINUE
++          CLOSE(98)
++        ENDIF
+ C
+-C
+       DO 2000 IV=NSYS, 2, -1
+ C
+ C------ eliminate upper VM columns
+@@ -484,5 +609,20 @@
+ C
+  2000 CONTINUE
+ C
++C---- INSTRUMENTATION: Output VDEL solution (first call only, full precision)
++      IF(BLSOLV_CALL .LE. 3) THEN
++        OPEN(97, FILE='blsolv_output.dat', STATUS='UNKNOWN',
++     &       POSITION='APPEND')
++        WRITE(97,'(A,I5)') '=== BLSOLV_CALL ', BLSOLV_CALL
++        WRITE(97,'(A,I5)') 'NSYS=', NSYS
++        DO 903 IVV=1, NSYS
++          WRITE(97,'(A,I4,A,6ES24.16)') 'VDEL(',IVV,')=',
++     &      VDEL(1,1,IVV),VDEL(1,2,IVV),
++     &      VDEL(2,1,IVV),VDEL(2,2,IVV),
++     &      VDEL(3,1,IVV),VDEL(3,2,IVV)
++  903   CONTINUE
++        CLOSE(97)
++      ENDIF
++C
+       RETURN
+       END

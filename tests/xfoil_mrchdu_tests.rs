@@ -5,7 +5,6 @@
 
 mod fixtures;
 
-use approx::assert_relative_eq;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -14,33 +13,31 @@ use yfoil::bl::mrchdu::{march_station, MarchResult, SurfaceMarchState};
 use yfoil::bl::system::{BLFlowType, BLGlobalParams, BLStationState};
 
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(".tmp")
-        .join(name)
+    fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
 /// BL station data from XFOIL fixture
 #[derive(Debug, Clone, Default)]
 pub struct BLStation {
-    pub xssi: f64,   // Arc length
-    pub uedg: f64,   // Edge velocity
-    pub thet: f64,   // Momentum thickness
-    pub dstr: f64,   // Displacement thickness
-    pub ctau: f64,   // Shear stress coefficient (or amplification for laminar)
-    pub mass: f64,   // Mass defect
+    pub xssi: f64, // Arc length
+    pub uedg: f64, // Edge velocity
+    pub thet: f64, // Momentum thickness
+    pub dstr: f64, // Displacement thickness
+    pub ctau: f64, // Shear stress coefficient (or amplification for laminar)
+    pub mass: f64, // Mass defect
 }
 
 /// Input data for MRCHDU
 #[derive(Debug, Clone)]
 pub struct MrchduInput {
-    pub nbl1: usize,   // Number of BL stations on surface 1
-    pub nbl2: usize,   // Number of BL stations on surface 2
-    pub iblte1: usize, // TE index on surface 1
-    pub iblte2: usize, // TE index on surface 2
-    pub minf: f64,     // Freestream Mach number
-    pub reinf: f64,    // Reynolds number
-    pub acrit1: f64,   // Critical N-factor surface 1
-    pub acrit2: f64,   // Critical N-factor surface 2
+    pub nbl1: usize,         // Number of BL stations on surface 1
+    pub nbl2: usize,         // Number of BL stations on surface 2
+    pub iblte1: usize,       // TE index on surface 1
+    pub iblte2: usize,       // TE index on surface 2
+    pub minf: f64,           // Freestream Mach number
+    pub reinf: f64,          // Reynolds number
+    pub acrit1: f64,         // Critical N-factor surface 1
+    pub acrit2: f64,         // Critical N-factor surface 2
     pub bl1: Vec<BLStation>, // Surface 1 stations
     pub bl2: Vec<BLStation>, // Surface 2 stations
 }
@@ -48,8 +45,8 @@ pub struct MrchduInput {
 /// Output data from MRCHDU
 #[derive(Debug, Clone)]
 pub struct MrchduOutput {
-    pub itran1: usize,  // Transition index surface 1
-    pub itran2: usize,  // Transition index surface 2
+    pub itran1: usize,       // Transition index surface 1
+    pub itran2: usize,       // Transition index surface 2
     pub bl1: Vec<BLStation>, // Updated surface 1 stations
     pub bl2: Vec<BLStation>, // Updated surface 2 stations
 }
@@ -97,21 +94,25 @@ fn parse_bl_line(line: &str) -> Option<(usize, usize, BLStation)> {
         return None;
     }
 
-    Some((is, ibl, BLStation {
-        xssi: values[0],
-        uedg: values[1],
-        thet: values[2],
-        dstr: values[3],
-        ctau: values[4],
-        mass: values[5],
-    }))
+    Some((
+        is,
+        ibl,
+        BLStation {
+            xssi: values[0],
+            uedg: values[1],
+            thet: values[2],
+            dstr: values[3],
+            ctau: values[4],
+            mass: values[5],
+        },
+    ))
 }
 
 /// Parse MRCHDU input fixture file
 pub fn parse_mrchdu_input(path: &Path) -> Option<MrchduInput> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
 
     let mut input = MrchduInput {
         nbl1: 0,
@@ -176,7 +177,7 @@ pub fn parse_mrchdu_input(path: &Path) -> Option<MrchduInput> {
 pub fn parse_mrchdu_output(path: &Path) -> Option<MrchduOutput> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
 
     let mut output = MrchduOutput {
         itran1: 0,
@@ -223,11 +224,6 @@ fn test_parse_mrchdu_fixtures() {
     let input_path = fixture_path("mrchdu_input.dat");
     let output_path = fixture_path("mrchdu_output.dat");
 
-    if !input_path.exists() || !output_path.exists() {
-        eprintln!("Skipping test: MRCHDU fixture files not found");
-        return;
-    }
-
     let input = parse_mrchdu_input(&input_path).expect("Failed to parse MRCHDU input");
     let output = parse_mrchdu_output(&output_path).expect("Failed to parse MRCHDU output");
 
@@ -255,16 +251,22 @@ fn test_parse_mrchdu_fixtures() {
     for i in 0..5.min(input.bl1.len()) {
         let inp = &input.bl1[i];
         let out = &output.bl1[i];
-        println!("  Station {}: THET diff = {:.2e}",
-            i + 1,
-            (out.thet - inp.thet).abs());
+        println!("  Station {}: THET diff = {:.2e}", i + 1, (out.thet - inp.thet).abs());
     }
 
     // Check that transition was found
-    assert!(output.itran1 > 0 && output.itran1 <= input.nbl1,
-        "ITRAN1={} should be within [1, {}]", output.itran1, input.nbl1);
-    assert!(output.itran2 > 0 && output.itran2 <= input.nbl2,
-        "ITRAN2={} should be within [1, {}]", output.itran2, input.nbl2);
+    assert!(
+        output.itran1 > 0 && output.itran1 <= input.nbl1,
+        "ITRAN1={} should be within [1, {}]",
+        output.itran1,
+        input.nbl1
+    );
+    assert!(
+        output.itran2 > 0 && output.itran2 <= input.nbl2,
+        "ITRAN2={} should be within [1, {}]",
+        output.itran2,
+        input.nbl2
+    );
 
     println!("\nTransition locations:");
     println!("  Surface 1: station {} (of {})", output.itran1, input.nbl1);
@@ -276,10 +278,6 @@ fn test_mrchdu_state_changes() {
     let input_path = fixture_path("mrchdu_input.dat");
     let output_path = fixture_path("mrchdu_output.dat");
 
-    if !input_path.exists() || !output_path.exists() {
-        return;
-    }
-
     let input = parse_mrchdu_input(&input_path).expect("Failed to parse");
     let output = parse_mrchdu_output(&output_path).expect("Failed to parse");
 
@@ -288,7 +286,8 @@ fn test_mrchdu_state_changes() {
     let mut max_dstr_change: f64 = 0.0;
     let mut max_uedg_change: f64 = 0.0;
 
-    for i in 1..input.bl1.len() {  // Skip station 0 (similarity point)
+    for i in 1..input.bl1.len() {
+        // Skip station 0 (similarity point)
         let inp = &input.bl1[i];
         let out = &output.bl1[i];
 
@@ -313,10 +312,16 @@ fn test_mrchdu_state_changes() {
 
     // MRCHDU should make relatively small changes
     // (it's refining the BL state, not completely recomputing it)
-    assert!(max_thet_change < 0.1,
-        "THET change {:.2e} seems too large", max_thet_change);
-    assert!(max_dstr_change < 0.1,
-        "DSTR change {:.2e} seems too large", max_dstr_change);
+    assert!(
+        max_thet_change < 0.1,
+        "THET change {:.2e} seems too large",
+        max_thet_change
+    );
+    assert!(
+        max_dstr_change < 0.1,
+        "DSTR change {:.2e} seems too large",
+        max_dstr_change
+    );
 }
 
 /// Newton iteration fixture data from XFOIL MRCHDU
@@ -351,14 +356,28 @@ struct NewtonFixture {
 fn parse_newton_fixture(path: &Path) -> Option<NewtonFixture> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
 
     // Debug: eprintln!("Parsing {} lines from {:?}", lines.len(), path);
 
     let mut fixture = NewtonFixture {
-        ibl: 0, is: 0, itbl: 0,
-        xsi: 0.0, uei: 0.0, thi: 0.0, dsi: 0.0, ami: 0.0, cti: 0.0, dswaki: 0.0,
-        u2: 0.0, t2: 0.0, d2: 0.0, hk2: 0.0, rt2: 0.0, ueref: 0.0, hkref: 0.0,
+        ibl: 0,
+        is: 0,
+        itbl: 0,
+        xsi: 0.0,
+        uei: 0.0,
+        thi: 0.0,
+        dsi: 0.0,
+        ami: 0.0,
+        cti: 0.0,
+        dswaki: 0.0,
+        u2: 0.0,
+        t2: 0.0,
+        d2: 0.0,
+        hk2: 0.0,
+        rt2: 0.0,
+        ueref: 0.0,
+        hkref: 0.0,
         vs2: [[0.0; 4]; 4],
         vsrez_before: [0.0; 4],
         vsrez_solution: [0.0; 4],
@@ -388,60 +407,60 @@ fn parse_newton_fixture(path: &Path) -> Option<NewtonFixture> {
             }
         }
         // Parse scalar values
-        else if line.starts_with("XSI=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        else if let Some(rest) = line.strip_prefix("XSI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.xsi = v;
             }
-        } else if line.starts_with("UEI=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("UEI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.uei = v;
             }
-        } else if line.starts_with("THI=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("THI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.thi = v;
             }
-        } else if line.starts_with("DSI=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("DSI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.dsi = v;
             }
-        } else if line.starts_with("AMI=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("AMI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.ami = v;
             }
-        } else if line.starts_with("CTI=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("CTI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.cti = v;
             }
-        } else if line.starts_with("DSWAKI=") {
-            if let Some(v) = parse_fortran_float(&line[7..]) {
+        } else if let Some(rest) = line.strip_prefix("DSWAKI=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.dswaki = v;
             }
-        } else if line.starts_with("U2=") {
-            if let Some(v) = parse_fortran_float(&line[3..]) {
+        } else if let Some(rest) = line.strip_prefix("U2=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.u2 = v;
             }
-        } else if line.starts_with("T2=") {
-            if let Some(v) = parse_fortran_float(&line[3..]) {
+        } else if let Some(rest) = line.strip_prefix("T2=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.t2 = v;
             }
-        } else if line.starts_with("D2=") {
-            if let Some(v) = parse_fortran_float(&line[3..]) {
+        } else if let Some(rest) = line.strip_prefix("D2=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.d2 = v;
             }
-        } else if line.starts_with("HK2=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("HK2=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.hk2 = v;
             }
-        } else if line.starts_with("RT2=") {
-            if let Some(v) = parse_fortran_float(&line[4..]) {
+        } else if let Some(rest) = line.strip_prefix("RT2=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.rt2 = v;
             }
-        } else if line.starts_with("UEREF=") {
-            if let Some(v) = parse_fortran_float(&line[6..]) {
+        } else if let Some(rest) = line.strip_prefix("UEREF=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.ueref = v;
             }
-        } else if line.starts_with("HKREF=") {
-            if let Some(v) = parse_fortran_float(&line[6..]) {
+        } else if let Some(rest) = line.strip_prefix("HKREF=") {
+            if let Some(v) = parse_fortran_float(rest) {
                 fixture.hkref = v;
             }
         }
@@ -449,21 +468,21 @@ fn parse_newton_fixture(path: &Path) -> Option<NewtonFixture> {
         else if line.starts_with("VS2(") {
             // Format: VS2( 1,1:4)=  val val val val
             // Extract row number from between VS2( and ,
-            let row_idx_str: String = line.chars()
-                .skip(4)  // skip "VS2("
-                .skip_while(|c| c.is_whitespace())  // skip any spaces
-                .take_while(|c| c.is_ascii_digit())  // take the digit
+            let row_idx_str: String = line
+                .chars()
+                .skip(4) // skip "VS2("
+                .skip_while(|c| c.is_whitespace()) // skip any spaces
+                .take_while(|c| c.is_ascii_digit()) // take the digit
                 .collect();
             if let Ok(row_idx) = row_idx_str.parse::<usize>() {
                 if row_idx >= 1 && row_idx <= 4 {
                     if let Some(values_part) = line.split('=').nth(1) {
-                        let values: Vec<f64> = values_part.split_whitespace()
+                        let values: Vec<f64> = values_part
+                            .split_whitespace()
                             .filter_map(|s| parse_fortran_float(s.trim()))
                             .collect();
                         if values.len() >= 4 {
-                            for j in 0..4 {
-                                fixture.vs2[row_idx - 1][j] = values[j];
-                            }
+                            fixture.vs2[row_idx - 1][..4].copy_from_slice(&values[..4]);
                         }
                     }
                 }
@@ -472,17 +491,18 @@ fn parse_newton_fixture(path: &Path) -> Option<NewtonFixture> {
         // Parse VSREZ arrays
         else if line.starts_with("VSREZ=") {
             if let Some(values_part) = line.split('=').nth(1) {
-                let values: Vec<f64> = values_part.split_whitespace()
+                let values: Vec<f64> = values_part
+                    .split_whitespace()
                     .filter_map(|s| parse_fortran_float(s.trim()))
                     .collect();
                 if values.len() >= 4 {
                     fixture.vsrez_before = [values[0], values[1], values[2], values[3]];
                 }
             }
-        }
-        else if line.starts_with("VSREZ_SOL=") {
+        } else if line.starts_with("VSREZ_SOL=") {
             if let Some(values_part) = line.split('=').nth(1) {
-                let values: Vec<f64> = values_part.split_whitespace()
+                let values: Vec<f64> = values_part
+                    .split_whitespace()
                     .filter_map(|s| parse_fortran_float(s.trim()))
                     .collect();
                 if values.len() >= 4 {
@@ -509,33 +529,34 @@ fn test_gauss_against_xfoil() {
     // Test that our GAUSS implementation matches XFOIL's
     let fixture_path = fixture_path("mrchdu_newton.dat");
 
-    if !fixture_path.exists() {
-        eprintln!("Skipping test: mrchdu_newton.dat not found");
-        return;
-    }
-
-    let fixture = parse_newton_fixture(&fixture_path)
-        .expect("Failed to parse Newton fixture");
+    let fixture = parse_newton_fixture(&fixture_path).expect("Failed to parse Newton fixture");
 
     println!("Newton fixture for station {}, surface {}", fixture.ibl, fixture.is);
     println!("VS2 matrix:");
     for i in 0..4 {
-        println!("  Row {}: {:e} {:e} {:e} {:e}",
-            i+1, fixture.vs2[i][0], fixture.vs2[i][1],
-            fixture.vs2[i][2], fixture.vs2[i][3]);
+        println!(
+            "  Row {}: {:e} {:e} {:e} {:e}",
+            i + 1,
+            fixture.vs2[i][0],
+            fixture.vs2[i][1],
+            fixture.vs2[i][2],
+            fixture.vs2[i][3]
+        );
     }
     println!("\nVSREZ before GAUSS:");
-    println!("  {:e} {:e} {:e} {:e}",
-        fixture.vsrez_before[0], fixture.vsrez_before[1],
-        fixture.vsrez_before[2], fixture.vsrez_before[3]);
+    println!(
+        "  {:e} {:e} {:e} {:e}",
+        fixture.vsrez_before[0], fixture.vsrez_before[1], fixture.vsrez_before[2], fixture.vsrez_before[3]
+    );
     println!("\nExpected solution:");
-    println!("  {:e} {:e} {:e} {:e}",
-        fixture.vsrez_solution[0], fixture.vsrez_solution[1],
-        fixture.vsrez_solution[2], fixture.vsrez_solution[3]);
+    println!(
+        "  {:e} {:e} {:e} {:e}",
+        fixture.vsrez_solution[0], fixture.vsrez_solution[1], fixture.vsrez_solution[2], fixture.vsrez_solution[3]
+    );
 
     // Copy VS2 and VSREZ since GAUSS modifies them
-    let mut z = fixture.vs2.clone();
-    let mut r = fixture.vsrez_before.clone();
+    let mut z = fixture.vs2;
+    let mut r = fixture.vsrez_before;
 
     // Solve with our GAUSS implementation
     gauss_solve_4x4(&mut z, &mut r);
@@ -550,14 +571,20 @@ fn test_gauss_against_xfoil() {
         let our_sol = r[i];
         let diff = (our_sol - xfoil_sol).abs();
 
-        println!("  Component {}: XFOIL={:e}, ours={:e}, diff={:e}",
-            i, xfoil_sol, our_sol, diff);
+        println!(
+            "  Component {}: XFOIL={:e}, ours={:e}, diff={:e}",
+            i, xfoil_sol, our_sol, diff
+        );
 
         // Since these are very small numbers, use absolute tolerance
         // The tolerance is loose because the residuals are already ~1e-12
-        assert!(diff < 1e-10 || diff / xfoil_sol.abs().max(1e-30) < 1e-6,
+        assert!(
+            diff < 1e-10 || diff / xfoil_sol.abs().max(1e-30) < 1e-6,
             "GAUSS solution mismatch at component {}: XFOIL={:e}, ours={:e}",
-            i, xfoil_sol, our_sol);
+            i,
+            xfoil_sol,
+            our_sol
+        );
     }
 
     println!("\nGAUSS solution matches XFOIL!");
@@ -568,11 +595,6 @@ fn test_mrchdu_full_march() {
     // Test full MRCHDU march against XFOIL fixture
     let input_path = fixture_path("mrchdu_input.dat");
     let output_path = fixture_path("mrchdu_output.dat");
-
-    if !input_path.exists() || !output_path.exists() {
-        eprintln!("Skipping test: MRCHDU fixture files not found");
-        return;
-    }
 
     let input = parse_mrchdu_input(&input_path).expect("Failed to parse MRCHDU input");
     let output = parse_mrchdu_output(&output_path).expect("Failed to parse MRCHDU output");
@@ -634,14 +656,10 @@ fn test_mrchdu_full_march() {
         // (march_station reads ami from s2_init.ctau when ibl < itrold)
         let mut s2_init = BLStationState::default();
         s2_init.blprv(
-            stn.xssi,
-            0.0,      // AMI placeholder (not used - read from ctau for laminar)
+            stn.xssi, 0.0,      // AMI placeholder (not used - read from ctau for laminar)
             stn.ctau, // CTI = amplification for laminar stations
-            stn.thet,
-            stn.dstr,
-            0.0, // DSWAKI (surface, not wake)
-            stn.uedg,
-            &params,
+            stn.thet, stn.dstr, 0.0, // DSWAKI (surface, not wake)
+            stn.uedg, &params,
         );
         s2_init.blkin(&params);
         let flow_type = if ibl >= march.itran {
@@ -653,13 +671,7 @@ fn test_mrchdu_full_march() {
 
         // March this station
         let (result, s2) = march_station(
-            &s1,
-            &s2_init,
-            &mut march,
-            &params,
-            ibl,
-            stn.xssi,
-            0.0, // DSWAKI
+            &s1, &s2_init, &mut march, &params, ibl, stn.xssi, 0.0,  // DSWAKI
             None, // Not first wake
         );
 
@@ -680,8 +692,10 @@ fn test_mrchdu_full_march() {
 
         // Debug: print amplification for first 50 laminar stations
         if ibl < 50 && !march.turb {
-            println!("AMPL IBL={:4} AMPL1={:.16e} AMPL2={:.16e} HK2={:.6}",
-                ibl, s1.ampl, s2.ampl, s2.hk);
+            println!(
+                "AMPL IBL={:4} AMPL1={:.16e} AMPL2={:.16e} HK2={:.6}",
+                ibl, s1.ampl, s2.ampl, s2.hk
+            );
         }
 
         // Update s1 for next station
@@ -695,10 +709,11 @@ fn test_mrchdu_full_march() {
     }
 
     println!("\nMarch results:");
-    println!("  Converged: {}, Partial: {}, Failed: {}",
-        converged_count, partial_count, failed_count);
-    println!("  Our ITRAN: {}, Expected ITRAN: {}",
-        march.itran, output.itran1);
+    println!(
+        "  Converged: {}, Partial: {}, Failed: {}",
+        converged_count, partial_count, failed_count
+    );
+    println!("  Our ITRAN: {}, Expected ITRAN: {}", march.itran, output.itran1);
 
     // Compare results to expected output
     let mut max_thet_err: f64 = 0.0;
@@ -735,9 +750,13 @@ fn test_mrchdu_full_march() {
     println!("\nFirst 5 stations comparison (station, ours, expected, diff):");
     for i in 1..6.min(input.nbl1) {
         let exp = &output.bl1[i];
-        println!("  {} THET: {:.6e} vs {:.6e} ({:.2e})",
-            i + 1, result_thet[i], exp.thet,
-            (result_thet[i] - exp.thet).abs());
+        println!(
+            "  {} THET: {:.6e} vs {:.6e} ({:.2e})",
+            i + 1,
+            result_thet[i],
+            exp.thet,
+            (result_thet[i] - exp.thet).abs()
+        );
     }
 
     // Check laminar region matches exactly (before transition)
@@ -767,16 +786,28 @@ fn test_mrchdu_full_march() {
 
     // Laminar region should match closely - tolerance allows for accumulated numerical
     // differences over many Newton iterations. With 46+ laminar stations, ~5e-6 is excellent.
-    assert!(max_laminar_thet_err < 5e-6,
-        "Laminar THET error {:.2e} too large - should match XFOIL closely", max_laminar_thet_err);
-    assert!(max_laminar_dstr_err < 5e-6,
-        "Laminar DSTR error {:.2e} too large - should match XFOIL closely", max_laminar_dstr_err);
+    assert!(
+        max_laminar_thet_err < 5e-6,
+        "Laminar THET error {:.2e} too large - should match XFOIL closely",
+        max_laminar_thet_err
+    );
+    assert!(
+        max_laminar_dstr_err < 5e-6,
+        "Laminar DSTR error {:.2e} too large - should match XFOIL closely",
+        max_laminar_dstr_err
+    );
 
     // Transition location should match XFOIL exactly now that the amplification
     // accumulation bug is fixed.
-    println!("\nTransition: Our itran={}, Fixture itran={}", march.itran, output.itran1);
-    assert_eq!(march.itran, output.itran1,
-        "Transition location mismatch: ours={}, expected={}", march.itran, output.itran1);
+    println!(
+        "\nTransition: Our itran={}, Fixture itran={}",
+        march.itran, output.itran1
+    );
+    assert_eq!(
+        march.itran, output.itran1,
+        "Transition location mismatch: ours={}, expected={}",
+        march.itran, output.itran1
+    );
 
     // Print comparison at and around transition
     let itran = output.itran1;
@@ -786,14 +817,19 @@ fn test_mrchdu_full_march() {
         let exp = &output.bl1[idx];
         let thet_err = if exp.thet.abs() > 1e-15 {
             ((result_thet[idx] - exp.thet) / exp.thet).abs()
-        } else { 0.0 };
+        } else {
+            0.0
+        };
         let dstr_err = if exp.dstr.abs() > 1e-15 {
             ((result_dstr[idx] - exp.dstr) / exp.dstr).abs()
-        } else { 0.0 };
+        } else {
+            0.0
+        };
         let marker = if i == itran { " <-- TRANSITION" } else { "" };
-        println!("  Stn {}: THET {:.6e} vs {:.6e} ({:.2e}), DSTR {:.6e} vs {:.6e} ({:.2e}){}",
-            i, result_thet[idx], exp.thet, thet_err,
-            result_dstr[idx], exp.dstr, dstr_err, marker);
+        println!(
+            "  Stn {}: THET {:.6e} vs {:.6e} ({:.2e}), DSTR {:.6e} vs {:.6e} ({:.2e}){}",
+            i, result_thet[idx], exp.thet, thet_err, result_dstr[idx], exp.dstr, dstr_err, marker
+        );
     }
 
     // Check turbulent region - stations where BOTH are turbulent
@@ -803,7 +839,10 @@ fn test_mrchdu_full_march() {
     let mut max_turb_dstr_err: f64 = 0.0;
     let mut turb_station_with_max_err = 0;
 
-    println!("\nTurbulent region (stations {} to {}):", common_turbulent_start, input.iblte1);
+    println!(
+        "\nTurbulent region (stations {} to {}):",
+        common_turbulent_start, input.iblte1
+    );
     for i in common_turbulent_start..input.iblte1 {
         let idx = i - 1;
         let exp = &output.bl1[idx];
@@ -820,7 +859,10 @@ fn test_mrchdu_full_march() {
         }
     }
 
-    println!("  Max THET error: {:.2e} (at station {})", max_turb_thet_err, turb_station_with_max_err);
+    println!(
+        "  Max THET error: {:.2e} (at station {})",
+        max_turb_thet_err, turb_station_with_max_err
+    );
     println!("  Max DSTR error: {:.2e}", max_turb_dstr_err);
 
     // Print a few turbulent stations for debugging
@@ -830,13 +872,18 @@ fn test_mrchdu_full_march() {
         let exp = &output.bl1[idx];
         let thet_err = if exp.thet.abs() > 1e-15 {
             ((result_thet[idx] - exp.thet) / exp.thet).abs()
-        } else { 0.0 };
+        } else {
+            0.0
+        };
         let dstr_err = if exp.dstr.abs() > 1e-15 {
             ((result_dstr[idx] - exp.dstr) / exp.dstr).abs()
-        } else { 0.0 };
-        println!("  Stn {}: THET {:.6e} vs {:.6e} ({:.2e}), DSTR {:.6e} vs {:.6e} ({:.2e})",
-            i, result_thet[idx], exp.thet, thet_err,
-            result_dstr[idx], exp.dstr, dstr_err);
+        } else {
+            0.0
+        };
+        println!(
+            "  Stn {}: THET {:.6e} vs {:.6e} ({:.2e}), DSTR {:.6e} vs {:.6e} ({:.2e})",
+            i, result_thet[idx], exp.thet, thet_err, result_dstr[idx], exp.dstr, dstr_err
+        );
     }
 
     // Note: Turbulent region errors may be larger due to different transition points
@@ -851,10 +898,6 @@ fn test_trchek_station_3_inputs() {
 
     let input_path = fixture_path("mrchdu_input.dat");
     let output_path = fixture_path("mrchdu_output.dat");
-    if !input_path.exists() || !output_path.exists() {
-        eprintln!("Skipping test: MRCHDU fixture files not found");
-        return;
-    }
 
     let input = parse_mrchdu_input(&input_path).expect("Failed to parse MRCHDU input");
     let output = parse_mrchdu_output(&output_path).expect("Failed to parse MRCHDU output");
@@ -862,20 +905,19 @@ fn test_trchek_station_3_inputs() {
     let acrit = input.acrit1;
 
     println!("=== Testing TRCHEK inputs at station 3 ===");
-    println!("Parameters: MINF={}, REINF={}, ACRIT={}", input.minf, input.reinf, acrit);
+    println!(
+        "Parameters: MINF={}, REINF={}, ACRIT={}",
+        input.minf, input.reinf, acrit
+    );
 
     // Set up station 2 (similarity station) - this becomes s1 for station 3
     let stn2 = &input.bl1[1]; // 0-based index 1 = station 2
     let mut s1 = BLStationState::default();
     s1.blprv(
-        stn2.xssi,
-        0.0,       // AMI = 0 at similarity station
-        0.03,      // CTI
-        stn2.thet,
-        stn2.dstr,
-        0.0,       // DSWAKI
-        stn2.uedg,
-        &params,
+        stn2.xssi, 0.0,  // AMI = 0 at similarity station
+        0.03, // CTI
+        stn2.thet, stn2.dstr, 0.0, // DSWAKI
+        stn2.uedg, &params,
     );
     s1.blkin(&params);
     s1.blvar(BLFlowType::Laminar, &params);
@@ -899,14 +941,10 @@ fn test_trchek_station_3_inputs() {
     let stn3 = &input.bl1[2]; // 0-based index 2 = station 3
     let mut s2 = BLStationState::default();
     s2.blprv(
-        stn3.xssi,
-        0.0,       // AMI initial guess
+        stn3.xssi, 0.0,       // AMI initial guess
         stn3.ctau, // CTI (stores amplification for laminar)
-        stn3.thet,
-        stn3.dstr,
-        0.0,       // DSWAKI
-        stn3.uedg,
-        &params,
+        stn3.thet, stn3.dstr, 0.0, // DSWAKI
+        stn3.uedg, &params,
     );
     s2.blkin(&params);
     s2.blvar(BLFlowType::Laminar, &params);
@@ -970,7 +1008,10 @@ fn test_trchek_station_3_inputs() {
             println!("  Ratio       = {:.4}", ampl2 / xfoil_ampl2);
 
             if rel_err > 0.01 {
-                println!("\n  *** MISMATCH: YFoil ampl2 is {:.2}x XFOIL! ***", ampl2 / xfoil_ampl2);
+                println!(
+                    "\n  *** MISMATCH: YFoil ampl2 is {:.2}x XFOIL! ***",
+                    ampl2 / xfoil_ampl2
+                );
             }
         }
         yfoil::bl::system::TransitionResult::FreeTransition { ampl2, location } => {

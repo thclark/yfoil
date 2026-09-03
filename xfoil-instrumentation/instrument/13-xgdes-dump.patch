@@ -1,0 +1,29 @@
+--- a/src/xgdes.f
++++ b/src/xgdes.f
+@@ -1015,6 +1015,26 @@
+ 
+       CALL TECALC
+       CALL APCALC
++C
++C---- INSTRUMENTATION: Output panel geometry to file
++      OPEN(UNIT=99,FILE='xfoil_panels.dat',STATUS='REPLACE')
++      WRITE(99,*) '=== PANEL GEOMETRY ==='
++      WRITE(99,*) 'N =', N
++      WRITE(99,*) 'SLE =', SLE
++      WRITE(99,*) 'XLE =', XLE
++      WRITE(99,*) 'YLE =', YLE
++      WRITE(99,*) 'XTE =', XTE
++      WRITE(99,*) 'YTE =', YTE
++      WRITE(99,*) 'CHORD =', CHORD
++      WRITE(99,*) 'SHARP =', SHARP
++      WRITE(99,*) '--- Panel coordinates ---'
++      WRITE(99,*) 'I, X, Y, S, NX, NY, APANEL'
++      DO I = 1, N
++        WRITE(99,'(I5,6ES24.16)') I, X(I), Y(I), S(I), NX(I), NY(I),
++     &                          APANEL(I)
++      ENDDO
++      CLOSE(99)
++      WRITE(*,*) '=== Wrote panels to /tmp/xfoil_panels.dat ==='
+ C
+       LGAMU = .FALSE.
+       LQINU = .FALSE.

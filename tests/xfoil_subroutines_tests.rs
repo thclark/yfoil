@@ -8,10 +8,11 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use yfoil::bl::system::{BLFlowType, BLGlobalParams, BLStationState};
 use yfoil::bl::{cf_lam, cf_turb, dampl, di_lam, hkin, hs_lam, hs_turb};
-use yfoil::bl::system::{BLFlowType, BLGlobalParams, BLStationState, trchek};
 
 /// Machine epsilon for f64
+#[allow(dead_code)]
 const EPSILON: f64 = 2.220446049250313e-16;
 /// Tolerance: 10 * machine epsilon (ideal)
 const _TOLERANCE: f64 = 10.0 * EPSILON;
@@ -59,7 +60,7 @@ fn load_hkin_fixtures() -> Vec<HkinFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<HkinFixture>(&content) {
                         fixtures.push(fixture);
@@ -108,7 +109,9 @@ fn test_hkin_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "HKIN validation failed!\nMax errors: HK={:.2e}, HK_H={:.2e}, HK_MSQ={:.2e}\nFirst {} failures:\n{}",
-            max_error_hk, max_error_hk_h, max_error_hk_msq,
+            max_error_hk,
+            max_error_hk_h,
+            max_error_hk_msq,
             failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
@@ -116,7 +119,10 @@ fn test_hkin_all_fixtures() {
 
     println!(
         "HKIN: {} cases passed. Max errors: HK={:.2e}, HK_H={:.2e}, HK_MSQ={:.2e}",
-        fixtures.len(), max_error_hk, max_error_hk_h, max_error_hk_msq
+        fixtures.len(),
+        max_error_hk,
+        max_error_hk_h,
+        max_error_hk_msq
     );
 }
 
@@ -151,7 +157,7 @@ fn load_cfl_fixtures() -> Vec<CflFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<CflFixture>(&content) {
                         fixtures.push(fixture);
@@ -186,7 +192,12 @@ fn test_cfl_all_fixtures() {
         if max_err > REL_TOL {
             failures.push(format!(
                 "Case {}: HK={:.6}, RT={:.6}\n  CF: err={:.2e}\n  CF_HK: err={:.2e}\n  CF_RT: err={:.2e}",
-                i + 1, fixture.input.hk, fixture.input.rt, err_cf, err_cf_hk, err_cf_rt
+                i + 1,
+                fixture.input.hk,
+                fixture.input.rt,
+                err_cf,
+                err_cf_hk,
+                err_cf_rt
             ));
         }
     }
@@ -194,7 +205,8 @@ fn test_cfl_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "CFL validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -233,7 +245,7 @@ fn load_hsl_fixtures() -> Vec<HslFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<HslFixture>(&content) {
                         fixtures.push(fixture);
@@ -276,7 +288,8 @@ fn test_hsl_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "HSL validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -313,7 +326,7 @@ fn load_dil_fixtures() -> Vec<DilFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<DilFixture>(&content) {
                         fixtures.push(fixture);
@@ -356,7 +369,8 @@ fn test_dil_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "DIL validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -395,7 +409,7 @@ fn load_hst_fixtures() -> Vec<HstFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<HstFixture>(&content) {
                         fixtures.push(fixture);
@@ -430,8 +444,13 @@ fn test_hst_all_fixtures() {
         if max_err > REL_TOL {
             failures.push(format!(
                 "Case {}: HK={:.6}, RT={:.6}, MSQ={:.6}\n  HS: expected={:.16e}, got={:.16e}, err={:.2e}",
-                i + 1, fixture.input.hk, fixture.input.rt, fixture.input.msq,
-                fixture.output.hs, result.val, err_hs
+                i + 1,
+                fixture.input.hk,
+                fixture.input.rt,
+                fixture.input.msq,
+                fixture.output.hs,
+                result.val,
+                err_hs
             ));
         }
     }
@@ -439,7 +458,8 @@ fn test_hst_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "HST validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -478,7 +498,7 @@ fn load_cft_fixtures() -> Vec<CftFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<CftFixture>(&content) {
                         fixtures.push(fixture);
@@ -514,8 +534,13 @@ fn test_cft_all_fixtures() {
         if max_err > REL_TOL {
             failures.push(format!(
                 "Case {}: HK={:.6}, RT={:.6}, MSQ={:.6}\n  CF: expected={:.16e}, got={:.16e}, err={:.2e}",
-                i + 1, fixture.input.hk, fixture.input.rt, fixture.input.msq,
-                fixture.output.cf, result.val, err_cf
+                i + 1,
+                fixture.input.hk,
+                fixture.input.rt,
+                fixture.input.msq,
+                fixture.output.cf,
+                result.val,
+                err_cf
             ));
         }
     }
@@ -523,7 +548,8 @@ fn test_cft_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "CFT validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -562,7 +588,7 @@ fn load_dampl_fixtures() -> Vec<DamplFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<DamplFixture>(&content) {
                         fixtures.push(fixture);
@@ -606,7 +632,8 @@ fn test_dampl_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "DAMPL validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -655,7 +682,7 @@ fn load_blkin_fixtures() -> Vec<BlkinFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<BlkinFixture>(&content) {
                         fixtures.push(fixture);
@@ -707,9 +734,15 @@ fn test_blkin_all_fixtures() {
         let err_rt_t = relative_error(fixture.output.rt2_t2, state.rt_t);
         let err_rt_u = relative_error(fixture.output.rt2_u2, state.rt_u);
 
-        let max_err = err_msq.max(err_h).max(err_hk).max(err_rt)
-            .max(err_hk_t).max(err_hk_d).max(err_hk_u)
-            .max(err_rt_t).max(err_rt_u);
+        let max_err = err_msq
+            .max(err_h)
+            .max(err_hk)
+            .max(err_rt)
+            .max(err_hk_t)
+            .max(err_hk_d)
+            .max(err_hk_u)
+            .max(err_rt_t)
+            .max(err_rt_u);
         max_error = max_error.max(max_err);
 
         if max_err > REL_TOL {
@@ -727,7 +760,8 @@ fn test_blkin_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "BLKIN validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -772,7 +806,7 @@ fn load_blvar_fixtures() -> Vec<BlvarFixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<BlvarFixture>(&content) {
                         fixtures.push(fixture);
@@ -863,7 +897,8 @@ fn test_blvar_all_fixtures() {
     if !failures.is_empty() {
         panic!(
             "BLVAR validation failed! Max error: {:.2e}\nFirst {} failures:\n{}",
-            max_error, failures.len().min(5),
+            max_error,
+            failures.len().min(5),
             failures[..failures.len().min(5)].join("\n\n")
         );
     }
@@ -902,7 +937,7 @@ fn load_trchek2_fixtures() -> Vec<Trchek2Fixture> {
 
     if let Ok(entries) = fs::read_dir(&fixture_dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<Trchek2Fixture>(&content) {
                         fixtures.push(fixture);
@@ -936,8 +971,12 @@ fn test_trchek2_all_fixtures() {
     for fixture in &fixtures {
         println!(
             "  Case: x1={:.6}, x2={:.6}, ampl1={:.6} -> ampl2={:.6}, xt={:.6}, tran={}",
-            fixture.input.x1, fixture.input.x2, fixture.input.ampl1,
-            fixture.output.ampl2, fixture.output.xt, fixture.output.tran
+            fixture.input.x1,
+            fixture.input.x2,
+            fixture.input.ampl1,
+            fixture.output.ampl2,
+            fixture.output.xt,
+            fixture.output.tran
         );
     }
 }

@@ -10,9 +10,7 @@ use std::path::PathBuf;
 use yfoil::bl::blsolv::{blsolv, BlsolvInput};
 
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(".tmp")
-        .join(name)
+    fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
 /// Test BLSOLV with actual XFOIL fixture data from first Newton iteration
@@ -21,17 +19,9 @@ fn test_blsolv_against_xfoil_call_1() {
     let input_path = fixture_path("blsolv_input.dat");
     let output_path = fixture_path("blsolv_output.dat");
 
-    if !input_path.exists() || !output_path.exists() {
-        eprintln!(
-            "Skipping test: fixture files not found. Run instrumented XFOIL to generate them."
-        );
-        return;
-    }
-
     // Parse XFOIL fixture data
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse BLSOLV input");
-    let xfoil_output =
-        parse_blsolv_output(&output_path, 1).expect("Failed to parse BLSOLV output");
+    let xfoil_output = parse_blsolv_output(&output_path, 1).expect("Failed to parse BLSOLV output");
 
     assert_eq!(xfoil_input.nsys, xfoil_output.nsys);
     let nsys = xfoil_input.nsys;
@@ -46,7 +36,11 @@ fn test_blsolv_against_xfoil_call_1() {
 
     // Use arc_length from fixture if available, otherwise estimate
     let arc_length = xfoil_input.arc_length.unwrap_or(2.0);
-    println!("\nArc length: {} (from fixture: {})", arc_length, xfoil_input.arc_length.is_some());
+    println!(
+        "\nArc length: {} (from fixture: {})",
+        arc_length,
+        xfoil_input.arc_length.is_some()
+    );
 
     // Test with VZ block disabled to isolate issues
     let disable_vz = std::env::var("DISABLE_VZ").is_ok();
@@ -114,10 +108,7 @@ fn test_blsolv_against_xfoil_call_1() {
             let xf = xfoil_output.vdel_out[iv][k][0];
             let yf = input.vdel[iv][k][0];
             let diff = (yf - xf).abs();
-            println!(
-                "    k={}: XFOIL={:+.10e}  YFoil={:+.10e}  diff={:.2e}",
-                k, xf, yf, diff
-            );
+            println!("    k={}: XFOIL={:+.10e}  YFoil={:+.10e}  diff={:.2e}", k, xf, yf, diff);
         }
     }
 
@@ -127,10 +118,7 @@ fn test_blsolv_against_xfoil_call_1() {
         let xf = xfoil_output.vdel_out[max_err_station][k][0];
         let yf = input.vdel[max_err_station][k][0];
         let diff = (yf - xf).abs();
-        println!(
-            "    k={}: XFOIL={:+.10e}  YFoil={:+.10e}  diff={:.2e}",
-            k, xf, yf, diff
-        );
+        println!("    k={}: XFOIL={:+.10e}  YFoil={:+.10e}  diff={:.2e}", k, xf, yf, diff);
     }
 
     // Print key parameters
@@ -168,11 +156,7 @@ fn test_blsolv_against_xfoil_call_1() {
 #[test]
 fn test_blsolv_small_subset() {
     let input_path = fixture_path("blsolv_input.dat");
-    let output_path = fixture_path("blsolv_output.dat");
-
-    if !input_path.exists() || !output_path.exists() {
-        return;
-    }
+    let _output_path = fixture_path("blsolv_output.dat");
 
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse");
 
@@ -197,12 +181,7 @@ fn test_blsolv_small_subset() {
 
     for iv in 0..small_input.nsys {
         for k in 0..3 {
-            assert!(
-                input.vdel[iv][k][0].is_finite(),
-                "NaN/Inf at station {} row {}",
-                iv,
-                k
-            );
+            assert!(input.vdel[iv][k][0].is_finite(), "NaN/Inf at station {} row {}", iv, k);
         }
     }
 }
@@ -212,10 +191,6 @@ fn test_blsolv_small_subset() {
 fn test_blsolv_against_xfoil_call_2() {
     let input_path = fixture_path("blsolv_input.dat");
     let output_path = fixture_path("blsolv_output.dat");
-
-    if !input_path.exists() || !output_path.exists() {
-        return;
-    }
 
     // Parse XFOIL fixture data for call 2
     let xfoil_input = match parse_blsolv_input(&input_path, 2) {
@@ -292,10 +267,7 @@ fn test_blsolv_against_xfoil_call_2() {
         let xf = xfoil_output.vdel_out[max_err_station][k][0];
         let yf = input.vdel[max_err_station][k][0];
         let diff = (yf - xf).abs();
-        println!(
-            "    k={}: XFOIL={:+.10e}  YFoil={:+.10e}  diff={:.2e}",
-            k, xf, yf, diff
-        );
+        println!("    k={}: XFOIL={:+.10e}  YFoil={:+.10e}  diff={:.2e}", k, xf, yf, diff);
     }
 }
 
@@ -304,10 +276,6 @@ fn test_blsolv_against_xfoil_call_2() {
 fn test_blsolv_trace_first_station() {
     let input_path = fixture_path("blsolv_input.dat");
     let output_path = fixture_path("blsolv_output.dat");
-
-    if !input_path.exists() || !output_path.exists() {
-        return;
-    }
 
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse");
     let xfoil_output = parse_blsolv_output(&output_path, 1).expect("Failed to parse output");
@@ -427,10 +395,6 @@ fn test_blsolv_forward_sweep_comparison() {
     let input_path = fixture_path("blsolv_input.dat");
     let output_path = fixture_path("blsolv_output.dat");
 
-    if !input_path.exists() || !output_path.exists() {
-        return;
-    }
-
     let xfoil_input = parse_blsolv_input(&input_path, 1).expect("Failed to parse");
     let _xfoil_output = parse_blsolv_output(&output_path, 1).expect("Failed to parse output");
 
@@ -535,16 +499,13 @@ fn test_blsolv_forward_sweep_comparison() {
             let vtmp2 = input.vb[ivp][k][1];
             let vtmp3 = input.vm[ivp][iv][k];
             for l in ivp..nsys {
-                input.vm[ivp][l][k] -= vtmp1 * input.vm[iv][l][0]
-                    + vtmp2 * input.vm[iv][l][1]
-                    + vtmp3 * input.vm[iv][l][2];
+                input.vm[ivp][l][k] -=
+                    vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1] + vtmp3 * input.vm[iv][l][2];
             }
-            input.vdel[ivp][k][0] -= vtmp1 * input.vdel[iv][0][0]
-                + vtmp2 * input.vdel[iv][1][0]
-                + vtmp3 * input.vdel[iv][2][0];
-            input.vdel[ivp][k][1] -= vtmp1 * input.vdel[iv][0][1]
-                + vtmp2 * input.vdel[iv][1][1]
-                + vtmp3 * input.vdel[iv][2][1];
+            input.vdel[ivp][k][0] -=
+                vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0] + vtmp3 * input.vdel[iv][2][0];
+            input.vdel[ivp][k][1] -=
+                vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1] + vtmp3 * input.vdel[iv][2][1];
         }
 
         // VZ block
@@ -554,13 +515,10 @@ fn test_blsolv_forward_sweep_comparison() {
                     let vtmp1 = input.vz[k][0];
                     let vtmp2 = input.vz[k][1];
                     for l in ivp..nsys {
-                        input.vm[ivz_val][l][k] -=
-                            vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1];
+                        input.vm[ivz_val][l][k] -= vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1];
                     }
-                    input.vdel[ivz_val][k][0] -=
-                        vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0];
-                    input.vdel[ivz_val][k][1] -=
-                        vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1];
+                    input.vdel[ivz_val][k][0] -= vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0];
+                    input.vdel[ivz_val][k][1] -= vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1];
                 }
             }
         }
@@ -605,25 +563,30 @@ fn test_blsolv_forward_sweep_comparison() {
     println!("\n=== After complete forward sweep (YFoil) ===");
     println!("First 5 stations VDEL[iv][2][0] (mass delta):");
     for iv in 0..5 {
-        println!("VDEL({},3,1) = {:.16e}", iv+1, input.vdel[iv][2][0]);
+        println!("VDEL({},3,1) = {:.16e}", iv + 1, input.vdel[iv][2][0]);
     }
 
     println!("\nVM couplings for station 1 backsolve:");
     for iv in 0..5 {
-        println!("VM(:,{},1) = {:.16e} {:.16e} {:.16e}",
-            iv+1, input.vm[0][iv][0], input.vm[0][iv][1], input.vm[0][iv][2]);
+        println!(
+            "VM(:,{},1) = {:.16e} {:.16e} {:.16e}",
+            iv + 1,
+            input.vm[0][iv][0],
+            input.vm[0][iv][1],
+            input.vm[0][iv][2]
+        );
     }
 
-    println!("\n=== Stations 85-95 (near TE, IBLTE1={}) ===", ivte1+1);
+    println!("\n=== Stations near TE (IBLTE1={}) ===", ivte1 + 1);
     println!("YFoil VDEL[iv][2][0] (mass delta):");
-    for iv in 84..95 {
-        println!("VDEL({},3,1) = {:.16e}", iv+1, input.vdel[iv][2][0]);
+    for iv in ivte1.saturating_sub(5)..(ivte1 + 6).min(input.nsys) {
+        println!("VDEL({},3,1) = {:.16e}", iv + 1, input.vdel[iv][2][0]);
     }
 
-    println!("\n=== Stations 158-168 (near IVZ={}) ===", ivz+1);
+    println!("\n=== Stations near IVZ={} ===", ivz + 1);
     println!("YFoil VDEL[iv][2][0] (mass delta):");
-    for iv in 157..168 {
-        println!("VDEL({},3,1) = {:.16e}", iv+1, input.vdel[iv][2][0]);
+    for iv in ivz.saturating_sub(5)..(ivz + 6).min(input.nsys) {
+        println!("VDEL({},3,1) = {:.16e}", iv + 1, input.vdel[iv][2][0]);
     }
 
     println!("\nXFOIL stations 158-168:");
@@ -637,8 +600,8 @@ fn test_blsolv_forward_sweep_comparison() {
 
     println!("\n=== Last 5 stations comparison ===");
     println!("YFoil VDEL[iv][2][0] (mass delta):");
-    for iv in (nsys-5)..nsys {
-        println!("VDEL({},3,1) = {:.16e}", iv+1, input.vdel[iv][2][0]);
+    for iv in (nsys - 5)..nsys {
+        println!("VDEL({},3,1) = {:.16e}", iv + 1, input.vdel[iv][2][0]);
     }
 
     println!("\nXFOIL Last 5 stations VDEL mass delta:");

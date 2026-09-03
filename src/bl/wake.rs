@@ -264,13 +264,7 @@ pub fn solve_wake(
 ///
 /// # Returns
 /// Edge velocity at each wake station
-pub fn wake_edge_velocity(
-    x_wake: &[f64],
-    _y_wake: &[f64],
-    gamma_total: f64,
-    alpha: f64,
-    chord: f64,
-) -> Vec<f64> {
+pub fn wake_edge_velocity(x_wake: &[f64], _y_wake: &[f64], gamma_total: f64, alpha: f64, chord: f64) -> Vec<f64> {
     let n = x_wake.len();
     let mut ue = Vec::with_capacity(n);
 

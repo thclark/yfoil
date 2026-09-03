@@ -1,0 +1,425 @@
+--- a/src/xbl.f
++++ b/src/xbl.f
+@@ -24,17 +24,36 @@
+ C     for the current BL variables and the edge
+ C     velocities received from SETUP. The local
+ C     BL system coefficients are then
+-C     incorporated into the global Newton system.  
++C     incorporated into the global Newton system.
+ C-------------------------------------------------
+       INCLUDE 'XFOIL.INC'
+       INCLUDE 'XBL.INC'
++      INCLUDE 'XLOG.INC'
+       REAL USAV(IVX,2)
+       REAL U1_M(2*IVX), U2_M(2*IVX)
+       REAL D1_M(2*IVX), D2_M(2*IVX)
+       REAL ULE1_M(2*IVX), ULE2_M(2*IVX)
+       REAL UTE1_M(2*IVX), UTE2_M(2*IVX)
+       REAL MA_CLMR, MSQ_CLMR, MDI
++C---- INSTRUMENTATION: First-call initialization flag
++      LOGICAL FIRST_SETBL_CALL
++      SAVE FIRST_SETBL_CALL
++      DATA FIRST_SETBL_CALL / .TRUE. /
+ C
++C---- INSTRUMENTATION: Initialize common block flags on first call
++      IF(FIRST_SETBL_CALL) THEN
++        FIRST_SETBL_CALL = .FALSE.
++        FIRST_MRCHDU_DONE = .FALSE.
++        MRCHDU_OUTPUT_DONE = .FALSE.
++      ENDIF
++C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('SETBL')
++      CALL LOGINT('NBL1', NBL(1))
++      CALL LOGINT('NBL2', NBL(2))
++      CALL LOGINT('ITRAN1', ITRAN(1))
++      CALL LOGINT('ITRAN2', ITRAN(2))
++C
+ C---- set the CL used to define Mach, Reynolds numbers
+       IF(LALFA) THEN
+        CLMR = CL
+@@ -89,9 +108,53 @@
+ C
+       WRITE(*,*)
+ C
++C---- INSTRUMENTATION: Output state before MRCHDU (first iteration only)
++      IF(.NOT.FIRST_MRCHDU_DONE) THEN
++       FIRST_MRCHDU_DONE = .TRUE.
++       OPEN(95, FILE='mrchdu_input.dat', STATUS='UNKNOWN')
++       WRITE(95,'(A,I5)') 'NBL1=', NBL(1)
++       WRITE(95,'(A,I5)') 'NBL2=', NBL(2)
++       WRITE(95,'(A,I5)') 'IBLTE1=', IBLTE(1)
++       WRITE(95,'(A,I5)') 'IBLTE2=', IBLTE(2)
++       WRITE(95,'(A,ES24.16)') 'MINF=', MINF
++       WRITE(95,'(A,ES24.16)') 'REINF=', REINF
++       WRITE(95,'(A,ES24.16)') 'ACRIT1=', ACRIT(1)
++       WRITE(95,'(A,ES24.16)') 'ACRIT2=', ACRIT(2)
++       DO 8001 IS=1, 2
++         DO 8002 IBL=1, NBL(IS)
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++ 8002    CONTINUE
++ 8001  CONTINUE
++       CLOSE(95)
++      ENDIF
++C
++C---- INSTRUMENTATION: Open amplification log for first iteration
++      IF(FIRST_MRCHDU_DONE .AND. .NOT.MRCHDU_OUTPUT_DONE) THEN
++       OPEN(97, FILE='mrchdu_ampl.dat', STATUS='UNKNOWN')
++      ENDIF
++C
+ C---- march BL with current Ue and Ds to establish transition
+       CALL MRCHDU
+ C
++C---- INSTRUMENTATION: Close amplification log and output state after MRCHDU
++      IF(FIRST_MRCHDU_DONE .AND. .NOT.MRCHDU_OUTPUT_DONE) THEN
++       CLOSE(97)
++       MRCHDU_OUTPUT_DONE = .TRUE.
++       OPEN(95, FILE='mrchdu_output.dat', STATUS='UNKNOWN')
++       WRITE(95,'(A,I5)') 'ITRAN1=', ITRAN(1)
++       WRITE(95,'(A,I5)') 'ITRAN2=', ITRAN(2)
++       DO 8003 IS=1, 2
++         DO 8004 IBL=1, NBL(IS)
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++ 8004    CONTINUE
++ 8003  CONTINUE
++       CLOSE(95)
++      ENDIF
++C
+       DO 5 IS=1, 2
+         DO 6 IBL=2, NBL(IS)
+           USAV(IBL,IS) = UEDG(IBL,IS)
+@@ -238,6 +301,22 @@
+        DTE = DSTR(IBLTE(1),1) + DSTR(IBLTE(2),2) + ANTE
+        CTE = ( CTAU(IBLTE(1),1)*THET(IBLTE(1),1)
+      &       + CTAU(IBLTE(2),2)*THET(IBLTE(2),2) ) / TTE
++C
++C----- INSTRUMENTATION: Log wake initialization
++       WRITE(98,'(A)') '=== WAKE_INIT ==='
++       WRITE(98,'(A,ES24.16)') 'THET_TE1=', THET(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'THET_TE2=', THET(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'DSTR_TE1=', DSTR(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'DSTR_TE2=', DSTR(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'CTAU_TE1=', CTAU(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'CTAU_TE2=', CTAU(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'UEDG_TE1=', UEDG(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'UEDG_TE2=', UEDG(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'ANTE=', ANTE
++       WRITE(98,'(A,ES24.16)') 'TTE=', TTE
++       WRITE(98,'(A,ES24.16)') 'DTE=', DTE
++       WRITE(98,'(A,ES24.16)') 'CTE=', CTE
++C
+        CALL TESYS(CTE,TTE,DTE)
+ C
+        TTE_TTE1 = 1.0
+@@ -273,7 +352,26 @@
+ C
+       ENDIF
+ C
++C---- INSTRUMENTATION: Log wake station data
++      IF(WAKE) THEN
++        IW = IBL - IBLTE(IS)
++        WRITE(98,'(A,I4)') '=== WAKE_STATION IW=', IW
++        WRITE(98,'(A,ES24.16)') 'XSSI=', XSSI(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'UEDG=', UEDG(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'THET=', THET(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'DSTR=', DSTR(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'MASS=', MASS(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'CTAU=', CTAU(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'T2=', T2
++        WRITE(98,'(A,ES24.16)') 'D2=', D2
++        WRITE(98,'(A,ES24.16)') 'U2=', U2
++        WRITE(98,'(A,ES24.16)') 'HK2=', HK2
++        WRITE(98,'(A,ES24.16)') 'HS2=', HS2
++        WRITE(98,'(A,ES24.16)') 'CF2=', CF2
++        WRITE(98,'(A,ES24.16)') 'DI2=', DI2
++      ENDIF
+ C
++C
+ C---- Save wall shear and equil. max shear coefficient for plotting output
+       TAU(IBL,IS) = 0.5*R2*U2*U2*CF2
+       DIS(IBL,IS) =     R2*U2*U2*U2*DI2*HS2*0.5
+@@ -511,6 +609,11 @@
+ C
+ C---- next airfoil side
+  2000 CONTINUE
++C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGINT('NSYS', NSYS)
++      CALL LOGREAL('RMSBL_SETBL', DBLE(RMSBL))
++      CALL LOGEXIT('SETBL')
+ C
+       RETURN
+       END
+@@ -552,6 +655,19 @@
+       LOGICAL DIRECT
+       REAL MSQ
+ C
++C---- DEBUG: Open output file and write header
++      OPEN(77, FILE='xfoil_bl_debug.dat', STATUS='REPLACE')
++      WRITE(77,'(A)') '# IBL IS TURB X S THETA DSTAR HK UE CF RT AMPL'
++C---- DEBUG: Open Newton iteration trace file
++      OPEN(78, FILE='xfoil_newton_trace.dat', STATUS='REPLACE')
++      WRITE(78,'(A)') '# Newton iteration trace'
++      WRITE(78,'(A)') '# FORMAT: STATION IBL IS ITBL'
++      WRITE(78,'(A)') '# PRIMARY: X2 U2 T2 D2 S2'
++      WRITE(78,'(A)') '# KINEMATIC: M2 H2 HK2 RT2 V2'
++      WRITE(78,'(A)') '# CLOSURE: HS2 US2 CQ2 CF2 DI2'
++      WRITE(78,'(A)') '# RESIDUAL: RES1 RES2 RES3'
++      WRITE(78,'(A)') '# UPDATE: DZ1 DZ2 DZ3 DMAX RLX'
++C
+ C---- shape parameters for separation criteria
+       HLMAX = 3.8
+       HTMAX = 2.5
+@@ -618,6 +734,11 @@
+           CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
+           CALL BLKIN
+ C
++C-------- DEBUG: Output primary and kinematic variables
++          WRITE(78,'(A,3I4)') 'STATION', IBL, IS, ITBL
++          WRITE(78,'(A,5ES24.16)') 'PRIMARY:', X2, U2, T2, D2, S2
++          WRITE(78,'(A,5ES24.16)') 'KINEMATIC:', M2, H2, HK2, RT2, V2
++C
+ C-------- check for transition and set appropriate flags and things
+           IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
+            CALL TRCHEK
+@@ -646,7 +767,17 @@
+            CALL BLSYS
+           ENDIF
+ C
+-
++C-------- DEBUG: Output closure variables and residuals after BLSYS
++          WRITE(78,'(A,5ES24.16)') 'CLOSURE:', HS2, US2, CQ2, CF2, DI2
++          WRITE(78,'(A,4ES24.16)') 'RESIDUAL:', VSREZ(1),VSREZ(2),
++     &       VSREZ(3),VSREZ(4)
++          WRITE(78,'(A,5ES24.16)') 'VS2_1:', VS2(1,1),VS2(1,2),VS2(1,3),
++     &       VS2(1,4),VS2(1,5)
++          WRITE(78,'(A,5ES24.16)') 'VS2_2:', VS2(2,1),VS2(2,2),VS2(2,3),
++     &       VS2(2,4),VS2(2,5)
++          WRITE(78,'(A,5ES24.16)') 'VS2_3:', VS2(3,1),VS2(3,2),VS2(3,3),
++     &       VS2(3,4),VS2(3,5)
++C
+           IF(DIRECT) THEN
+ C
+ C--------- try direct mode (set dUe = 0 in currently empty 4th line)
+@@ -659,6 +790,10 @@
+ C--------- solve Newton system for current "2" station
+            CALL GAUSS(4,4,VS2,VSREZ,1)
+ C
++C--------- DEBUG: Output Newton solution (update vector)
++           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
++     &        VSREZ(3),VSREZ(4)
++C
+ C--------- determine max changes and underrelax if necessary
+            DMAX = MAX( ABS(VSREZ(2)/THI),
+      &                 ABS(VSREZ(3)/DSI)  )
+@@ -668,6 +803,9 @@
+            RLX = 1.0
+            IF(DMAX.GT.0.3) RLX = 0.3/DMAX
+ C
++C--------- DEBUG: Output relaxation info
++           WRITE(78,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
++C
+ C--------- see if direct mode is not applicable
+            IF(IBL .NE. IBLTE(IS)+1) THEN
+ C
+@@ -773,8 +911,14 @@
+           CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
+           DSI = DSW + DSWAKI
+ C
+-          IF(DMAX.LE.1.0E-5) GO TO 110
++C-------- DEBUG: Output updated values
++          WRITE(78,'(A,4ES24.16)') 'UPDATED:', CTI, THI, DSI, UEI
+ C
++          IF(DMAX.LE.1.0E-5) THEN
++           WRITE(78,'(A,I4,ES24.16)') 'CONVERGED:', ITBL, DMAX
++           GO TO 110
++          ENDIF
++C
+   100   CONTINUE
+         WRITE(*,1350) IBL, IS, DMAX 
+  1350   FORMAT(' MRCHUE: Convergence failed at',I4,'  side',I2,
+@@ -842,6 +986,10 @@
+         DELT(IBL,IS) = DE2
+         TSTR(IBL,IS) = HS2*T2
+ C
++C------ DEBUG: Output BL values at each station for comparison
++        WRITE(77,'(I4,I2,1X,L1,9ES24.16)') IBL, IS, TURB,
++     &        X2, S2, T2, D2, HK2, U2, CF2, RT2, AMPL2
++C
+ C------ set "1" variables to "2" variables for next streamwise station
+         CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
+         CALL BLKIN
+@@ -868,10 +1016,13 @@
+  1000 CONTINUE
+  2000 CONTINUE
+ C
++C---- DEBUG: Close output file
++      CLOSE(77)
++C
+       RETURN
+       END
+-  
+- 
++
++
+       SUBROUTINE MRCHDU
+ C----------------------------------------------------
+ C     Marches the BLs and wake in mixed mode using
+@@ -887,6 +1038,13 @@
+       REAL VTMP(4,5), VZTMP(4)
+       REAL MSQ
+ ccc   REAL MDI
++C
++C---- INSTRUMENTATION: Save VS2 matrix before GAUSS for test station
++      REAL VS2_SAVE(4,5)
++      INTEGER ITEST_STN, ITEST_IS
++      LOGICAL FIRST_ITER_LOGGED
++      DATA ITEST_STN / 10 /
++      DATA ITEST_IS / 1 /
+ C
+       DATA DEPS / 5.0E-6 /
+ C
+@@ -966,6 +1124,12 @@
+           IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
+            CALL TRCHEK
+            AMI = AMPL2
++C-------- INSTRUMENTATION: Output amplification at each station
++           IF(FIRST_MRCHDU_DONE .AND. (.NOT.MRCHDU_OUTPUT_DONE)
++     &        .AND. (IS.EQ.1)) THEN
++            WRITE(97,'(A,I4,A,ES24.16,A,ES24.16,A,ES24.16)')
++     &        'AMPL IBL=',IBL,' AMPL1=',AMPL1,' AMPL2=',AMPL2,' HK2=',HK2
++           ENDIF
+            IF(     TRAN) ITRAN(IS) = IBL
+            IF(.NOT.TRAN) ITRAN(IS) = IBL+2
+           ENDIF
+@@ -1059,9 +1223,52 @@
+ C
+           ENDIF
+ C
++C-------- INSTRUMENTATION: Save VS2 and VSREZ before GAUSS for test station
++          IF(IBL.EQ.ITEST_STN .AND. IS.EQ.ITEST_IS .AND. ITBL.EQ.1) THEN
++           OPEN(96, FILE='mrchdu_newton.dat', STATUS='UNKNOWN')
++           WRITE(96,'(A)') '=== MRCHDU Newton Test Station ==='
++           WRITE(96,'(A,I4,A,I2,A,I4)') 'IBL=',IBL,' IS=',IS,' ITBL=',ITBL
++           WRITE(96,'(A)') '--- Input State ---'
++           WRITE(96,'(A,ES24.16)') 'XSI=', XSI
++           WRITE(96,'(A,ES24.16)') 'UEI=', UEI
++           WRITE(96,'(A,ES24.16)') 'THI=', THI
++           WRITE(96,'(A,ES24.16)') 'DSI=', DSI
++           WRITE(96,'(A,ES24.16)') 'AMI=', AMI
++           WRITE(96,'(A,ES24.16)') 'CTI=', CTI
++           WRITE(96,'(A,ES24.16)') 'DSWAKI=', DSWAKI
++           WRITE(96,'(A)') '--- Secondary Variables ---'
++           WRITE(96,'(A,ES24.16)') 'U2=', U2
++           WRITE(96,'(A,ES24.16)') 'T2=', T2
++           WRITE(96,'(A,ES24.16)') 'D2=', D2
++           WRITE(96,'(A,ES24.16)') 'HK2=', HK2
++           WRITE(96,'(A,ES24.16)') 'RT2=', RT2
++           WRITE(96,'(A,ES24.16)') 'UEREF=', UEREF
++           WRITE(96,'(A,ES24.16)') 'HKREF=', HKREF
++           WRITE(96,'(A)') '--- VS2 Matrix (4x4 portion) ---'
++           DO 8100 K=1, 4
++             WRITE(96,'(A,I2,A,4ES24.16)') 'VS2(',K,',1:4)=',
++     &         (VS2(K,L), L=1,4)
++ 8100      CONTINUE
++           WRITE(96,'(A)') '--- VSREZ before GAUSS ---'
++           WRITE(96,'(A,4ES24.16)') 'VSREZ=', (VSREZ(K), K=1,4)
++C-------- Save copies for comparison
++           DO 8101 K=1, 4
++             DO 8102 L=1, 4
++               VS2_SAVE(K,L) = VS2(K,L)
++ 8102        CONTINUE
++ 8101      CONTINUE
++          ENDIF
++C
+ C-------- solve Newton system for current "2" station
+           CALL GAUSS(4,4,VS2,VSREZ,1)
+ C
++C-------- INSTRUMENTATION: Log solution after GAUSS
++          IF(IBL.EQ.ITEST_STN .AND. IS.EQ.ITEST_IS .AND. ITBL.EQ.1) THEN
++           WRITE(96,'(A)') '--- Solution from GAUSS ---'
++           WRITE(96,'(A,4ES24.16)') 'VSREZ_SOL=', (VSREZ(K), K=1,4)
++           CLOSE(96)
++          ENDIF
++C
+ C-------- determine max changes and underrelax if necessary
+ C-------- (added Ue clamp   MD  3 Apr 03)
+           DMAX = MAX( ABS(VSREZ(2)/THI),
+@@ -1281,6 +1488,12 @@
+ C
+ C---- calculate new Ue distribution assuming no under-relaxation
+ C-    also set the sensitivity of Ue wrt to alpha or Re
++C
++C---- INSTRUMENTATION: Open UPDATE log file (append mode)
++      OPEN(UNIT=95,FILE='xfoil_update.dat',ACCESS='APPEND')
++      WRITE(95,*) '=== UPDATE START ==='
++      WRITE(95,*) 'NBL(1)=', NBL(1), ' NBL(2)=', NBL(2)
++C
+       DO 1 IS=1, 2
+         DO 10 IBL=2, NBL(IS)
+           I = IPAN(IBL,IS)
+@@ -1307,8 +1520,27 @@
+           UNEW(IBL,IS) = UINV(IBL,IS) + DUI
+           U_AC(IBL,IS) = UINV_AC      + DUI_AC
+ C
++C---- INSTRUMENTATION: Log DUI computation for each station
++          WRITE(95,'(A,I2,A,I3,A,I4,6ES24.16)') 'DUI IS=', IS,
++     &      ' IBL=', IBL, ' I=', I, UINV(IBL,IS), DUI,
++     &      UNEW(IBL,IS), UEDG(IBL,IS), MASS(IBL,IS), DSTR(IBL,IS)
++C
+    10   CONTINUE
+     1 CONTINUE
++C
++C---- INSTRUMENTATION: Log MASS and VDEL for each BL station
++      WRITE(95,*) '--- MASS+VDEL breakdown ---'
++      DO 1001 IIS=1, 2
++        DO 1002 JBL=2, NBL(IIS)
++          JV = ISYS(JBL,IIS)
++          WRITE(95,'(A,I2,A,I3,A,I4,4ES24.16)') 'M+V IS=', IIS,
++     &      ' JBL=', JBL, ' JV=', JV,
++     &      MASS(JBL,IIS), VDEL(3,1,JV), MASS(JBL,IIS)+VDEL(3,1,JV),
++     &      THET(JBL,IIS)
++ 1002   CONTINUE
++ 1001 CONTINUE
++      WRITE(95,*) '=== UPDATE UNEW COMPLETE ==='
++      CLOSE(95)
+ C
+ C---- set new Qtan from new Ue with appropriate sign change
+       DO 2 IS=1, 2
+@@ -1479,6 +1711,32 @@
+ C---- set true rms change
+       RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
+ C
++C---- INSTRUMENTATION: Output RLX and RMSBL for validation
++      OPEN(UNIT=96,FILE='xfoil_rlx.dat',STATUS='REPLACE')
++      WRITE(96,'(A,ES24.16)') 'RLX = ', RLX
++      WRITE(96,'(A,ES24.16)') 'RMSBL = ', RMSBL
++      WRITE(96,'(A,ES24.16)') 'DAC = ', DAC
++      WRITE(96,'(A,I4,A,I4)') 'NBL1 = ', NBL(1), ', NBL2 = ', NBL(2)
++      WRITE(96,*) '--- DN values for each station ---'
++      WRITE(96,'(A)') 'IS IBL DN1 DN2 DN3 DN4 DCTAU DTHET DDSTR DUEDG'
++      DO 41 IIS=1, 2
++        DO 410 JBL=2, NBL(IIS)
++          JV = ISYS(JBL,IIS)
++          DCTAU2 = VDEL(1,1,JV) - DAC*VDEL(1,2,JV)
++          DTHET2 = VDEL(2,1,JV) - DAC*VDEL(2,2,JV)
++          DMASS2 = VDEL(3,1,JV) - DAC*VDEL(3,2,JV)
++          DUEDG2 = UNEW(JBL,IIS) + DAC*U_AC(JBL,IIS) - UEDG(JBL,IIS)
++          DDSTR2 = (DMASS2 - DSTR(JBL,IIS)*DUEDG2)/UEDG(JBL,IIS)
++          IF(JBL.LT.ITRAN(IIS)) DN1X = DCTAU2 / 10.0
++          IF(JBL.GE.ITRAN(IIS)) DN1X = DCTAU2 / CTAU(JBL,IIS)
++          DN2X = DTHET2 / THET(JBL,IIS)
++          DN3X = DDSTR2 / DSTR(JBL,IIS)
++          DN4X = ABS(DUEDG2)/0.25
++          WRITE(96,'(I2,I4,8ES24.16)') IIS, JBL,
++     &      DN1X, DN2X, DN3X, DN4X, DCTAU2, DTHET2, DDSTR2, DUEDG2
++  410   CONTINUE
++   41 CONTINUE
++      CLOSE(96)
+ C
+       IF(LALFA) THEN
+ C----- set underrelaxed change in Reynolds number from change in lift

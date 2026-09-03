@@ -78,17 +78,11 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
 
         if parts.len() >= 2 {
             let x: f64 = parts[0].parse().map_err(|_| {
-                GeometryReadError::DatParse(format!(
-                    "Invalid x coordinate '{}' on line {}",
-                    parts[0], line_num
-                ))
+                GeometryReadError::DatParse(format!("Invalid x coordinate '{}' on line {}", parts[0], line_num))
             })?;
 
             let y: f64 = parts[1].parse().map_err(|_| {
-                GeometryReadError::DatParse(format!(
-                    "Invalid y coordinate '{}' on line {}",
-                    parts[1], line_num
-                ))
+                GeometryReadError::DatParse(format!("Invalid y coordinate '{}' on line {}", parts[1], line_num))
             })?;
 
             x_coords.push(x);
@@ -98,9 +92,7 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
     }
 
     if x_coords.is_empty() {
-        return Err(GeometryReadError::DatParse(
-            "No coordinates found in file".to_string(),
-        ));
+        return Err(GeometryReadError::DatParse("No coordinates found in file".to_string()));
     }
 
     // Detect Lednicer format: if x values go 0->1 then 0->1 again
@@ -208,10 +200,7 @@ fn convert_lednicer_to_selig(x: &[f64], y: &[f64]) -> Result<Geometry, GeometryR
 }
 
 /// Write airfoil geometry to a JSON file
-pub fn write_geometry_to_json<P: AsRef<Path>>(
-    geometry: &Geometry,
-    path: P,
-) -> Result<(), std::io::Error> {
+pub fn write_geometry_to_json<P: AsRef<Path>>(geometry: &Geometry, path: P) -> Result<(), std::io::Error> {
     let file = File::create(path)?;
     serde_json::to_writer_pretty(file, geometry)?;
     Ok(())
@@ -220,19 +209,16 @@ pub fn write_geometry_to_json<P: AsRef<Path>>(
 /// Write airfoil geometry to a Selig/XFOIL .dat file
 ///
 /// Format: First line is the airfoil name, subsequent lines are x y coordinates.
-pub fn write_dat_file<P: AsRef<Path>>(
-    geometry: &Geometry,
-    name: &str,
-    path: P,
-) -> Result<(), std::io::Error> {
+pub fn write_dat_file<P: AsRef<Path>>(geometry: &Geometry, name: &str, path: P) -> Result<(), std::io::Error> {
     let mut file = File::create(path)?;
 
     // Write name
     writeln!(file, "{}", name)?;
 
-    // Write coordinates with full double precision for numerical consistency
+    // 17 significant digits round-trip an f64 bitwise (CLAUDE.md Rule 4). Fixed-point
+    // {:22.16} does not: it drops to ~14 significant figures for small y values.
     for i in 0..geometry.x_c.len() {
-        writeln!(file, " {:22.16}  {:22.16}", geometry.x_c[i], geometry.y_c[i])?;
+        writeln!(file, " {:.17e}  {:.17e}", geometry.x_c[i], geometry.y_c[i])?;
     }
 
     Ok(())
@@ -320,9 +306,9 @@ mod tests {
     fn test_skip_empty_lines() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "Test").unwrap();
-        writeln!(temp_file, "").unwrap();
+        writeln!(temp_file).unwrap();
         writeln!(temp_file, "  1.0  0.0").unwrap();
-        writeln!(temp_file, "").unwrap();
+        writeln!(temp_file).unwrap();
         writeln!(temp_file, "  0.0  0.0").unwrap();
         temp_file.flush().unwrap();
 
@@ -445,11 +431,7 @@ mod tests {
         // Normal vectors should have unit length
         for i in 0..paneled.n {
             let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
-            assert!(
-                (mag - 1.0).abs() < 1e-10,
-                "Normal at {} should be unit length",
-                i
-            );
+            assert!((mag - 1.0).abs() < 1e-10, "Normal at {} should be unit length", i);
         }
     }
 }

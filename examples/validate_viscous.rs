@@ -21,15 +21,19 @@ fn main() {
 
     // XFOIL reference values (approximate)
     let cases: [(f64, f64, f64); 3] = [
-        (0.0, 0.0, 0.0064),    // α=0°
-        (5.0, 0.55, 0.0076),   // α=5°
-        (10.0, 1.08, 0.0130),  // α=10°
+        (0.0, 0.0, 0.0064),   // α=0°
+        (5.0, 0.55, 0.0076),  // α=5°
+        (10.0, 1.08, 0.0130), // α=10°
     ];
 
-    println!("{:>6} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
-             "alpha", "CL", "CL_ref", "CL_err%", "CD", "CD_ref", "CD_err%", "Conv");
-    println!("{:-<6} {:-<10} {:-<10} {:-<10} {:-<10} {:-<10} {:-<10} {:-<10}",
-             "", "", "", "", "", "", "", "");
+    println!(
+        "{:>6} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
+        "alpha", "CL", "CL_ref", "CL_err%", "CD", "CD_ref", "CD_err%", "Conv"
+    );
+    println!(
+        "{:-<6} {:-<10} {:-<10} {:-<10} {:-<10} {:-<10} {:-<10} {:-<10}",
+        "", "", "", "", "", "", "", ""
+    );
 
     for (alpha_deg, cl_ref, cd_ref) in cases {
         let alpha = alpha_deg.to_radians();
@@ -42,14 +46,23 @@ fn main() {
         };
         let cd_err = 100.0 * (result.cd - cd_ref).abs() / cd_ref;
 
-        println!("{:6.1} {:10.4} {:10.4} {:10.1} {:10.5} {:10.5} {:10.1} {:>10}",
-                 alpha_deg, result.cl, cl_ref, cl_err,
-                 result.cd, cd_ref, cd_err,
-                 if result.converged { "yes" } else { "NO" });
+        println!(
+            "{:6.1} {:10.4} {:10.4} {:10.1} {:10.5} {:10.5} {:10.1} {:>10}",
+            alpha_deg,
+            result.cl,
+            cl_ref,
+            cl_err,
+            result.cd,
+            cd_ref,
+            cd_err,
+            if result.converged { "yes" } else { "NO" }
+        );
 
         // Also print component breakdown
-        println!("        CDf={:.5} CDp={:.5} xtr_u={:.3} xtr_l={:.3} iter={}",
-                 result.cdf, result.cdp, result.xtr_upper, result.xtr_lower, result.iterations);
+        println!(
+            "        CDf={:.5} CDp={:.5} xtr_u={:.3} xtr_l={:.3} iter={}",
+            result.cdf, result.cdp, result.xtr_upper, result.xtr_lower, result.iterations
+        );
     }
 
     println!("\n=== Summary ===");

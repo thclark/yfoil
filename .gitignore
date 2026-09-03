@@ -1,9 +1,46 @@
+# ---------------------------------------------------------------------------
+# Exclude by default, allowlist deliberately.
+#
+# Generated artefacts (XFOIL dumps, fixture data, logs) are ignored everywhere
+# unless they sit under an allowlisted path. Committing a fixture is a decision:
+# put it under tests/fixtures/ and it is tracked; anywhere else it is not.
+# ---------------------------------------------------------------------------
+
+# Build output
 /target
+/.tmp/
+
+# Editor / OS
 /.idea/
-*.html
 .DS_Store
-/xfoil/
+._*
+
+# Generated data anywhere in the tree
 *.dat
-fort.*
-*.bl
 *.log
+*.bl
+*.pol
+*.html
+fort.*
+
+# XFOIL build products (the vendored source under third_party/ is tracked;
+# builds happen in target/xfoil-ref/ and never in-tree)
+*.o
+*.a
+third_party/xfoil-6.99/bin/xfoil
+third_party/xfoil-6.99/bin/pplot
+third_party/xfoil-6.99/bin/pxplot
+third_party/xfoil-6.99/plotlib/libPlt*.a
+
+# Legacy in-place instrumented tree (superseded by third_party/ + xfoil-instrumentation/;
+# removed once the patch-series build is proven equivalent)
+/xfoil/
+
+# ---------------------------------------------------------------------------
+# Allowlist
+# ---------------------------------------------------------------------------
+!tests/fixtures/**
+!third_party/xfoil-6.99/**
+!third_party/*.sha256
+!third_party/*.ORIGIN
+!docs/**/*.html

@@ -11,10 +11,7 @@
 //! 1. Momentum integral (von Kármán)
 //! 2. Shape parameter (kinetic energy integral)
 
-use crate::bl::{
-    cf_lam, cf_turb, dampl, di_lam, hkin, hs_lam, hs_turb, ClosureResult, FlowConditions,
-    FlowRegime,
-};
+use crate::bl::{cf_lam, cf_turb, dampl, di_lam, hkin, hs_lam, hs_turb, ClosureResult, FlowConditions, FlowRegime};
 
 /// Newton solver configuration
 #[derive(Debug, Clone, Copy)]
@@ -46,8 +43,8 @@ impl Default for NewtonConfig {
             theta_min: 1e-10,
             hk_min: 1.00005,
             hk_max: 12.0,
-            hlmax: 3.8,  // XFOIL's laminar Hk limit
-            htmax: 2.5,  // XFOIL's turbulent Hk limit
+            hlmax: 3.8, // XFOIL's laminar Hk limit
+            htmax: 2.5, // XFOIL's turbulent Hk limit
         }
     }
 }
@@ -142,11 +139,7 @@ pub fn solve_station(
 
     // Upstream closures
     let (hs1, cf1, di1) = match regime {
-        FlowRegime::Laminar => (
-            hs_lam(hk1, rt1, cond.msq),
-            cf_lam(hk1, rt1, cond.msq),
-            di_lam(hk1, rt1),
-        ),
+        FlowRegime::Laminar => (hs_lam(hk1, rt1, cond.msq), cf_lam(hk1, rt1, cond.msq), di_lam(hk1, rt1)),
         _ => {
             let cf = cf_turb(hk1, rt1.max(200.0), cond.msq, 1.0);
             let hs = hs_turb(hk1, rt1.max(200.0), cond.msq);
@@ -237,15 +230,13 @@ pub fn solve_station(
             let btmp = h_avg + 2.0 - cond.msq;
 
             // CFX = 0.50*CFM*XA/TA + 0.25*(CF1*X1/T1 + CF2*X2/T2)
-            let cfx = 0.5 * cf_mid.val * s_avg / theta_avg
-                + 0.25 * (cf1.val * s1 / theta1 + cf_res.val * s2 / theta2);
+            let cfx = 0.5 * cf_mid.val * s_avg / theta_avg + 0.25 * (cf1.val * s1 / theta1 + cf_res.val * s2 / theta2);
 
             let r1_val = tlog + btmp * ulog - xlog * 0.5 * cfx;
 
             // Jacobian with coupling terms
             // CFX depends on θ2 through both theta_avg and cf_res
-            let cfx_t2 = -0.5 * cf_mid.val * s_avg / theta_avg.powi(2) * 0.5
-                - 0.25 * cf_res.val * s2 / theta2.powi(2)
+            let cfx_t2 = -0.5 * cf_mid.val * s_avg / theta_avg.powi(2) * 0.5 - 0.25 * cf_res.val * s2 / theta2.powi(2)
                 + 0.25 * cf2_t2 * s2 / theta2;
 
             let cfx_d2 = 0.25 * cf2_d2 * s2 / theta2;
@@ -261,10 +252,8 @@ pub fn solve_station(
             let mom_coef = btmp * theta_avg / ue_avg;
             let r1_val = (theta2 - theta1) / ds + mom_coef * due_ds - cf_mid.val / 2.0;
 
-            let dr1_dt2_val = 1.0 / ds
-                + 0.5 * btmp / ue_avg * due_ds
-                + 0.5 * h2_t2 * theta_avg / ue_avg * due_ds
-                - cf2_t2 / 2.0;
+            let dr1_dt2_val =
+                1.0 / ds + 0.5 * btmp / ue_avg * due_ds + 0.5 * h2_t2 * theta_avg / ue_avg * due_ds - cf2_t2 / 2.0;
 
             let dr1_dd2_val = 0.5 * h2_d2 * theta_avg / ue_avg * due_ds - cf2_d2 / 2.0;
 
@@ -311,16 +300,18 @@ pub fn solve_station(
             // Differential form
             let dhs_ds = (hs_res.val - hs1.val) / ds;
             let shape_coef = hs_avg * (1.0 - h_avg) * theta_avg / ue_avg;
-            let r2_val = theta_avg * dhs_ds + shape_coef * due_ds
-                - 2.0 * di_res.val + hs_avg * cf_res.val / 2.0;
+            let r2_val = theta_avg * dhs_ds + shape_coef * due_ds - 2.0 * di_res.val + hs_avg * cf_res.val / 2.0;
 
-            let dr2_dt2_val = 0.5 * dhs_ds + theta_avg / ds * hs2_t2
+            let dr2_dt2_val = 0.5 * dhs_ds
+                + theta_avg / ds * hs2_t2
                 + (0.5 * hs2_t2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_t2) * theta_avg / ue_avg * due_ds
-                + hs_avg * cf2_t2 / 2.0 - 2.0 * di2_t2;
+                + hs_avg * cf2_t2 / 2.0
+                - 2.0 * di2_t2;
 
             let dr2_dd2_val = theta_avg / ds * hs2_d2
                 + (0.5 * hs2_d2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_d2) * theta_avg / ue_avg * due_ds
-                + hs_avg * cf2_d2 / 2.0 - 2.0 * di2_d2;
+                + hs_avg * cf2_d2 / 2.0
+                - 2.0 * di2_d2;
 
             (r2_val, dr2_dt2_val, dr2_dd2_val)
         };
@@ -487,7 +478,11 @@ mod tests {
 
         // Check that solution is physically reasonable (may not fully converge for single station)
         assert!(result.theta > 0.0, "Theta should be positive");
-        assert!(result.h > 1.0 && result.h < 10.0, "H should be reasonable: {}", result.h);
+        assert!(
+            result.h > 1.0 && result.h < 10.0,
+            "H should be reasonable: {}",
+            result.h
+        );
         // Either converged or residual is small
         assert!(
             result.converged || result.residual < 1e-2,
@@ -511,12 +506,15 @@ mod tests {
         let s1 = 0.5;
         let s2 = 0.52;
 
-        let result =
-            solve_station(theta1, h1, ue1, n1, ue2, s1, s2, FlowRegime::Turbulent, &cond, &config);
+        let result = solve_station(theta1, h1, ue1, n1, ue2, s1, s2, FlowRegime::Turbulent, &cond, &config);
 
         // Check physically reasonable solution
         assert!(result.theta > 0.0, "Theta should be positive");
-        assert!(result.h > 1.0 && result.h < 5.0, "H should be reasonable for turbulent: {}", result.h);
+        assert!(
+            result.h > 1.0 && result.h < 5.0,
+            "H should be reasonable for turbulent: {}",
+            result.h
+        );
         // Either converged or residual is acceptably small
         assert!(
             result.converged || result.residual < 1e-2,
@@ -525,5 +523,4 @@ mod tests {
             result.residual
         );
     }
-
 }

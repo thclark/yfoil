@@ -1,0 +1,195 @@
+--- a/src/xoper.f
++++ b/src/xoper.f
+@@ -2734,7 +2734,14 @@
+ C     Converges to specified alpha.
+ C-----------------------------------
+       INCLUDE 'XFOIL.INC'
++      INCLUDE 'XLOG.INC'
+       REAL MINF_CLM, MSQ_CLM
++C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('SPECAL')
++      CALL LOGREAL('ALFA', DBLE(ALFA))
++      CALL LOGBOOL('LGAMU', LGAMU)
++      CALL LOGBOOL('LQAIJ', LQAIJ)
+ C
+ C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
+       IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
+@@ -2811,7 +2818,35 @@
+        CALL CPCALC(N,QINV,QINF,MINF,CPI)
+       ENDIF
+       IF(LFLAP) CALL MHINGE
++C
++C---- INSTRUMENTATION: Output inviscid solution to file
++      OPEN(UNIT=98,FILE='xfoil_inviscid.dat',STATUS='REPLACE')
++      WRITE(98,*) '=== INVISCID SOLUTION ==='
++      WRITE(98,*) 'ALFA =', ALFA
++      WRITE(98,*) 'CL =', CL
++      WRITE(98,*) 'CM =', CM
++      WRITE(98,*) 'N =', N
++      WRITE(98,*) '--- GAM and QINV ---'
++      WRITE(98,*) 'I, GAM, QINV, CPI'
++      DO I = 1, N
++        WRITE(98,'(I5,3ES24.16)') I, GAM(I), QINV(I), CPI(I)
++      ENDDO
++      WRITE(98,*) '--- GAMU(alpha=0) and GAMU(alpha=90) ---'
++      WRITE(98,*) 'I, GAMU1, GAMU2, QINVU1, QINVU2'
++      DO I = 1, N
++        WRITE(98,'(I5,4ES24.16)') I, GAMU(I,1), GAMU(I,2),
++     &                          QINVU(I,1), QINVU(I,2)
++      ENDDO
++      CLOSE(98)
++      WRITE(*,*) '=== Wrote inviscid to /tmp/xfoil_inviscid.dat ==='
+ C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGREAL('CL', DBLE(CL))
++      CALL LOGREAL('CM', DBLE(CM))
++      CALL LOGREAL('ALFA_OUT', DBLE(ALFA))
++      CALL LOGCOMMON1('SPECAL')
++      CALL LOGEXIT('SPECAL')
++C
+       RETURN
+       END ! SPECAL
+  
+@@ -2888,10 +2923,23 @@
+ C     Converges viscous operating point
+ C----------------------------------------
+       INCLUDE 'XFOIL.INC'
++      INCLUDE 'XLOG.INC'
+ C
+ C---- convergence tolerance
+       DATA EPS1 / 1.0E-4 /
+ C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('VISCAL')
++      CALL LOGINT('NITER1', NITER1)
++      CALL LOGREAL('ALFA', DBLE(ALFA))
++      CALL LOGBOOL('LWAKE', LWAKE)
++      CALL LOGBOOL('LIPAN', LIPAN)
++      CALL LOGBOOL('LBLINI', LBLINI)
++C
++C---- INSTRUMENTATION: Open log file for subroutine tracing (legacy)
++      OPEN(98, FILE='xfoil_subroutine_log.dat', STATUS='REPLACE')
++      WRITE(98,'(A)') '=== VISCAL START ==='
++C
+       NITER = NITER1
+ C
+ C---- calculate wake trajectory from current inviscid solution if necessary
+@@ -2956,13 +3004,42 @@
+ C
+ C---- set up source influence matrix if it doesn't exist
+       IF(.NOT.LWDIJ .OR. .NOT.LADIJ) CALL QDCALC
++C
++C---- INSTRUMENTATION: Output DIJ matrix
++      OPEN(UNIT=97,FILE='xfoil_dij.dat',STATUS='REPLACE')
++      WRITE(97,*) '=== DIJ MATRIX ==='
++      WRITE(97,*) 'N =', N
++      WRITE(97,*) 'NW =', NW
++      DO I = 1, N+NW
++        DO J = 1, N+NW
++          WRITE(97,'(2I5,ES24.16)') I, J, DIJ(I,J)
++        ENDDO
++      ENDDO
++      CLOSE(97)
++      WRITE(*,*) '=== Wrote DIJ matrix to /tmp/xfoil_dij.dat ==='
++C
++C---- INSTRUMENTATION: Open viscal iteration log file
++      OPEN(UNIT=96,FILE='xfoil_viscal_iter.dat',STATUS='REPLACE')
++      WRITE(96,*) '=== VISCAL ITERATION LOG ==='
++      FLUSH(96)
++C---- INSTRUMENTATION: Clear UPDATE log file at start
++      OPEN(UNIT=95,FILE='xfoil_update.dat',STATUS='REPLACE')
++      CLOSE(95)
+ C
+ C---- Newton iteration for entire BL solution
+       IF(NITER.EQ.0) CALL ASKI('Enter number of iterations^',NITER)
+       WRITE(*,*)
+       WRITE(*,*) 'Solving BL system ...'
++      CALL LOGEVENT('VISCAL_LOOP_START')
++      CALL LOGINT('NITER', NITER)
+       DO 1000 ITER=1, NITER
+ C
++C---- INSTRUMENTATION: Log iteration start
++      CALL LOGITER('VISCAL', ITER)
++      CALL LOGREAL('ALFA_ITER', DBLE(ALFA))
++      CALL LOGREAL('CL_ITER', DBLE(CL))
++      CALL LOGINT('IST_ITER', IST)
++C
+ C------ fill Newton system for BL variables
+         CALL SETBL
+ C
+@@ -3005,7 +3082,31 @@
+          WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDPDIF
+ c         CDSURF = CDP + CDF
+ c         WRITE(*,2025) CDSURF, CDF, CDP
+-
++C
++C---- INSTRUMENTATION: Log iteration state using append mode
++        OPEN(UNIT=94,FILE='xfoil_iter_simple.dat',
++     &       ACCESS='APPEND',STATUS='UNKNOWN')
++        WRITE(94,'(A,I3,A,ES24.16,A,ES24.16,A,ES24.16)')
++     &    'ITER=', ITER, ' RMSBL=', RMSBL, ' CD=', CD, ' CL=', CL
++        WRITE(94,'(A,I4,A,I4,A,I4,A,I4)')
++     &    '  NBL1=', NBL(1), ' NBL2=', NBL(2),
++     &    ' ITRAN1=', ITRAN(1), ' ITRAN2=', ITRAN(2)
++C       Log BL state for iteration 1 only
++        IF(ITER.EQ.1) THEN
++          WRITE(94,*) '=== ITER 1 BL STATE ==='
++          WRITE(94,*) 'IS=1 (Upper surface):'
++          DO 951 JBL = 1, NBL(1)
++            WRITE(94,'(I4,5ES24.16)') JBL, UEDG(JBL,1),
++     &        DSTR(JBL,1), THET(JBL,1), MASS(JBL,1), CTAU(JBL,1)
++  951     CONTINUE
++          WRITE(94,*) 'IS=2 (Lower surface):'
++          DO 952 JBL = 1, NBL(2)
++            WRITE(94,'(I4,5ES24.16)') JBL, UEDG(JBL,2),
++     &        DSTR(JBL,2), THET(JBL,2), MASS(JBL,2), CTAU(JBL,2)
++  952     CONTINUE
++        ENDIF
++        CLOSE(94)
++C
+         IF(RMSBL .LT. EPS1) THEN
+          LVCONV = .TRUE.
+          AVISC = ALFA
+@@ -3020,8 +3121,18 @@
+       CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
+       CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
+       IF(LFLAP) CALL MHINGE
++C
++C---- INSTRUMENTATION: Close iteration log file
++      WRITE(96,*) '=== VISCAL COMPLETE ==='
++      WRITE(96,*) 'CONVERGED =', LVCONV
++      WRITE(96,*) 'FINAL CL =', CL
++      WRITE(96,*) 'FINAL CD =', CD
++      WRITE(96,*) 'FINAL CDF =', CDF
++      WRITE(96,*) 'FINAL CDP =', CDP
++      CLOSE(96)
++      WRITE(*,*) '=== Wrote viscal to /tmp/xfoil_viscal_iter.dat ==='
++C
+ 
+-
+         is = 1
+         hkmax = 0.
+         hkm = 0.0
+@@ -3092,7 +3203,20 @@
+         close(lu)
+ 
+ 
+-
++C
++C---- INSTRUMENTATION: Close log file
++      WRITE(98,'(A)') '=== VISCAL END ==='
++      CLOSE(98)
++C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGREAL('CL_FINAL', DBLE(CL))
++      CALL LOGREAL('CD_FINAL', DBLE(CD))
++      CALL LOGREAL('CM_FINAL', DBLE(CM))
++      CALL LOGREAL('RMSBL_FINAL', DBLE(RMSBL))
++      CALL LOGBOOL('LVCONV', LVCONV)
++      CALL LOGCOMMON1('VISCAL')
++      CALL LOGEXIT('VISCAL')
++C
+       RETURN
+ C....................................................................
+  2000   FORMAT

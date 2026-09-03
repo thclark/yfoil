@@ -189,7 +189,7 @@ pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarRes
     PolarResult {
         points,
         failed_alphas,
-        conditions: config.conditions.clone(),
+        conditions: config.conditions,
         completed,
     }
 }
@@ -253,9 +253,14 @@ mod tests {
             let first = &points[0];
             let last = &points[points.len() - 1];
             if last.alpha > first.alpha {
-                assert!(last.cl > first.cl,
+                assert!(
+                    last.cl > first.cl,
                     "CL should increase with alpha: CL({:.1}°)={:.4} vs CL({:.1}°)={:.4}",
-                    first.alpha.to_degrees(), first.cl, last.alpha.to_degrees(), last.cl);
+                    first.alpha.to_degrees(),
+                    first.cl,
+                    last.alpha.to_degrees(),
+                    last.cl
+                );
             }
         }
 

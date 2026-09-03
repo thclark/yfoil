@@ -166,8 +166,14 @@ pub fn trchek(
 
     // Calculate initial average amplification rate over X1..X2
     let ax_init = axset(
-        s1.hk, s1.theta, s1.rt, ampl1,
-        s2.hk, s2.theta, s2.rt, ampl1 + 1.0, // Initial guess
+        s1.hk,
+        s1.theta,
+        s1.rt,
+        ampl1,
+        s2.hk,
+        s2.theta,
+        s2.rt,
+        ampl1 + 1.0, // Initial guess
         acrit,
     );
 
@@ -239,11 +245,7 @@ pub fn trchek(
         let rtt_ut = st.rt_u;
 
         // Calculate amplification rate over X1-XT interval
-        let ax_result = axset(
-            s1.hk, s1.theta, s1.rt, ampl1,
-            hkt, tt, rtt, amplt,
-            acrit,
-        );
+        let ax_result = axset(s1.hk, s1.theta, s1.rt, ampl1, hkt, tt, rtt, amplt, acrit);
 
         // Check if no amplification
         if ax_result.ax <= 0.0 {
@@ -279,9 +281,7 @@ pub fn trchek(
         }
 
         // Update AMPL2, limiting step across AMCRIT
-        if (ampl2 > acrit && ampl2 + rlx * da2 < acrit)
-            || (ampl2 < acrit && ampl2 + rlx * da2 > acrit)
-        {
+        if (ampl2 > acrit && ampl2 + rlx * da2 < acrit) || (ampl2 < acrit && ampl2 + rlx * da2 > acrit) {
             ampl2 = acrit;
         } else {
             ampl2 += rlx * da2;
@@ -405,18 +405,16 @@ pub fn trchek(
     let rtt_re = st.rt_re;
 
     // Calculate amplification rate AX at transition point
-    let ax_result = axset(
-        s1.hk, s1.theta, s1.rt, ampl1,
-        hkt, tt, rtt, acrit,
-        acrit,
-    );
+    let ax_result = axset(s1.hk, s1.theta, s1.rt, ampl1, hkt, tt, rtt, acrit, acrit);
 
     // Calculate full sensitivities of AX
-    let ax_t1 = ax_result.ax_hk1 * s1.hk_t + ax_result.ax_t1 + ax_result.ax_rt1 * s1.rt_t
+    let ax_t1 = ax_result.ax_hk1 * s1.hk_t
+        + ax_result.ax_t1
+        + ax_result.ax_rt1 * s1.rt_t
         + (ax_result.ax_hk2 * hkt_tt + ax_result.ax_t2 + ax_result.ax_rt2 * rtt_tt) * tt_t1;
-    let ax_d1 = ax_result.ax_hk1 * s1.hk_d
-        + (ax_result.ax_hk2 * hkt_dt) * dt_d1;
-    let ax_u1 = ax_result.ax_hk1 * s1.hk_u + ax_result.ax_rt1 * s1.rt_u
+    let ax_d1 = ax_result.ax_hk1 * s1.hk_d + (ax_result.ax_hk2 * hkt_dt) * dt_d1;
+    let ax_u1 = ax_result.ax_hk1 * s1.hk_u
+        + ax_result.ax_rt1 * s1.rt_u
         + (ax_result.ax_hk2 * hkt_ut + ax_result.ax_rt2 * rtt_ut) * ut_u1;
     let ax_a1 = ax_result.ax_a1
         + (ax_result.ax_hk2 * hkt_tt + ax_result.ax_t2 + ax_result.ax_rt2 * rtt_tt) * tt_a1
@@ -441,8 +439,10 @@ pub fn trchek(
         + (ax_result.ax_hk2 * hkt_dt) * dt_xf
         + (ax_result.ax_hk2 * hkt_ut + ax_result.ax_rt2 * rtt_ut) * ut_xf;
 
-    let ax_ms = ax_result.ax_hk2 * hkt_ms + ax_result.ax_rt2 * rtt_ms
-        + ax_result.ax_hk1 * s1.hk_ms + ax_result.ax_rt1 * s1.rt_ms;
+    let ax_ms = ax_result.ax_hk2 * hkt_ms
+        + ax_result.ax_rt2 * rtt_ms
+        + ax_result.ax_hk1 * s1.hk_ms
+        + ax_result.ax_rt1 * s1.rt_ms;
     let ax_re = ax_result.ax_rt2 * rtt_re + ax_result.ax_rt1 * s1.rt_re;
 
     // Set sensitivities of residual RES = AMPL2 - AMPL1 - AX*(X2-X1)
@@ -483,10 +483,7 @@ pub fn trchek(
     location.xt_re = factor * z_re;
     location.xt_xf = 0.0; // Free transition doesn't depend on forced location
 
-    TransitionResult::FreeTransition {
-        location,
-        ampl2: acrit,
-    }
+    TransitionResult::FreeTransition { location, ampl2: acrit }
 }
 
 // ============================================================================
@@ -728,7 +725,7 @@ pub struct BLGlobalParams {
 
     /// Gas constants
     pub gamma: f64, // Cp/Cv (typically 1.4)
-    pub gm1: f64,   // gamma - 1
+    pub gm1: f64, // gamma - 1
 
     /// Viscosity ratio (Hvrat in XFOIL)
     pub hvrat: f64,
@@ -817,7 +814,6 @@ pub struct BLStationState {
     // ========================================================================
     // Primary variables (set by blprv)
     // ========================================================================
-
     /// Arc length position (X2 in XFOIL)
     pub x: f64,
     /// Edge velocity (compressible) (U2 in XFOIL)
@@ -842,7 +838,6 @@ pub struct BLStationState {
     // ========================================================================
     // Kinematic secondary variables (set by blkin)
     // ========================================================================
-
     /// Shape factor H = δ*/θ
     pub h: f64,
     pub h_t: f64, // ∂H/∂θ
@@ -881,7 +876,6 @@ pub struct BLStationState {
     // ========================================================================
     // Turbulence-dependent secondary variables (set by blvar)
     // ========================================================================
-
     /// Density thickness shape factor H**
     pub hc: f64,
     pub hc_u: f64,
@@ -940,7 +934,6 @@ pub struct BLStationState {
     // ========================================================================
     // For convenience
     // ========================================================================
-
     /// Mass defect M = Ue·δ* (stored, not computed with derivatives here)
     pub mass: f64,
 }
@@ -1175,11 +1168,7 @@ impl BLStationState {
         // CQ = sqrt(CTCON*HS*HKB*HKC^2 / (USB*H*HK^2))
         // where HKB = HK-1, HKC = HK-1-GCC/RT, USB = 1-US
         // ====================================================================
-        let gcc = if flow_type == BLFlowType::Turbulent {
-            GCCON
-        } else {
-            0.0
-        };
+        let gcc = if flow_type == BLFlowType::Turbulent { GCCON } else { 0.0 };
 
         let hkc = if flow_type == BLFlowType::Turbulent {
             let hkc_raw = hk - 1.0 - gcc / rt;
@@ -1261,10 +1250,12 @@ impl BLStationState {
                     self.cf_re = cf_lam_result.val_rt * self.rt_re;
                 } else {
                     self.cf = cf_result.val;
-                    self.cf_u = cf_result.val_hk * self.hk_u + cf_result.val_rt * self.rt_u + cf_result.val_msq * self.msq_u;
+                    self.cf_u =
+                        cf_result.val_hk * self.hk_u + cf_result.val_rt * self.rt_u + cf_result.val_msq * self.msq_u;
                     self.cf_t = cf_result.val_hk * self.hk_t + cf_result.val_rt * self.rt_t;
                     self.cf_d = cf_result.val_hk * self.hk_d;
-                    self.cf_ms = cf_result.val_hk * self.hk_ms + cf_result.val_rt * self.rt_ms + cf_result.val_msq * self.msq_ms;
+                    self.cf_ms =
+                        cf_result.val_hk * self.hk_ms + cf_result.val_rt * self.rt_ms + cf_result.val_msq * self.msq_ms;
                     self.cf_re = cf_result.val_rt * self.rt_re;
                 }
             }
@@ -1319,11 +1310,26 @@ impl BLStationState {
                 self.di = self.di + dd_lam;
 
                 // Simplified derivative assembly
-                self.di_u = di_wall_hs * self.hs_u * dfac + di_wall_us * self.us_u * dfac + dd_hs * self.hs_u + dd_us * self.us_u;
-                self.di_t = di_wall_hs * self.hs_t * dfac + di_wall_us * self.us_t * dfac + dd_hs * self.hs_t + dd_us * self.us_t;
-                self.di_d = di_wall_hs * self.hs_d * dfac + di_wall_us * self.us_d * dfac + dd_hs * self.hs_d + dd_us * self.us_d;
-                self.di_ms = di_wall_hs * self.hs_ms * dfac + di_wall_us * self.us_ms * dfac + dd_hs * self.hs_ms + dd_us * self.us_ms;
-                self.di_re = di_wall_hs * self.hs_re * dfac + di_wall_us * self.us_re * dfac + dd_hs * self.hs_re + dd_us * self.us_re;
+                self.di_u = di_wall_hs * self.hs_u * dfac
+                    + di_wall_us * self.us_u * dfac
+                    + dd_hs * self.hs_u
+                    + dd_us * self.us_u;
+                self.di_t = di_wall_hs * self.hs_t * dfac
+                    + di_wall_us * self.us_t * dfac
+                    + dd_hs * self.hs_t
+                    + dd_us * self.us_t;
+                self.di_d = di_wall_hs * self.hs_d * dfac
+                    + di_wall_us * self.us_d * dfac
+                    + dd_hs * self.hs_d
+                    + dd_us * self.us_d;
+                self.di_ms = di_wall_hs * self.hs_ms * dfac
+                    + di_wall_us * self.us_ms * dfac
+                    + dd_hs * self.hs_ms
+                    + dd_us * self.us_ms;
+                self.di_re = di_wall_hs * self.hs_re * dfac
+                    + di_wall_us * self.us_re * dfac
+                    + dd_hs * self.hs_re
+                    + dd_us * self.us_re;
 
                 // Check if laminar DI is higher
                 let di_lam_result = di_lam(hk, rt);
@@ -1432,12 +1438,7 @@ impl MidpointCf {
     /// * `s2` - Station 2 state
     /// * `flow_type` - Type of BL flow
     /// * `is_similarity` - True if this is a similarity station (copy s2→s1)
-    pub fn compute(
-        s1: &BLStationState,
-        s2: &BLStationState,
-        flow_type: BLFlowType,
-        is_similarity: bool,
-    ) -> Self {
+    pub fn compute(s1: &BLStationState, s2: &BLStationState, flow_type: BLFlowType, is_similarity: bool) -> Self {
         let mut result = Self::default();
 
         // For similarity station, station 1 equals station 2
@@ -1514,7 +1515,10 @@ impl MidpointCf {
 
         // Derivatives w.r.t. global parameters
         result.cfm_ms = 0.5
-            * (cfm_hka * hk1_ms + cfm_ma * m1_ms + cfm_rta * rt1_ms + cfm_hka * s2.hk_ms
+            * (cfm_hka * hk1_ms
+                + cfm_ma * m1_ms
+                + cfm_rta * rt1_ms
+                + cfm_hka * s2.hk_ms
                 + cfm_ma * s2.msq_ms
                 + cfm_rta * s2.rt_ms);
         result.cfm_re = 0.5 * (cfm_rta * rt1_re + cfm_rta * s2.rt_re);
@@ -1680,11 +1684,7 @@ impl BLLocalSystem {
                 // Note: We use a fixed ACRIT of 9.0 here (default value)
                 // This should ideally be passed as a parameter
                 let acrit = 9.0;
-                let ax_result = axset(
-                    s1.hk, s1.theta, s1.rt, s1.ampl,
-                    s2.hk, s2.theta, s2.rt, s2.ampl,
-                    acrit,
-                );
+                let ax_result = axset(s1.hk, s1.theta, s1.rt, s1.ampl, s2.hk, s2.theta, s2.rt, s2.ampl, acrit);
 
                 let ax = ax_result.ax;
                 let rezc = s2.ampl - s1.ampl - ax * dxi;
@@ -1756,18 +1756,10 @@ impl BLLocalSystem {
         let da = 0.5 * (s1.dstar + s2.dstar);
 
         // Dissipation length factor
-        let ald = if flow_type == BLFlowType::Wake {
-            DLCON
-        } else {
-            1.0
-        };
+        let ald = if flow_type == BLFlowType::Wake { DLCON } else { 1.0 };
 
         // Wall term correction
-        let gcc = if flow_type == BLFlowType::Turbulent {
-            GCCON
-        } else {
-            0.0
-        };
+        let gcc = if flow_type == BLFlowType::Turbulent { GCCON } else { 0.0 };
 
         let mut hkc = hka - 1.0 - gcc / rta;
         let (hkc_hka, hkc_rta) = if hkc < 0.01 {
@@ -1794,8 +1786,7 @@ impl BLLocalSystem {
         let scc_usa = -scc / (1.0 + usa);
 
         // Shear lag residual
-        let rezc = scc * (cqa - sa * ald) * dxi - dea * 2.0 * slog
-            + dea * 2.0 * (uq * dxi - ulog) * DUXCON;
+        let rezc = scc * (cqa - sa * ald) * dxi - dea * 2.0 * slog + dea * 2.0 * (uq * dxi - ulog) * DUXCON;
 
         // Z coefficients for derivatives
         let z_cfa = dea * 2.0 * uq_cfa * dxi * DUXCON;
@@ -1827,27 +1818,20 @@ impl BLLocalSystem {
         self.vs2[0][2] = 0.5 * z_da + 0.5 * z_dea * s2.de_d + 0.5 * z_usa * s2.us_d;
 
         // Add CQ and CF contributions
-        self.vs1[0][1] += (1.0 - u) * z_cqa * s1.cq_t + (1.0 - u) * z_cfa * s1.cf_t
-            + (1.0 - u) * z_hka * s1.hk_t;
-        self.vs1[0][2] += (1.0 - u) * z_cqa * s1.cq_d + (1.0 - u) * z_cfa * s1.cf_d
-            + (1.0 - u) * z_hka * s1.hk_d;
-        self.vs1[0][3] += (1.0 - u) * z_cqa * s1.cq_u + (1.0 - u) * z_cfa * s1.cf_u
-            + (1.0 - u) * z_hka * s1.hk_u;
+        self.vs1[0][1] += (1.0 - u) * z_cqa * s1.cq_t + (1.0 - u) * z_cfa * s1.cf_t + (1.0 - u) * z_hka * s1.hk_t;
+        self.vs1[0][2] += (1.0 - u) * z_cqa * s1.cq_d + (1.0 - u) * z_cfa * s1.cf_d + (1.0 - u) * z_hka * s1.hk_d;
+        self.vs1[0][3] += (1.0 - u) * z_cqa * s1.cq_u + (1.0 - u) * z_cfa * s1.cf_u + (1.0 - u) * z_hka * s1.hk_u;
 
-        self.vs2[0][1] +=
-            u * z_cqa * s2.cq_t + u * z_cfa * s2.cf_t + u * z_hka * s2.hk_t;
-        self.vs2[0][2] +=
-            u * z_cqa * s2.cq_d + u * z_cfa * s2.cf_d + u * z_hka * s2.hk_d;
-        self.vs2[0][3] +=
-            u * z_cqa * s2.cq_u + u * z_cfa * s2.cf_u + u * z_hka * s2.hk_u;
+        self.vs2[0][1] += u * z_cqa * s2.cq_t + u * z_cfa * s2.cf_t + u * z_hka * s2.hk_t;
+        self.vs2[0][2] += u * z_cqa * s2.cq_d + u * z_cfa * s2.cf_d + u * z_hka * s2.hk_d;
+        self.vs2[0][3] += u * z_cqa * s2.cq_u + u * z_cfa * s2.cf_u + u * z_hka * s2.hk_u;
 
         // Mach and Re sensitivities
         self.vsm[0] = (1.0 - u) * (z_cqa * s1.cq_ms + z_cfa * s1.cf_ms + z_hka * s1.hk_ms)
             + u * (z_cqa * s2.cq_ms + z_cfa * s2.cf_ms + z_hka * s2.hk_ms)
             + 0.5 * z_dea * (s1.de_ms + s2.de_ms)
             + 0.5 * z_usa * (s1.us_ms + s2.us_ms);
-        self.vsr[0] = (1.0 - u) * (z_cqa * s1.cq_re + z_cfa * s1.cf_re)
-            + u * (z_cqa * s2.cq_re + z_cfa * s2.cf_re);
+        self.vsr[0] = (1.0 - u) * (z_cqa * s1.cq_re + z_cfa * s1.cf_re) + u * (z_cqa * s2.cq_re + z_cfa * s2.cf_re);
 
         self.vsrez[0] = -rezc;
     }
@@ -1871,8 +1855,7 @@ impl BLLocalSystem {
         let hwa = 0.5 * (s1.dw / s1.theta + s2.dw / s2.theta);
 
         // Cf term using central CFM for accuracy
-        let cfx = 0.5 * cfm.cfm * xa / ta
-            + 0.25 * (s1.cf * s1.x / s1.theta + s2.cf * s2.x / s2.theta);
+        let cfx = 0.5 * cfm.cfm * xa / ta + 0.25 * (s1.cf * s1.x / s1.theta + s2.cf * s2.x / s2.theta);
         let cfx_xa = 0.5 * cfm.cfm / ta;
         let cfx_ta = -0.5 * cfm.cfm * xa / (ta * ta);
         let cfx_x1 = 0.25 * s1.cf / s1.theta + cfx_xa * 0.5;
@@ -1901,10 +1884,8 @@ impl BLLocalSystem {
         let z_cf1 = z_cfx * cfx_cf1;
         let z_cf2 = z_cfx * cfx_cf2;
 
-        let z_t1 =
-            -z_tl / s1.theta + z_cfx * cfx_t1 + z_hwa * 0.5 * (-s1.dw / (s1.theta * s1.theta));
-        let z_t2 =
-            z_tl / s2.theta + z_cfx * cfx_t2 + z_hwa * 0.5 * (-s2.dw / (s2.theta * s2.theta));
+        let z_t1 = -z_tl / s1.theta + z_cfx * cfx_t1 + z_hwa * 0.5 * (-s1.dw / (s1.theta * s1.theta));
+        let z_t2 = z_tl / s2.theta + z_cfx * cfx_t2 + z_hwa * 0.5 * (-s2.dw / (s2.theta * s2.theta));
         let z_x1 = -z_xl / s1.x + z_cfx * cfx_x1;
         let z_x2 = z_xl / s2.x + z_cfx * cfx_x2;
         let z_u1 = -z_ul / s1.u;
@@ -1921,9 +1902,8 @@ impl BLLocalSystem {
         self.vs2[1][3] = 0.5 * z_ma * s2.msq_u + z_cfm * cfm.cfm_u2 + z_cf2 * s2.cf_u + z_u2;
         self.vs2[1][4] = z_x2;
 
-        self.vsm[1] = 0.5 * z_ma * s1.msq_ms + z_cfm * cfm.cfm_ms + z_cf1 * s1.cf_ms
-            + 0.5 * z_ma * s2.msq_ms
-            + z_cf2 * s2.cf_ms;
+        self.vsm[1] =
+            0.5 * z_ma * s1.msq_ms + z_cfm * cfm.cfm_ms + z_cf1 * s1.cf_ms + 0.5 * z_ma * s2.msq_ms + z_cf2 * s2.cf_ms;
         self.vsr[1] = z_cfm * cfm.cfm_re + z_cf1 * s1.cf_re + z_cf2 * s2.cf_re;
 
         self.vsrez[1] = -rezt;
@@ -1983,8 +1963,8 @@ impl BLLocalSystem {
 
         let z_t1 = (1.0 - u) * (z_cfx * s1.cf + z_dix * s1.di) * (-xot1 / s1.theta)
             + z_hwa * 0.5 * (-s1.dw / (s1.theta * s1.theta));
-        let z_t2 = u * (z_cfx * s2.cf + z_dix * s2.di) * (-xot2 / s2.theta)
-            + z_hwa * 0.5 * (-s2.dw / (s2.theta * s2.theta));
+        let z_t2 =
+            u * (z_cfx * s2.cf + z_dix * s2.di) * (-xot2 / s2.theta) + z_hwa * 0.5 * (-s2.dw / (s2.theta * s2.theta));
         let z_x1 = (1.0 - u) * (z_cfx * s1.cf + z_dix * s1.di) / s1.theta - z_xl / s1.x;
         let z_x2 = u * (z_cfx * s2.cf + z_dix * s2.di) / s2.theta + z_xl / s2.x;
         let z_u1 = -z_ul / s1.u;
@@ -1992,35 +1972,49 @@ impl BLLocalSystem {
 
         // Jacobian entries for row 3
         self.vs1[2][0] = z_di1 * s1.di_s;
-        self.vs1[2][1] = z_hs1 * s1.hs_t + z_cf1 * s1.cf_t + z_di1 * s1.di_t + z_t1
+        self.vs1[2][1] = z_hs1 * s1.hs_t
+            + z_cf1 * s1.cf_t
+            + z_di1 * s1.di_t
+            + z_t1
             + 0.5 * (z_hca * s1.hc_t + z_ha * s1.h_t)
             + z_upw * upw.upw_t1;
-        self.vs1[2][2] = z_hs1 * s1.hs_d + z_cf1 * s1.cf_d + z_di1 * s1.di_d
+        self.vs1[2][2] = z_hs1 * s1.hs_d
+            + z_cf1 * s1.cf_d
+            + z_di1 * s1.di_d
             + 0.5 * (z_hca * s1.hc_d + z_ha * s1.h_d)
             + z_upw * upw.upw_d1;
-        self.vs1[2][3] = z_hs1 * s1.hs_u + z_cf1 * s1.cf_u + z_di1 * s1.di_u + z_u1
-            + 0.5 * z_hca * s1.hc_u
-            + z_upw * upw.upw_u1;
+        self.vs1[2][3] =
+            z_hs1 * s1.hs_u + z_cf1 * s1.cf_u + z_di1 * s1.di_u + z_u1 + 0.5 * z_hca * s1.hc_u + z_upw * upw.upw_u1;
         self.vs1[2][4] = z_x1;
 
         self.vs2[2][0] = z_di2 * s2.di_s;
-        self.vs2[2][1] = z_hs2 * s2.hs_t + z_cf2 * s2.cf_t + z_di2 * s2.di_t + z_t2
+        self.vs2[2][1] = z_hs2 * s2.hs_t
+            + z_cf2 * s2.cf_t
+            + z_di2 * s2.di_t
+            + z_t2
             + 0.5 * (z_hca * s2.hc_t + z_ha * s2.h_t)
             + z_upw * upw.upw_t2;
-        self.vs2[2][2] = z_hs2 * s2.hs_d + z_cf2 * s2.cf_d + z_di2 * s2.di_d
+        self.vs2[2][2] = z_hs2 * s2.hs_d
+            + z_cf2 * s2.cf_d
+            + z_di2 * s2.di_d
             + 0.5 * (z_hca * s2.hc_d + z_ha * s2.h_d)
             + z_upw * upw.upw_d2;
-        self.vs2[2][3] = z_hs2 * s2.hs_u + z_cf2 * s2.cf_u + z_di2 * s2.di_u + z_u2
-            + 0.5 * z_hca * s2.hc_u
-            + z_upw * upw.upw_u2;
+        self.vs2[2][3] =
+            z_hs2 * s2.hs_u + z_cf2 * s2.cf_u + z_di2 * s2.di_u + z_u2 + 0.5 * z_hca * s2.hc_u + z_upw * upw.upw_u2;
         self.vs2[2][4] = z_x2;
 
-        self.vsm[2] = z_hs1 * s1.hs_ms + z_cf1 * s1.cf_ms + z_di1 * s1.di_ms + z_hs2 * s2.hs_ms
+        self.vsm[2] = z_hs1 * s1.hs_ms
+            + z_cf1 * s1.cf_ms
+            + z_di1 * s1.di_ms
+            + z_hs2 * s2.hs_ms
             + z_cf2 * s2.cf_ms
             + z_di2 * s2.di_ms
             + 0.5 * (z_hca * s1.hc_ms + z_hca * s2.hc_ms)
             + z_upw * upw.upw_ms;
-        self.vsr[2] = z_hs1 * s1.hs_re + z_cf1 * s1.cf_re + z_di1 * s1.di_re + z_hs2 * s2.hs_re
+        self.vsr[2] = z_hs1 * s1.hs_re
+            + z_cf1 * s1.cf_re
+            + z_di1 * s1.di_re
+            + z_hs2 * s2.hs_re
             + z_cf2 * s2.cf_re
             + z_di2 * s2.di_re;
 
@@ -2369,7 +2363,6 @@ impl BLLocalSystem {
                 self.vs2[k][l] = bl2[k][l] + bt2[k][l];
             }
         }
-
     }
 }
 
@@ -2857,8 +2850,7 @@ pub fn update(
     // Step 2: Calculate changes and check for underrelaxation
     // =========================================================================
 
-    let surfaces: [(&mut BLSurfaceState, &[f64]); 2] =
-        [(upper, &unew_upper[..]), (lower, &unew_lower[..])];
+    let surfaces: [(&mut BLSurfaceState, &[f64]); 2] = [(upper, &unew_upper[..]), (lower, &unew_lower[..])];
 
     // First pass: determine relaxation factor
     for (is, (surface, unew)) in surfaces.iter().enumerate() {
@@ -2985,8 +2977,7 @@ pub fn update(
 
         // Limit shape factor using DSLIM
         let hklim = if ibl <= upper.iblte { 1.02 } else { 1.00005 };
-        let msq = upper.uedg[ibl].powi(2) * hstinv
-            / (gm1 * (1.0 - 0.5 * upper.uedg[ibl].powi(2) * hstinv));
+        let msq = upper.uedg[ibl].powi(2) * hstinv / (gm1 * (1.0 - 0.5 * upper.uedg[ibl].powi(2) * hstinv));
         dslim(&mut upper.dstr[ibl], upper.thet[ibl], upper.uedg[ibl], msq, hklim);
 
         // Update mass defect (nonlinear)
@@ -3026,8 +3017,7 @@ pub fn update(
 
         // Limit shape factor using DSLIM
         let hklim = if ibl <= lower.iblte { 1.02 } else { 1.00005 };
-        let msq = lower.uedg[ibl].powi(2) * hstinv
-            / (gm1 * (1.0 - 0.5 * lower.uedg[ibl].powi(2) * hstinv));
+        let msq = lower.uedg[ibl].powi(2) * hstinv / (gm1 * (1.0 - 0.5 * lower.uedg[ibl].powi(2) * hstinv));
         dslim(&mut lower.dstr[ibl], lower.thet[ibl], lower.uedg[ibl], msq, hklim);
 
         // Update mass defect (nonlinear)
@@ -3849,7 +3839,7 @@ mod tests {
         let result = axset(
             2.5, 0.0015, 1800.0, 3.0, // Station 1: HK, T, RT, A
             2.6, 0.0018, 2200.0, 4.5, // Station 2
-            9.0,                       // ACRIT
+            9.0, // ACRIT
         );
 
         // AX = 0.1160733819E+01
@@ -3869,9 +3859,9 @@ mod tests {
         // AXSET Test 2: Near transition
         // XFOIL reference values
         let result = axset(
-            2.5, 0.002, 2500.0, 7.5,   // Station 1
+            2.5, 0.002, 2500.0, 7.5, // Station 1
             2.55, 0.0022, 2750.0, 8.5, // Station 2
-            9.0,                        // ACRIT
+            9.0, // ACRIT
         );
 
         // AX = 0.7944293022E+00
@@ -4059,10 +4049,7 @@ mod tests {
                 // Free transition might occur first if amplification is high enough
                 // Check if it's before xiforc
                 if location.xt > xiforc {
-                    panic!(
-                        "Expected forced transition at {}, got free at {}",
-                        xiforc, location.xt
-                    );
+                    panic!("Expected forced transition at {}, got free at {}", xiforc, location.xt);
                 }
             }
             TransitionResult::NoTransition { .. } => {
@@ -4120,8 +4107,10 @@ mod tests {
         // Station 0 is similarity, so VB should be zero
         // For other stations, VB should be non-zero
         let sum_vb: f64 = newton_sys.vb[1].iter().flat_map(|r| r.iter()).sum();
-        assert!(sum_vb.abs() > 0.0 || newton_sys.va[1][1][1].abs() > 0.0,
-                "Newton system should have non-zero entries");
+        assert!(
+            sum_vb.abs() > 0.0 || newton_sys.va[1][1][1].abs() > 0.0,
+            "Newton system should have non-zero entries"
+        );
 
         newton_sys.finalize_residual();
         assert!(newton_sys.rms_bl >= 0.0, "RMS residual should be non-negative");
@@ -4257,19 +4246,14 @@ mod tests {
         let vti_lower = vec![-1.0, -1.0, -1.0];
 
         // Run update
-        let result = update(
-            &mut upper,
-            &mut lower,
-            &solution,
-            &dij,
-            &vti_upper,
-            &vti_lower,
-            &params,
-        );
+        let result = update(&mut upper, &mut lower, &solution, &dij, &vti_upper, &vti_lower, &params);
 
         // Check that update produced reasonable results
         assert!(result.rms_bl.is_finite(), "RMS should be finite");
-        assert!(result.rlx > 0.0 && result.rlx <= 1.0, "Relaxation factor should be in (0,1]");
+        assert!(
+            result.rlx > 0.0 && result.rlx <= 1.0,
+            "Relaxation factor should be in (0,1]"
+        );
 
         // Check that variables were updated
         // With small solution vector and zero DIJ, changes should be small
@@ -4326,15 +4310,7 @@ mod tests {
         let vti_upper = vec![1.0, 1.0];
         let vti_lower = vec![-1.0, -1.0];
 
-        let result = update(
-            &mut upper,
-            &mut lower,
-            &solution,
-            &dij,
-            &vti_upper,
-            &vti_lower,
-            &params,
-        );
+        let result = update(&mut upper, &mut lower, &solution, &dij, &vti_upper, &vti_lower, &params);
 
         // Relaxation factor should be less than 1.0 due to large changes
         assert!(

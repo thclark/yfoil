@@ -1,0 +1,260 @@
+--- a/src/xpanel.f
++++ b/src/xpanel.f
+@@ -159,6 +159,15 @@
+        SDS = ASTE/DSTE
+       ENDIF
+ C
++C---- DEBUG: Open file for PSILIN output (only once, for I=1)
++      IF(IO.EQ.1) THEN
++        OPEN(UNIT=97, FILE='xfoil_psilin_debug.dat',
++     &       STATUS='REPLACE')
++        WRITE(97,*) 'PSILIN debug output for I=1'
++        WRITE(97,'(A,I5)') 'N = ', N
++        WRITE(97,'(A,2ES24.16)') 'XI, YI = ', XI, YI
++      ENDIF
++C
+       DO 10 JO=1, N
+         JP = JO+1
+ C
+@@ -183,6 +192,17 @@
+ C
+         APAN = APANEL(JO)
+ C
++C---- DEBUG: Output for I=1, first 5 panels
++        IF(IO.EQ.1 .AND. JO.LE.5 .AND. SIGLIN) THEN
++          WRITE(97,*) ''
++          WRITE(97,'(A,4I5)') 'JO,JP,JM,JQ = ', JO, JP, JM, JQ
++          WRITE(97,'(A,4ES24.16)') 'X(JO),Y(JO),X(JP),Y(JP) = ',
++     &         X(JO), Y(JO), X(JP), Y(JP)
++          WRITE(97,'(A,ES24.16)') 'APAN = ', APAN
++          WRITE(97,'(A,ES24.16)') 'DSO = ', DSO
++          WRITE(97,'(A,ES24.16)') 'DSIO = ', DSIO
++        ENDIF
++C
+         RX1 = XI - X(JO)
+         RY1 = YI - Y(JO)
+         RX2 = XI - X(JP)
+@@ -224,6 +244,18 @@
+          T2 = 0.0
+         ENDIF
+ C
++C---- DEBUG: Output intermediate values for I=1, first 5 panels
++        IF(IO.EQ.1 .AND. JO.LE.5 .AND. SIGLIN) THEN
++          WRITE(97,'(A,4ES24.16)') 'RX1,RY1,RX2,RY2 = ',
++     &         RX1, RY1, RX2, RY2
++          WRITE(97,'(A,2ES24.16)') 'SX, SY = ', SX, SY
++          WRITE(97,'(A,3ES24.16)') 'X1, X2, YY = ', X1, X2, YY
++          WRITE(97,'(A,2ES24.16)') 'RS1, RS2 = ', RS1, RS2
++          WRITE(97,'(A,ES24.16)') 'SGN = ', SGN
++          WRITE(97,'(A,2ES24.16)') 'G1, T1 = ', G1, T1
++          WRITE(97,'(A,2ES24.16)') 'G2, T2 = ', G2, T2
++        ENDIF
++C
+         X1I = SX*NXI + SY*NYI
+         X2I = SX*NXI + SY*NYI
+         YYI = SX*NYI - SY*NXI
+@@ -269,6 +301,21 @@
+          DSM = SQRT((X(JP)-X(JM))**2 + (Y(JP)-Y(JM))**2)
+          DSIM = 1.0/DSM
+ C
++C---- DEBUG: Output first half-panel values for I=1, first 5 panels
++         IF(IO.EQ.1 .AND. JO.LE.5) THEN
++           WRITE(97,'(A)') '  --- First half-panel (1-0) ---'
++           WRITE(97,'(A,3ES24.16)') '  X0, RS0, G0 = ', X0, RS0, G0
++           WRITE(97,'(A,ES24.16)') '  T0 = ', T0
++           WRITE(97,'(A,ES24.16)') '  DXINV_10 = ', DXINV
++           WRITE(97,'(A,2ES24.16)') '  PSUM_10, PDIF_10 = ', PSUM, PDIF
++           WRITE(97,'(A,2ES24.16)') '  DSM, DSIM = ', DSM, DSIM
++           WRITE(97,'(A,ES24.16)') '  QOPI = ', QOPI
++           WRITE(97,'(A,3ES24.16)') '  DZDM incr JM,JO,JP = ',
++     &          QOPI*(-PSUM*DSIM + PDIF*DSIM),
++     &          QOPI*(-PSUM*DSIO - PDIF*DSIO),
++     &          QOPI*(PSUM*(DSIO+DSIM) + PDIF*(DSIO-DSIM))
++         ENDIF
++C
+ CCC      SIG0 = (SIG(JP) - SIG(JO))*DSIO
+ CCC      SIG1 = (SIG(JP) - SIG(JM))*DSIM
+ CCC      SSUM = SIG0 + SIG1
+@@ -315,6 +362,18 @@
+          DSP = SQRT((X(JQ)-X(JO))**2 + (Y(JQ)-Y(JO))**2)
+          DSIP = 1.0/DSP
+ C
++C---- DEBUG: Output second half-panel values for I=1, first 5 panels
++         IF(IO.EQ.1 .AND. JO.LE.5) THEN
++           WRITE(97,'(A)') '  --- Second half-panel (0-2) ---'
++           WRITE(97,'(A,ES24.16)') '  DXINV_02 = ', DXINV
++           WRITE(97,'(A,2ES24.16)') '  PSUM_02, PDIF_02 = ', PSUM, PDIF
++           WRITE(97,'(A,2ES24.16)') '  DSP, DSIP = ', DSP, DSIP
++           WRITE(97,'(A,3ES24.16)') '  DZDM incr JO,JP,JQ = ',
++     &          QOPI*(-PSUM*(DSIP+DSIO) - PDIF*(DSIP-DSIO)),
++     &          QOPI*(PSUM*DSIO - PDIF*DSIO),
++     &          QOPI*(PSUM*DSIP + PDIF*DSIP)
++         ENDIF
++C
+ CCC         SIG2 = (SIG(JQ) - SIG(JO))*DSIP
+ CCC         SIG0 = (SIG(JP) - SIG(JO))*DSIO
+ CCC         SSUM = SIG2 + SIG0
+@@ -470,6 +529,17 @@
+ C
+    12 CONTINUE
+ C
++C---- DEBUG: Output final DZDM values and close file for I=1
++      IF(IO.EQ.1 .AND. SIGLIN) THEN
++        WRITE(97,*) ''
++        WRITE(97,'(A)') '=== Final DZDM values for I=1 ==='
++        DO 997 J=1, N
++          WRITE(97,'(A,I5,A,ES24.16)') '  DZDM[', J, '] = ', DZDM(J)
++  997   CONTINUE
++        CLOSE(97)
++        WRITE(*,*) '=== PSILIN debug output written to file ==='
++      ENDIF
++C
+ C**** Freestream terms
+       PSI = PSI + QINF*(COSA*YI - SINA*XI)
+ C
+@@ -992,6 +1062,12 @@
+ C     in SPECAL or SPECCL for specified alpha or CL.
+ C--------------------------------------------------------------
+       INCLUDE 'XFOIL.INC'
++      INCLUDE 'XLOG.INC'
++C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('GGCALC')
++      CALL LOGINT('N', N)
++      CALL LOGBOOL('SHARP', SHARP)
+ C
+ C---- distance of internal control point ahead of sharp TE
+ C-    (fraction of smaller panel length adjacent to TE)
+@@ -1028,6 +1104,18 @@
+         DO 202 J=1, N
+           BIJ(I,J) = -DZDM(J)
+   202   CONTINUE
++C---- DEBUG: Print all DZDM values for I=1 (first control point)
++        IF(I.EQ.1) THEN
++          OPEN(UNIT=98, FILE='xfoil_dzdm_i1.dat',
++     &         STATUS='REPLACE')
++          WRITE(*,*) '=== DZDM at I=1 saved to file ==='
++          DO 203 J=1, N
++            WRITE(98,'(I5,ES24.16)') J, DZDM(J)
++  203     CONTINUE
++          CLOSE(98)
++          WRITE(*,*) 'DZDM(1) = ', DZDM(1)
++          WRITE(*,*) 'DZDM(N) = ', DZDM(N)
++        ENDIF
+ C
+ C------ dRes/dPsio
+         AIJ(I,N+1) = -1.0
+@@ -1119,6 +1207,11 @@
+ C
+       LGAMU = .TRUE.
+ C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGBOOL('LGAMU_OUT', LGAMU)
++      CALL LOGBOOL('LQAIJ_OUT', LQAIJ)
++      CALL LOGEXIT('GGCALC')
++C
+       RETURN
+       END
+ 
+@@ -1171,6 +1264,23 @@
+    10  CONTINUE
+        LADIJ = .TRUE.
+ C
++C---- INSTRUMENTATION: Output DIJ values for validation
++       OPEN(UNIT=97,FILE='xfoil_dij.dat',STATUS='REPLACE')
++       WRITE(97,*) 'N =', N
++       WRITE(97,*) '=== Sample DIJ values ==='
++       DO 111 II=1, MIN(5,N)
++         DO 112 JJ=1, MIN(5,N)
++           WRITE(97,'(A,I3,A,I3,A,ES24.16)')
++     &       'DIJ(',II,',',JJ,') = ', DIJ(II,JJ)
++  112    CONTINUE
++  111  CONTINUE
++       WRITE(97,*) '=== DIJ diagonal ==='
++       DO 113 II=1, MIN(10,N)
++         WRITE(97,'(A,I3,A,I3,A,ES24.16)')
++     &     'DIJ(',II,',',II,') = ', DIJ(II,II)
++  113  CONTINUE
++       CLOSE(97)
++C
+       ENDIF
+ C
+ C---- set up coefficient matrix of dPsi/dm on airfoil surface
+@@ -1387,6 +1497,17 @@
+ C
+       SST_GO = (SST  - S(I+1))/DGAM
+       SST_GP = (S(I) - SST   )/DGAM
++C
++C---- YFoil instrumentation: output stagnation point data
++      WRITE(*,'(A)') '=== STFIND OUTPUT ==='
++      WRITE(*,'(A,I6)') 'IST =', IST
++      WRITE(*,'(A,ES24.16)') 'SST =', SST
++      WRITE(*,'(A,ES24.16)') 'S(IST) =', S(IST)
++      WRITE(*,'(A,ES24.16)') 'S(IST+1) =', S(IST+1)
++      WRITE(*,'(A,ES24.16)') 'GAM(IST) =', GAM(IST)
++      WRITE(*,'(A,ES24.16)') 'GAM(IST+1) =', GAM(IST+1)
++      WRITE(*,'(A,ES24.16)') 'DGAM =', DGAM
++      WRITE(*,'(A)') '=== END STFIND ==='
+ C
+       RETURN
+       END
+@@ -1447,6 +1568,17 @@
+         STOP
+       ENDIF
+ C
++C---- YFoil instrumentation: output IBLPAN data
++      WRITE(*,'(A)') '=== IBLPAN OUTPUT ==='
++      WRITE(*,'(A,I6)') 'IST =', IST
++      WRITE(*,'(A,I6)') 'N =', N
++      WRITE(*,'(A,I6)') 'NW =', NW
++      WRITE(*,'(A,I6)') 'IBLTE(1) =', IBLTE(1)
++      WRITE(*,'(A,I6)') 'IBLTE(2) =', IBLTE(2)
++      WRITE(*,'(A,I6)') 'NBL(1) =', NBL(1)
++      WRITE(*,'(A,I6)') 'NBL(2) =', NBL(2)
++      WRITE(*,'(A)') '=== END IBLPAN ==='
++C
+       LIPAN = .TRUE.
+       RETURN
+       END
+@@ -1501,6 +1633,41 @@
+         XSSI(IBL2,IS2) = XSSI(IBL2-1,IS2) + DXSSI
+    25 CONTINUE
+ C
++C---- YFoil instrumentation: output XICALC data
++      WRITE(*,'(A)') '=== XICALC OUTPUT ==='
++      WRITE(*,'(A,ES24.16)') 'XEPS =', XEPS
++      WRITE(*,'(A,ES24.16)') 'SST =', SST
++      WRITE(*,'(A,I6)') 'N =', N
++      WRITE(*,'(A,I6)') 'IBLTE(1) =', IBLTE(1)
++      WRITE(*,'(A,I6)') 'IBLTE(2) =', IBLTE(2)
++      WRITE(*,'(A)') 'UPPER SURFACE (IS=1):'
++      WRITE(*,'(A4,A8,A24,A24)') 'IBL', 'IPAN', 'S(IPAN)', 'XSSI'
++      DO 110 IBL=1, MIN(IBLTE(1), 20)
++        I = IPAN(IBL,1)
++        IF(IBL.EQ.1) THEN
++          WRITE(*,'(I4,A8,A24,ES24.16)') IBL, 'N/A', 'N/A', XSSI(IBL,1)
++        ELSE
++          WRITE(*,'(I4,I8,ES24.16,ES24.16)') IBL, I, S(I), XSSI(IBL,1)
++        ENDIF
++  110 CONTINUE
++      IF(IBLTE(1).GT.20) THEN
++        WRITE(*,'(A,I6,A)') '... (', IBLTE(1)-20, ' more stations)'
++      ENDIF
++      WRITE(*,'(A)') 'LOWER SURFACE (IS=2):'
++      WRITE(*,'(A4,A8,A24,A24)') 'IBL', 'IPAN', 'S(IPAN)', 'XSSI'
++      DO 120 IBL=1, MIN(IBLTE(2), 20)
++        I = IPAN(IBL,2)
++        IF(IBL.EQ.1) THEN
++          WRITE(*,'(I4,A8,A24,ES24.16)') IBL, 'N/A', 'N/A', XSSI(IBL,2)
++        ELSE
++          WRITE(*,'(I4,I8,ES24.16,ES24.16)') IBL, I, S(I), XSSI(IBL,2)
++        ENDIF
++  120 CONTINUE
++      IF(IBLTE(2).GT.20) THEN
++        WRITE(*,'(A,I6,A)') '... (', IBLTE(2)-20, ' more stations)'
++      ENDIF
++      WRITE(*,'(A)') '=== END XICALC ==='
++C
+ C---- trailing edge flap length to TE gap ratio
+       TELRAT = 2.50
+ C

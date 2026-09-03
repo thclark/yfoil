@@ -3,10 +3,8 @@
 //! Run: cargo run --release --example newton_trace > yfoil_newton_trace.dat
 
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-use yfoil::bl::{
-    cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb, ClosureResult, FlowConditions, FlowRegime,
-};
+use std::io::BufReader;
+use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb, ClosureResult, FlowConditions, FlowRegime};
 use yfoil::geometry::{create_paneled_airfoil, Geometry};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::{extract_upper_surface, find_stagnation_point};
@@ -64,15 +62,11 @@ fn solve_station_instrumented(
     let mut dstar2 = h_init * theta2;
 
     // Initial Ctau for turbulent (S2 in XFOIL)
-    let mut ctau2 = 0.03;
+    let ctau2 = 0.03;
 
     // Upstream closures
     let (hs1, cf1, di1) = match regime {
-        FlowRegime::Laminar => (
-            hs_lam(hk1, rt1, cond.msq),
-            cf_lam(hk1, rt1, cond.msq),
-            di_lam(hk1, rt1),
-        ),
+        FlowRegime::Laminar => (hs_lam(hk1, rt1, cond.msq), cf_lam(hk1, rt1, cond.msq), di_lam(hk1, rt1)),
         _ => {
             let cf = cf_turb(hk1, rt1.max(200.0), cond.msq, 1.0);
             let hs = hs_turb(hk1, rt1.max(200.0), cond.msq);
@@ -88,10 +82,10 @@ fn solve_station_instrumented(
 
     // Newton iteration
     let mut converged = false;
-    let mut iterations = 0;
+    let mut _iterations = 0;
 
     for iter in 0..max_iter {
-        iterations = iter + 1;
+        _iterations = iter + 1;
 
         let h2 = dstar2 / theta2;
         let (hk2_raw, hk2_h, _) = hkin(h2, cond.msq);
@@ -194,13 +188,11 @@ fn solve_station_instrumented(
             let xlog = (s2 / s1).ln();
             let btmp = h_avg + 2.0 - cond.msq;
 
-            let cfx = 0.5 * cf_mid.val * s_avg / theta_avg
-                + 0.25 * (cf1.val * s1 / theta1 + cf_res.val * s2 / theta2);
+            let cfx = 0.5 * cf_mid.val * s_avg / theta_avg + 0.25 * (cf1.val * s1 / theta1 + cf_res.val * s2 / theta2);
 
             let r1_val = tlog + btmp * ulog - xlog * 0.5 * cfx;
 
-            let cfx_t2 = -0.5 * cf_mid.val * s_avg / theta_avg.powi(2) * 0.5
-                - 0.25 * cf_res.val * s2 / theta2.powi(2)
+            let cfx_t2 = -0.5 * cf_mid.val * s_avg / theta_avg.powi(2) * 0.5 - 0.25 * cf_res.val * s2 / theta2.powi(2)
                 + 0.25 * cf2_t2 * s2 / theta2;
             let cfx_d2 = 0.25 * cf2_d2 * s2 / theta2;
 
@@ -213,10 +205,8 @@ fn solve_station_instrumented(
             let mom_coef = btmp * theta_avg / ue_avg;
             let r1_val = (theta2 - theta1) / ds + mom_coef * due_ds - cf_mid.val / 2.0;
 
-            let dr1_dt2_val = 1.0 / ds
-                + 0.5 * btmp / ue_avg * due_ds
-                + 0.5 * h2_t2 * theta_avg / ue_avg * due_ds
-                - cf2_t2 / 2.0;
+            let dr1_dt2_val =
+                1.0 / ds + 0.5 * btmp / ue_avg * due_ds + 0.5 * h2_t2 * theta_avg / ue_avg * due_ds - cf2_t2 / 2.0;
             let dr1_dd2_val = 0.5 * h2_d2 * theta_avg / ue_avg * due_ds - cf2_d2 / 2.0;
 
             (r1_val, dr1_dt2_val, dr1_dd2_val)
@@ -259,21 +249,16 @@ fn solve_station_instrumented(
         } else {
             let dhs_ds = (hs_res.val - hs1.val) / ds;
             let shape_coef = hs_avg * (1.0 - h_avg) * theta_avg / ue_avg;
-            let r2_val = theta_avg * dhs_ds
-                + shape_coef * due_ds
-                - 2.0 * di_res.val
-                + hs_avg * cf_res.val / 2.0;
+            let r2_val = theta_avg * dhs_ds + shape_coef * due_ds - 2.0 * di_res.val + hs_avg * cf_res.val / 2.0;
 
             let dr2_dt2_val = 0.5 * dhs_ds
                 + theta_avg / ds * hs2_t2
-                + (0.5 * hs2_t2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_t2) * theta_avg / ue_avg
-                    * due_ds
+                + (0.5 * hs2_t2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_t2) * theta_avg / ue_avg * due_ds
                 + hs_avg * cf2_t2 / 2.0
                 - 2.0 * di2_t2;
 
             let dr2_dd2_val = theta_avg / ds * hs2_d2
-                + (0.5 * hs2_d2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_d2) * theta_avg / ue_avg
-                    * due_ds
+                + (0.5 * hs2_d2 * (1.0 - h_avg) - 0.5 * hs_avg * h2_d2) * theta_avg / ue_avg * due_ds
                 + hs_avg * cf2_d2 / 2.0
                 - 2.0 * di2_d2;
 
@@ -282,10 +267,7 @@ fn solve_station_instrumented(
 
         // Output residual in XFOIL format (VS2 reduced to 2x2 for direct mode)
         // XFOIL outputs 4 residuals, but for direct mode (dUe=0), 4th is always 0
-        println!(
-            "RESIDUAL:  {:.10E}  {:.10E}  {:.10E}  {:.10E}",
-            0.0, r1, r2, 0.0
-        );
+        println!("RESIDUAL:  {:.10E}  {:.10E}  {:.10E}  {:.10E}", 0.0, r1, r2, 0.0);
         // VS2 matrix - in direct mode, this is effectively 2x2 embedded in 3x5
         println!(
             "VS2_1:  {:.10E}  {:.10E}  {:.10E}  {:.10E}  {:.10E}",
@@ -366,7 +348,7 @@ fn main() {
     let qinv = inviscid.velocity_at_nodes(0.0);
     let stag_idx = find_stagnation_point(&airfoil, &qinv);
 
-    let (x_upper, _, s_upper, ue_upper) = extract_upper_surface(&airfoil, &qinv, stag_idx);
+    let (_x_upper, _, s_upper, ue_upper) = extract_upper_surface(&airfoil, &qinv, stag_idx);
 
     let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);
 
@@ -398,9 +380,17 @@ fn main() {
         let ue1 = ue_upper[i - 1];
         let ue2 = ue_upper[i];
 
-        let (theta2, dstar2, h2, _hk2, _cf2, n2, _converged) = solve_station_instrumented(
+        let (theta2, _dstar2, h2, _hk2, _cf2, n2, _converged) = solve_station_instrumented(
             i + 1, // IBL = i+1 (1-indexed, starting at 2)
-            theta, h, ue1, n_amp, ue2, s1, s2, regime, &cond,
+            theta,
+            h,
+            ue1,
+            n_amp,
+            ue2,
+            s1,
+            s2,
+            regime,
+            &cond,
         );
 
         theta = theta2;

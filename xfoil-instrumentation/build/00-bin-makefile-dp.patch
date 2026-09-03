@@ -1,0 +1,54 @@
+--- a/bin/Makefile
++++ b/bin/Makefile
+@@ -6,8 +6,8 @@
+ 
+ 
+ SHELL = sh
+-BINDIR = /home/codes/bin/
+-#BINDIR = .
++#BINDIR = /home/codes/bin/
++BINDIR = .
+ 
+ PROGS = xfoil pplot pxplot
+ 
+@@ -39,7 +39,8 @@
+ #PLTOBJ = -lPlt 
+ 
+ # The extra location arg here is for Linux which places X libs in /usr/X11R6
+-PLTLIB = -L/usr/X11R6/lib -lX11
++# macOS with Homebrew X11
++PLTLIB = -L/opt/homebrew/opt/libx11/lib -lX11
+ 
+ ###================================================
+ ###  Default compilers and flags
+@@ -47,7 +48,7 @@
+ FC = f77
+ FFLAGS  = -O 
+ FFLOPT  = -O
+-INSTALLCMD = install -s
++INSTALLCMD = cp
+ 
+ CC = cc
+ CFLAGS = -O -DUNDERSCORE
+@@ -116,9 +117,10 @@
+ ##--------------------------
+ ### Gfortran
+ FC = gfortran
+-CHK = 
+-CHK = -fbounds-check -finit-real=inf -ffpe-trap=invalid,zero
+-DBL = -fdefault-real-8
++CHK =
++# Disable FPE traps for stability
++#CHK = -fbounds-check -finit-real=inf -ffpe-trap=invalid,zero
++DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none
+ FFLAGS = -O $(CHK) $(DBL)
+ FFLOPT = -O $(CHK) $(DBL)
+ FTNLIB =
+@@ -211,7 +213,6 @@
+ 	$(FC) -c $(FFLAGS)  $(SRC)/sort.f
+ profil.o: $(SRC)/profil.f
+ 	$(FC) -c $(FFLAGS)  $(SRC)/profil.f
+-
+ polplt.o: $(SRC)/polplt.f $(SRC)/PINDEX.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/polplt.f
+ iopol.o: $(SRC)/iopol.f $(SRC)/PINDEX.INC

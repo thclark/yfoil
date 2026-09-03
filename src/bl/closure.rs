@@ -101,8 +101,8 @@ pub fn cf_lam(hk: f64, rt: f64, _msq: f64) -> ClosureResult {
 pub fn hs_lam(hk: f64, _rt: f64, _msq: f64) -> ClosureResult {
     let (hs, hs_hk) = if hk < 4.35 {
         let tmp = hk - 4.35;
-        let hs = 0.0111 * tmp.powi(2) / (hk + 1.0) - 0.0278 * tmp.powi(3) / (hk + 1.0) + 1.528
-            - 0.0002 * (tmp * hk).powi(2);
+        let hs =
+            0.0111 * tmp.powi(2) / (hk + 1.0) - 0.0278 * tmp.powi(3) / (hk + 1.0) + 1.528 - 0.0002 * (tmp * hk).powi(2);
         let hs_hk = 0.0111 * (2.0 * tmp - tmp.powi(2) / (hk + 1.0)) / (hk + 1.0)
             - 0.0278 * (3.0 * tmp.powi(2) - tmp.powi(3) / (hk + 1.0)) / (hk + 1.0)
             - 0.0002 * 2.0 * tmp * hk * (tmp + hk);
@@ -175,9 +175,7 @@ pub fn cf_turb(hk: f64, rt: f64, msq: f64, cffac: f64) -> ClosureResult {
     let cfo = cffac * 0.3 * arg.exp() * (grt / 2.3026).powf(gex);
     let cf = (cfo + 1.1e-4 * (thk - 1.0)) / fc;
 
-    let cf_hk = (-1.33 * cfo - 0.31 * (grt / 2.3026).ln() * cfo
-        - 1.1e-4 * (1.0 - thk.powi(2)) / 0.875)
-        / fc;
+    let cf_hk = (-1.33 * cfo - 0.31 * (grt / 2.3026).ln() * cfo - 1.1e-4 * (1.0 - thk.powi(2)) / 0.875) / fc;
     let cf_rt = gex * cfo / (fc * grt) / rt;
     let cf_msq = gex * cfo / (fc * grt) * (-0.25 * gm1 / fc.powi(2)) - 0.25 * gm1 * cf / fc.powi(2);
 
@@ -232,8 +230,7 @@ pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
 
         let hs = hdif.powi(2) * htmp + HSMIN + 4.0 / rtz;
         let hs_hk = hdif * 2.0 * htmp + hdif.powi(2) * htmp_hk;
-        let hs_rt =
-            hdif.powi(2) * htmp_rt - 4.0 / rtz.powi(2) * rtz_rt + hdif * 2.0 * htmp * (-ho_rt);
+        let hs_rt = hdif.powi(2) * htmp_rt - 4.0 / rtz.powi(2) * rtz_rt + hdif * 2.0 * htmp * (-ho_rt);
         (hs, hs_hk, hs_rt)
     };
 

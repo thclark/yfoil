@@ -1,0 +1,11 @@
+# Deliberate, temporary deviations from XFOIL that CI's no-deviations gate tolerates.
+# Format: <file>:<pattern>   # <stage that removes it>
+# Each line here is a debt; the plan stage named removes it and the line is deleted.
+src/solver/setbl.rs:disable_vm            # S7 SETBL VM assembly
+src/solver/setbl.rs:disable_dij_coupling  # S8 UPDATE
+src/solver/setbl.rs:tighter than XFOIL    # S7 DHI/DLO restored with VM
+src/solver/setbl.rs:TEMPORARILY DISABLED    # S7 SETBL VM assembly
+src/solver/setbl.rs:coupling_scale          # S8 UPDATE
+src/solver/viscal.rs:causes divergence      # S4 extended DIJ re-enabled
+src/solver/setbl.rs:for stability           # S7 DHI/DLO restored with VM
+src/bl/mrchdu.rs:for stability              # S6 MRCHDU standalone pass

@@ -3,11 +3,13 @@ name = "yfoil"
 version = "0.1.0"
 edition = "2021"
 description = "Rust-based aerofoil analysis tool reproducing XFOIL's core functionality"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 # Serialization
-serde_json = "1.0"
+# float_roundtrip: serde_json's default float parser is best-effort (may be 1 ULP off);
+# CLAUDE.md Rule 4 needs bit-exact geometry round-trips.
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 serde = { version = "1.0", features = ["derive"] }
 
 # CLI
@@ -44,3 +46,21 @@ required-features = ["plotting"]
 name = "generate_analysis_validation"
 path = "src/bin/generate_analysis_validation.rs"
 required-features = ["plotting"]
+
+[workspace]
+members = [".", "xtask"]
+
+# Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a
+# deliberate policy, not laziness; anything not listed here must be fixed, not allowed inline.
+[workspace.lints.clippy]
+excessive_precision = "allow"       # Fortran literals are kept verbatim (e.g. 20-digit PI)
+too_many_arguments = "allow"        # XFOIL subroutine signatures are translated as-is
+needless_range_loop = "allow"       # index loops mirror Fortran DO loops and preserve evaluation order
+manual_clamp = "allow"              # XFOIL's MIN/MAX sequences must not become clamp (NaN/order semantics)
+manual_range_contains = "allow"     # keep XFOIL's comparison order verbatim
+assign_op_pattern = "allow"         # `x = x + y` kept where it mirrors the Fortran statement
+field_reassign_with_default = "allow" # test-fixture construction style
+approx_constant = "allow"           # XFOIL's own digits for ln10 etc. (e.g. DAMPL) must be kept, not replaced by LN_10
+
+[lints]
+workspace = true

@@ -4,8 +4,8 @@ use approx::assert_relative_eq;
 use tempfile::NamedTempFile;
 
 use yfoil::geometry::{
-    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
-    repanel_cosine, write_dat_file, write_geometry_to_json,
+    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file, repanel_cosine,
+    write_dat_file, write_geometry_to_json,
 };
 
 /// Test NACA 0012 against the standard NACA formula from external reference.
@@ -26,9 +26,7 @@ fn test_naca_0012_against_standard_formula() {
     // Helper: compute NACA 0012 thickness using our closed-TE formula
     fn naca_0012_closed_te(x: f64) -> f64 {
         let t = 0.12;
-        (t / 0.2)
-            * (0.2969 * x.sqrt() - 0.126 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3)
-                - 0.1036 * x.powi(4))
+        (t / 0.2) * (0.2969 * x.sqrt() - 0.126 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3) - 0.1036 * x.powi(4))
     }
 
     // For each reference point, compute what our formula gives and compare
@@ -166,11 +164,7 @@ fn test_full_geometry_pipeline() {
 
     // Arc length should be monotonically increasing
     for i in 1..paneled.s.len() {
-        assert!(
-            paneled.s[i] > paneled.s[i - 1],
-            "Arc length not monotonic at {}",
-            i
-        );
+        assert!(paneled.s[i] > paneled.s[i - 1], "Arc length not monotonic at {}", i);
     }
 
     // All normal vectors should be unit length
@@ -383,10 +377,7 @@ fn test_laminar_amplification_off_below_critical() {
 
     // At low Re_θ (below ~200 for Blasius)
     let (ax, _, _, _) = dampl(hk_blasius, theta, 100.0);
-    assert_eq!(
-        ax, 0.0,
-        "Amplification should be 0 below critical Re_θ"
-    );
+    assert_eq!(ax, 0.0, "Amplification should be 0 below critical Re_θ");
 }
 
 #[test]
@@ -397,10 +388,7 @@ fn test_laminar_amplification_on_above_critical() {
 
     // At high Re_θ (well above critical)
     let (ax, _, _, _) = dampl(hk_blasius, theta, 5000.0);
-    assert!(
-        ax > 0.0,
-        "Amplification should be positive above critical Re_θ"
-    );
+    assert!(ax > 0.0, "Amplification should be positive above critical Re_θ");
 }
 
 #[test]
@@ -439,14 +427,8 @@ fn test_blunt_te_detection() {
     let blunt_geom = geom.blunten(0.002);
     let paneled = create_paneled_airfoil(&blunt_geom);
 
-    assert!(
-        !paneled.sharp_te,
-        "Blunted airfoil should have blunt TE"
-    );
-    assert!(
-        !blunt_geom.is_sharp_te(),
-        "Geometry should detect as blunt TE"
-    );
+    assert!(!paneled.sharp_te, "Blunted airfoil should have blunt TE");
+    assert!(!blunt_geom.is_sharp_te(), "Geometry should detect as blunt TE");
 
     // TE gap should be ~0.002
     assert_relative_eq!(blunt_geom.te_gap(), 0.002, epsilon = 1e-10);

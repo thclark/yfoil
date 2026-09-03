@@ -70,7 +70,7 @@ fn load_fixtures(dir: &Path) -> Vec<AxsetFixture> {
         paths.sort_by_key(|e| e.path());
 
         for entry in paths {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<AxsetFixture>(&content) {
                         fixtures.push(fixture);
@@ -84,15 +84,10 @@ fn load_fixtures(dir: &Path) -> Vec<AxsetFixture> {
 
 #[test]
 fn test_axset_against_xfoil_fixtures() {
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/subroutines/axset");
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/subroutines/axset");
 
     let fixtures = load_fixtures(&fixture_dir);
-    assert!(
-        !fixtures.is_empty(),
-        "No AXSET fixtures found in {:?}",
-        fixture_dir
-    );
+    assert!(!fixtures.is_empty(), "No AXSET fixtures found in {:?}", fixture_dir);
 
     let mut passed = 0;
     let mut failed = 0;
@@ -104,9 +99,7 @@ fn test_axset_against_xfoil_fixtures() {
         let out = &f.output;
 
         let result = axset(
-            inp.hk1, inp.t1, inp.rt1, inp.a1,
-            inp.hk2, inp.t2, inp.rt2, inp.a2,
-            inp.acrit,
+            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit,
         );
 
         // Check each output value
@@ -156,8 +149,7 @@ fn test_axset_against_xfoil_fixtures() {
 #[test]
 fn test_axset_sample_cases() {
     // Test a few specific cases with detailed assertions
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/subroutines/axset");
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/subroutines/axset");
 
     let fixtures = load_fixtures(&fixture_dir);
 
@@ -167,9 +159,7 @@ fn test_axset_sample_cases() {
         let out = &f.output;
 
         let result = axset(
-            inp.hk1, inp.t1, inp.rt1, inp.a1,
-            inp.hk2, inp.t2, inp.rt2, inp.a2,
-            inp.acrit,
+            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit,
         );
 
         check_value("AX", 1, out.ax, result.ax);
@@ -190,9 +180,7 @@ fn test_axset_sample_cases() {
         let out = &f.output;
 
         let result = axset(
-            inp.hk1, inp.t1, inp.rt1, inp.a1,
-            inp.hk2, inp.t2, inp.rt2, inp.a2,
-            inp.acrit,
+            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit,
         );
 
         check_value("AX", idx, out.ax, result.ax);

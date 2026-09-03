@@ -155,9 +155,7 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     // Set artificial curvature at refinement regions
     if let Some((xsref1, xsref2)) = config.xsref {
         for i in 1..nb - 1 {
-            let xoc = ((geometry.x_c[i] - xble) * (xbte - xble)
-                + (geometry.y_c[i] - yble) * (ybte - yble))
-                / chbsq;
+            let xoc = ((geometry.x_c[i] - xble) * (xbte - xble) + (geometry.y_c[i] - yble) * (ybte - yble)) / chbsq;
             if sb[i] < sble && xoc > xsref1 && xoc < xsref2 {
                 w1[i] = 0.0;
                 w2[i] = 1.0;
@@ -169,9 +167,7 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
 
     if let Some((xpref1, xpref2)) = config.xpref {
         for i in 1..nb - 1 {
-            let xoc = ((geometry.x_c[i] - xble) * (xbte - xble)
-                + (geometry.y_c[i] - yble) * (ybte - yble))
-                / chbsq;
+            let xoc = ((geometry.x_c[i] - xble) * (xbte - xble) + (geometry.y_c[i] - yble) * (ybte - yble)) / chbsq;
             if sb[i] >= sble && xoc > xpref1 && xoc < xpref2 {
                 w1[i] = 0.0;
                 w2[i] = 1.0;
@@ -520,14 +516,8 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     }
 
     // Evaluate splines at new parameter values
-    let x_c: Vec<f64> = s_new
-        .iter()
-        .map(|&si| seval(si, &geometry.x_c, &xp, &s))
-        .collect();
-    let y_c: Vec<f64> = s_new
-        .iter()
-        .map(|&si| seval(si, &geometry.y_c, &yp, &s))
-        .collect();
+    let x_c: Vec<f64> = s_new.iter().map(|&si| seval(si, &geometry.x_c, &xp, &s)).collect();
+    let y_c: Vec<f64> = s_new.iter().map(|&si| seval(si, &geometry.y_c, &yp, &s)).collect();
 
     Geometry {
         reference: geometry.reference,
@@ -646,13 +636,7 @@ fn calculate_normals_and_angles(
 /// The defining condition is: (X-XTE, Y-YTE) · (X', Y') = 0 at S = SLE
 ///
 /// Returns (sle, le_index)
-fn find_leading_edge(
-    x: &[f64],
-    y: &[f64],
-    s: &[f64],
-    xp: &[f64],
-    yp: &[f64],
-) -> (f64, usize) {
+fn find_leading_edge(x: &[f64], y: &[f64], s: &[f64], xp: &[f64], yp: &[f64]) -> (f64, usize) {
     let n = x.len();
 
     // Convergence tolerance (matches XFOIL)

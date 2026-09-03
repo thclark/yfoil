@@ -173,16 +173,13 @@ pub fn blsolv(input: &mut BlsolvInput) {
             let vtmp2 = input.vb[ivp][k][1];
             let vtmp3 = input.vm[ivp][iv][k];
             for l in ivp..nsys {
-                input.vm[ivp][l][k] -= vtmp1 * input.vm[iv][l][0]
-                    + vtmp2 * input.vm[iv][l][1]
-                    + vtmp3 * input.vm[iv][l][2];
+                input.vm[ivp][l][k] -=
+                    vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1] + vtmp3 * input.vm[iv][l][2];
             }
-            input.vdel[ivp][k][0] -= vtmp1 * input.vdel[iv][0][0]
-                + vtmp2 * input.vdel[iv][1][0]
-                + vtmp3 * input.vdel[iv][2][0];
-            input.vdel[ivp][k][1] -= vtmp1 * input.vdel[iv][0][1]
-                + vtmp2 * input.vdel[iv][1][1]
-                + vtmp3 * input.vdel[iv][2][1];
+            input.vdel[ivp][k][0] -=
+                vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0] + vtmp3 * input.vdel[iv][2][0];
+            input.vdel[ivp][k][1] -=
+                vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1] + vtmp3 * input.vdel[iv][2][1];
         }
 
         // Handle VZ block at trailing edge (coupling from upper to lower surface)
@@ -192,13 +189,10 @@ pub fn blsolv(input: &mut BlsolvInput) {
                     let vtmp1 = input.vz[k][0];
                     let vtmp2 = input.vz[k][1];
                     for l in ivp..nsys {
-                        input.vm[ivz][l][k] -=
-                            vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1];
+                        input.vm[ivz][l][k] -= vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1];
                     }
-                    input.vdel[ivz][k][0] -=
-                        vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0];
-                    input.vdel[ivz][k][1] -=
-                        vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1];
+                    input.vdel[ivz][k][0] -= vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0];
+                    input.vdel[ivz][k][1] -= vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1];
                 }
             }
         }

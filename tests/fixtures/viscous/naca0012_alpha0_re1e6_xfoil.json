@@ -1,0 +1,23 @@
+{
+  "description": "XFOIL reference results for NACA 0012, alpha=0, Re=1e6, Mach=0, Ncrit=9 (default YFoil paneling)",
+  "geometry": "naca0012_160.json",
+  "conditions": {
+    "alpha_deg": 0.0,
+    "reynolds": 1000000.0,
+    "mach": 0.0,
+    "ncrit": 9.0
+  },
+  "results": {
+    "cl": 0.0000,
+    "cd": 0.00541,
+    "cdf": 0.00426,
+    "cdp": 0.00115,
+    "cm": 0.0000,
+    "xtr_upper": 0.6870,
+    "xtr_lower": 0.6870
+  },
+  "convergence": {
+    "iterations": 6,
+    "rmsbl": 2.871e-05
+  }
+}

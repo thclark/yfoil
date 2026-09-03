@@ -298,28 +298,20 @@ fn camber_line_5digit(x: f64, r: f64, k1: f64, k2_k1: f64, reflex: bool) -> (f64
         // Reflex camber line (three regions)
         let k2 = k1 * k2_k1;
         if x < r {
-            let yc = (k1 / 6.0)
-                * (x.powi(3) - 3.0 * r * x.powi(2) + r.powi(2) * (3.0 - r) * x);
-            let dyc = (k1 / 6.0)
-                * (3.0 * x.powi(2) - 6.0 * r * x + r.powi(2) * (3.0 - r));
+            let yc = (k1 / 6.0) * (x.powi(3) - 3.0 * r * x.powi(2) + r.powi(2) * (3.0 - r) * x);
+            let dyc = (k1 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + r.powi(2) * (3.0 - r));
             (yc, dyc)
         } else {
             let yc = (k1 * r.powi(3) / 6.0) * (1.0 - x)
-                - (k2 / 6.0)
-                    * (x.powi(3) - 3.0 * r * x.powi(2)
-                        + 3.0 * r.powi(2) * x
-                        - r.powi(3));
-            let dyc = -(k1 * r.powi(3) / 6.0)
-                - (k2 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + 3.0 * r.powi(2));
+                - (k2 / 6.0) * (x.powi(3) - 3.0 * r * x.powi(2) + 3.0 * r.powi(2) * x - r.powi(3));
+            let dyc = -(k1 * r.powi(3) / 6.0) - (k2 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + 3.0 * r.powi(2));
             (yc, dyc)
         }
     } else {
         // Standard camber line (two regions)
         if x < r {
-            let yc = (k1 / 6.0)
-                * (x.powi(3) - 3.0 * r * x.powi(2) + r.powi(2) * (3.0 - r) * x);
-            let dyc = (k1 / 6.0)
-                * (3.0 * x.powi(2) - 6.0 * r * x + r.powi(2) * (3.0 - r));
+            let yc = (k1 / 6.0) * (x.powi(3) - 3.0 * r * x.powi(2) + r.powi(2) * (3.0 - r) * x);
+            let dyc = (k1 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + r.powi(2) * (3.0 - r));
             (yc, dyc)
         } else {
             let yc = (k1 * r.powi(3) / 6.0) * (1.0 - x);
@@ -336,11 +328,7 @@ fn thickness_distribution(x: f64, t: f64) -> f64 {
     // Standard NACA 4-digit thickness equation
     // Original coefficient -0.1015 gives blunt trailing edge (XFOIL default)
     // For NACA 0012: half-thickness at TE = 0.00126, gap = 0.00252
-    let yt = 5.0
-        * t
-        * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3)
-            - 0.1015 * x.powi(4));
-    yt
+    5.0 * t * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3) - 0.1015 * x.powi(4))
 }
 
 /// NACA 4-digit mean camber line
@@ -469,10 +457,7 @@ mod tests {
         let max_y_low = geom_low.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let max_y_high = geom_high.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
-        assert!(
-            max_y_high > max_y_low,
-            "Higher Cl design should have more camber"
-        );
+        assert!(max_y_high > max_y_low, "Higher Cl design should have more camber");
     }
 
     #[test]

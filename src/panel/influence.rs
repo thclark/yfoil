@@ -137,10 +137,7 @@ pub fn panel_influence(
         ((x1 + x2) * psi_const + 0.5 * (rs2 * g2 - rs1 * g1 + x1 * x1 - x2 * x2)) / dx_inv
     };
 
-    PanelInfluence {
-        psi_const,
-        psi_linear,
-    }
+    PanelInfluence { psi_const, psi_linear }
 }
 
 /// Calculate the freestream contribution to streamfunction.
@@ -275,10 +272,7 @@ pub fn source_panel_influence(
         ((x1 + x2) * psi_const + 0.5 * (rs2 * t2 - rs1 * t1 + yy * (g1 - g2) * 0.5)) / dx_inv
     };
 
-    SourcePanelInfluence {
-        psi_const,
-        psi_linear,
-    }
+    SourcePanelInfluence { psi_const, psi_linear }
 }
 
 /// Calculate the tangential velocity induced by a source panel at a field point.

@@ -7,7 +7,7 @@ mod fixtures;
 
 use fixtures::{assert_xfoil_match, WakeFixture};
 use std::path::Path;
-use yfoil::bl::{FlowConditions, WakeConfig, WakeInitialState};
+use yfoil::bl::FlowConditions;
 use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
 use yfoil::solver::{solve_viscous, ViscalConfig};
 
@@ -18,15 +18,18 @@ use yfoil::solver::{solve_viscous, ViscalConfig};
 /// - DTE = dstar_upper + dstar_lower + ANTE (TE base thickness)
 /// - CTE = weighted average of ctau by theta
 #[test]
-#[ignore] // VISCAL solver not converging correctly - needs debugging
+#[ignore = "S9: VISCAL loop closure"]
 fn test_wake_initial_conditions() {
     let fixture_path = Path::new("tests/fixtures/naca0012/wake_alpha0.json");
 
     let fixture = match WakeFixture::load(fixture_path) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("Skipping test: fixture not found at {} ({})", fixture_path.display(), e);
-            return;
+            panic!(
+                "never skip silently (CLAUDE.md Rule 7): fixture not found at {} ({})",
+                fixture_path.display(),
+                e
+            );
         }
     };
 
@@ -99,8 +102,11 @@ fn test_wake_stations() {
     let fixture = match WakeFixture::load(fixture_path) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("Skipping test: fixture not found at {} ({})", fixture_path.display(), e);
-            return;
+            panic!(
+                "never skip silently (CLAUDE.md Rule 7): fixture not found at {} ({})",
+                fixture_path.display(),
+                e
+            );
         }
     };
 
@@ -122,7 +128,10 @@ fn test_wake_stations() {
     let n_compare = 5.min(fixture.wake_stations.len()).min(result.bl.wake.len());
 
     println!("\nComparing first {} wake stations:", n_compare);
-    println!("  {:>4} {:>14} {:>14} {:>14} {:>14}", "IW", "theta_xf", "theta_yf", "dstar_xf", "dstar_yf");
+    println!(
+        "  {:>4} {:>14} {:>14} {:>14} {:>14}",
+        "IW", "theta_xf", "theta_yf", "dstar_xf", "dstar_yf"
+    );
 
     for i in 0..n_compare {
         let xfoil = &fixture.wake_stations[i];
@@ -179,8 +188,11 @@ fn test_wake_drag_contribution() {
     let fixture = match WakeFixture::load(fixture_path) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("Skipping test: fixture not found at {} ({})", fixture_path.display(), e);
-            return;
+            panic!(
+                "never skip silently (CLAUDE.md Rule 7): fixture not found at {} ({})",
+                fixture_path.display(),
+                e
+            );
         }
     };
 

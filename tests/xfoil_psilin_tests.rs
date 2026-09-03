@@ -32,7 +32,7 @@ fn load_xfoil_dzdm_fixture() -> Vec<(usize, f64)> {
 #[test]
 fn test_dzdm_matches_xfoil_naca0012_160() {
     // Load the same geometry used for XFOIL fixture
-    let json_path = "/tmp/naca0012.json";
+    let json_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/viscous/naca0012_160.json");
     let json_str = fs::read_to_string(json_path).expect("Failed to read JSON file");
     let geom: Geometry = serde_json::from_str(&json_str).expect("Failed to parse JSON");
     let airfoil = create_paneled_airfoil(&geom);
@@ -86,18 +86,12 @@ fn test_dzdm_matches_xfoil_naca0012_160() {
         }
     }
 
-    eprintln!(
-        "Max relative error: {:.2e} at index {}",
-        max_rel_error, max_error_idx
-    );
+    eprintln!("Max relative error: {:.2e} at index {}", max_rel_error, max_error_idx);
 
     // Check first few values explicitly
     let (_, xfoil_dzdm_1) = xfoil_dzdm[0];
     let yfoil_dzdm_1 = -bij[(0, 0)];
-    eprintln!(
-        "DZDM[1]: XFOIL={:+.10e}, YFoil={:+.10e}",
-        xfoil_dzdm_1, yfoil_dzdm_1
-    );
+    eprintln!("DZDM[1]: XFOIL={:+.10e}, YFoil={:+.10e}", xfoil_dzdm_1, yfoil_dzdm_1);
 
     // Assert that the max error is within tolerance
     assert!(
@@ -112,7 +106,7 @@ fn test_dzdm_matches_xfoil_naca0012_160() {
 /// Test that DZDM[1] (self-influence of first panel) is computed correctly
 #[test]
 fn test_dzdm_self_influence() {
-    let json_path = "/tmp/naca0012.json";
+    let json_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/viscous/naca0012_160.json");
     let json_str = fs::read_to_string(json_path).expect("Failed to read JSON file");
     let geom: Geometry = serde_json::from_str(&json_str).expect("Failed to parse JSON");
     let airfoil = create_paneled_airfoil(&geom);

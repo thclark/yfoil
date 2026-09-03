@@ -29,8 +29,7 @@
 use super::closure::hkin;
 use super::gauss::gauss_solve_4x4;
 use super::system::{
-    BLFlowType, BLGlobalParams, BLLocalSystem, BLStationState, MidpointCf, TransitionLocation,
-    TransitionResult,
+    BLFlowType, BLGlobalParams, BLLocalSystem, BLStationState, MidpointCf, TransitionLocation, TransitionResult,
 };
 
 /// Convergence tolerance for Newton iteration
@@ -408,7 +407,11 @@ pub fn march_station(
         0.03 // CTI not used for laminar, but initialize to reasonable value
     } else {
         let c = s2_init.ctau;
-        if c <= 0.0 { 0.03 } else { c }
+        if c <= 0.0 {
+            0.03
+        } else {
+            c
+        }
     };
 
     // Enforce minimum delta* for H > 1.02
@@ -435,14 +438,7 @@ pub fn march_station(
 
         // Check for transition (if not similarity and not already turbulent)
         if !is_simi && !march.turb {
-            let result = super::system::trchek(
-                s1,
-                &s2,
-                s1.ampl,
-                march.acrit,
-                march.xiforc,
-                params,
-            );
+            let result = super::system::trchek(s1, &s2, s1.ampl, march.acrit, march.xiforc, params);
 
             match result {
                 TransitionResult::NoTransition { ampl2 } => {
@@ -561,16 +557,13 @@ pub fn march_station(
             prescribed_ue_equation(&s2, ueref)
         } else {
             // Use Ue-Hk characteristic
-            let (sens_new, row4, rez4) =
-                calc_ue_hk_characteristic(&local_sys, &s2, hkref, ueref, sens, itbl);
+            let (sens_new, row4, rez4) = calc_ue_hk_characteristic(&local_sys, &s2, hkref, ueref, sens, itbl);
             sens = sens_new;
             (row4, rez4)
         };
 
         // Copy row 4 into system
-        for l in 0..5 {
-            local_sys.vs2[3][l] = vs2_row4[l];
-        }
+        local_sys.vs2[3][..5].copy_from_slice(&vs2_row4[..5]);
         local_sys.vsrez[3] = vsrez4;
 
         // Extract 4x4 system for GAUSS

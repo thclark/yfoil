@@ -31,12 +31,7 @@ pub struct AeroCoefficients {
 ///
 /// # Returns
 /// Lift, moment, and pressure drag coefficients
-pub fn integrate_forces(
-    airfoil: &PaneledAirfoil,
-    velocity: &[f64],
-    alpha_rad: f64,
-    mach: f64,
-) -> AeroCoefficients {
+pub fn integrate_forces(airfoil: &PaneledAirfoil, velocity: &[f64], alpha_rad: f64, mach: f64) -> AeroCoefficients {
     let n = airfoil.n;
     let cosa = alpha_rad.cos();
     let sina = alpha_rad.sin();
@@ -135,9 +130,7 @@ pub fn cl_from_circulation(airfoil: &PaneledAirfoil, velocity: &[f64]) -> f64 {
 
     for i in 0..n {
         let ip1 = if i == n - 1 { 0 } else { i + 1 };
-        let ds = ((airfoil.x[ip1] - airfoil.x[i]).powi(2)
-            + (airfoil.y[ip1] - airfoil.y[i]).powi(2))
-        .sqrt();
+        let ds = ((airfoil.x[ip1] - airfoil.x[i]).powi(2) + (airfoil.y[ip1] - airfoil.y[i]).powi(2)).sqrt();
         let velocity_avg = 0.5 * (velocity[i] + velocity[ip1]);
         circulation += velocity_avg * ds;
     }

@@ -7,15 +7,17 @@ use clap::{Parser, Subcommand};
 use yfoil::bl::FlowConditions;
 use yfoil::forces::{calculate_cp, integrate_forces}; // calculate_cp still needed for JSON output
 use yfoil::geometry::{
-    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
-    repanel_cosine, repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
+    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file, repanel_cosine,
+    repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
-use yfoil::panel::solve_inviscid;
 use yfoil::output::{InviscidAnalysisOutput, PolarOutput};
+use yfoil::panel::solve_inviscid;
 use yfoil::solver::{compute_polar, solve_viscous, PolarConfig, ViscalConfig};
 
 #[cfg(feature = "plotting")]
-use yfoil::output::{plot_paneled_svg, plot_paneled_png, GeometryPlotConfig, plot_analysis_svg, plot_analysis_png, AnalysisPlotConfig};
+use yfoil::output::{
+    plot_analysis_png, plot_analysis_svg, plot_paneled_png, plot_paneled_svg, AnalysisPlotConfig, GeometryPlotConfig,
+};
 
 /// YFoil - Rust-based aerofoil analysis tool
 #[derive(Parser, Debug)]
@@ -272,19 +274,9 @@ fn main() {
 
                 // Write JSON output if requested
                 if let Some(ref path) = output {
-                    let airfoil_name = file
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Unknown");
-                    let result = InviscidAnalysisOutput::new(
-                        &airfoil,
-                        &velocity,
-                        &cp,
-                        &coeffs,
-                        alpha,
-                        mach,
-                        airfoil_name,
-                    );
+                    let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
+                    let result =
+                        InviscidAnalysisOutput::new(&airfoil, &velocity, &cp, &coeffs, alpha, mach, airfoil_name);
                     let json_str = result.to_json().expect("Failed to serialize results");
                     std::fs::write(path, &json_str).expect("Failed to write output file");
                     println!();
@@ -346,7 +338,7 @@ fn main() {
                 alpha_max,
                 alpha_min,
                 alpha_step,
-                conditions: conditions.clone(),
+                conditions,
                 ..Default::default()
             };
 
@@ -354,10 +346,7 @@ fn main() {
             let result = compute_polar(&airfoil, &config);
 
             // Create output struct
-            let airfoil_name = file
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown");
+            let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
             let polar_output = PolarOutput::from_polar(&result, airfoil_name);
 
             if json {
@@ -462,7 +451,9 @@ fn main() {
                     Ok(a) => a,
                     Err(e) => {
                         eprintln!("Error parsing JSON: {}", e);
-                        eprintln!("Make sure the file is an inviscid analysis output (from 'yfoil analyze --inviscid -o')");
+                        eprintln!(
+                            "Make sure the file is an inviscid analysis output (from 'yfoil analyze --inviscid -o')"
+                        );
                         std::process::exit(1);
                     }
                 };
@@ -502,9 +493,7 @@ fn main() {
                 let _ = title;
                 let _ = width;
                 let _ = height;
-                eprintln!(
-                    "Plotting feature not enabled. Rebuild with: cargo build --features plotting"
-                );
+                eprintln!("Plotting feature not enabled. Rebuild with: cargo build --features plotting");
                 std::process::exit(1);
             }
         }
@@ -578,9 +567,7 @@ fn handle_geom(action: GeomAction) {
             };
 
             let name = format!("NACA {}", spec);
-            let output_path = output.unwrap_or_else(|| {
-                PathBuf::from(format!("naca{}.{}", spec, to))
-            });
+            let output_path = output.unwrap_or_else(|| PathBuf::from(format!("naca{}.{}", spec, to)));
 
             match to.as_str() {
                 "json" => {
@@ -721,9 +708,7 @@ fn handle_geom(action: GeomAction) {
                 let _ = title;
                 let _ = width;
                 let _ = height;
-                eprintln!(
-                    "Plotting feature not enabled. Rebuild with: cargo build --features plotting"
-                );
+                eprintln!("Plotting feature not enabled. Rebuild with: cargo build --features plotting");
                 std::process::exit(1);
             }
         }
@@ -731,11 +716,7 @@ fn handle_geom(action: GeomAction) {
 }
 
 fn read_geometry_auto(path: &PathBuf) -> Geometry {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
 
     match ext.as_str() {
         "json" => match read_geometry_from_file(path) {
@@ -774,20 +755,11 @@ fn print_geometry_info(summary: &yfoil::output::GeometrySummary) {
     println!("Geometry Information:");
     println!("  Number of points: {}", summary.n_points);
     println!("  Chord: {:.6}", summary.chord);
-    println!(
-        "  X range: {:.6} to {:.6}",
-        summary.x_range[0], summary.x_range[1]
-    );
-    println!(
-        "  Y range: {:.6} to {:.6}",
-        summary.y_range[0], summary.y_range[1]
-    );
+    println!("  X range: {:.6} to {:.6}", summary.x_range[0], summary.x_range[1]);
+    println!("  Y range: {:.6} to {:.6}", summary.y_range[0], summary.y_range[1]);
     println!("  Max thickness: {:.4}", summary.max_thickness);
     println!("  TE gap: {:.6}", summary.te_gap);
-    println!(
-        "  Sharp TE: {}",
-        if summary.sharp_te { "yes" } else { "no" }
-    );
+    println!("  Sharp TE: {}", if summary.sharp_te { "yes" } else { "no" });
     println!(
         "  Reference point: ({:.4}, {:.4})",
         summary.reference[0], summary.reference[1]

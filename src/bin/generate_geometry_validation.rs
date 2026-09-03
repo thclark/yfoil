@@ -12,9 +12,7 @@ use std::fs;
 use std::path::Path;
 
 use yfoil::geometry::{naca_4digit, repanel_xfoil, Geometry, PaneConfig};
-use yfoil::output::{
-    parse_xfoil_dat_file, plot_geometry_comparison_svg, GeometryComparisonPlotConfig, PlotError,
-};
+use yfoil::output::{parse_xfoil_dat_file, plot_geometry_comparison_svg, GeometryComparisonPlotConfig, PlotError};
 
 /// Test case definition
 struct TestCase {
@@ -85,17 +83,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Load XFOIL reference
         let xfoil_path = base_dir.join("xfoil").join(format!("{}.dat", case_name));
         let xfoil_coords = parse_xfoil_dat_file(&xfoil_path)?;
-        println!(
-            "  Loaded XFOIL reference ({} points)",
-            xfoil_coords.len()
-        );
+        println!("  Loaded XFOIL reference ({} points)", xfoil_coords.len());
 
         // Compute metrics
         let metrics = compute_metrics(&xfoil_coords, &yfoil_coords);
-        println!(
-            "  Metrics: total_max_error = {:.2e}",
-            metrics.total_max_error
-        );
+        println!("  Metrics: total_max_error = {:.2e}", metrics.total_max_error);
 
         // Generate comparison plot
         let plot_path = base_dir.join("plots").join(format!("{}-comparison.svg", case_name));
@@ -114,11 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Summary ===");
     for (case, metrics) in &all_metrics {
         let case_name = format!("{}-{}", case.airfoil, case.n_panels);
-        println!(
-            "  {}: max error = {:.2e}",
-            case_name,
-            metrics.total_max_error
-        );
+        println!("  {}: max error = {:.2e}", case_name, metrics.total_max_error);
     }
 
     Ok(())
@@ -145,10 +133,7 @@ fn generate_yfoil_geometry(case: &TestCase) -> Result<Vec<(f64, f64)>, Box<dyn s
 }
 
 /// Save YFoil geometry to JSON file
-fn save_yfoil_geometry(
-    coords: &[(f64, f64)],
-    path: &Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn save_yfoil_geometry(coords: &[(f64, f64)], path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry {
         reference: [0.25, 0.0],
         x_c: coords.iter().map(|(x, _)| *x).collect(),
@@ -204,11 +189,7 @@ fn generate_comparison_plot(
     output_path: &Path,
 ) -> Result<(), PlotError> {
     let config = GeometryComparisonPlotConfig {
-        title: Some(format!(
-            "{} - {} Panels",
-            case.airfoil.to_uppercase(),
-            case.n_panels
-        )),
+        title: Some(format!("{} - {} Panels", case.airfoil.to_uppercase(), case.n_panels)),
         ..Default::default()
     };
 
@@ -216,9 +197,7 @@ fn generate_comparison_plot(
 }
 
 /// Update the markdown report
-fn update_markdown_report(
-    metrics: &[(&TestCase, GeometryMetrics)],
-) -> Result<(), Box<dyn std::error::Error>> {
+fn update_markdown_report(metrics: &[(&TestCase, GeometryMetrics)]) -> Result<(), Box<dyn std::error::Error>> {
     let mut report = String::new();
 
     report.push_str("# Geometry Validation\n\n");

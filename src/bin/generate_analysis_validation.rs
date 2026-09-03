@@ -23,9 +23,9 @@ use std::process::Command;
 use yfoil::bl::FlowConditions;
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
 use yfoil::output::{
-    parse_xfoil_cp_file, parse_xfoil_dump_file, parse_xfoil_polar_file_with_cm,
-    plot_bl_comparison_svg, plot_cp_ue_comparison_svg, plot_polar_3panel_svg, stitch_polars_with_cm,
-    PolarDataWithCm, PolarPlotConfig, YfoilBLDist,
+    parse_xfoil_cp_file, parse_xfoil_dump_file, parse_xfoil_polar_file_with_cm, plot_bl_comparison_svg,
+    plot_cp_ue_comparison_svg, plot_polar_3panel_svg, stitch_polars_with_cm, PolarDataWithCm, PolarPlotConfig,
+    YfoilBLDist,
 };
 use yfoil::solver::{solve_viscous, ViscalConfig};
 
@@ -200,8 +200,7 @@ fn run_xfoil_scripts() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Each angle's solution is initialized from the previous converged solution,
 /// ensuring identical initialization to XFOIL's sweep behavior.
-fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn std::error::Error>>
-{
+fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn std::error::Error>> {
     let geom_path = format!("{}/{}", BASE_DIR, airfoil.geometry_file);
     let geometry = read_geometry_from_file(&geom_path)?;
     let paneled = create_paneled_airfoil(&geometry);
@@ -395,10 +394,7 @@ fn generate_angle_comparison(
     let xfoil_cp = parse_xfoil_cp_file(&xfoil_cp_path)?;
 
     // Generate Cp/Ue comparison plot
-    let cp_ue_path = format!(
-        "{}/plots/{}/cp_ue_a{}.svg",
-        BASE_DIR, airfoil.name, alpha
-    );
+    let cp_ue_path = format!("{}/plots/{}/cp_ue_a{}.svg", BASE_DIR, airfoil.name, alpha);
     plot_cp_ue_comparison_svg(
         &yfoil_result.x,
         &yfoil_result.cp,
@@ -551,9 +547,15 @@ fn generate_readme() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(file, "```rust")?;
     writeln!(file, "// Positive sweep: 0° to 15°")?;
     writeln!(file, "for alpha_deg in 0..=15 {{")?;
-    writeln!(file, "    let result = solve_viscous_with_init(&paneled, alpha_rad, &conditions, &config, prev_dq.as_deref());")?;
+    writeln!(
+        file,
+        "    let result = solve_viscous_with_init(&paneled, alpha_rad, &conditions, &config, prev_dq.as_deref());"
+    )?;
     writeln!(file, "    if VALIDATION_ANGLES.contains(&alpha_deg) {{")?;
-    writeln!(file, "        bl_distributions.insert(alpha_deg, extract_bl_result(&result));")?;
+    writeln!(
+        file,
+        "        bl_distributions.insert(alpha_deg, extract_bl_result(&result));"
+    )?;
     writeln!(file, "    }}")?;
     writeln!(file, "    prev_dq = Some(result.dq_source.clone());")?;
     writeln!(file, "}}")?;
@@ -578,20 +580,14 @@ fn generate_readme() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(file, "## Regenerating Validation")?;
     writeln!(file)?;
     writeln!(file, "```bash")?;
-    writeln!(
-        file,
-        "# Generate XFOIL baseline data (only needed once)"
-    )?;
+    writeln!(file, "# Generate XFOIL baseline data (only needed once)")?;
     writeln!(
         file,
         "cargo run --bin generate_analysis_validation --features plotting -- --run-xfoil"
     )?;
     writeln!(file)?;
     writeln!(file, "# Regenerate plots and reports")?;
-    writeln!(
-        file,
-        "cargo run --bin generate_analysis_validation --features plotting"
-    )?;
+    writeln!(file, "cargo run --bin generate_analysis_validation --features plotting")?;
     writeln!(file, "```")?;
 
     Ok(())

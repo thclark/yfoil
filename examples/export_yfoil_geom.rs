@@ -18,7 +18,13 @@ fn main() {
     // Also output to stderr for debugging
     eprintln!("Exported {} nodes", airfoil.n);
     eprintln!("First node: ({:.6}, {:.6})", airfoil.x[0], airfoil.y[0]);
-    eprintln!("Last node: ({:.6}, {:.6})", airfoil.x[airfoil.n-1], airfoil.y[airfoil.n-1]);
-    eprintln!("LE node {}: ({:.6}, {:.6})", airfoil.le_index,
-              airfoil.x[airfoil.le_index], airfoil.y[airfoil.le_index]);
+    eprintln!(
+        "Last node: ({:.6}, {:.6})",
+        airfoil.x[airfoil.n - 1],
+        airfoil.y[airfoil.n - 1]
+    );
+    eprintln!(
+        "LE node {}: ({:.6}, {:.6})",
+        airfoil.le_index, airfoil.x[airfoil.le_index], airfoil.y[airfoil.le_index]
+    );
 }

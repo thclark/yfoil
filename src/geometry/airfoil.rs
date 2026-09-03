@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-const MIN_PANELS: usize = 100;
+// XFOIL itself accepts any NB > 1 (ABCOPY) up to IQX-5; 100 was an arbitrary product floor that
+// blocked small validation and fuzz cases. 20 is the smallest count PANGEN handles sensibly.
+const MIN_PANELS: usize = 20;
 const MAX_PANELS: usize = 250;
 
 /// Raw airfoil geometry from input file
@@ -66,7 +68,9 @@ pub enum InvalidGeometryError {
     #[error("The number of panels is too many! Maximum is {0}.")]
     TooManyPanels(usize),
 
-    #[error("The maximum value of x_c is < 0.95 or > 1.05, suggesting the input geometry is not a normalised aerofoil")]
+    #[error(
+        "The maximum value of x_c is < 0.95 or > 1.05, suggesting the input geometry is not a normalised aerofoil"
+    )]
     MaxXExtent,
 
     #[error("The minimum value in x_c array is < -0.05 or > 0.05, suggesting the input geometry is not a normalised aerofoil")]
@@ -164,9 +168,7 @@ impl Geometry {
         if n < 2 {
             return false;
         }
-        let te_gap =
-            ((self.x_c[0] - self.x_c[n - 1]).powi(2) + (self.y_c[0] - self.y_c[n - 1]).powi(2))
-                .sqrt();
+        let te_gap = ((self.x_c[0] - self.x_c[n - 1]).powi(2) + (self.y_c[0] - self.y_c[n - 1]).powi(2)).sqrt();
         // Use same threshold as panel.rs: 0.0001 * chord
         // For normalized airfoil, chord ≈ 1.0
         te_gap < 0.0001
@@ -242,13 +244,10 @@ mod tests {
     fn test_geometry_validation_too_few_panels() {
         let geom = Geometry {
             reference: [0.25, 0.0],
-            x_c: vec![0.0; 50],
-            y_c: vec![0.0; 50],
+            x_c: vec![0.0; 10],
+            y_c: vec![0.0; 10],
         };
-        assert!(matches!(
-            geom.validate(),
-            Err(InvalidGeometryError::TooFewPanels(_))
-        ));
+        assert!(matches!(geom.validate(), Err(InvalidGeometryError::TooFewPanels(_))));
     }
 
     #[test]
@@ -256,7 +255,7 @@ mod tests {
         // Create a simple geometry with open TE
         let geom = Geometry {
             reference: [0.25, 0.0],
-            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0], // TE at x=1, LE at x=0
+            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0],       // TE at x=1, LE at x=0
             y_c: vec![0.01, 0.05, 0.0, -0.05, -0.01], // Gap of 0.02 at TE
         };
 
@@ -271,16 +270,8 @@ mod tests {
         // TE should be at midpoint
         assert_relative_eq!(sharpened.x_c[0], 1.0, epsilon = 1e-10);
         assert_relative_eq!(sharpened.y_c[0], 0.0, epsilon = 1e-10);
-        assert_relative_eq!(
-            sharpened.x_c[sharpened.x_c.len() - 1],
-            1.0,
-            epsilon = 1e-10
-        );
-        assert_relative_eq!(
-            sharpened.y_c[sharpened.y_c.len() - 1],
-            0.0,
-            epsilon = 1e-10
-        );
+        assert_relative_eq!(sharpened.x_c[sharpened.x_c.len() - 1], 1.0, epsilon = 1e-10);
+        assert_relative_eq!(sharpened.y_c[sharpened.y_c.len() - 1], 0.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -302,11 +293,7 @@ mod tests {
 
         // Upper TE should move up, lower should move down
         assert_relative_eq!(blunted.y_c[0], 0.01, epsilon = 1e-10);
-        assert_relative_eq!(
-            blunted.y_c[blunted.y_c.len() - 1],
-            -0.01,
-            epsilon = 1e-10
-        );
+        assert_relative_eq!(blunted.y_c[blunted.y_c.len() - 1], -0.01, epsilon = 1e-10);
     }
 
     #[test]
