@@ -228,3 +228,28 @@ pub fn parse_inviscid_gam(path: &Path) -> Vec<f64> {
     }
     gam
 }
+
+/// DIJ(I,J) from xfoil_dij.dat, 1-based (N+NW)×(N+NW); returns (n, nw, dij).
+pub fn parse_dij(path: &Path) -> (usize, usize, Vec<Vec<f64>>) {
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut n = 0;
+    let mut nw = 0;
+    let mut dij: Vec<Vec<f64>> = Vec::new();
+    for l in text.lines() {
+        let t = l.trim();
+        if let Some(v) = t.strip_prefix("N =") {
+            n = v.trim().parse().unwrap();
+        } else if let Some(v) = t.strip_prefix("NW =") {
+            nw = v.trim().parse().unwrap();
+            dij = vec![vec![0.0; n + nw + 1]; n + nw + 1];
+        } else {
+            let p: Vec<&str> = t.split_whitespace().collect();
+            if p.len() == 3 {
+                if let (Ok(i), Ok(j)) = (p[0].parse::<usize>(), p[1].parse::<usize>()) {
+                    dij[i][j] = p[2].parse().unwrap();
+                }
+            }
+        }
+    }
+    (n, nw, dij)
+}

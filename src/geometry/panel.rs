@@ -777,17 +777,6 @@ mod tests {
     }
 
     #[test]
-    fn test_chord_calculation_symmetric() {
-        // Simple symmetric airfoil shape
-        // TE at x=1, LE at x=0
-        let x = vec![1.0, 0.8, 0.5, 0.2, 0.0, 0.2, 0.5, 0.8, 1.0];
-        let y = vec![0.0, 0.05, 0.08, 0.06, 0.0, -0.06, -0.08, -0.05, 0.0];
-
-        let chord = x.iter().cloned().fold(f64::MIN, f64::max) - x.iter().cloned().fold(f64::MAX, f64::min);
-        assert_relative_eq!(chord, 1.0, epsilon = 0.01);
-    }
-
-    #[test]
     fn test_paneled_airfoil_from_naca0012() {
         use crate::geometry::naca::naca_4digit;
 

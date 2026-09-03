@@ -10,9 +10,12 @@
 //! - `polar` - Alpha sweep for polar generation
 
 pub mod blstate;
+pub mod ggcalc;
+pub mod ludcmp;
 pub mod pointers;
 mod polar;
 pub mod psilin;
+pub mod qdcalc;
 pub mod setbl;
 pub mod velocity;
 mod viscal;

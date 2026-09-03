@@ -2,7 +2,6 @@
 //! Line-for-line translations on the 1-based `BlState`.
 
 use crate::solver::blstate::BlState;
-use nalgebra::DMatrix;
 
 /// QISET: inviscid panel tangential velocity for the current alpha from the alpha=0,90 solutions.
 pub fn qiset(st: &mut BlState, alfa: f64) {
@@ -56,9 +55,8 @@ pub fn gamqv(st: &mut BlState) {
     }
 }
 
-/// UESET: Ue from inviscid Ue plus all source (mass defect) influence through DIJ.
-/// `dij` is the (N+NW)x(N+NW) matrix in 0-based storage: `dij[(i-1, j-1)]` is DIJ(I,J).
-pub fn ueset(st: &mut BlState, dij: &DMatrix<f64>) {
+/// UESET: Ue from inviscid Ue plus all source (mass defect) influence through `st.dij`.
+pub fn ueset(st: &mut BlState) {
     for is in 1..=2 {
         for ibl in 2..=st.nbl[is] {
             let i = st.ipan[is][ibl];
@@ -66,7 +64,7 @@ pub fn ueset(st: &mut BlState, dij: &DMatrix<f64>) {
             for js in 1..=2 {
                 for jbl in 2..=st.nbl[js] {
                     let j = st.ipan[js][jbl];
-                    let ue_m = -st.vti[is][ibl] * st.vti[js][jbl] * dij[(i - 1, j - 1)];
+                    let ue_m = -st.vti[is][ibl] * st.vti[js][jbl] * st.dij[i][j];
                     dui += ue_m * st.mass[js][jbl];
                 }
             }
@@ -127,14 +125,14 @@ mod tests {
     fn ueset_and_dsset_degenerate_cases() {
         let mut st = small_state();
         let np = st.n + st.nw;
-        let dij = DMatrix::<f64>::zeros(np, np);
+        st.dij = vec![vec![0.0; np + 1]; np + 1];
         for is in 1..=2 {
             for ibl in 2..=st.nbl[is] {
                 st.uinv[is][ibl] = 1.0 + 0.01 * ibl as f64;
                 st.mass[is][ibl] = 0.5 * ibl as f64;
             }
         }
-        ueset(&mut st, &dij);
+        ueset(&mut st);
         dsset(&mut st);
         for is in 1..=2 {
             for ibl in 2..=st.nbl[is] {

@@ -92,6 +92,8 @@ pub struct BlState {
     pub ctq: [Vec<f64>; 3],
     /// Wake gap ("dead air" thickness) WGAP(IW), 1..=nw
     pub wgap: Vec<f64>,
+    /// Source influence matrix DIJ(I,J) = dQtan(I)/dSig(J), 1-based (N+NW)×(N+NW) (QDCALC)
+    pub dij: Vec<Vec<f64>>,
     /// Forced-transition x/c per side (XSTRIP); >= 1.0 means free transition
     pub xstrip: [f64; 3],
 }
@@ -167,6 +169,7 @@ impl BlState {
             dis: side(),
             ctq: side(),
             wgap: vec![0.0; nw + 1],
+            dij: Vec::new(),
             xstrip: [0.0, 1.0, 1.0],
         }
     }

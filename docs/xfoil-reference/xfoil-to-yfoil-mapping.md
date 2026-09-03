@@ -244,3 +244,10 @@ Velocity-layer subroutines (`src/solver/velocity.rs`): `QISET → qiset`, `UICAL
 
 The legacy `SetblState` in `src/solver/setbl.rs` (two 0-based sides, no wake stations) is
 superseded by `BlState` and is deleted when the new SETBL lands (stage S7).
+
+Inviscid / wake subroutines on `BlState` (stages S3–S4): `PSILIN → solver::psilin::psilin`
+(returns `Psilin { psi, psi_ni, qtan1, qtan2, qtanm, dzdg, dqdg, dzdm, dqdm, z_qinf, z_alfa }`),
+`PSWLIN → solver::qdcalc::pswlin`, `SETEXP/XYWAKE/QWCALC → solver::xywake`, `GGCALC → solver::ggcalc::ggcalc`
+(returns `InviscidSystem { aij: LuFactors, bij, ladij }`), `LUDCMP/BAKSUB → solver::ludcmp`,
+`QDCALC → solver::qdcalc::qdcalc` (fills `st.dij`, 1-based (N+NW)²), `ATANC → solver::ggcalc::atanc`.
+`PI/HOPI/QOPI` are computed as XFOIL's INIT does (`4*atan(1)`), see `psilin::pi_consts`.
