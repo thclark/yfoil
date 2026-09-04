@@ -3001,7 +3001,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "S9: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
+    #[ignore = "S10: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
     fn test_global_params_compressible() {
         let params = BLGlobalParams::new(0.5, 1e6, 1.4);
 
@@ -3052,7 +3052,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "S9: expected values were unsourced (derived with TKBL = 1/beta - 1, not COMSET's TKLAM) — regenerate from the M=0.3 coverage case"]
+    #[ignore = "S10: expected values were unsourced (derived with TKBL = 1/beta - 1, not COMSET's TKLAM) — regenerate from the M=0.3 coverage case"]
     fn test_blprv_compressible() {
         // Test case: M=0.5, Re=1e6
         // XFOIL reference values from Fortran test
@@ -3120,7 +3120,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "S9: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
+    #[ignore = "S10: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
     fn test_blkin_compressible() {
         // Test case: M=0.5, Re=1e6
         let params = BLGlobalParams::new(0.5, 1e6, 1.4);

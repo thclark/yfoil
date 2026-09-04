@@ -167,9 +167,9 @@ no third "wake surface". Elsewhere in the crate, idiomatic Rust.
 geometry/   - Airfoil coordinates, splines, paneling, NACA generation
 panel/      - Inviscid panel method, influence matrices, wake geometry, DIJ
 bl/         - BL closures, BLDIF/TRDIF/TESYS, MRCHUE, MRCHDU, BLSOLV
-solver/     - Pointer layer (IBLPAN/XICALC/IBLSYS/STFIND), velocity layer (UESET/QVFUE/GAMQV…),
-              SETBL, UPDATE, VISCAL, SPECAL/SPECCL, polar state machine
-forces/     - CPCALC, CLCALC (with CL_ALF/CL_MSQ), CDCALC
+solver/     - Pointer layer (IBLPAN/XICALC/IBLSYS/STFIND/STMOVE), velocity layer (UESET/QVFUE/GAMQV…),
+              PSILIN/GGCALC/XYWAKE/QDCALC, SETBL, UPDATE, CPCALC/CLCALC/CDCALC (clcalc.rs), VISCAL,
+              SPECAL (specal.rs), the OPER session and polar driver (analysis.rs)
 output/     - Results serialisation, optional plotting
 ```
 

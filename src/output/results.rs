@@ -30,26 +30,26 @@ pub struct OperatingPoint {
     pub converged: bool,
     /// Number of iterations to converge
     pub iterations: usize,
-    /// Final convergence residual (CL change)
+    /// Final RMSBL (rms BL Newton change) of the last VISCAL iteration
     pub residual: f64,
 }
 
 impl OperatingPoint {
-    /// Create from ViscousResult
-    pub fn from_viscous(result: &crate::solver::ViscousResult) -> Self {
+    /// Create from an analysis operating point
+    pub fn from_point(p: &crate::solver::analysis::OperatingPoint) -> Self {
         Self {
-            alpha_deg: result.alpha.to_degrees(),
-            cl: result.cl,
-            cd: result.cd,
-            cm: result.cm,
-            cdf: result.cdf,
-            cdp: result.cdp,
-            ld: if result.cd > 1e-10 { result.cl / result.cd } else { 0.0 },
-            xtr_upper: result.xtr_upper,
-            xtr_lower: result.xtr_lower,
-            converged: result.converged,
-            iterations: result.iterations,
-            residual: result.residual,
+            alpha_deg: p.alpha.to_degrees(),
+            cl: p.cl,
+            cd: p.cd,
+            cm: p.cm,
+            cdf: p.cdf,
+            cdp: p.cdp,
+            ld: if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 },
+            xtr_upper: p.xtr_upper,
+            xtr_lower: p.xtr_lower,
+            converged: p.converged,
+            iterations: p.iterations,
+            residual: p.rmsbl,
         }
     }
 }
@@ -66,12 +66,12 @@ pub struct FlowConditionsOutput {
 }
 
 impl FlowConditionsOutput {
-    /// Create from FlowConditions
-    pub fn from_conditions(cond: &crate::bl::FlowConditions) -> Self {
+    /// Create from the flow specification
+    pub fn from_spec(spec: &crate::solver::analysis::FlowSpec) -> Self {
         Self {
-            reynolds: cond.reynolds,
-            mach: cond.mach,
-            ncrit: cond.ncrit,
+            reynolds: spec.re,
+            mach: spec.mach,
+            ncrit: spec.ncrit,
         }
     }
 }
@@ -112,8 +112,8 @@ pub struct PolarSummary {
 
 impl PolarOutput {
     /// Create from PolarResult
-    pub fn from_polar(result: &crate::solver::PolarResult, airfoil_name: &str) -> Self {
-        let points: Vec<OperatingPoint> = result.points.iter().map(OperatingPoint::from_viscous).collect();
+    pub fn from_polar(result: &crate::solver::analysis::PolarResult, airfoil_name: &str) -> Self {
+        let points: Vec<OperatingPoint> = result.points.iter().map(OperatingPoint::from_point).collect();
 
         let (cl_max, alpha_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| (Some(cl), Some(a)));
 
@@ -131,7 +131,7 @@ impl PolarOutput {
 
         Self {
             airfoil: airfoil_name.to_string(),
-            conditions: FlowConditionsOutput::from_conditions(&result.conditions),
+            conditions: FlowConditionsOutput::from_spec(&result.spec),
             points,
             summary,
             completed: result.completed,
@@ -158,17 +158,17 @@ pub struct AnalysisOutput {
 }
 
 impl AnalysisOutput {
-    /// Create from ViscousResult
-    pub fn from_viscous(
-        result: &crate::solver::ViscousResult,
+    /// Create from an analysis operating point
+    pub fn from_point(
+        p: &crate::solver::analysis::OperatingPoint,
         airfoil_name: &str,
-        conditions: &crate::bl::FlowConditions,
+        spec: &crate::solver::analysis::FlowSpec,
         inviscid_only: bool,
     ) -> Self {
         Self {
             airfoil: airfoil_name.to_string(),
-            conditions: FlowConditionsOutput::from_conditions(conditions),
-            result: OperatingPoint::from_viscous(result),
+            conditions: FlowConditionsOutput::from_spec(spec),
+            result: OperatingPoint::from_point(p),
             inviscid_only,
         }
     }
@@ -230,7 +230,7 @@ impl InviscidAnalysisOutput {
         airfoil: &crate::geometry::PaneledAirfoil,
         velocity: &[f64],
         cp: &[f64],
-        coeffs: &crate::forces::AeroCoefficients,
+        (cl, cm, cdp): (f64, f64, f64),
         alpha_deg: f64,
         mach: f64,
         airfoil_name: &str,
@@ -241,11 +241,7 @@ impl InviscidAnalysisOutput {
             mach,
             n_stations: airfoil.n,
             le_index: airfoil.le_index,
-            coefficients: InviscidCoefficients {
-                cl: coeffs.cl,
-                cm: coeffs.cm,
-                cdp: coeffs.cdp,
-            },
+            coefficients: InviscidCoefficients { cl, cm, cdp },
             stations: StationDistributions {
                 x: airfoil.x.clone(),
                 y: airfoil.y.clone(),

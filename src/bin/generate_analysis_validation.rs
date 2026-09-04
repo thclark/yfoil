@@ -27,7 +27,7 @@ use yfoil::output::{
     plot_cp_ue_comparison_svg, plot_polar_3panel_svg, stitch_polars_with_cm, PolarDataWithCm, PolarPlotConfig,
     YfoilBLDist,
 };
-use yfoil::solver::{solve_viscous, ViscalConfig};
+use yfoil::solver::analysis::{FlowSpec, Session};
 
 const BASE_DIR: &str = "docs/validation/assets/analysis";
 const XFOIL_BIN: &str = "xfoil/xfoil6.99/bin/xfoil";
@@ -191,25 +191,21 @@ fn run_xfoil_scripts() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Run YFoil polar sweep and collect BL distributions at validation angles
-///
-/// This function performs a proper polar sweep:
-/// - Positive sweep: 0° → 1° → 2° → ... → 15° (collecting BL at 0°, 5°, 10°, 15°)
-/// - Reinitialize
-/// - Negative sweep: -1° → -2° → ... → -15° (collecting BL at -5°, -10°, -15°)
-///
-/// Each angle's solution is initialized from the previous converged solution,
-/// ensuring identical initialization to XFOIL's sweep behavior.
+/// Run the YFoil polar sweep as XFOIL's ASEQ does it: 0° → 15° with the previous point's BL
+/// as the initial condition, INIT, then −1° → −15°.
 fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn std::error::Error>> {
     let geom_path = format!("{}/{}", BASE_DIR, airfoil.geometry_file);
     let geometry = read_geometry_from_file(&geom_path)?;
     let paneled = create_paneled_airfoil(&geometry);
 
-    let conditions = FlowConditions::new(REYNOLDS, MACH, NCRIT, paneled.chord);
-    let config = ViscalConfig {
-        max_iter: 400,
-        ..Default::default()
+    let spec = FlowSpec {
+        re: REYNOLDS,
+        mach: MACH,
+        ncrit: NCRIT,
+        itmax: 20,
+        ..FlowSpec::default()
     };
+    let mut session = Session::new(&paneled, spec);
 
     let mut alphas = Vec::new();
     let mut cls = Vec::new();
@@ -218,21 +214,15 @@ fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn
     let mut bl_distributions: HashMap<i32, YfoilAnalysisResult> = HashMap::new();
 
     // Positive sweep: 0° to 15°
-    // Note: Currently each angle starts fresh (no state carried forward).
-    // XFOIL carries forward UEDG (edge velocities) via LBLINI flag.
-    // TODO: Implement proper BL state initialization for polar sweeps.
     for alpha_deg in 0..=15 {
-        let alpha_rad = (alpha_deg as f64).to_radians();
-        let result = solve_viscous(&paneled, alpha_rad, &conditions, &config);
-        if result.converged {
+        let p = session.alfa((alpha_deg as f64).to_radians());
+        if p.converged {
             alphas.push(alpha_deg as f64);
-            cls.push(result.cl);
-            cds.push(result.cd);
-            cms.push(result.cm);
-
-            // Collect BL distribution at validation angles
+            cls.push(p.cl);
+            cds.push(p.cd);
+            cms.push(p.cm);
             if VALIDATION_ANGLES.contains(&alpha_deg) {
-                bl_distributions.insert(alpha_deg, extract_bl_result(&result));
+                bl_distributions.insert(alpha_deg, extract_bl_result(&session));
             }
         } else {
             println!(
@@ -243,19 +233,17 @@ fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn
         }
     }
 
-    // Negative sweep: -1° to -15°
+    // INIT, then negative sweep: -1° to -15°
+    session.init();
     for alpha_deg in (-15..0).rev() {
-        let alpha_rad = (alpha_deg as f64).to_radians();
-        let result = solve_viscous(&paneled, alpha_rad, &conditions, &config);
-        if result.converged {
+        let p = session.alfa((alpha_deg as f64).to_radians());
+        if p.converged {
             alphas.insert(0, alpha_deg as f64);
-            cls.insert(0, result.cl);
-            cds.insert(0, result.cd);
-            cms.insert(0, result.cm);
-
-            // Collect BL distribution at validation angles
+            cls.insert(0, p.cl);
+            cds.insert(0, p.cd);
+            cms.insert(0, p.cm);
             if VALIDATION_ANGLES.contains(&alpha_deg) {
-                bl_distributions.insert(alpha_deg, extract_bl_result(&result));
+                bl_distributions.insert(alpha_deg, extract_bl_result(&session));
             }
         } else {
             println!(
@@ -272,67 +260,31 @@ fn run_yfoil_sweep(airfoil: &AirfoilConfig) -> Result<YfoilSweepResults, Box<dyn
     })
 }
 
-/// Extract BL result from a viscous solution for plotting
-fn extract_bl_result(result: &yfoil::solver::ViscousResult) -> YfoilAnalysisResult {
-    let mut x = Vec::new();
-    let mut s = Vec::new();
-    let mut ue = Vec::new();
-    let mut theta = Vec::new();
-    let mut dstar = Vec::new();
-    let mut h = Vec::new();
-    let mut hs = Vec::new();
-    let mut cf = Vec::new();
-
-    // Upper surface
-    for (i, res) in result.bl.upper.iter().enumerate() {
-        x.push(res.x);
-        s.push(result.bl.s_upper[i]);
-        ue.push(res.ue);
-        theta.push(res.theta);
-        dstar.push(res.dstar);
-        h.push(res.h);
-        hs.push(res.hs);
-        cf.push(res.cf);
+/// Extract the BL distributions of the session's current point for plotting
+fn extract_bl_result(session: &Session) -> YfoilAnalysisResult {
+    let mut r = YfoilAnalysisResult {
+        x: Vec::new(),
+        s: Vec::new(),
+        cp: Vec::new(),
+        ue: Vec::new(),
+        theta: Vec::new(),
+        dstar: Vec::new(),
+        h: Vec::new(),
+        hs: Vec::new(),
+        cf: Vec::new(),
+    };
+    for st in session.stations() {
+        r.x.push(st.x);
+        r.s.push(st.xssi);
+        r.cp.push(st.cp);
+        r.ue.push(st.ue);
+        r.theta.push(st.theta);
+        r.dstar.push(st.dstar);
+        r.h.push(st.h);
+        r.hs.push(st.hs);
+        r.cf.push(st.cf);
     }
-
-    // Lower surface
-    for (i, res) in result.bl.lower.iter().enumerate() {
-        x.push(res.x);
-        s.push(result.bl.s_lower[i]);
-        ue.push(res.ue);
-        theta.push(res.theta);
-        dstar.push(res.dstar);
-        h.push(res.h);
-        hs.push(res.hs);
-        cf.push(res.cf);
-    }
-
-    // Wake
-    for (i, res) in result.bl.wake.iter().enumerate() {
-        x.push(result.bl.x_wake[i]);
-        s.push(result.bl.s_wake[i]);
-        ue.push(res.ue);
-        theta.push(res.theta);
-        dstar.push(res.dstar);
-        h.push(res.h);
-        hs.push(res.hs);
-        cf.push(res.cf);
-    }
-
-    // Cp from Ue: Cp = 1 - Ue^2
-    let cp = ue.iter().map(|&u| 1.0 - u * u).collect();
-
-    YfoilAnalysisResult {
-        x,
-        s,
-        cp,
-        ue,
-        theta,
-        dstar,
-        h,
-        hs,
-        cf,
-    }
+    r
 }
 
 /// Generate polar comparison for an airfoil

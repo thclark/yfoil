@@ -231,8 +231,20 @@ fn test_thickness_values() {
 // Panel Method Validation Tests
 // ============================================================================
 
-use yfoil::forces::integrate_forces;
 use yfoil::panel::solve_inviscid;
+use yfoil::solver::analysis::{analyze, FlowSpec, Session};
+
+fn inviscid_cl(airfoil: &yfoil::geometry::PaneledAirfoil, alpha: f64) -> f64 {
+    analyze(
+        airfoil,
+        alpha,
+        &FlowSpec {
+            re: 0.0,
+            ..FlowSpec::default()
+        },
+    )
+    .cl
+}
 
 /// Test inviscid panel method lift curve slope against thin airfoil theory.
 ///
@@ -243,19 +255,10 @@ use yfoil::panel::solve_inviscid;
 fn test_panel_method_lift_slope() {
     let geom = naca_4digit("0012", 160).unwrap();
     let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
     // Calculate CL at two angles
     let alpha1 = 0.0_f64;
     let alpha2 = 5.0_f64.to_radians();
-
-    let vel1 = solution.velocity_at_alpha(alpha1);
-    let vel2 = solution.velocity_at_alpha(alpha2);
-
-    let coeffs1 = integrate_forces(&airfoil, &vel1, alpha1, 0.0);
-    let coeffs2 = integrate_forces(&airfoil, &vel2, alpha2, 0.0);
-
-    let dcl_dalpha = (coeffs2.cl - coeffs1.cl) / (alpha2 - alpha1);
+    let dcl_dalpha = (inviscid_cl(&airfoil, alpha2) - inviscid_cl(&airfoil, alpha1)) / (alpha2 - alpha1);
 
     // Should be in range 5.0 to 7.0 (thin airfoil theory ≈ 6.28)
     assert!(
@@ -270,15 +273,10 @@ fn test_panel_method_lift_slope() {
 fn test_panel_method_symmetric_zero_lift() {
     let geom = naca_4digit("0012", 160).unwrap();
     let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
-
+    let cl = inviscid_cl(&airfoil, 0.0);
     assert!(
-        coeffs.cl.abs() < 0.01,
-        "CL={} should be ~0 for symmetric airfoil at α=0",
-        coeffs.cl
+        cl.abs() < 1e-12,
+        "CL={cl} should be zero to the noise floor for a symmetric airfoil at α=0"
     );
 }
 
@@ -287,18 +285,10 @@ fn test_panel_method_symmetric_zero_lift() {
 fn test_panel_method_cambered_lift() {
     let geom = naca_4digit("4412", 160).unwrap();
     let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
-
+    let cl = inviscid_cl(&airfoil, 0.0);
     // NACA 4412 has 4% camber, should produce positive lift at α=0
     // Thin airfoil theory predicts CL ≈ 2π * 2 * (0.04) ≈ 0.5 for 4% camber
-    assert!(
-        coeffs.cl > 0.2,
-        "CL={} should be positive for cambered airfoil at α=0",
-        coeffs.cl
-    );
+    assert!(cl > 0.2, "CL={cl} should be positive for cambered airfoil at α=0");
 }
 
 // ============================================================================
@@ -447,9 +437,15 @@ fn test_blunt_te_reasonable_results() {
 
     assert!(!airfoil.sharp_te, "Should use blunt TE handling");
 
-    let solution = solve_inviscid(&airfoil);
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
+    let mut session = Session::new(
+        &airfoil,
+        FlowSpec {
+            re: 0.0,
+            ..FlowSpec::default()
+        },
+    );
+    let coeffs = session.alfa(0.0);
+    let vel: Vec<f64> = session.st.qinv[1..=airfoil.n].to_vec();
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(
@@ -481,30 +477,18 @@ fn test_te_type_lift_slope_comparison() {
     // Sharp TE
     let geom_sharp = naca_4digit("0012", 160).unwrap();
     let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
-    let solution_sharp = solve_inviscid(&airfoil_sharp);
 
     // Blunt TE
     let geom_blunt = geom_sharp.blunten(0.002);
     let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
-    let solution_blunt = solve_inviscid(&airfoil_blunt);
 
     // Calculate lift slope for both
     let alpha1 = 0.0_f64;
     let alpha2 = 5.0_f64.to_radians();
-
-    // Sharp TE lift slope
-    let vel1_sharp = solution_sharp.velocity_at_alpha(alpha1);
-    let vel2_sharp = solution_sharp.velocity_at_alpha(alpha2);
-    let coeffs1_sharp = integrate_forces(&airfoil_sharp, &vel1_sharp, alpha1, 0.0);
-    let coeffs2_sharp = integrate_forces(&airfoil_sharp, &vel2_sharp, alpha2, 0.0);
-    let dcl_dalpha_sharp = (coeffs2_sharp.cl - coeffs1_sharp.cl) / (alpha2 - alpha1);
-
-    // Blunt TE lift slope
-    let vel1_blunt = solution_blunt.velocity_at_alpha(alpha1);
-    let vel2_blunt = solution_blunt.velocity_at_alpha(alpha2);
-    let coeffs1_blunt = integrate_forces(&airfoil_blunt, &vel1_blunt, alpha1, 0.0);
-    let coeffs2_blunt = integrate_forces(&airfoil_blunt, &vel2_blunt, alpha2, 0.0);
-    let dcl_dalpha_blunt = (coeffs2_blunt.cl - coeffs1_blunt.cl) / (alpha2 - alpha1);
+    let dcl_dalpha_sharp =
+        (inviscid_cl(&airfoil_sharp, alpha2) - inviscid_cl(&airfoil_sharp, alpha1)) / (alpha2 - alpha1);
+    let dcl_dalpha_blunt =
+        (inviscid_cl(&airfoil_blunt, alpha2) - inviscid_cl(&airfoil_blunt, alpha1)) / (alpha2 - alpha1);
 
     // Both should be close to thin airfoil theory (2π ≈ 6.28)
     assert!(

@@ -1,0 +1,330 @@
+//! The OPER analysis driver on `BlState`: one persistent session per airfoil and flow
+//! specification, `alfa` = XFOIL's `ALFA` command (SPECAL, then VISCAL when viscous),
+//! `init` = XFOIL's `INIT`, and the polar sweep as CLAUDE.md prescribes it (0° → max,
+//! reinitialise, −step → min, stitched ascending).
+
+use crate::geometry::PaneledAirfoil;
+use crate::solver::blstate::BlState;
+use crate::solver::ggcalc::InviscidSystem;
+use crate::solver::specal::alfa_command;
+use crate::solver::viscal::{viscal, ViscalIter};
+
+/// Flow specification (the OPER settings that must be pinned explicitly).
+#[derive(Debug, Clone)]
+pub struct FlowSpec {
+    /// Reynolds number REINF1 (0 → inviscid analysis)
+    pub re: f64,
+    /// Mach number MINF1
+    pub mach: f64,
+    /// Critical amplification ACRIT (both sides)
+    pub ncrit: f64,
+    /// ITMAX: VISCAL iteration limit
+    pub itmax: usize,
+    /// WAKLEN: wake length in chords
+    pub waklen: f64,
+    /// VACCEL: BLSOLV sparse-elimination threshold
+    pub vaccel: f64,
+    /// XSTRIP(1..2): forced-transition x/c per side (1.0 = free transition)
+    pub xstrip: [f64; 2],
+    /// MATYP / RETYP: Mach and Re dependence on CL (1 = fixed)
+    pub matyp: usize,
+    pub retyp: usize,
+}
+
+impl Default for FlowSpec {
+    fn default() -> Self {
+        Self {
+            re: 1.0e6,
+            mach: 0.0,
+            ncrit: 9.0,
+            itmax: 20,
+            waklen: 1.0,
+            vaccel: 0.01,
+            xstrip: [1.0, 1.0],
+            matyp: 1,
+            retyp: 1,
+        }
+    }
+}
+
+/// One converged (or not) operating point.
+#[derive(Debug, Clone, Default)]
+pub struct OperatingPoint {
+    /// Angle of attack (radians)
+    pub alpha: f64,
+    pub cl: f64,
+    pub cd: f64,
+    pub cdf: f64,
+    pub cdp: f64,
+    pub cm: f64,
+    pub cl_alf: f64,
+    /// XOCTR(1), XOCTR(2): transition x/c on the upper and lower side
+    pub xtr_upper: f64,
+    pub xtr_lower: f64,
+    pub itran: [usize; 3],
+    /// LVCONV after VISCAL (true for an inviscid point)
+    pub converged: bool,
+    /// VISCAL iterations performed
+    pub iterations: usize,
+    /// RMSBL of the last iteration (0 for an inviscid point)
+    pub rmsbl: f64,
+    /// Per-iteration record
+    pub trace: Vec<ViscalIter>,
+}
+
+/// BL quantities at one station, as XFOIL's `DUMP` reports them.
+#[derive(Debug, Clone, Default)]
+pub struct StationRecord {
+    pub is: usize,
+    pub ibl: usize,
+    /// Panel/wake node index IPAN
+    pub i: usize,
+    pub x: f64,
+    pub y: f64,
+    /// XSSI
+    pub xssi: f64,
+    /// UEDG / QINF
+    pub ue: f64,
+    pub dstar: f64,
+    pub theta: f64,
+    /// TAU / (0.5 QINF²)
+    pub cf: f64,
+    /// DSTR/THET
+    pub h: f64,
+    /// TSTR/THET
+    pub hs: f64,
+    /// CPV at the node
+    pub cp: f64,
+    /// CTAU (amplification N ahead of transition)
+    pub ctau: f64,
+}
+
+/// A persistent analysis session: the geometry, inviscid system and BL state that XFOIL keeps
+/// in COMMON between OPER commands.
+#[derive(Debug, Clone)]
+pub struct Session {
+    pub st: BlState,
+    pub sys: Option<InviscidSystem>,
+    pub spec: FlowSpec,
+}
+
+impl Session {
+    /// LOAD + OPER settings: geometry in, VISC/MACH/N/ITER/VACCEL/XTR pinned.
+    pub fn new(airfoil: &PaneledAirfoil, spec: FlowSpec) -> Self {
+        // NW = N/12 + 10*INT(WAKLEN)
+        let nw = airfoil.n / 12 + 10 * (spec.waklen as usize);
+        let mut st = BlState::from_airfoil(airfoil, nw);
+        st.reinf1 = spec.re;
+        st.reinf = spec.re;
+        st.minf1 = spec.mach;
+        st.minf = spec.mach;
+        st.matyp = spec.matyp;
+        st.retyp = spec.retyp;
+        st.acrit = [0.0, spec.ncrit, spec.ncrit];
+        st.vaccel = spec.vaccel;
+        st.xstrip = [0.0, spec.xstrip[0], spec.xstrip[1]];
+        st.lvisc = spec.re > 0.0;
+        st.lalfa = true;
+        st.qinf = 1.0;
+        Self { st, sys: None, spec }
+    }
+
+    /// OPER `INIT`: BL initialisation flag toggled off so the next VISCAL re-marches with
+    /// MRCHUE, and the pointer layer is rebuilt.
+    pub fn init(&mut self) {
+        self.st.lblini = !self.st.lblini;
+        if !self.st.lblini {
+            // 'BLs will be initialized on next point'
+            self.st.lipan = false;
+        }
+    }
+
+    /// OPER `ALFA`: SPECAL for the new angle, then VISCAL when viscous.
+    pub fn alfa(&mut self, alpha: f64) -> OperatingPoint {
+        alfa_command(&mut self.st, &mut self.sys, alpha);
+        let mut trace = Vec::new();
+        let converged = if self.st.lvisc {
+            viscal(
+                &mut self.st,
+                self.sys.as_mut(),
+                self.spec.itmax,
+                self.spec.waklen,
+                Some(&mut trace),
+            )
+        } else {
+            true
+        };
+        let st = &self.st;
+        OperatingPoint {
+            alpha: st.alfa,
+            cl: st.cl,
+            cd: st.cd,
+            cdf: st.cdf,
+            cdp: st.cdp,
+            cm: st.cm,
+            cl_alf: st.cl_alf,
+            xtr_upper: st.xoctr[1],
+            xtr_lower: st.xoctr[2],
+            itran: st.itran,
+            converged,
+            iterations: trace.len(),
+            rmsbl: trace.last().map(|t| t.rmsbl).unwrap_or(0.0),
+            trace,
+        }
+    }
+
+    /// BL distributions of the current state, both sides then wake (side 2's wake stations),
+    /// in XFOIL's `DUMP` order.
+    pub fn stations(&self) -> Vec<StationRecord> {
+        let st = &self.st;
+        let mut out = Vec::new();
+        for is in 1..=2 {
+            for ibl in 2..=st.nbl[is] {
+                let i = st.ipan[is][ibl];
+                let thet = st.thet[is][ibl];
+                out.push(StationRecord {
+                    is,
+                    ibl,
+                    i,
+                    x: st.x[i],
+                    y: st.y[i],
+                    xssi: st.xssi[is][ibl],
+                    ue: st.uedg[is][ibl] / st.qinf,
+                    dstar: st.dstr[is][ibl],
+                    theta: thet,
+                    cf: st.tau[is][ibl] / (0.5 * st.qinf * st.qinf),
+                    h: st.dstr[is][ibl] / thet,
+                    hs: st.tstr[is][ibl] / thet,
+                    cp: st.cpv[i],
+                    ctau: st.ctau[is][ibl],
+                });
+            }
+        }
+        out
+    }
+}
+
+/// Single operating point from scratch (fresh session).
+pub fn analyze(airfoil: &PaneledAirfoil, alpha: f64, spec: &FlowSpec) -> OperatingPoint {
+    Session::new(airfoil, spec.clone()).alfa(alpha)
+}
+
+/// Polar sweep configuration.
+#[derive(Debug, Clone)]
+pub struct PolarConfig {
+    /// Maximum angle of attack (degrees)
+    pub alpha_max: f64,
+    /// Minimum angle of attack (degrees)
+    pub alpha_min: f64,
+    /// Step size (degrees, positive)
+    pub alpha_step: f64,
+    pub spec: FlowSpec,
+    /// Consecutive non-converged points after which a sweep direction stops
+    pub max_failures: usize,
+}
+
+impl Default for PolarConfig {
+    fn default() -> Self {
+        Self {
+            alpha_max: 15.0,
+            alpha_min: -5.0,
+            alpha_step: 0.5,
+            spec: FlowSpec::default(),
+            max_failures: 3,
+        }
+    }
+}
+
+/// Result of a polar sweep: points sorted by ascending alpha.
+#[derive(Debug, Clone)]
+pub struct PolarResult {
+    pub points: Vec<OperatingPoint>,
+    /// Alphas (radians) that did not converge
+    pub failed_alphas: Vec<f64>,
+    pub spec: FlowSpec,
+    /// Neither sweep direction stopped on max_failures
+    pub completed: bool,
+}
+
+impl PolarResult {
+    /// (CL_max, alpha in degrees at CL_max) over converged points
+    pub fn cl_max(&self) -> Option<(f64, f64)> {
+        self.points
+            .iter()
+            .filter(|p| p.converged)
+            .map(|p| (p.cl, p.alpha.to_degrees()))
+            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
+    }
+    /// (max L/D, CL at max L/D) over converged points
+    pub fn ld_max(&self) -> Option<(f64, f64)> {
+        self.points
+            .iter()
+            .filter(|p| p.converged && p.cd > 1e-10)
+            .map(|p| (p.cl / p.cd, p.cl))
+            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
+    }
+    /// CD at the converged point with the smallest |CL|
+    pub fn cd0(&self) -> Option<f64> {
+        self.points
+            .iter()
+            .filter(|p| p.converged)
+            .min_by(|a, b| a.cl.abs().partial_cmp(&b.cl.abs()).unwrap())
+            .map(|p| p.cd)
+    }
+}
+
+/// The polar as a state machine (CLAUDE.md): sweep 0° → alpha_max with the previous point's
+/// BL as the initial condition, `INIT`, then −step → alpha_min, and stitch ascending. Each
+/// direction stops after `max_failures` consecutive non-converged points.
+pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarResult {
+    let step = config.alpha_step.abs();
+    let mut session = Session::new(airfoil, config.spec.clone());
+    let mut points = Vec::new();
+    let mut failed = Vec::new();
+    let mut completed = true;
+
+    let mut sweep = |session: &mut Session, alphas: Vec<f64>, points: &mut Vec<OperatingPoint>| {
+        let mut consecutive = 0;
+        for adeg in alphas {
+            let p = session.alfa(adeg.to_radians());
+            if p.converged {
+                consecutive = 0;
+            } else {
+                consecutive += 1;
+                failed.push(p.alpha);
+            }
+            points.push(p);
+            if consecutive >= config.max_failures {
+                completed = false;
+                break;
+            }
+        }
+    };
+
+    // 0° → alpha_max
+    let mut up = Vec::new();
+    let mut a = 0.0;
+    while a <= config.alpha_max + 1e-9 {
+        up.push(a);
+        a += step;
+    }
+    sweep(&mut session, up, &mut points);
+
+    // reinitialise, then −step → alpha_min
+    session.init();
+    let mut down = Vec::new();
+    let mut a = -step;
+    while a >= config.alpha_min - 1e-9 {
+        down.push(a);
+        a -= step;
+    }
+    sweep(&mut session, down, &mut points);
+
+    points.sort_by(|p, q| p.alpha.partial_cmp(&q.alpha).unwrap());
+    PolarResult {
+        points,
+        failed_alphas: failed,
+        spec: config.spec.clone(),
+        completed,
+    }
+}

@@ -119,6 +119,10 @@ pub fn xywake(st: &mut BlState, waklen: f64) {
         // set angle of wake panel normal
         st.apanel[i] = psi_y.atan2(psi_x);
     }
+    // LWAKE = .TRUE., AWAKE = ALFA, LWDIJ = .FALSE. (new wake geometry invalidates the wake DIJ)
+    st.lwake = true;
+    st.awake = st.alfa;
+    st.lwdij = false;
 }
 
 /// QWCALC: inviscid tangential velocity for alpha = 0, 90 on the wake due to freestream and

@@ -253,3 +253,46 @@ pub fn parse_dij(path: &Path) -> (usize, usize, Vec<Vec<f64>>) {
     }
     (n, nw, dij)
 }
+
+/// The inviscid arrays entering VISCAL's Newton loop (`viscal_inviscid.dat`): per node
+/// QINVU(I,1), QINVU(I,2), QINV(I), QINV_A(I), GAM(I), GAM_A(I), 1-based; plus the header.
+#[derive(Debug, Clone, Default)]
+pub struct ViscalInviscid {
+    pub header: std::collections::HashMap<String, String>,
+    pub qinvu1: Vec<f64>,
+    pub qinvu2: Vec<f64>,
+    pub qinv: Vec<f64>,
+    pub qinv_a: Vec<f64>,
+    pub gam: Vec<f64>,
+    pub gam_a: Vec<f64>,
+}
+
+pub fn parse_viscal_inviscid(path: &Path) -> ViscalInviscid {
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut d = ViscalInviscid::default();
+    for v in [
+        &mut d.qinvu1,
+        &mut d.qinvu2,
+        &mut d.qinv,
+        &mut d.qinv_a,
+        &mut d.gam,
+        &mut d.gam_a,
+    ] {
+        v.push(0.0);
+    }
+    for l in text.lines() {
+        if let Some(r) = l.strip_prefix("NODE(") {
+            let (_, vals) = r.split_once(")=").unwrap();
+            let v: Vec<f64> = vals.split_whitespace().map(|t| t.parse().unwrap()).collect();
+            d.qinvu1.push(v[0]);
+            d.qinvu2.push(v[1]);
+            d.qinv.push(v[2]);
+            d.qinv_a.push(v[3]);
+            d.gam.push(v[4]);
+            d.gam_a.push(v[5]);
+        } else if let Some((k, v)) = l.split_once('=') {
+            d.header.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    d
+}

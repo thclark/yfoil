@@ -4,15 +4,12 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use yfoil::bl::FlowConditions;
-use yfoil::forces::{calculate_cp, integrate_forces}; // calculate_cp still needed for JSON output
 use yfoil::geometry::{
     create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file, repanel_cosine,
     repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
-use yfoil::output::{InviscidAnalysisOutput, PolarOutput};
-use yfoil::panel::solve_inviscid;
-use yfoil::solver::{compute_polar, solve_viscous, PolarConfig, ViscalConfig};
+use yfoil::output::{AnalysisOutput, InviscidAnalysisOutput, PolarOutput};
+use yfoil::solver::analysis::{compute_polar, FlowSpec, PolarConfig, Session};
 
 #[cfg(feature = "plotting")]
 use yfoil::output::{
@@ -60,6 +57,9 @@ enum Commands {
         /// Inviscid analysis only
         #[arg(long)]
         inviscid: bool,
+        /// Maximum VISCAL iterations (XFOIL ITER)
+        #[arg(long, default_value_t = 20)]
+        iter: usize,
 
         /// Output file path for JSON results
         #[arg(short, long)]
@@ -98,6 +98,9 @@ enum Commands {
         /// Output JSON format
         #[arg(long)]
         json: bool,
+        /// Maximum VISCAL iterations (XFOIL ITER)
+        #[arg(long, default_value_t = 20)]
+        iter: usize,
 
         /// Output file path
         #[arg(short, long)]
@@ -244,51 +247,57 @@ fn main() {
             ncrit,
             inviscid,
             output,
+            iter,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
             let airfoil = create_paneled_airfoil(&geometry);
+            let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
             // Convert angle to radians
             let alpha_rad = alpha.to_radians();
 
-            if inviscid {
-                // Inviscid-only analysis
-                let solution = solve_inviscid(&airfoil);
-                // Use node-based velocities for consistency with XFOIL
-                let velocity = solution.velocity_at_nodes(alpha_rad);
-                // integrate_forces computes Cp internally with Karman-Tsien correction
-                let coeffs = integrate_forces(&airfoil, &velocity, alpha_rad, mach);
-                // Compute Cp for JSON output
-                let cp = calculate_cp(&velocity, mach);
+            let spec = FlowSpec {
+                re: if inviscid { 0.0 } else { reynolds },
+                mach,
+                ncrit,
+                itmax: iter,
+                ..FlowSpec::default()
+            };
+            let mut session = Session::new(&airfoil, spec.clone());
+            let point = session.alfa(alpha_rad);
 
+            if inviscid {
                 println!("Inviscid Analysis Results");
                 println!("========================");
                 println!("Airfoil: {}", file.display());
                 println!("Alpha:   {:.2}°", alpha);
                 println!("Mach:    {:.3}", mach);
                 println!();
-                println!("CL  = {:+.6}", coeffs.cl);
-                println!("CM  = {:+.6}", coeffs.cm);
-                println!("CDp = {:+.6} (pressure drag)", coeffs.cdp);
+                println!("CL  = {:+.6}", point.cl);
+                println!("CM  = {:+.6}", point.cm);
+                println!("CDp = {:+.6} (pressure drag)", point.cdp);
 
                 // Write JSON output if requested
                 if let Some(ref path) = output {
-                    let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
-                    let result =
-                        InviscidAnalysisOutput::new(&airfoil, &velocity, &cp, &coeffs, alpha, mach, airfoil_name);
+                    let n = airfoil.n;
+                    let velocity: Vec<f64> = session.st.qinv[1..=n].to_vec();
+                    let cp: Vec<f64> = session.st.cpi[1..=n].to_vec();
+                    let result = InviscidAnalysisOutput::new(
+                        &airfoil,
+                        &velocity,
+                        &cp,
+                        (point.cl, point.cm, point.cdp),
+                        alpha,
+                        mach,
+                        airfoil_name,
+                    );
                     let json_str = result.to_json().expect("Failed to serialize results");
                     std::fs::write(path, &json_str).expect("Failed to write output file");
                     println!();
                     println!("Wrote JSON to {}", path.display());
                 }
             } else {
-                // Viscous analysis
-                let cond = FlowConditions::new(reynolds, mach, ncrit, airfoil.chord);
-                let config = ViscalConfig::default();
-
-                let result = solve_viscous(&airfoil, alpha_rad, &cond, &config);
-
                 println!("Viscous Analysis Results");
                 println!("========================");
                 println!("Airfoil: {}", file.display());
@@ -297,23 +306,31 @@ fn main() {
                 println!("Mach:    {:.3}", mach);
                 println!("Ncrit:   {:.1}", ncrit);
                 println!();
-                println!("CL  = {:+.6}", result.cl);
-                println!("CD  = {:+.6}", result.cd);
-                println!("  CDf = {:+.6} (friction)", result.cdf);
-                println!("  CDp = {:+.6} (pressure)", result.cdp);
-                println!("CM  = {:+.6}", result.cm);
+                println!("CL  = {:+.6}", point.cl);
+                println!("CD  = {:+.6}", point.cd);
+                println!("  CDf = {:+.6} (friction)", point.cdf);
+                println!("  CDp = {:+.6} (pressure, CD - CDf)", point.cd - point.cdf);
+                println!("CM  = {:+.6}", point.cm);
                 println!();
                 println!("Transition:");
-                println!("  Upper: {:.1}% chord", result.xtr_upper * 100.0);
-                println!("  Lower: {:.1}% chord", result.xtr_lower * 100.0);
+                println!("  Upper: {:.1}% chord", point.xtr_upper * 100.0);
+                println!("  Lower: {:.1}% chord", point.xtr_lower * 100.0);
                 println!();
                 println!("Convergence:");
-                println!("  Iterations: {}", result.iterations);
-                println!("  Residual:   {:.2e}", result.residual);
-                if result.converged {
+                println!("  Iterations: {}", point.iterations);
+                println!("  rms:        {:.2e}", point.rmsbl);
+                if point.converged {
                     println!("  Status:     Converged");
                 } else {
                     println!("  Status:     NOT CONVERGED");
+                }
+
+                if let Some(ref path) = output {
+                    let result = AnalysisOutput::from_point(&point, airfoil_name, &spec, false);
+                    let json_str = result.to_json().expect("Failed to serialize results");
+                    std::fs::write(path, &json_str).expect("Failed to write output file");
+                    println!();
+                    println!("Wrote JSON to {}", path.display());
                 }
             }
         }
@@ -327,18 +344,24 @@ fn main() {
             ncrit,
             json,
             output,
+            iter,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
             let airfoil = create_paneled_airfoil(&geometry);
 
             // Set up polar configuration
-            let conditions = FlowConditions::new(reynolds, mach, ncrit, airfoil.chord);
             let config = PolarConfig {
                 alpha_max,
                 alpha_min,
                 alpha_step,
-                conditions,
+                spec: FlowSpec {
+                    re: reynolds,
+                    mach,
+                    ncrit,
+                    itmax: iter,
+                    ..FlowSpec::default()
+                },
                 ..Default::default()
             };
 

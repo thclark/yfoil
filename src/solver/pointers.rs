@@ -95,6 +95,8 @@ pub fn iblpan(st: &mut BlState) {
         st.ipan[1][st.iblte[1] + iw] = st.ipan[2][st.iblte[2] + iw];
         st.vti[1][st.iblte[1] + iw] = 1.0;
     }
+    // LIPAN = .TRUE.
+    st.lipan = true;
 }
 
 /// XICALC (xpanel.f): BL arc length XSSI on each side and along the wake, and the TE
@@ -235,6 +237,111 @@ pub fn xifset(st: &BlState, is: usize) -> f64 {
         xiforc = st.xssi[is][st.iblte[is]];
     }
     xiforc
+}
+
+/// STMOVE: moves the stagnation point location to a new panel. Re-runs STFIND on the current
+/// GAM; if IST is unchanged only XICALC is redone, otherwise the pointer layer is rebuilt and
+/// the BL arrays and ITRAN are shifted by IDIF. Always refreshes MASS = DSTR*UEDG.
+pub fn stmove(st: &mut BlState) {
+    // locate new stagnation point arc length SST from GAM distribution
+    let istold = st.ist;
+    stfind(st);
+
+    if istold == st.ist {
+        // recalculate new arc length array
+        xicalc(st);
+    } else {
+        // set new BL position -> panel position pointers
+        iblpan(st);
+        // set new inviscid BL edge velocity UINV from QINV
+        crate::solver::velocity::uicalc(st);
+        // recalculate new arc length array
+        xicalc(st);
+        // set BL position -> system line pointers
+        iblsys(st);
+
+        if st.ist > istold {
+            // increase in number of points on top side (IS=1)
+            let idif = st.ist - istold;
+            st.itran[1] += idif;
+            st.itran[2] -= idif;
+
+            // move top side BL variables downstream
+            for ibl in (idif + 2..=st.nbl[1]).rev() {
+                st.ctau[1][ibl] = st.ctau[1][ibl - idif];
+                st.thet[1][ibl] = st.thet[1][ibl - idif];
+                st.dstr[1][ibl] = st.dstr[1][ibl - idif];
+                st.uedg[1][ibl] = st.uedg[1][ibl - idif];
+            }
+
+            // set BL variables between old and new stagnation point
+            let dudx = st.uedg[1][idif + 2] / st.xssi[1][idif + 2];
+            for ibl in (2..=idif + 1).rev() {
+                st.ctau[1][ibl] = st.ctau[1][idif + 2];
+                st.thet[1][ibl] = st.thet[1][idif + 2];
+                st.dstr[1][ibl] = st.dstr[1][idif + 2];
+                st.uedg[1][ibl] = dudx * st.xssi[1][ibl];
+            }
+
+            // move bottom side BL variables upstream
+            for ibl in 2..=st.nbl[2] {
+                st.ctau[2][ibl] = st.ctau[2][ibl + idif];
+                st.thet[2][ibl] = st.thet[2][ibl + idif];
+                st.dstr[2][ibl] = st.dstr[2][ibl + idif];
+                st.uedg[2][ibl] = st.uedg[2][ibl + idif];
+            }
+        } else {
+            // increase in number of points on bottom side (IS=2)
+            let idif = istold - st.ist;
+            st.itran[1] -= idif;
+            st.itran[2] += idif;
+
+            // move bottom side BL variables downstream
+            for ibl in (idif + 2..=st.nbl[2]).rev() {
+                st.ctau[2][ibl] = st.ctau[2][ibl - idif];
+                st.thet[2][ibl] = st.thet[2][ibl - idif];
+                st.dstr[2][ibl] = st.dstr[2][ibl - idif];
+                st.uedg[2][ibl] = st.uedg[2][ibl - idif];
+            }
+
+            // set BL variables between old and new stagnation point
+            let dudx = st.uedg[2][idif + 2] / st.xssi[2][idif + 2];
+            for ibl in (2..=idif + 1).rev() {
+                st.ctau[2][ibl] = st.ctau[2][idif + 2];
+                st.thet[2][ibl] = st.thet[2][idif + 2];
+                st.dstr[2][ibl] = st.dstr[2][idif + 2];
+                st.uedg[2][ibl] = dudx * st.xssi[2][ibl];
+            }
+
+            // move top side BL variables upstream
+            for ibl in 2..=st.nbl[1] {
+                st.ctau[1][ibl] = st.ctau[1][ibl + idif];
+                st.thet[1][ibl] = st.thet[1][ibl + idif];
+                st.dstr[1][ibl] = st.dstr[1][ibl + idif];
+                st.uedg[1][ibl] = st.uedg[1][ibl + idif];
+            }
+        }
+
+        // tweak Ue so it's not zero, in case stag. point is right on node
+        let ueps = 1.0e-7;
+        for is in 1..=2 {
+            for ibl in 2..=st.nbl[is] {
+                let i = st.ipan[is][ibl];
+                if st.uedg[is][ibl] <= ueps {
+                    st.uedg[is][ibl] = ueps;
+                    st.qvis[i] = st.vti[is][ibl] * ueps;
+                    st.gam[i] = st.vti[is][ibl] * ueps;
+                }
+            }
+        }
+    }
+
+    // set new mass array since Ue has been tweaked
+    for is in 1..=2 {
+        for ibl in 2..=st.nbl[is] {
+            st.mass[is][ibl] = st.dstr[is][ibl] * st.uedg[is][ibl];
+        }
+    }
 }
 
 #[cfg(test)]

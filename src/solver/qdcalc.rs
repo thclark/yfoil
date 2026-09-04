@@ -263,4 +263,6 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
     for j in 1..=np {
         st.dij[n + 1][j] = st.dij[n][j];
     }
+    // LWDIJ = .TRUE.
+    st.lwdij = true;
 }

@@ -296,3 +296,20 @@ the under-relaxed update with the CTAU ≤ 0.25 clamp for IBL ≥ ITRAN, DSLIM, 
 the negative-Ue island fix-up and the wake array equating. `UNEW/U_AC/QNEW/Q_AC` are locals (XFOIL
 EQUIVALENCEs them onto VA/VB; `blsolv` consumes its input, so nothing can read VA/VB after the
 solve). `CL`/`ALFA` updated in place on `BlState`.
+
+Stage S9: `VISCAL → solver::viscal::viscal(&mut st, sys, niter, waklen, trace) -> bool`
+(prologue XYWAKE/QWCALC/QISET/STFIND/IBLPAN/XICALC/IBLSYS/UICALC/QDCALC guarded by
+`LWAKE/LIPAN/LBLINI/LWDIJ`, then SETBL → BLSOLV → UPDATE → MRCL+COMSET | QISET+UICALC → QVFUE →
+GAMQV → STMOVE → CLCALC → CDCALC to `RMSBL < EPS1`; `ViscalIter` mirrors `viscal_iter.dat`).
+`STMOVE → solver::pointers::stmove`, `CPCALC/CLCALC/CDCALC/COMSET → solver::clcalc::{cpcalc,
+clcalc, cdcalc, comset}`, `SPECAL → solver::specal::specal` and OPER's `ALFA` command →
+`specal::alfa_command` (SPECAL, then the AWAKE/AVISC/MVISC invalidations), OPER `INIT` →
+`analysis::Session::init` (LBLINI toggle). The XFOIL.INC flags/outputs on `BlState`: `LWAKE,
+LIPAN, LWDIJ, LVISC, LVCONV, AWAKE, AVISC, MVISC, TKLAM, TKL_MSQ, MINF_CL, REINF_CL, CM, CDP, CD,
+CDF, CL_ALF, CL_MSQ, XCMREF, YCMREF, CPI, CPV`; `LADIJ` stays on `InviscidSystem`; `LGAMU/LQAIJ`
+are the presence of the `InviscidSystem`. XYWAKE sets `LWAKE/AWAKE/LWDIJ`, IBLPAN `LIPAN`,
+QDCALC `LWDIJ`, exactly where XFOIL does. `solver::analysis::{FlowSpec, Session, analyze,
+compute_polar}` is the OPER driver (one persistent `BlState` per session, as XFOIL's COMMON).
+The legacy `SetblState`/station-at-a-time/`bl::wake`/`bl::newton`/`forces` implementations are
+deleted; `panel::solve_inviscid` remains only for the pre-S3 inviscid tests (removed with
+stage G).

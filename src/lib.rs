@@ -19,7 +19,6 @@ pub mod geometry;
 
 // Placeholder modules (to be implemented)
 pub mod bl;
-pub mod forces;
 pub mod output;
 pub mod panel;
 pub mod solver;

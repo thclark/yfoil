@@ -127,6 +127,33 @@ pub struct BlState {
     pub xoctr: [f64; 3],
     pub yoctr: [f64; 3],
     pub tindex: [f64; 3],
+    /// VISCAL-level flags (XFOIL.INC): wake/pointers/DIJ built, viscous mode, converged
+    pub lwake: bool,
+    pub lipan: bool,
+    pub lwdij: bool,
+    pub lvisc: bool,
+    pub lvconv: bool,
+    /// AWAKE/AVISC/MVISC: alpha the wake was built for, alpha and Mach of the converged point
+    pub awake: f64,
+    pub avisc: f64,
+    pub mvisc: f64,
+    /// TKLAM/TKL_MSQ (COMSET), MINF_CL/REINF_CL (VISCAL's MRCL)
+    pub tklam: f64,
+    pub tkl_msq: f64,
+    pub minf_cl: f64,
+    pub reinf_cl: f64,
+    /// Force coefficients (CLCALC/CDCALC) and the moment reference point
+    pub cm: f64,
+    pub cdp: f64,
+    pub cd: f64,
+    pub cdf: f64,
+    pub cl_alf: f64,
+    pub cl_msq: f64,
+    pub xcmref: f64,
+    pub ycmref: f64,
+    /// CPI/CPV: inviscid and viscous Cp at the nodes (1..=N+NW)
+    pub cpi: Vec<f64>,
+    pub cpv: Vec<f64>,
 }
 
 impl BlState {
@@ -223,6 +250,28 @@ impl BlState {
             xoctr: [0.0; 3],
             yoctr: [0.0; 3],
             tindex: [0.0; 3],
+            lwake: false,
+            lipan: false,
+            lwdij: false,
+            lvisc: false,
+            lvconv: false,
+            awake: 0.0,
+            avisc: 0.0,
+            mvisc: 0.0,
+            tklam: 0.0,
+            tkl_msq: 0.0,
+            minf_cl: 0.0,
+            reinf_cl: 0.0,
+            cm: 0.0,
+            cdp: 0.0,
+            cd: 0.0,
+            cdf: 0.0,
+            cl_alf: 0.0,
+            cl_msq: 0.0,
+            xcmref: 0.25,
+            ycmref: 0.0,
+            cpi: vec![0.0; n + nw + 1],
+            cpv: vec![0.0; n + nw + 1],
         }
     }
 
