@@ -124,3 +124,80 @@ pub fn specal(st: &mut BlState, sys: &mut Option<InviscidSystem>) {
         st.cpi = cpcalc(st.n, &st.qinv, st.qinf, st.minf);
     }
 }
+
+/// SPECCL: converges to the specified inviscid CL by Newton iteration on alpha (20 iterations,
+/// |DALFA| ≤ 1e-6), with MINF/REINF set from CLSPEC by MRCL and held fixed.
+pub fn speccl(st: &mut BlState, sys: &mut Option<InviscidSystem>) {
+    // calculate surface vorticity distributions for alpha = 0, 90 degrees
+    if sys.is_none() {
+        *sys = Some(ggcalc(st));
+    }
+
+    // set freestream Mach from specified CL -- Mach will be held fixed
+    let (m_cl, re_cl) = mrcl(st, st.clspec);
+    st.minf_cl = m_cl;
+    st.reinf_cl = re_cl;
+    comset(st);
+
+    // current alpha is the initial guess for Newton variable ALFA
+    let set_gam = |st: &mut BlState| {
+        let cosa = st.alfa.cos();
+        let sina = st.alfa.sin();
+        for i in 1..=st.n {
+            st.gam[i] = cosa * st.qinvu[1][i] + sina * st.qinvu[2][i];
+            st.gam_a[i] = -sina * st.qinvu[1][i] + cosa * st.qinvu[2][i];
+        }
+    };
+    set_gam(st);
+
+    // get corresponding CL, CL_alpha, CL_Mach
+    clcalc(st);
+
+    // Newton loop for alpha to get specified inviscid CL
+    for _ital in 1..=20 {
+        let dalfa = (st.clspec - st.cl) / st.cl_alf;
+        let rlx = 1.0;
+        st.alfa += rlx * dalfa;
+
+        // set new surface speed distribution
+        set_gam(st);
+
+        // set new CL(alpha)
+        clcalc(st);
+
+        if dalfa.abs() <= 1.0e-6 {
+            break;
+        }
+    }
+    // 'SPECCL:  CL convergence failed' if the loop ran out
+
+    // set final surface speed and Cp distributions
+    tecalc(st);
+    qiset(st, st.alfa);
+    if st.lvisc {
+        let nt = st.n + st.nw;
+        st.cpv = cpcalc(nt, &st.qvis, st.qinf, st.minf);
+        st.cpi = cpcalc(nt, &st.qinv, st.qinf, st.minf);
+    } else {
+        st.cpi = cpcalc(st.n, &st.qinv, st.qinf, st.minf);
+    }
+}
+
+/// OPER's `CL` command: LALFA false, ALFA reset to 0 as the Newton initial guess, QINF = 1,
+/// SPECCL, then the wake/converged invalidations.
+pub fn cl_command(st: &mut BlState, sys: &mut Option<InviscidSystem>, clspec: f64) {
+    st.clspec = clspec;
+    st.lalfa = false;
+    st.alfa = 0.0;
+    st.qinf = 1.0;
+    speccl(st, sys);
+    if (st.alfa - st.awake).abs() > 1.0e-5 {
+        st.lwake = false;
+    }
+    if (st.alfa - st.avisc).abs() > 1.0e-5 {
+        st.lvconv = false;
+    }
+    if (st.minf - st.mvisc).abs() > 1.0e-5 {
+        st.lvconv = false;
+    }
+}

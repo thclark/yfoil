@@ -6,7 +6,7 @@
 use crate::geometry::PaneledAirfoil;
 use crate::solver::blstate::BlState;
 use crate::solver::ggcalc::InviscidSystem;
-use crate::solver::specal::{alfa_command, aseq_point};
+use crate::solver::specal::{alfa_command, aseq_point, cl_command};
 use crate::solver::viscal::{viscal, ViscalIter};
 
 /// Flow specification (the OPER settings that must be pinned explicitly).
@@ -142,6 +142,13 @@ impl Session {
     /// OPER `ALFA`: SPECAL for the new angle, then VISCAL(ITMAX) when viscous.
     pub fn alfa(&mut self, alpha: f64) -> OperatingPoint {
         alfa_command(&mut self.st, &mut self.sys, alpha);
+        self.run_viscal(self.spec.itmax)
+    }
+
+    /// OPER `CL`: SPECCL for the specified CL (alpha is the unknown), then VISCAL(ITMAX) when
+    /// viscous — UPDATE then drives alpha so that the viscous CL meets CLSPEC.
+    pub fn cl(&mut self, clspec: f64) -> OperatingPoint {
+        cl_command(&mut self.st, &mut self.sys, clspec);
         self.run_viscal(self.spec.itmax)
     }
 

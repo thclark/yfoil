@@ -321,3 +321,12 @@ does), `INIT` (`Session::init`, the LBLINI toggle that also clears LIPAN), `ALFA
 down to alpha_min; each ASEQ halts after `NSEQEX` (4) consecutive non-converged points, PACC keeps
 only converged points, and the result is stitched ascending. `QDCALC` keeps the airfoil DIJ block
 across calls (LADIJ) and refreshes only the wake part when XYWAKE has moved the wake (LWDIJ).
+
+Stage S11: `SPECCL → solver::specal::speccl` (MRCL(CLSPEC)+COMSET, then the 20-iteration Newton on
+ALFA with CL_ALF to |DALFA| ≤ 1e-6, TECALC, QISET, Cp), OPER's `CL` command →
+`specal::cl_command` (LALFA = .FALSE., ALFA = 0 as the initial guess, SPECCL, invalidations) →
+`Session::cl`; VISCAL then runs its `QISET+UICALC` branch and UPDATE moves ALFA (DAC with
+DALMAX/DALMIN). `MRCL` with MATYP/RETYP = 2 (Re, M ∝ 1/√CL, re-evaluated from CL after every
+UPDATE) is gated by the `naca0012_n60_a2_re1e6_type2` case (`FlowSpec { matyp, retyp }`; the
+pipeline emits OPER `TYPE n`). Minimal cases (`minimal = true`) keep only the `viscal_*.dat`
+records (~50 KB each) so coverage cases stay cheap to track.

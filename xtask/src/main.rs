@@ -30,6 +30,16 @@ struct Case {
     /// of one ALFA per point; ASEQ gives each point ITMAX+5 iterations, as the polar procedure does.
     #[serde(default)]
     polar: bool,
+    /// Fixed-CL points (OPER `CL x`), run after the alpha points
+    #[serde(default)]
+    cls: Vec<f64>,
+    /// OPER `TYPE n`: MATYP = RETYP = n (Mach/Re dependence on CL); 0 = leave XFOIL's default (1)
+    #[serde(default)]
+    matyp: usize,
+    /// Keep only the VISCAL-level records (viscal_*.dat) — for coverage cases that gate on the
+    /// converged points rather than the per-subroutine dumps
+    #[serde(default)]
+    minimal: bool,
     re: f64,
     #[serde(default)]
     mach: f64,
@@ -194,6 +204,9 @@ fn fixtures(flags: &[String]) {
             "VISC {}\nMACH {}\nVPAR\nN {}\n\nITER {}\n",
             case.re, case.mach, case.ncrit, case.iter
         );
+        if case.matyp != 0 {
+            s += &format!("TYPE {}\n", case.matyp);
+        }
         let seq = |s: &mut String, alphas: &[f64]| {
             // ALFA for the first point, ASEQ for the rest (uniform step asserted)
             s.push_str(&format!("ALFA {}\n", alphas[0]));
@@ -224,6 +237,9 @@ fn fixtures(flags: &[String]) {
                     s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
                 }
             }
+        }
+        for c in &case.cls {
+            s += &format!("CL {c}\n");
         }
         s += "\nQUIT\n";
         fs::write(work.join("xfoil.inp"), &s).unwrap();
@@ -256,7 +272,7 @@ fn fixtures(flags: &[String]) {
         let manifest = serde_json::json!({
             "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar },
+                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar, "cls": case.cls, "matyp": case.matyp },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",
@@ -275,6 +291,14 @@ fn fixtures(flags: &[String]) {
                 .iter()
                 .chain(RAW_KEEP.iter())
             {
+                if case.minimal
+                    && !name.starts_with("viscal_")
+                    && !name.starts_with("panels")
+                    && *name != "manifest.json"
+                    && *name != "xfoil.inp"
+                {
+                    continue;
+                }
                 let p = work.join(name);
                 if p.exists() {
                     staged.push((dst.join(name), fs::read(&p).unwrap()));
@@ -282,7 +306,7 @@ fn fixtures(flags: &[String]) {
             }
             for entry in fs::read_dir(&work).unwrap().flatten() {
                 let n = entry.file_name().to_string_lossy().to_string();
-                if n.starts_with("cp_a") || n.starts_with("bl_a") {
+                if !case.minimal && (n.starts_with("cp_a") || n.starts_with("bl_a")) {
                     staged.push((dst.join(&n), fs::read(entry.path()).unwrap()));
                 }
             }

@@ -30,6 +30,32 @@ polar = true
 track = true
 
 [[case]]
+name = "naca0012_n60_cl03_re1e6"         # fixed-CL mode (S11): OPER `CL 0.3` — SPECCL, then VISCAL with alpha as the unknown
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = []
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+cls = [0.3]
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_re1e6_type2"     # MATYP = RETYP = 2 (S11): Re and Mach scale with 1/sqrt(CL) through MRCL
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+matyp = 2
+minimal = true
+track = true
+
+[[case]]
 name = "naca0012_n160_a0_re1e6"         # full-resolution headline case (S9 acceptance)
 airfoil = "naca4:0012"
 n_panels = 160

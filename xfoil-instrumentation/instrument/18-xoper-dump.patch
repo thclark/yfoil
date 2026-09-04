@@ -159,7 +159,7 @@
  C------ fill Newton system for BL variables
          CALL SETBL
  C
-@@ -2989,12 +3101,46 @@
+@@ -2989,6 +3101,7 @@
          CALL GAMQV
  C
  C------ relocate stagnation point
@@ -167,15 +167,16 @@
          CALL STMOVE
  C
  C------ set updated CL,CD
-         CALL CLCALC(N,X,Y,GAM,GAM_A,ALFA,MINF,QINF, XCMREF,YCMREF,
+@@ -2996,6 +3109,40 @@
       &              CL,CM,CDP,CL_ALF,CL_MSQ)
          CALL CDCALC
-+C
+ C
 +C------ INSTRUMENTATION: per-iteration record (after CLCALC/CDCALC, before the test)
 +        LVC = RMSBL .LT. EPS1
 +        NITDONE = ITER
-+        WRITE(77,'(A,2I4,5ES24.16,4I5)') 'IT', NVISCAL, ITER, RMSBL, RLX,
-+     &    CL, CD, CM, ISTB, IST, ITRAN(1), ITRAN(2)
++        WRITE(77,'(A,2I4,5ES24.16,4I5,3ES24.16)') 'IT', NVISCAL, ITER,
++     &    RMSBL, RLX, CL, CD, CM, ISTB, IST, ITRAN(1), ITRAN(2),
++     &    ALFA, MINF, REINF
 +        IF(NVISCAL.EQ.1) THEN
 +        IF(ITER.EQ.1) OPEN(79, FILE='viscal_iter.dat', STATUS='REPLACE')
 +        WRITE(79,'(A,I5)') 'ITER=', ITER
@@ -203,10 +204,11 @@
 +        WRITE(79,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
 +        WRITE(79,'(A,L1)') 'LVCONV=', LVC
 +        ENDIF
- C
++C
  C------ display changes and test for convergence
          IF(RLX.LT.1.0) 
-@@ -3005,7 +3151,8 @@
+      &   WRITE(*,2000) ITER, RMSBL, RMXBL, VMXBL,IMXBL,ISMXBL,RLX
+@@ -3005,7 +3152,8 @@
           WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDPDIF
  c         CDSURF = CDP + CDF
  c         WRITE(*,2025) CDSURF, CDF, CDP
@@ -216,7 +218,7 @@
          IF(RMSBL .LT. EPS1) THEN
           LVCONV = .TRUE.
           AVISC = ALFA
-@@ -3020,8 +3167,76 @@
+@@ -3020,8 +3168,76 @@
        CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
        CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
        IF(LFLAP) CALL MHINGE
@@ -294,7 +296,7 @@
          is = 1
          hkmax = 0.
          hkm = 0.0
-@@ -3092,7 +3307,20 @@
+@@ -3092,7 +3308,20 @@
          close(lu)
  
  

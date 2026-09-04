@@ -230,14 +230,16 @@ SPECCL), `xsolve.f` (BLSOLV, GAUSS, LUDCMP/BAKSUB), `xfoil.f` (CLCALC, CDCALC, M
 
 Non-interactive XFOIL scripts always start with `PLOP` / `G F` to disable graphics. Defaults that must be pinned
 explicitly in every equivalence run because the two codes' defaults differ: `ITER` (XFOIL `ITMAX=20`), `VACCEL`
-(0.01), `WAKLEN` (1.0), `MATYP` (1 — pinned for the whole equivalence campaign; `MRCL` is added last).
+(0.01), `WAKLEN` (1.0), `TYPE` (MATYP/RETYP; 1 unless the case says otherwise — `MRCL` is gated by the TYPE 2 case).
 
 ## Fixture pipeline
 
 `cargo xtask fixtures [--case NAME] [--verify] [--big]` reads `fixtures/cases.toml`, builds the reference if
 needed, generates panels **with YFoil**, runs instrumented XFOIL via `LOAD`, asserts the bitwise geometry
 handoff, and keeps the raw dumps plus `manifest.json` under `tests/fixtures/xfoil/<case>/` (`track = true`,
-budget 8 MB) or `target/fixtures/<case>/`. The tracked CI reference case is
+budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
+(drive with `ALFA a0 / ASEQ a1 aN da` like the polar procedure; ASEQ points get ITMAX+5), `cls` (OPER `CL x`
+points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat` records — for coverage cases). The tracked CI reference case is
 `naca0012_n60_a2_re1e6` (`tests/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
 plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a

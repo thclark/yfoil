@@ -41,6 +41,9 @@ enum Commands {
         /// Angle of attack in degrees
         #[arg(short, long, default_value_t = 0.0)]
         alpha: f64,
+        /// Specified lift coefficient (fixed-CL mode: alpha becomes the unknown; overrides --alpha)
+        #[arg(long)]
+        cl: Option<f64>,
 
         /// Reynolds number
         #[arg(short, long, default_value_t = 1_000_000.0)]
@@ -242,6 +245,7 @@ fn main() {
         Commands::Analyze {
             file,
             alpha,
+            cl,
             reynolds,
             mach,
             ncrit,
@@ -265,7 +269,11 @@ fn main() {
                 ..FlowSpec::default()
             };
             let mut session = Session::new(&airfoil, spec.clone());
-            let point = session.alfa(alpha_rad);
+            let point = match cl {
+                Some(clspec) => session.cl(clspec),
+                None => session.alfa(alpha_rad),
+            };
+            let alpha = point.alpha.to_degrees();
 
             if inviscid {
                 println!("Inviscid Analysis Results");
