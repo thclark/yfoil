@@ -199,11 +199,17 @@ field or state variable is added, renamed or re-represented.
 ## CLI
 
 ```
-yfoil geometry - convert | naca | repanel | info | plot        (alias: geom)
-yfoil analyze  - single operating point (--alpha or --cl)
+yfoil geometry - convert | naca | repanel | info                (alias: geom)
+yfoil analyze  - single operating point (--alpha or --cl); -o writes forces + geometry + wake +
+                 every per-station BL quantity (live closures and XFOIL's stored arrays)
 yfoil polar    - alpha sweep (state machine: 0°→max, reinitialise, 0°→min, stitched ascending);
-                 --label names the curve, -o writes the polar JSON
-yfoil plot     - analysis <file> | polar <file>... (feature-gated; several polars overlay for comparison)
+                 --label names the curve, -o writes the polar JSON, --distributions embeds a full
+                 point record at every sweep point
+yfoil plot     - foil <file>... | analysis <file> | polar <file>...   (feature-gated)
+                 foil: geometry files (panels only), analysis JSONs (design points, same panels) or
+                 one polar JSON (--alpha selects points); --panels notches|dots|none, --wake,
+                 --quantity dstar,theta,... (hue per quantity, tone + dash per design point, one
+                 scale per quantity), --scale K | --max-offset F, --markers/--no-markers; svg or png
 ```
 
 Analysis commands accept JSON geometry only; use `yfoil geometry convert` for `.dat`. Typical session:
@@ -211,8 +217,9 @@ Analysis commands accept JSON geometry only; use `yfoil geometry convert` for `.
 ```bash
 yfoil geometry naca 4412 -n 160 -o naca4412.json
 yfoil polar naca4412.json --alpha-min -5 --alpha-max 15 --alpha-step 0.5 -r 1e6 --iterations 20 \
-    --label "NACA 4412" -o naca4412_polar.json
+    --label "NACA 4412" --distributions -o naca4412_polar.json
 yfoil plot polar --title "NACA 0012 vs 4412" naca0012_polar.json naca4412_polar.json -o compare.svg
+yfoil plot foil naca4412_polar.json --alpha 0,5,10 --quantity dstar,theta --wake --panels notches -o foil.svg
 ```
 
 ## Reference implementation

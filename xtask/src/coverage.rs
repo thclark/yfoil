@@ -158,9 +158,10 @@ pub(crate) fn run(flags: &[String]) {
     }
 
     // run the cases from their tracked inputs
-    let cases: super::Cases =
-        toml::from_str(&fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("xtask/fixtures-config/cases.toml"))
-            .expect("parse cases.toml");
+    let cases: super::Cases = toml::from_str(
+        &fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("xtask/fixtures-config/cases.toml"),
+    )
+    .expect("parse cases.toml");
     let mut ran: Vec<String> = vec![];
     let mut failures = 0;
     for case in &cases.cases {
@@ -213,9 +214,11 @@ pub(crate) fn run(flags: &[String]) {
     assert!(!ran.is_empty(), "no cases ran");
 
     // read the counters back
-    let spec: Spec =
-        toml::from_str(&fs::read_to_string(root.join("xtask/fixtures-config/coverage.toml")).expect("xtask/fixtures-config/coverage.toml"))
-            .expect("parse coverage.toml");
+    let spec: Spec = toml::from_str(
+        &fs::read_to_string(root.join("xtask/fixtures-config/coverage.toml"))
+            .expect("xtask/fixtures-config/coverage.toml"),
+    )
+    .expect("parse coverage.toml");
     let gcov = gcov_binary();
     let scratch = root.join("target/coverage/_gcov");
     let _ = fs::remove_dir_all(&scratch);

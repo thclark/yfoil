@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use yfoil::geometry::{
     create_paneled_airfoil, naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, read_dat_file,
@@ -10,12 +10,12 @@ use yfoil::geometry::{
     PaneConfig,
 };
 use yfoil::output::{AnalysisOutput, InviscidAnalysisOutput, PolarOutput};
-use yfoil::solver::analysis::{compute_polar, FlowSpec, PolarConfig, Session};
+use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowSpec, PolarConfig, Session};
 
 #[cfg(feature = "plotting")]
 use yfoil::output::{
-    plot_analysis_png, plot_analysis_svg, plot_paneled_png, plot_paneled_svg, plot_polars_png, plot_polars_svg,
-    AnalysisPlotConfig, GeometryPlotConfig, PolarSeries, PolarsPlotConfig,
+    plot_analysis_png, plot_analysis_svg, plot_foil, plot_polars_png, plot_polars_svg, AnalysisPlotConfig, BlQuantity,
+    DesignPoint, FoilPlotConfig, ImageFormat, MarkerSet, OffsetScale, PanelStyle, PolarSeries, PolarsPlotConfig,
 };
 
 /// YFoil - Rust-based aerofoil analysis tool
@@ -112,6 +112,11 @@ enum Commands {
         #[arg(long, alias = "iter", default_value_t = 20)]
         iterations: usize,
 
+        /// Embed the full point record (geometry, wake, boundary layer) of every sweep point in the
+        /// JSON, for `yfoil plot foil polar.json --alpha ...`
+        #[arg(long)]
+        distributions: bool,
+
         /// Output file path
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -124,8 +129,98 @@ enum Commands {
     },
 }
 
+/// Panel node rendering for `yfoil plot foil`
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum PanelStyleArg {
+    /// Plain surface line
+    None,
+    /// Short outward tick at every node along the spline normal (XFOIL PANPLT)
+    Notches,
+    /// Black dot at every node
+    Dots,
+}
+
+/// Output image format for `yfoil plot foil`
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum FormatArg {
+    Svg,
+    Png,
+}
+
 #[derive(Subcommand, Debug)]
 enum PlotAction {
+    /// Plot the foil: panels, wake, boundary-layer quantities drawn normal to the surface, and the
+    /// stagnation, transition and separation points. Input: geometry files (panels only, overlaid),
+    /// point analysis JSONs (one design point each; same panels), or one polar JSON written with
+    /// `--distributions` (one design point per alpha)
+    Foil {
+        /// Geometry (.json/.dat), analysis JSON (`yfoil analyze -o`) or polar JSON (`yfoil polar --distributions -o`)
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+
+        /// Polar input only: the embedded alphas to plot, comma-separated (default: all)
+        #[arg(long, allow_hyphen_values = true)]
+        alpha: Option<String>,
+
+        /// Panel node rendering (default: notches for geometry input, none otherwise)
+        #[arg(long, value_enum)]
+        panels: Option<PanelStyleArg>,
+
+        /// Notch length as a fraction of chord (XFOIL PANPLT: 0.01)
+        #[arg(long, default_value_t = 0.01)]
+        notch_length: f64,
+
+        /// Draw the wake panels and, with --quantity, the wake band
+        #[arg(long)]
+        wake: bool,
+
+        /// Boundary-layer quantities to draw normal to the surface, comma-separated:
+        /// dstar theta delta h hk hs ue cf cdis ctau ctq uslp cp mass
+        #[arg(short, long, value_delimiter = ',')]
+        quantity: Vec<String>,
+
+        /// Fixed offset multiplier for every quantity (1 draws δ*, θ and δ at true size); default is auto-scaling
+        #[arg(long, conflicts_with = "max_offset")]
+        scale: Option<f64>,
+
+        /// Auto-scaling: the largest |value| of each quantity over all design points is drawn this
+        /// fraction of chord off the surface
+        #[arg(long, default_value_t = 0.1)]
+        max_offset: f64,
+
+        /// Markers to draw, comma-separated from: stagnation, transition, separation (default: all)
+        #[arg(long, value_delimiter = ',', conflicts_with = "no_markers")]
+        markers: Option<Vec<String>>,
+
+        /// Draw no markers
+        #[arg(long)]
+        no_markers: bool,
+
+        /// Design-point labels in input order (default: the file stem, or "stem α=…°" for polar points)
+        #[arg(long)]
+        label: Vec<String>,
+
+        /// Output file (default: the first input's stem plus _foil.svg)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format (default: from the output extension; svg if ambiguous)
+        #[arg(long, value_enum)]
+        format: Option<FormatArg>,
+
+        /// Plot title (default: the design-point label, or "Foil")
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Image width in pixels
+        #[arg(long, default_value_t = 1200)]
+        width: u32,
+
+        /// Image height in pixels
+        #[arg(long, default_value_t = 500)]
+        height: u32,
+    },
+
     /// Plot Cp and Ue distributions from a single-point analysis
     Analysis {
         /// Path to analysis results JSON file
@@ -250,36 +345,6 @@ enum GeomAction {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-
-    /// Plot geometry (requires 'plotting' feature)
-    Plot {
-        /// Input file path
-        input: PathBuf,
-
-        /// Output file (SVG or PNG based on extension)
-        #[arg(short, long, default_value = "geometry.svg")]
-        output: PathBuf,
-
-        /// Show panel node ticks perpendicular to surface
-        #[arg(long)]
-        nodes: bool,
-
-        /// Length of node ticks as fraction of chord
-        #[arg(long, default_value_t = 0.015)]
-        tick_length: f64,
-
-        /// Plot title
-        #[arg(long)]
-        title: Option<String>,
-
-        /// Image width in pixels
-        #[arg(long, default_value_t = 1200)]
-        width: u32,
-
-        /// Image height in pixels
-        #[arg(long, default_value_t = 400)]
-        height: u32,
-    },
 }
 
 fn main() {
@@ -382,7 +447,7 @@ fn main() {
                 }
 
                 if let Some(ref path) = output {
-                    let result = AnalysisOutput::from_point(&point, airfoil_name, &spec, false);
+                    let result = AnalysisOutput::from_session(&session, &point, airfoil_name, &spec, false);
                     let json_str = result.to_json().expect("Failed to serialize results");
                     std::fs::write(path, &json_str).expect("Failed to write output file");
                     println!();
@@ -402,10 +467,12 @@ fn main() {
             label,
             output,
             iterations,
+            distributions,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
             let airfoil = create_paneled_airfoil(&geometry);
+            let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
             // Set up polar configuration
             let config = PolarConfig {
@@ -422,13 +489,22 @@ fn main() {
                 ..Default::default()
             };
 
-            // Run polar sweep
-            let result = compute_polar(&airfoil, &config);
+            // Run polar sweep, capturing every visited point's state when asked to
+            let mut records: Vec<AnalysisOutput> = Vec::new();
+            let result = if distributions {
+                let spec = config.spec.clone();
+                compute_polar_with(&airfoil, &config, &mut |session, p| {
+                    records.push(AnalysisOutput::from_session(session, p, airfoil_name, &spec, false));
+                })
+            } else {
+                compute_polar(&airfoil, &config)
+            };
+            records.sort_by(|a, b| a.result.alpha_deg.partial_cmp(&b.result.alpha_deg).unwrap());
 
             // Create output struct
-            let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
             let mut polar_output = PolarOutput::from_polar(&result, airfoil_name);
             polar_output.label = label;
+            polar_output.distributions = records;
 
             if json {
                 // JSON output
@@ -517,6 +593,127 @@ fn main() {
 #[cfg(feature = "plotting")]
 fn handle_plot(action: PlotAction) {
     match action {
+        PlotAction::Foil {
+            files,
+            alpha,
+            panels,
+            notch_length,
+            wake,
+            quantity,
+            scale,
+            max_offset,
+            markers,
+            no_markers,
+            label,
+            output,
+            format,
+            title,
+            width,
+            height,
+        } => {
+            let inputs: Vec<FoilInput> = files.iter().map(read_foil_input).collect();
+            let stem = |f: &PathBuf| f.file_stem().and_then(|s| s.to_str()).unwrap_or("foil").to_string();
+            let alphas: Option<Vec<f64>> = alpha.as_deref().map(|a| parse_list(a, "alpha"));
+
+            let geometry_only = inputs.iter().all(|i| matches!(i, FoilInput::Geometry(_)));
+            let all_analysis = inputs.iter().all(|i| matches!(i, FoilInput::Analysis(_)));
+            let all_polar = inputs.iter().all(|i| matches!(i, FoilInput::Polar(_)));
+            if !(geometry_only || all_analysis || all_polar) {
+                fail("input files must all be of one kind: geometry, point analysis JSON, or a polar JSON");
+            }
+            if alphas.is_some() && !all_polar {
+                fail("--alpha selects embedded operating points and needs a polar JSON input");
+            }
+            if geometry_only {
+                if !quantity.is_empty() {
+                    fail("geometry input has no boundary layer: --quantity needs analysis or polar JSON input");
+                }
+                if wake {
+                    fail("geometry input has no wake: --wake needs analysis or polar JSON input");
+                }
+                if markers.is_some() {
+                    fail("geometry input has no boundary layer: --markers needs analysis or polar JSON input");
+                }
+            }
+
+            let mut points: Vec<DesignPoint> = Vec::new();
+            match inputs.len() {
+                n if all_polar && n > 1 => fail("give one polar JSON; several design points come from --alpha"),
+                _ => {}
+            }
+            for (file, input) in files.iter().zip(inputs) {
+                match input {
+                    FoilInput::Geometry(g) => {
+                        points.push(DesignPoint::from_geometry(stem(file), &create_paneled_airfoil(&g)))
+                    }
+                    FoilInput::Analysis(a) => points.push(DesignPoint::from_analysis(stem(file), *a)),
+                    FoilInput::Polar(p) => match DesignPoint::from_polar(&stem(file), &p, alphas.as_deref()) {
+                        Ok(ps) => points.extend(ps),
+                        Err(e) => fail(&e.to_string()),
+                    },
+                }
+            }
+            for (p, l) in points.iter_mut().zip(&label) {
+                p.label = l.clone();
+            }
+
+            let quantities: Vec<BlQuantity> = quantity
+                .iter()
+                .map(|q| q.parse::<BlQuantity>().unwrap_or_else(|e| fail(&e)))
+                .collect();
+            let markers = if no_markers || geometry_only {
+                MarkerSet::NONE
+            } else if let Some(list) = markers {
+                let mut m = MarkerSet::NONE;
+                for name in list {
+                    match name.trim().to_ascii_lowercase().as_str() {
+                        "stagnation" => m.stagnation = true,
+                        "transition" => m.transition = true,
+                        "separation" => m.separation = true,
+                        other => fail(&format!(
+                            "unknown marker '{other}' (expected stagnation, transition or separation)"
+                        )),
+                    }
+                }
+                m
+            } else {
+                MarkerSet::ALL
+            };
+            let panels = match panels {
+                Some(PanelStyleArg::None) => PanelStyle::None,
+                Some(PanelStyleArg::Notches) => PanelStyle::Notches,
+                Some(PanelStyleArg::Dots) => PanelStyle::Dots,
+                None if geometry_only => PanelStyle::Notches,
+                None => PanelStyle::None,
+            };
+            let title = title.or_else(|| if all_polar { Some(stem(&files[0])) } else { None });
+            let config = FoilPlotConfig {
+                width,
+                height,
+                title,
+                panels,
+                notch_length,
+                show_wake: wake,
+                quantities,
+                scale: match scale {
+                    Some(k) => OffsetScale::Fixed(k),
+                    None => OffsetScale::Auto { max_offset },
+                },
+                markers,
+                ..Default::default()
+            };
+
+            let output = output.unwrap_or_else(|| PathBuf::from(format!("{}_foil.svg", stem(&files[0]))));
+            let format = match format {
+                Some(FormatArg::Svg) => ImageFormat::Svg,
+                Some(FormatArg::Png) => ImageFormat::Png,
+                None => ImageFormat::from_path(&output),
+            };
+            match plot_foil(&points, &output, format, &config) {
+                Ok(()) => println!("Wrote foil plot to {}", output.display()),
+                Err(e) => fail(&format!("Error creating plot: {e}")),
+            }
+        }
         PlotAction::Analysis {
             file,
             output,
@@ -622,6 +819,57 @@ fn handle_plot(action: PlotAction) {
             }
         }
     }
+}
+
+/// One input file of `yfoil plot foil`
+#[cfg(feature = "plotting")]
+enum FoilInput {
+    Geometry(Geometry),
+    Analysis(Box<AnalysisOutput>),
+    Polar(Box<PolarOutput>),
+}
+
+/// Geometry (.dat, or JSON with `x_c`), analysis JSON (`result` + `geometry`) or polar JSON
+/// (`points`), by trying the parsers in that order of specificity
+#[cfg(feature = "plotting")]
+fn read_foil_input(path: &PathBuf) -> FoilInput {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext == "dat" {
+        return FoilInput::Geometry(read_geometry_auto(path));
+    }
+    let text =
+        std::fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("Error reading {}: {e}", path.display())));
+    if let Ok(p) = serde_json::from_str::<PolarOutput>(&text) {
+        return FoilInput::Polar(Box::new(p));
+    }
+    if let Ok(a) = serde_json::from_str::<AnalysisOutput>(&text) {
+        return FoilInput::Analysis(Box::new(a));
+    }
+    if let Ok(g) = serde_json::from_str::<Geometry>(&text) {
+        return FoilInput::Geometry(g);
+    }
+    fail(&format!(
+        "{}: not a geometry, analysis or polar JSON (analysis JSON must come from this version's `yfoil analyze -o`)",
+        path.display()
+    ))
+}
+
+/// Comma-separated numbers
+#[cfg(feature = "plotting")]
+fn parse_list(text: &str, what: &str) -> Vec<f64> {
+    text.split(',')
+        .map(|t| {
+            t.trim()
+                .parse::<f64>()
+                .unwrap_or_else(|_| fail(&format!("--{what}: '{t}' is not a number")))
+        })
+        .collect()
+}
+
+#[cfg(feature = "plotting")]
+fn fail(msg: &str) -> ! {
+    eprintln!("{msg}");
+    std::process::exit(1);
 }
 
 #[cfg(feature = "plotting")]
@@ -805,64 +1053,6 @@ fn handle_geom(action: GeomAction) {
             } else {
                 // Print summary to stdout
                 print_geometry_info(&info.summary);
-            }
-        }
-
-        GeomAction::Plot {
-            input,
-            output,
-            nodes,
-            tick_length,
-            title,
-            width,
-            height,
-        } => {
-            let geometry = read_geometry_auto(&input);
-            let airfoil = create_paneled_airfoil(&geometry);
-
-            #[cfg(feature = "plotting")]
-            {
-                let config = GeometryPlotConfig {
-                    width,
-                    height,
-                    show_nodes: nodes,
-                    tick_length,
-                    title,
-                    ..Default::default()
-                };
-
-                // Determine output format from extension
-                let ext = output
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("svg")
-                    .to_lowercase();
-
-                let result = match ext.as_str() {
-                    "png" => plot_paneled_png(&airfoil, &output, &config),
-                    _ => plot_paneled_svg(&airfoil, &output, &config),
-                };
-
-                match result {
-                    Ok(()) => println!("Wrote plot to {}", output.display()),
-                    Err(e) => {
-                        eprintln!("Error creating plot: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            }
-
-            #[cfg(not(feature = "plotting"))]
-            {
-                let _ = airfoil;
-                let _ = output;
-                let _ = nodes;
-                let _ = tick_length;
-                let _ = title;
-                let _ = width;
-                let _ = height;
-                eprintln!("Plotting feature not enabled. Rebuild with: cargo build --features plotting");
-                std::process::exit(1);
             }
         }
     }

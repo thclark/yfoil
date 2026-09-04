@@ -359,3 +359,42 @@ GGCALC/PSILIN on `BlState` are the inviscid solve.
 | `IDAMP` (OPER `DAMP` toggle) | `BlState.idamp`, `FlowSpec.idamp` | 0/false = envelope e^n (`DAMPL`), 1/true = modified envelope (`DAMPL2`) |
 | `IDAMPV` (SETBL: `IDAMPV = IDAMP`) | `BLGlobalParams.idampv` | read by `axset` (AXSET's `IF(IDAMPV.EQ.0)`), reached through `trchek` and `bldif` |
 | `DAMPL2` | `bl::system::dampl2` | verbatim; gated end-to-end by `naca0012_n60_a2_re1e6_damp` |
+
+## Output: BLDUMP ↔ `BlSideOutput` (2026-09-04)
+
+`yfoil analyze -o` / `yfoil polar --distributions` write `AnalysisOutput.boundary_layer`
+(`src/output/foil.rs`): three struct-of-arrays sides (`upper` = side 1 to IBLTE, `lower` = side 2
+to IBLTE, `wake` = side 2 past IBLTE), each column one entry per station.
+
+| XFOIL DUMP column (`xoper.f:1955-1995`) | XFOIL source | `BlSideOutput` column | How YFoil forms it |
+|---|---|---|---|
+| `s`, `x`, `y` | `S(I), X(I), Y(I)` | `x`, `y` (`xssi` is XSSI, not S) | verbatim node coordinates |
+| `Ue/Vinf` | `(GAM/QINF)(1-TKLAM)/(1-TKLAM(GAM/QINF)²)` — signed by GAM, negative on the lower side | `ue` | BLPRV's `U2/QINF` on UEDG: the same transformation, unsigned |
+| `Dstar`, `Theta` | `DSTR, THET` (post-UPDATE) | `dstr`, `thet` | verbatim |
+| `H` | `DSTR/THET` | `h` | BLKIN on the primaries (wake: without WGAP, as BLKIN) |
+| `HK` | `HKIN(H, AMSQ)` live | `hk` | BLKIN's HKIN, unclamped |
+| `Cf` | `TAU/(½QINF²)`, TAU **lagged** | `cf` (live), `stored.cf_dump` (DUMP's) | live: BLVAR's `CF2` scaled `R2·U2²/QINF²` |
+| `H*` | `TSTR/THET`, TSTR **lagged** | `hs` (live), `stored.hs_dump` (DUMP's) | live: BLVAR's `HS2` |
+| `CDIS` (`Di` in the wide format) | `DIS/QINF³`, DIS **lagged** | `cdis` (live), `stored.dis` | live: `R2·U2³·DI2·HS2·½/QINF³` |
+| — | `DELT, CTQ, USLP` (VPLO) **lagged** | `delta`, `ctq`, `uslp` (live), `stored.delt/ctq/uslp` | live: BLVAR's `DE2, CQ2, 1.6/(1+US2)` |
+| — | `CTAU, MASS` | `ctau`, `mass` | verbatim |
+| — | `CPV(I)` | `cp` | verbatim |
+
+**Why "lagged".** SETBL calls MRCHDU at the top of every Newton iteration (`xbl.f:93`); MRCHDU
+and SETBL store `TAU, DIS, CTQ, DELT, USLP, TSTR` from the state entering that iteration
+(`xbl.f:277-282, 1157-1167`), then BLSOLV/UPDATE correct `THET, DSTR, UEDG, CTAU, MASS` and nothing
+refreshes the closure arrays. So DUMP's `Cf`, `H*`, `K`, `tau`, `Di` and VPLO's `CF`, `CD`, `DELT`
+are one Newton correction behind `Dstar`, `Theta`, `Ue`, `H`, `HK`, `N`, `CT` (`H*` and `K` divide a
+lagged TSTR by a current THET). The mismatch is bounded by the convergence test (RMSBL < 1e-4) on a
+converged point and unbounded on an unconverged one. It is an inconsistency in XFOIL's own output,
+not a solver error; `blplot.f:1387` has the `TSTR/THET` plot commented out in favour of a live
+HKIN. YFoil stores the same lagged arrays (fixture-gated: `tests/xfoil_mrchdu_tests.rs`,
+`tests/xfoil_update_tests.rs`) and emits them under `stored`; its canonical columns are the closures
+re-evaluated live on the converged primaries. A side-by-side of live `hs` against DUMP's `H*`
+therefore differs at the ~RMSBL level (`tests/foil_output_tests.rs` bounds it).
+
+**Markers** (`BoundaryLayerOutput`): `stagnation` = `IST, SST` and the spline point at SST;
+`transition[is]` = `ITRAN, TFORCE, XOCTR, YOCTR` and the spline point at `SST ∓ XSSITR`;
+`wake_split` = CPDISP's `DSF1, DSF2` (`xplots.f:714-721`); `derived_separation` is YFoil's (XFOIL
+reports no separation location): the sign change of the live `cf` between consecutive surface
+stations, linear in S, on the spline.

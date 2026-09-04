@@ -92,6 +92,12 @@ pub struct PolarOutput {
     pub summary: PolarSummary,
     /// Whether sweep completed without excessive failures
     pub completed: bool,
+    /// Full point records (geometry, wake and BL distributions) at every point the sweep visited,
+    /// converged or not, ascending in alpha; written by `yfoil polar --distributions`. A point
+    /// reached inside a sweep starts from the previous alpha's BL and is not the same solve as
+    /// `yfoil analyze` at that alpha.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub distributions: Vec<AnalysisOutput>,
 }
 
 /// Summary statistics for a polar
@@ -139,6 +145,7 @@ impl PolarOutput {
             points,
             summary,
             completed: result.completed,
+            distributions: Vec::new(),
         }
     }
 
@@ -148,7 +155,8 @@ impl PolarOutput {
     }
 }
 
-/// Single-point analysis result
+/// Single-point analysis result: forces, the geometry as solved (with the wake), and every
+/// per-station boundary-layer quantity (see [`crate::output::BoundaryLayerOutput`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisOutput {
     /// Airfoil name/description
@@ -159,21 +167,34 @@ pub struct AnalysisOutput {
     pub result: OperatingPoint,
     /// Inviscid-only mode
     pub inviscid_only: bool,
+    /// Panel nodes, normals and (after a viscous solve) the wake
+    pub geometry: crate::output::FoilGeometryOutput,
+    /// Boundary-layer distributions and markers; `None` for an inviscid point
+    pub boundary_layer: Option<crate::output::BoundaryLayerOutput>,
 }
 
 impl AnalysisOutput {
-    /// Create from an analysis operating point
-    pub fn from_point(
+    /// Create from a session's state after an operating point
+    pub fn from_session(
+        session: &crate::solver::analysis::Session,
         p: &crate::solver::analysis::OperatingPoint,
         airfoil_name: &str,
         spec: &crate::solver::analysis::FlowSpec,
         inviscid_only: bool,
     ) -> Self {
+        let st = &session.st;
+        let boundary_layer = if st.lvisc && st.lblini {
+            Some(crate::output::BoundaryLayerOutput::from_state(st))
+        } else {
+            None
+        };
         Self {
             airfoil: airfoil_name.to_string(),
             conditions: FlowConditionsOutput::from_spec(spec),
             result: OperatingPoint::from_point(p),
             inviscid_only,
+            geometry: crate::output::FoilGeometryOutput::from_state(st),
+            boundary_layer,
         }
     }
 

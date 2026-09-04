@@ -75,33 +75,6 @@ pub struct OperatingPoint {
     pub trace: Vec<ViscalIter>,
 }
 
-/// BL quantities at one station, as XFOIL's `DUMP` reports them.
-#[derive(Debug, Clone, Default)]
-pub struct StationRecord {
-    pub is: usize,
-    pub ibl: usize,
-    /// Panel/wake node index IPAN
-    pub i: usize,
-    pub x: f64,
-    pub y: f64,
-    /// XSSI
-    pub xssi: f64,
-    /// UEDG / QINF
-    pub ue: f64,
-    pub dstar: f64,
-    pub theta: f64,
-    /// TAU / (0.5 QINF²)
-    pub cf: f64,
-    /// DSTR/THET
-    pub h: f64,
-    /// TSTR/THET
-    pub hs: f64,
-    /// CPV at the node
-    pub cp: f64,
-    /// CTAU (amplification N ahead of transition)
-    pub ctau: f64,
-}
-
 /// A persistent analysis session: the geometry, inviscid system and BL state that XFOIL keeps
 /// in COMMON between OPER commands.
 #[derive(Debug, Clone)]
@@ -193,36 +166,6 @@ impl Session {
             trace,
         }
     }
-
-    /// BL distributions of the current state, both sides then wake (side 2's wake stations),
-    /// in XFOIL's `DUMP` order.
-    pub fn stations(&self) -> Vec<StationRecord> {
-        let st = &self.st;
-        let mut out = Vec::new();
-        for is in 1..=2 {
-            for ibl in 2..=st.nbl[is] {
-                let i = st.ipan[is][ibl];
-                let thet = st.thet[is][ibl];
-                out.push(StationRecord {
-                    is,
-                    ibl,
-                    i,
-                    x: st.x[i],
-                    y: st.y[i],
-                    xssi: st.xssi[is][ibl],
-                    ue: st.uedg[is][ibl] / st.qinf,
-                    dstar: st.dstr[is][ibl],
-                    theta: thet,
-                    cf: st.tau[is][ibl] / (0.5 * st.qinf * st.qinf),
-                    h: st.dstr[is][ibl] / thet,
-                    hs: st.tstr[is][ibl] / thet,
-                    cp: st.cpv[i],
-                    ctau: st.ctau[is][ibl],
-                });
-            }
-        }
-        out
-    }
 }
 
 /// Single operating point from scratch (fresh session).
@@ -298,6 +241,18 @@ impl PolarResult {
 /// with one persistent session so each point starts from the previous point's BL, and each
 /// ASEQ halting after NSEQEX consecutive non-converged points. Points are stitched ascending.
 pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarResult {
+    compute_polar_with(airfoil, config, &mut |_, _| {})
+}
+
+/// [`compute_polar`] with an observer called after every point the sweep visits, converged or
+/// not, with the session in that point's state (before the next SPECAL moves it on). This is how
+/// `yfoil polar --distributions` captures the BL of each point: a point reached inside a sweep
+/// starts from the previous alpha's BL and is not the same solve as a fresh `analyze`.
+pub fn compute_polar_with(
+    airfoil: &PaneledAirfoil,
+    config: &PolarConfig,
+    observe: &mut dyn FnMut(&Session, &OperatingPoint),
+) -> PolarResult {
     let step = config.alpha_step.abs();
     let mut session = Session::new(airfoil, config.spec.clone());
     let mut points = Vec::new();
@@ -319,47 +274,58 @@ pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarRes
             failed.push(p.alpha);
         }
     };
-    let aseq =
-        |session: &mut Session, alphas: Vec<f64>, points: &mut Vec<OperatingPoint>, failed: &mut Vec<f64>| -> bool {
-            let mut iseqex = 0;
-            for adeg in alphas {
-                let p = session.aseq(adeg.to_radians());
-                let conv = p.converged;
-                record(p, points, failed);
-                if session.st.lvisc && !conv {
-                    iseqex += 1;
-                    if iseqex >= config.nseqex {
-                        // 'Sequence halted since previous N points did not converge'
-                        return false;
-                    }
-                } else {
-                    iseqex = 0;
+    let aseq = |session: &mut Session,
+                alphas: Vec<f64>,
+                points: &mut Vec<OperatingPoint>,
+                failed: &mut Vec<f64>,
+                observe: &mut dyn FnMut(&Session, &OperatingPoint)|
+     -> bool {
+        let mut iseqex = 0;
+        for adeg in alphas {
+            let p = session.aseq(adeg.to_radians());
+            observe(session, &p);
+            let conv = p.converged;
+            record(p, points, failed);
+            if session.st.lvisc && !conv {
+                iseqex += 1;
+                if iseqex >= config.nseqex {
+                    // 'Sequence halted since previous N points did not converge'
+                    return false;
                 }
+            } else {
+                iseqex = 0;
             }
-            true
-        };
+        }
+        true
+    };
 
     // ALFA 0, ASEQ step alpha_max step
-    record(session.alfa(0.0), &mut points, &mut failed);
+    let p = session.alfa(0.0);
+    observe(&session, &p);
+    record(p, &mut points, &mut failed);
     if config.alpha_max >= step {
         completed &= aseq(
             &mut session,
             aseq_alphas(step, config.alpha_max, step),
             &mut points,
             &mut failed,
+            observe,
         );
     }
 
     // INIT, ALFA -step, ASEQ -2step alpha_min -step
     if config.alpha_min <= -step {
         session.init();
-        record(session.alfa(-step.to_radians()), &mut points, &mut failed);
+        let p = session.alfa(-step.to_radians());
+        observe(&session, &p);
+        record(p, &mut points, &mut failed);
         if config.alpha_min <= -2.0 * step {
             completed &= aseq(
                 &mut session,
                 aseq_alphas(-2.0 * step, config.alpha_min, -step),
                 &mut points,
                 &mut failed,
+                observe,
             );
         }
     }

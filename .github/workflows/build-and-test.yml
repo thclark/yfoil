@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets --all-features -- -D warnings
 
   no-deviations:
     # Rule 2, mechanised: the vocabulary of "temporary" algorithm changes must not
@@ -43,6 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: cargo build --all-targets
       - run: cargo test --all-targets --no-fail-fast
+      - run: cargo test --all-targets --features plotting --no-fail-fast
       - run: cargo build --examples
 
   xfoil-parity:
