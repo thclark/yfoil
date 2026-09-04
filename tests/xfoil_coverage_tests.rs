@@ -10,6 +10,14 @@
 //! | `naca0012_n60_a12_re1e6` | high alpha: RLX limiting, Hk clamps, negative-Ue fix-up |
 //! | `naca0012_n60_a4_re1e5` | low Re: laminar separation, MRCHUE DIRECT switch (HLMAX/HTMAX) |
 //! | `naca0012_n60_a2_re1e6_xtr03` | XTR 0.3 0.3: XIFSET with XSTRIP < 1, TRCHEK2 forced transition |
+//! | `naca0012_n60_a2_repeat_re1e6` | the same alpha twice: VISCAL entered with LWAKE/LWDIJ/LVCONV already set |
+//! | `naca0012_n60_a2_cl03_re1e6` | CL after a converged alpha: SPECCL with LGAMU/LQAIJ valid |
+//! | `naca0012_n60_a2_re1e6_type3` | TYPE 3 (MATYP 1, RETYP 3): MRCL's 1/CL Re scaling |
+//! | `naca0012_n60_a2_re1e6_m03_type2` | MATYP = 2 with M > 0: SPECAL's Mach–CL Newton loop |
+//! | `naca0012_n60_a2_re1e6_xtr_coinc` | trip in the natural-transition interval: TRCHEK2 TRFREE .AND. TRFORC |
+//!
+//! The last five were added from the gcov measurement (`cargo xtask coverage`,
+//! `docs/validation/coverage.md`): each wakes branches the earlier set left open.
 
 mod fixtures;
 mod utilities;
@@ -252,4 +260,69 @@ fn test_high_alpha_iteration_18_replay_from_xfoil_state() {
 #[test]
 fn test_high_alpha_iteration_19_replay_from_xfoil_state() {
     replay_iteration("naca0012_n60_a12_re1e6", 12.0, 19);
+}
+
+#[test]
+fn test_repeated_alpha_matches_xfoil() {
+    let outcomes = run_case("naca0012_n60_a2_repeat_re1e6", FlowSpec::default(), &[2.0, 2.0]);
+    assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
+}
+
+#[test]
+fn test_cl_after_alpha_matches_xfoil() {
+    let case = "naca0012_n60_a2_cl03_re1e6";
+    let dir = case_dir(case);
+    let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).unwrap();
+    let airfoil = create_paneled_airfoil(&geometry);
+    let rec = load(&dir);
+    assert_eq!(rec.points.len(), 2, "{case}: VISCAL call count");
+    let mut session = Session::new(&airfoil, FlowSpec::default());
+    let p = session.alfa(2.0_f64.to_radians());
+    let o1 = check_call(&rec, 1, &p, &session.st, transient_tol(1));
+    let p = session.cl(0.3);
+    let o2 = check_call(&rec, 2, &p, &session.st, transient_tol(2));
+    assert_eq!((o1, o2), (Outcome::Match, Outcome::Match));
+}
+
+#[test]
+fn test_type_3_matches_xfoil() {
+    // XFOIL's TYPE 3 is MATYP = 1, RETYP = 3 (xoper.f:362); MATYP = 3 is never set by TYPE
+    let outcomes = run_case(
+        "naca0012_n60_a2_re1e6_type3",
+        FlowSpec {
+            matyp: 1,
+            retyp: 3,
+            ..FlowSpec::default()
+        },
+        &[2.0],
+    );
+    assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
+}
+
+#[test]
+fn test_matyp_2_with_mach_matches_xfoil() {
+    let outcomes = run_case(
+        "naca0012_n60_a2_re1e6_m03_type2",
+        FlowSpec {
+            mach: 0.3,
+            matyp: 2,
+            retyp: 2,
+            ..FlowSpec::default()
+        },
+        &[2.0],
+    );
+    assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
+}
+
+#[test]
+fn test_trip_in_transition_interval_matches_xfoil() {
+    let outcomes = run_case(
+        "naca0012_n60_a2_re1e6_xtr_coinc",
+        FlowSpec {
+            xstrip: [0.48, 0.87],
+            ..FlowSpec::default()
+        },
+        &[2.0],
+    );
+    assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
 }

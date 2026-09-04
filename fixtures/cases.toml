@@ -118,6 +118,70 @@ minimal = true
 track = true
 
 [[case]]
+name = "naca0012_n60_a2_repeat_re1e6"    # coverage: the same alpha twice (VISCAL entered with LWAKE/LWDIJ/LVCONV already set)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0, 2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_cl03_re1e6"      # coverage: CL after a converged alpha point (SPECCL with LGAMU/LQAIJ valid)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+cls = [0.3]
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_re1e6_type3"     # coverage: TYPE 3 = MATYP 1, RETYP 3 (Re scales with 1/CL, Mach fixed)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+matyp = 3
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_re1e6_m03_type2" # coverage: MATYP = 2 with M > 0 (SPECAL's Mach-CL Newton loop, MRCL Mach scaling)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.3
+ncrit = 9.0
+iter = 20
+matyp = 2
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_re1e6_xtr_coinc" # coverage: trip in the same interval as natural transition (TRCHEK2 TRFREE .AND. TRFORC)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+xtr = [0.48, 0.87]
+minimal = true
+track = true
+
+[[case]]
 name = "pangen_naca0012_n160"              # stage G: XFOIL's NACA generator + PANGEN at NPAN = 160
 airfoil = "xfoil-naca:0012"
 n_panels = 160

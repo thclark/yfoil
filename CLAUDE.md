@@ -135,6 +135,17 @@ Cases that exercise each of those are part of the validation set, not extras. Th
 branch coverage; it reports per-variable ULP distributions, iteration-count and branch-flip counts, and
 threshold-straddling cases — not a single worst-case number.
 
+**The measurement is mechanised.** `scripts/xfoil-build.sh --gcov` builds the pristine DP reference with
+`-fprofile-arcs -ftest-coverage`; `cargo xtask coverage` runs every tracked case through it from its tracked
+`xfoil.inp`/`panels.dat`, reads the counters back with gcov and writes `docs/validation/coverage.md`.
+`fixtures/coverage.toml` names the translated subroutine set (77 subroutines, 10 files) and carries the
+annotations: `[[unreachable]]` entries with a class (*structural*, *mode*, *guard*, *compiler*) and a reason,
+`[[note]]` entries recording how an open branch can be reached, `[[dead]]` entries for subroutines XFOIL never
+calls. Every never-taken branch that is not annotated is **open**; annotations that stop matching are reported
+as stale. Measured 2026-09-04 over 19 cases: 1320 branches, 1115 taken, 100 open (every one with a reach note, 8 of them Newton-loop iteration caps),
+84 annotated unreachable, 29 DO-loop zero-trip edges. One translation gap found by it: OPER `DAMP` (IDAMPV=1,
+`DAMPL2`) is reachable and not translated.
+
 XFOIL-independent invariants are also required, because two codes can share a misunderstanding: symmetric airfoil at
 α=0 → CL=CM=0 to the noise floor; mirrored airfoil at −α; Blasius flat plate.
 
@@ -249,7 +260,7 @@ budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after
 points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat` records — for coverage cases). The tracked CI reference case is
 `naca0012_n60_a2_re1e6` (`tests/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
 plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
-budget). Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
+budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
 
 ## Testing

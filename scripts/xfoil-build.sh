@@ -5,19 +5,22 @@
 #   target/xfoil-ref/pristine/      pristine 6.99 + build-config patches only (double precision)
 #   target/xfoil-ref/instrumented/  the above + instrumentation patches
 #
-# Usage: scripts/xfoil-build.sh [--verify] [--snan]
+# Usage: scripts/xfoil-build.sh [--verify] [--snan] [--gcov]
 #   --verify   after building, run both binaries on the smoke case and assert
 #              their numeric output is byte-identical (instrumentation is inert)
 #   --snan     additionally build a pristine variant with -finit-real=snan
 #              -ffpe-trap=invalid and run the smoke case (no uninitialised reads)
+#   --gcov     additionally build target/xfoil-ref/gcov/ — pristine + build series compiled
+#              and linked with -fprofile-arcs -ftest-coverage, the branch-coverage
+#              instrument behind `cargo xtask coverage` (CLAUDE.md Rule 6)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/third_party/xfoil-6.99"
 PATCHES="$ROOT/xfoil-instrumentation"
 OUT="$ROOT/target/xfoil-ref"
-VERIFY=0; SNAN=0
-for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
+VERIFY=0; SNAN=0; GCOV=0
+for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; --gcov) GCOV=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
 
 # --- integrity of the vendored tree ------------------------------------------
 ( cd "$SRC" && shasum -a 256 -c --quiet "$ROOT/third_party/xfoil-6.99.sha256" ) \
@@ -37,6 +40,10 @@ stage() { # stage <name> <extra-fflags> <series...>
   if [ -n "$extra" ]; then
     sed -i '' "s|^DBL = \(.*\)$|DBL = \1 $extra|" "$dir/bin/Makefile"
   fi
+  case "$extra" in *profile-arcs*)
+    # the link step has no FFLAGS; libgcov must be linked in explicitly
+    sed -i '' 's|^	$(FC) -o xfoil |	$(FC) --coverage -o xfoil |' "$dir/bin/Makefile";;
+  esac
   # plotlib (double precision), then xfoil. The Makefile's final `cp ./xfoil xfoil`
   # install step fails with BINDIR=. even though the link succeeded, so success is
   # judged by the presence of a freshly linked binary, not by make's exit status.
@@ -49,6 +56,11 @@ stage() { # stage <name> <extra-fflags> <series...>
 
 stage pristine     "" series.build
 stage instrumented "" series.build series.instrument
+if [ "$GCOV" = 1 ]; then
+  # Branch counters accumulate in target/xfoil-ref/gcov/bin/*.gcda across runs (the path is
+  # baked in at compile time, so the binary can run from any working directory).
+  stage gcov "-fprofile-arcs -ftest-coverage" series.build
+fi
 
 # --- provenance manifest -------------------------------------------------------
 {

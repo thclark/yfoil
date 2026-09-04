@@ -1,0 +1,34 @@
+{
+  "case": {
+    "airfoil": "naca4:0012",
+    "alphas": [
+      2.0
+    ],
+    "alphas_after_reinit": [],
+    "cls": [],
+    "dump_calls": [],
+    "iter": 20,
+    "mach": 0.0,
+    "matyp": 0,
+    "n_panels": 60,
+    "name": "naca0012_n60_a2_re1e6_xtr_coinc",
+    "ncrit": 9.0,
+    "polar": false,
+    "re": 1000000.0,
+    "xtr": [
+      0.48,
+      0.87
+    ]
+  },
+  "generated_by": "cargo xtask fixtures",
+  "panels_dat_sha256": "e2f4be06fd20eb51a1c6122ee1577f891c07846253d8121ea90d4bc9854fc07f",
+  "xfoil_ref": [
+    "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
+    "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
+    "series_instr_sha256:    63e0978952f107a63fe118f5ee2afee87206cb26105487e45b15320eb5663619",
+    "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
+    "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
+    "host:                   arm64-Darwin-24.6.0",
+    "libm:                   /usr/lib/libSystem.B.dylib 1345.120.2)"
+  ]
+}
