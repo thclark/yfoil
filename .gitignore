@@ -23,24 +23,20 @@ target/
 *.html
 fort.*
 
-# XFOIL build products (the vendored source under third_party/ is tracked;
+# XFOIL build products (the vendored source under xfoil/third-party/ is tracked;
 # builds happen in target/xfoil-ref/ and never in-tree)
 *.o
 *.a
-third_party/xfoil-6.99/bin/xfoil
-third_party/xfoil-6.99/bin/pplot
-third_party/xfoil-6.99/bin/pxplot
-third_party/xfoil-6.99/plotlib/libPlt*.a
-
-# Legacy in-place instrumented tree (superseded by third_party/ + xfoil-instrumentation/;
-# removed once the patch-series build is proven equivalent)
-/xfoil/
+xfoil/third-party/xfoil-6.99/bin/xfoil
+xfoil/third-party/xfoil-6.99/bin/pplot
+xfoil/third-party/xfoil-6.99/bin/pxplot
+xfoil/third-party/xfoil-6.99/plotlib/libPlt*.a
 
 # ---------------------------------------------------------------------------
 # Allowlist
 # ---------------------------------------------------------------------------
 !tests/fixtures/**
-!third_party/xfoil-6.99/**
-!third_party/*.sha256
-!third_party/*.ORIGIN
+!xfoil/third-party/xfoil-6.99/**
+!xfoil/third-party/*.sha256
+!xfoil/third-party/*.ORIGIN
 !docs/**/*.html

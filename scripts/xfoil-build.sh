@@ -16,15 +16,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$ROOT/third_party/xfoil-6.99"
-PATCHES="$ROOT/xfoil-instrumentation"
+SRC="$ROOT/xfoil/third-party/xfoil-6.99"
+PATCHES="$ROOT/xfoil/instrumentation"
 OUT="$ROOT/target/xfoil-ref"
 VERIFY=0; SNAN=0; GCOV=0
 for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; --gcov) GCOV=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
 
 # --- integrity of the vendored tree ------------------------------------------
-( cd "$SRC" && shasum -a 256 -c --quiet "$ROOT/third_party/xfoil-6.99.sha256" ) \
-  || { echo "third_party/xfoil-6.99 does not match its checksum manifest" >&2; exit 1; }
+( cd "$SRC" && shasum -a 256 -c --quiet "$ROOT/xfoil/third-party/xfoil-6.99.sha256" ) \
+  || { echo "xfoil/third-party/xfoil-6.99 does not match its checksum manifest" >&2; exit 1; }
 
 # --- stage a tree and apply a series -------------------------------------------
 stage() { # stage <name> <extra-fflags> <series...>
@@ -64,7 +64,7 @@ fi
 
 # --- provenance manifest -------------------------------------------------------
 {
-  echo "source_sha256_manifest: $(shasum -a 256 "$ROOT/third_party/xfoil-6.99.sha256" | cut -d' ' -f1)"
+  echo "source_sha256_manifest: $(shasum -a 256 "$ROOT/xfoil/third-party/xfoil-6.99.sha256" | cut -d' ' -f1)"
   echo "series_build_sha256:    $(cat "$PATCHES"/build/*.patch | shasum -a 256 | cut -d' ' -f1)"
   echo "series_instr_sha256:    $(cat "$PATCHES"/instrument/*.patch | shasum -a 256 | cut -d' ' -f1)"
   echo "gfortran:               $(gfortran --version | head -1)"

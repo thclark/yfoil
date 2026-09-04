@@ -46,7 +46,7 @@ jobs:
       - run: cargo build --examples
 
   xfoil-parity:
-    # Rebuild the reference from third_party/ + xfoil-instrumentation/, prove the
+    # Rebuild the reference from xfoil/third-party/ + xfoil/instrumentation/, prove the
     # instrumentation inert and free of uninitialised reads, then regenerate every
     # tracked fixture and compare. Nightly, and on demand.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

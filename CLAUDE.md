@@ -153,7 +153,7 @@ XFOIL-independent invariants are also required, because two codes can share a mi
 ### Rule 7: Fixtures are intentional, tracked, and never silently skipped
 
 - `.gitignore` excludes generated files by default (`*.dat`, `*.log`, `fort.*`, `*.bl`, `.tmp/`) and **allowlists**
-  what is deliberately committed (`!tests/fixtures/**`, `!third_party/**`). Committing a fixture is a decision.
+  what is deliberately committed (`!tests/fixtures/**`, `!xfoil/third-party/**`). Committing a fixture is a decision.
 - Tracked fixture budget ~25 MB; full-resolution cases live behind `cargo xtask fixtures --big`.
 - Every fixture directory carries a `manifest.json`: source SHA256, patch-series SHA, `gfortran --version`,
   FFLAGS, host triple, libm/OS.
@@ -214,13 +214,13 @@ Never look above `/Users/thc29/source/thclark/yfoil/`.
 **Layout:**
 
 ```
-third_party/xfoil-6.99/          - pristine XFOIL 6.99 source (MIT tarball, sha256 5c025064…), tracked,
-                                   with a per-file checksum manifest (third_party/xfoil-6.99.sha256)
-xfoil-instrumentation/build/     - build-config patches applied to BOTH reference builds (DP, -ffp-contract=off,
-                                   -ffixed-line-length-none, macOS X11 paths)
-xfoil-instrumentation/instrument/- instrumentation patches (xlog harness + per-file dumps), instrumented build only
+xfoil/third-party/xfoil-6.99/     - pristine XFOIL 6.99 source (MIT tarball, sha256 5c025064…), tracked,
+                                    with a per-file checksum manifest (xfoil/third-party/xfoil-6.99.sha256)
+xfoil/instrumentation/build/      - build-config patches applied to BOTH reference builds (DP, -ffp-contract=off,
+                                    -ffixed-line-length-none, macOS X11 paths)
+xfoil/instrumentation/instrument/ - instrumentation patches (xlog harness + per-file dumps), instrumented build only
 target/xfoil-ref/{pristine,instrumented,snan}/ - build output; never edit in place
-scripts/xfoil-build.sh           - the build; `cargo xtask xfoil-build [--verify] [--snan]` wraps it
+scripts/xfoil-build.sh            - the build; `cargo xtask xfoil-build [--verify] [--snan]` wraps it
 ```
 
 Two proofs are part of the reference build and re-run nightly:
