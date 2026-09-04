@@ -14,7 +14,8 @@ use yfoil::solver::analysis::{compute_polar, FlowSpec, PolarConfig, Session};
 
 #[cfg(feature = "plotting")]
 use yfoil::output::{
-    plot_analysis_png, plot_analysis_svg, plot_paneled_png, plot_paneled_svg, AnalysisPlotConfig, GeometryPlotConfig,
+    plot_analysis_png, plot_analysis_svg, plot_paneled_png, plot_paneled_svg, plot_polars_png, plot_polars_svg,
+    AnalysisPlotConfig, GeometryPlotConfig, PolarSeries, PolarsPlotConfig,
 };
 
 /// YFoil - Rust-based aerofoil analysis tool
@@ -29,7 +30,8 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Geometry operations (convert, generate, repanel)
-    Geom {
+    #[command(visible_alias = "geom")]
+    Geometry {
         #[command(subcommand)]
         action: GeomAction,
     },
@@ -40,10 +42,10 @@ enum Commands {
         file: PathBuf,
 
         /// Angle of attack in degrees
-        #[arg(short, long, default_value_t = 0.0)]
+        #[arg(short, long, default_value_t = 0.0, allow_negative_numbers = true)]
         alpha: f64,
         /// Specified lift coefficient (fixed-CL mode: alpha becomes the unknown; overrides --alpha)
-        #[arg(long)]
+        #[arg(long, allow_negative_numbers = true)]
         cl: Option<f64>,
 
         /// Reynolds number
@@ -62,8 +64,8 @@ enum Commands {
         #[arg(long)]
         inviscid: bool,
         /// Maximum VISCAL iterations (XFOIL ITER)
-        #[arg(long, default_value_t = 20)]
-        iter: usize,
+        #[arg(long, alias = "iter", default_value_t = 20)]
+        iterations: usize,
 
         /// Output file path for JSON results
         #[arg(short, long)]
@@ -76,15 +78,15 @@ enum Commands {
         file: PathBuf,
 
         /// Maximum angle of attack
-        #[arg(long, default_value_t = 15.0)]
+        #[arg(long, default_value_t = 15.0, allow_negative_numbers = true)]
         alpha_max: f64,
 
         /// Minimum angle of attack
-        #[arg(long, default_value_t = -5.0)]
+        #[arg(long, default_value_t = -5.0, allow_negative_numbers = true)]
         alpha_min: f64,
 
         /// Alpha step size
-        #[arg(long, default_value_t = 0.5)]
+        #[arg(long, default_value_t = 0.5, allow_negative_numbers = true)]
         alpha_step: f64,
 
         /// Reynolds number
@@ -102,17 +104,30 @@ enum Commands {
         /// Output JSON format
         #[arg(long)]
         json: bool,
+
+        /// Display label for the polar (legend entry in `yfoil plot polar`); defaults to the geometry file stem
+        #[arg(long)]
+        label: Option<String>,
         /// Maximum VISCAL iterations (XFOIL ITER)
-        #[arg(long, default_value_t = 20)]
-        iter: usize,
+        #[arg(long, alias = "iter", default_value_t = 20)]
+        iterations: usize,
 
         /// Output file path
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 
-    /// Plot analysis results (Cp and Ue distributions)
+    /// Plot results (analysis distributions or polars)
     Plot {
+        #[command(subcommand)]
+        action: PlotAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum PlotAction {
+    /// Plot Cp and Ue distributions from a single-point analysis
+    Analysis {
         /// Path to analysis results JSON file
         file: PathBuf,
 
@@ -130,6 +145,29 @@ enum Commands {
 
         /// Image height in pixels
         #[arg(long, default_value_t = 800)]
+        height: u32,
+    },
+
+    /// Plot one or more polars (CL–α, CL–CD, CM–α, CD–α); several files are overlaid for comparison
+    Polar {
+        /// Polar JSON files (from `yfoil polar -o`)
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+
+        /// Output file (SVG or PNG based on extension); defaults to the polar's stem plus .svg, or polar_comparison.svg for several
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Plot title (defaults to the polar label, or "Polar comparison")
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Image width in pixels
+        #[arg(long, default_value_t = 1400)]
+        width: u32,
+
+        /// Image height in pixels
+        #[arg(long, default_value_t = 1000)]
         height: u32,
     },
 }
@@ -251,7 +289,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Geom { action } => handle_geom(action),
+        Commands::Geometry { action } => handle_geom(action),
         Commands::Analyze {
             file,
             alpha,
@@ -261,7 +299,7 @@ fn main() {
             ncrit,
             inviscid,
             output,
-            iter,
+            iterations,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
@@ -275,7 +313,7 @@ fn main() {
                 re: if inviscid { 0.0 } else { reynolds },
                 mach,
                 ncrit,
-                itmax: iter,
+                itmax: iterations,
                 ..FlowSpec::default()
             };
             let mut session = Session::new(&airfoil, spec.clone());
@@ -361,8 +399,9 @@ fn main() {
             mach,
             ncrit,
             json,
+            label,
             output,
-            iter,
+            iterations,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
@@ -377,7 +416,7 @@ fn main() {
                     re: reynolds,
                     mach,
                     ncrit,
-                    itmax: iter,
+                    itmax: iterations,
                     ..FlowSpec::default()
                 },
                 ..Default::default()
@@ -388,7 +427,8 @@ fn main() {
 
             // Create output struct
             let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
-            let polar_output = PolarOutput::from_polar(&result, airfoil_name);
+            let mut polar_output = PolarOutput::from_polar(&result, airfoil_name);
+            polar_output.label = label;
 
             if json {
                 // JSON output
@@ -470,75 +510,131 @@ fn main() {
                 }
             }
         }
-        Commands::Plot {
+        Commands::Plot { action } => handle_plot(action),
+    }
+}
+
+#[cfg(feature = "plotting")]
+fn handle_plot(action: PlotAction) {
+    match action {
+        PlotAction::Analysis {
             file,
             output,
             title,
             width,
             height,
         } => {
-            #[cfg(feature = "plotting")]
-            {
-                // Read analysis results JSON
-                let json_str = match std::fs::read_to_string(&file) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("Error reading file: {}", e);
-                        std::process::exit(1);
-                    }
-                };
+            let json_str = match std::fs::read_to_string(&file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error reading file: {}", e);
+                    std::process::exit(1);
+                }
+            };
 
-                let analysis: InviscidAnalysisOutput = match serde_json::from_str(&json_str) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        eprintln!("Error parsing JSON: {}", e);
-                        eprintln!(
-                            "Make sure the file is an inviscid analysis output (from 'yfoil analyze --inviscid -o')"
-                        );
-                        std::process::exit(1);
-                    }
-                };
+            let analysis: InviscidAnalysisOutput = match serde_json::from_str(&json_str) {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("Error parsing JSON: {}", e);
+                    eprintln!("Make sure the file is an inviscid analysis output (from 'yfoil analyze --inviscid -o')");
+                    std::process::exit(1);
+                }
+            };
 
-                let config = AnalysisPlotConfig {
-                    width,
-                    height,
-                    title,
-                    ..Default::default()
-                };
+            let config = AnalysisPlotConfig {
+                width,
+                height,
+                title,
+                ..Default::default()
+            };
 
-                // Determine output format from extension
-                let ext = output
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("svg")
-                    .to_lowercase();
+            let result = if is_png(&output) {
+                plot_analysis_png(&analysis, &output, &config)
+            } else {
+                plot_analysis_svg(&analysis, &output, &config)
+            };
 
-                let result = match ext.as_str() {
-                    "png" => plot_analysis_png(&analysis, &output, &config),
-                    _ => plot_analysis_svg(&analysis, &output, &config),
-                };
-
-                match result {
-                    Ok(()) => println!("Wrote analysis plot to {}", output.display()),
-                    Err(e) => {
-                        eprintln!("Error creating plot: {}", e);
-                        std::process::exit(1);
-                    }
+            match result {
+                Ok(()) => println!("Wrote analysis plot to {}", output.display()),
+                Err(e) => {
+                    eprintln!("Error creating plot: {}", e);
+                    std::process::exit(1);
                 }
             }
+        }
+        PlotAction::Polar {
+            files,
+            output,
+            title,
+            width,
+            height,
+        } => {
+            let mut series = Vec::with_capacity(files.len());
+            for file in &files {
+                let json_str = match std::fs::read_to_string(file) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Error reading {}: {}", file.display(), e);
+                        std::process::exit(1);
+                    }
+                };
+                let polar: PolarOutput = match serde_json::from_str(&json_str) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Error parsing {}: {}", file.display(), e);
+                        eprintln!("Make sure the file is a polar output (from 'yfoil polar -o')");
+                        std::process::exit(1);
+                    }
+                };
+                let s = PolarSeries::from_polar_output(&polar);
+                if s.alpha.is_empty() {
+                    eprintln!("Warning: {} has no converged points", file.display());
+                }
+                series.push(s);
+            }
 
-            #[cfg(not(feature = "plotting"))]
-            {
-                let _ = file;
-                let _ = output;
-                let _ = title;
-                let _ = width;
-                let _ = height;
-                eprintln!("Plotting feature not enabled. Rebuild with: cargo build --features plotting");
-                std::process::exit(1);
+            let output = output.unwrap_or_else(|| {
+                if files.len() == 1 {
+                    files[0].with_extension("svg")
+                } else {
+                    PathBuf::from("polar_comparison.svg")
+                }
+            });
+            let config = PolarsPlotConfig {
+                width,
+                height,
+                title,
+                ..Default::default()
+            };
+
+            let result = if is_png(&output) {
+                plot_polars_png(&series, &output, &config)
+            } else {
+                plot_polars_svg(&series, &output, &config)
+            };
+
+            match result {
+                Ok(()) => println!("Wrote polar plot to {}", output.display()),
+                Err(e) => {
+                    eprintln!("Error creating plot: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     }
+}
+
+#[cfg(feature = "plotting")]
+fn is_png(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("png"))
+}
+
+#[cfg(not(feature = "plotting"))]
+fn handle_plot(_action: PlotAction) {
+    eprintln!("Plotting feature not enabled. Rebuild with: cargo build --features plotting");
+    std::process::exit(1);
 }
 
 fn handle_geom(action: GeomAction) {

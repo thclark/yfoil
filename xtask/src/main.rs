@@ -256,15 +256,18 @@ fn fixtures(flags: &[String]) {
         let sharp = matches!(parts.next(), Some("sharp"));
         assert_eq!(kind, "naca4", "only naca4 supported so far");
         let npan = case.n_panels.to_string();
-        let mut gargs = vec!["geom", "naca", spec, "-n", &npan, "-o", "panels.json"];
+        let mut gargs = vec!["geometry", "naca", spec, "-n", &npan, "-o", "panels.json"];
         if sharp {
             gargs.push("--sharp");
         }
-        run(Command::new(&yfoil).args(&gargs).current_dir(&work), "yfoil geom naca");
+        run(
+            Command::new(&yfoil).args(&gargs).current_dir(&work),
+            "yfoil geometry naca",
+        );
         run(
             Command::new(&yfoil)
                 .args([
-                    "geom",
+                    "geometry",
                     "convert",
                     "panels.json",
                     "--to",
@@ -275,7 +278,7 @@ fn fixtures(flags: &[String]) {
                     "panels.dat",
                 ])
                 .current_dir(&work),
-            "yfoil geom convert",
+            "yfoil geometry convert",
         );
 
         // 2. XFOIL script: LOAD (never NACA/PANE/PPAR), pinned defaults, alpha sequence

@@ -248,7 +248,7 @@ fn update_markdown_report(metrics: &[(&TestCase, GeometryMetrics)]) -> Result<()
         ));
         report.push_str("**YFoil command (equivalent):**\n");
         report.push_str(&format!(
-            "```\nyfoil geom naca {} --paneler xfoil -n {} -o {}.json\n```\n\n",
+            "```\nyfoil geometry naca {} --paneler xfoil -n {} -o {}.json\n```\n\n",
             case.designation, case.n_panels, case_name
         ));
 

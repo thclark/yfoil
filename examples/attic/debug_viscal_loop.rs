@@ -13,7 +13,7 @@ fn main() {
     // Load geometry from JSON file (same as used by XFOIL for comparison)
     let json_path = "/tmp/naca0012.json";
     let json_str = fs::read_to_string(json_path)
-        .expect("Failed to read geometry JSON - run: yfoil geom naca 0012 -n 160 -o /tmp/naca0012.json");
+        .expect("Failed to read geometry JSON - run: yfoil geometry naca 0012 -n 160 -o /tmp/naca0012.json");
     let geom: Geometry = serde_json::from_str(&json_str).expect("Failed to parse JSON");
     let airfoil = create_paneled_airfoil(&geom);
     let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);

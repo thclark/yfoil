@@ -347,7 +347,7 @@ no panel count), `PANGEN → geometry::panel::repanel_xfoil` line for line (IPFA
 the LE-adjacent smoothing equations on both neighbours, exact-equality corner/LE tests, TRISOL
 split at a sharp LE, corner insertion), with `SCALC/SEGSPL/CURV/LEFIND/TRISOL →
 geometry::panel::{scalc, segspl, curv, lefind, trisol}` as XFOIL has them (`create_paneled_airfoil`
-uses the same `lefind`). CLI: `yfoil geom naca --naca-model xfoil`. The pipeline's geometry-only
+uses the same `lefind`). CLI: `yfoil geometry naca --naca-model xfoil`. The pipeline's geometry-only
 cases (`airfoil = "xfoil-naca:dddd"`, `geometry_only = true`) run `NACA dddd / PPAR / N n` and dump
 `xfoil_pangen.dat` from PANGEN. `panel::solve_inviscid` (the pre-S3 inviscid solver) is deleted;
 GGCALC/PSILIN on `BlState` are the inviscid solve.

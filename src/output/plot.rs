@@ -2,6 +2,7 @@
 //!
 //! Uses the plotters library for PNG output and custom high-precision SVG output.
 
+use plotters::element::ComposedElement;
 use plotters::prelude::*;
 use std::io::Write;
 use std::path::Path;
@@ -3297,5 +3298,333 @@ pub fn plot_bl_comparison_svg<P: AsRef<Path>>(
     )?;
 
     writeln!(file, "</svg>")?;
+    Ok(())
+}
+
+// ============================================================================
+// Multi-polar plotting (CLI `yfoil plot polar`)
+// ============================================================================
+
+/// One polar curve with its legend label
+#[derive(Debug, Clone)]
+pub struct PolarSeries {
+    /// Legend label
+    pub label: String,
+    /// Angle of attack values (degrees)
+    pub alpha: Vec<f64>,
+    /// Lift coefficient values
+    pub cl: Vec<f64>,
+    /// Drag coefficient values
+    pub cd: Vec<f64>,
+    /// Moment coefficient values (about quarter chord)
+    pub cm: Vec<f64>,
+}
+
+impl PolarSeries {
+    /// Build from a `PolarOutput`, keeping only converged points.
+    ///
+    /// The label is the polar's `label` if set, otherwise its `airfoil` name.
+    pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
+        let pts: Vec<_> = polar.points.iter().filter(|p| p.converged).collect();
+        Self {
+            label: polar.label.clone().unwrap_or_else(|| polar.airfoil.clone()),
+            alpha: pts.iter().map(|p| p.alpha_deg).collect(),
+            cl: pts.iter().map(|p| p.cl).collect(),
+            cd: pts.iter().map(|p| p.cd).collect(),
+            cm: pts.iter().map(|p| p.cm).collect(),
+        }
+    }
+}
+
+/// Point-marker shape, cycled per series. Open markers come first so that coincident series
+/// (YFoil over XFOIL in the validation plots) stay visible through each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Marker {
+    /// Diagonal cross (no filled variant)
+    Cross,
+    /// Plus sign (no filled variant)
+    Plus,
+    /// Hollow circle
+    CircleHollow,
+    /// Hollow square
+    SquareHollow,
+    /// Hollow upward triangle
+    TriangleHollow,
+    /// Hollow diamond
+    DiamondHollow,
+    /// Hollow downward triangle
+    TriangleDownHollow,
+    /// Filled circle
+    Circle,
+    /// Filled square
+    Square,
+    /// Filled upward triangle
+    Triangle,
+    /// Filled diamond
+    Diamond,
+    /// Filled downward triangle
+    TriangleDown,
+}
+
+impl Marker {
+    /// Default cycle order: every open marker (`x + o □ △ ◇ ▽`), then the filled variants
+    pub const CYCLE: [Marker; 12] = [
+        Marker::Cross,
+        Marker::Plus,
+        Marker::CircleHollow,
+        Marker::SquareHollow,
+        Marker::TriangleHollow,
+        Marker::DiamondHollow,
+        Marker::TriangleDownHollow,
+        Marker::Circle,
+        Marker::Square,
+        Marker::Triangle,
+        Marker::Diamond,
+        Marker::TriangleDown,
+    ];
+}
+
+/// Pixel offsets from a marker centre
+type Verts = Vec<(i32, i32)>;
+
+/// Vertex lists describing a marker: an optional filled polygon and up to two stroked paths,
+/// in pixel offsets from the marker centre with half-width `s`.
+fn marker_shape(marker: Marker, s: i32) -> (Verts, Verts, Verts) {
+    let circle = |r: i32| -> Verts {
+        (0..=16)
+            .map(|k| {
+                let t = std::f64::consts::TAU * k as f64 / 16.0;
+                ((r as f64 * t.cos()).round() as i32, (r as f64 * t.sin()).round() as i32)
+            })
+            .collect()
+    };
+    let square = vec![(-s, -s), (s, -s), (s, s), (-s, s), (-s, -s)];
+    let triangle = vec![(0, -s - 1), (s + 1, s), (-s - 1, s), (0, -s - 1)];
+    let triangle_down = vec![(0, s + 1), (s + 1, -s), (-s - 1, -s), (0, s + 1)];
+    let diamond = vec![(0, -s - 1), (s + 1, 0), (0, s + 1), (-s - 1, 0), (0, -s - 1)];
+    let filled = |v: Verts| (v, vec![], vec![]);
+    let hollow = |v: Verts| (vec![], v, vec![]);
+    match marker {
+        Marker::Cross => (vec![], vec![(-s, -s), (s, s)], vec![(-s, s), (s, -s)]),
+        Marker::Plus => (vec![], vec![(-s - 1, 0), (s + 1, 0)], vec![(0, -s - 1), (0, s + 1)]),
+        Marker::CircleHollow => hollow(circle(s)),
+        Marker::SquareHollow => hollow(square),
+        Marker::TriangleHollow => hollow(triangle),
+        Marker::DiamondHollow => hollow(diamond),
+        Marker::TriangleDownHollow => hollow(triangle_down),
+        Marker::Circle => filled(circle(s)),
+        Marker::Square => filled(square),
+        Marker::Triangle => filled(triangle),
+        Marker::Diamond => filled(diamond),
+        Marker::TriangleDown => filled(triangle_down),
+    }
+}
+
+/// The one concrete element type used for every marker kind: legend line, filled polygon and two
+/// stroked paths composed on an anchor. No boxed elements, so no lifetime coupling to the backend.
+type MarkerElement<C, DB> = ComposedElement<
+    C,
+    DB,
+    PathElement<(i32, i32)>,
+    ComposedElement<
+        (i32, i32),
+        DB,
+        ComposedElement<(i32, i32), DB, Polygon<(i32, i32)>, PathElement<(i32, i32)>>,
+        PathElement<(i32, i32)>,
+    >,
+>;
+
+/// A marker at `at` in a colour. With `legend_line` a horizontal stroke is drawn through it so
+/// the same element serves as the key entry.
+fn marker_element<C: Clone, DB: DrawingBackend>(
+    marker: Marker,
+    at: C,
+    color: RGBColor,
+    size: i32,
+    legend_line: bool,
+) -> MarkerElement<C, DB> {
+    let (fill, stroke1, stroke2) = marker_shape(marker, size);
+    let hollow: ShapeStyle = color.stroke_width(1);
+    // An empty path draws nothing, so the line is present only for key entries.
+    let line = PathElement::new(
+        if legend_line { vec![(-16, 0), (16, 0)] } else { vec![] },
+        color.stroke_width(2),
+    );
+    EmptyElement::<C, DB>::at(at)
+        + line
+        + Polygon::new(fill, color.filled())
+        + PathElement::new(stroke1, hollow)
+        + PathElement::new(stroke2, hollow)
+}
+
+/// Configuration for the multi-polar plot
+#[derive(Debug, Clone)]
+pub struct PolarsPlotConfig {
+    /// Image width in pixels
+    pub width: u32,
+    /// Image height in pixels
+    pub height: u32,
+    /// Title; defaults to the single series' label, or "Polar comparison"
+    pub title: Option<String>,
+    /// Background colour (RGB)
+    pub background: (u8, u8, u8),
+    /// Series colours (RGB), cycled when there are more series than colours
+    pub palette: Vec<(u8, u8, u8)>,
+    /// Series markers, cycled independently of the palette
+    pub markers: Vec<Marker>,
+    /// Marker half-size in pixels
+    pub marker_size: i32,
+}
+
+impl Default for PolarsPlotConfig {
+    fn default() -> Self {
+        Self {
+            width: 1400,
+            height: 1000,
+            title: None,
+            background: (255, 255, 255),
+            palette: vec![
+                (0, 100, 200),
+                (200, 50, 50),
+                (30, 150, 60),
+                (220, 130, 0),
+                (120, 60, 180),
+                (0, 150, 160),
+            ],
+            markers: Marker::CYCLE.to_vec(),
+            marker_size: 3,
+        }
+    }
+}
+
+/// Plot one or more polars to SVG: CL–α, CL–CD (drag polar), CM–α and CD–α in a 2×2 grid.
+pub fn plot_polars_svg<P: AsRef<Path>>(
+    series: &[PolarSeries],
+    output_path: P,
+    config: &PolarsPlotConfig,
+) -> Result<(), PlotError> {
+    let root = SVGBackend::new(&output_path, (config.width, config.height)).into_drawing_area();
+    plot_polars_impl(&root, series, config)
+}
+
+/// Plot one or more polars to PNG (same layout as [`plot_polars_svg`]).
+pub fn plot_polars_png<P: AsRef<Path>>(
+    series: &[PolarSeries],
+    output_path: P,
+    config: &PolarsPlotConfig,
+) -> Result<(), PlotError> {
+    let root = BitMapBackend::new(&output_path, (config.width, config.height)).into_drawing_area();
+    plot_polars_impl(&root, series, config)
+}
+
+/// Padded [min, max] of a set of values; `floor` guards a degenerate range.
+fn padded_range<'a>(values: impl Iterator<Item = &'a f64>, pad: f64, floor: f64) -> std::ops::Range<f64> {
+    let (lo, hi) = values.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+        (lo.min(v), hi.max(v))
+    });
+    if !lo.is_finite() || !hi.is_finite() {
+        return 0.0..1.0;
+    }
+    let span = (hi - lo).max(floor);
+    (lo - pad * span)..(hi + pad * span)
+}
+
+fn plot_polars_impl<DB: DrawingBackend>(
+    root: &DrawingArea<DB, plotters::coord::Shift>,
+    series: &[PolarSeries],
+    config: &PolarsPlotConfig,
+) -> Result<(), PlotError>
+where
+    DB::ErrorType: 'static,
+{
+    if series.is_empty() {
+        return Err(PlotError::Drawing("no polars to plot".to_string()));
+    }
+    let bg = RGBColor(config.background.0, config.background.1, config.background.2);
+    root.fill(&bg).map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    let title = config.title.clone().unwrap_or_else(|| {
+        if series.len() == 1 {
+            series[0].label.clone()
+        } else {
+            "Polar comparison".to_string()
+        }
+    });
+    let (title_area, body) = root.split_vertically(40);
+    title_area
+        .titled(&title, ("sans-serif", 20))
+        .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+    let panels = body.split_evenly((2, 2));
+
+    // Shared axis ranges across every series so the panels line up
+    let alpha_r = padded_range(series.iter().flat_map(|s| s.alpha.iter()), 0.05, 1.0);
+    let cl_r = padded_range(series.iter().flat_map(|s| s.cl.iter()), 0.08, 0.1);
+    let cd_r = padded_range(series.iter().flat_map(|s| s.cd.iter()), 0.08, 0.001);
+    let cm_r = padded_range(series.iter().flat_map(|s| s.cm.iter()), 0.08, 0.01);
+
+    // (x-label, y-label, x-range, y-range, point extractor)
+    type Extract = fn(&PolarSeries) -> Vec<(f64, f64)>;
+    type PanelSpec<'a> = (&'a str, &'a str, std::ops::Range<f64>, std::ops::Range<f64>, Extract);
+    let panel_specs: [PanelSpec; 4] = [
+        ("α (deg)", "CL", alpha_r.clone(), cl_r.clone(), |s| {
+            s.alpha.iter().zip(s.cl.iter()).map(|(&x, &y)| (x, y)).collect()
+        }),
+        ("CD", "CL", cd_r.clone(), cl_r.clone(), |s| {
+            s.cd.iter().zip(s.cl.iter()).map(|(&x, &y)| (x, y)).collect()
+        }),
+        ("α (deg)", "CM", alpha_r.clone(), cm_r.clone(), |s| {
+            s.alpha.iter().zip(s.cm.iter()).map(|(&x, &y)| (x, y)).collect()
+        }),
+        ("α (deg)", "CD", alpha_r.clone(), cd_r.clone(), |s| {
+            s.alpha.iter().zip(s.cd.iter()).map(|(&x, &y)| (x, y)).collect()
+        }),
+    ];
+    for (panel, (xl, yl, xr, yr, extract)) in panels.iter().zip(panel_specs.iter()) {
+        let mut chart = ChartBuilder::on(panel)
+            .margin(12)
+            .x_label_area_size(40)
+            .y_label_area_size(60)
+            .build_cartesian_2d(xr.clone(), yr.clone())
+            .map_err(|e| PlotError::Drawing(e.to_string()))?;
+        chart
+            .configure_mesh()
+            .x_desc(*xl)
+            .y_desc(*yl)
+            .x_labels(8)
+            .y_labels(8)
+            .bold_line_style(RGBColor(205, 205, 205))
+            .light_line_style(RGBColor(235, 235, 235))
+            .x_max_light_lines(5)
+            .y_max_light_lines(5)
+            .draw()
+            .map_err(|e| PlotError::Drawing(e.to_string()))?;
+
+        for (i, s) in series.iter().enumerate() {
+            let c = config.palette[i % config.palette.len()];
+            let color = RGBColor(c.0, c.1, c.2);
+            let marker = config.markers[i % config.markers.len()];
+            let size = config.marker_size;
+            let pts = extract(s);
+            chart
+                .draw_series(LineSeries::new(pts.clone(), color.stroke_width(2)))
+                .map_err(|e| PlotError::Drawing(e.to_string()))?
+                .label(&s.label)
+                .legend(move |(x, y)| marker_element(marker, (x + 14, y), color, size, true));
+            chart
+                .draw_series(pts.into_iter().map(|p| marker_element(marker, p, color, size, false)))
+                .map_err(|e| PlotError::Drawing(e.to_string()))?;
+        }
+
+        chart
+            .configure_series_labels()
+            .position(SeriesLabelPosition::UpperLeft)
+            .background_style(WHITE.mix(0.8))
+            .border_style(BLACK)
+            .draw()
+            .map_err(|e| PlotError::Drawing(e.to_string()))?;
+    }
+
+    root.present().map_err(|e| PlotError::Drawing(e.to_string()))?;
     Ok(())
 }

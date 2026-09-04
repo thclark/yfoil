@@ -98,8 +98,8 @@ Progress is measured by fixture matches, never by an end-to-end number moving in
 Different panels make any comparison meaningless. The workflow, and the only one:
 
 ```bash
-yfoil geom naca 0012 -n 160 -o geometry.json          # or repanel: yfoil geom repanel --method xfoil
-yfoil geom convert geometry.json --to dat -o geometry.dat
+yfoil geometry naca 0012 -n 160 -o geometry.json      # or repanel: yfoil geometry repanel --method xfoil
+yfoil geometry convert geometry.json --to dat -o geometry.dat
 # XFOIL:  PLOP / G F / LOAD geometry.dat / ...      never NACA, never PANE, never PPAR
 ```
 
@@ -199,13 +199,21 @@ field or state variable is added, renamed or re-represented.
 ## CLI
 
 ```
-yfoil geom     - convert | naca | repanel | info | plot
+yfoil geometry - convert | naca | repanel | info | plot        (alias: geom)
 yfoil analyze  - single operating point (--alpha or --cl)
-yfoil polar    - alpha sweep (state machine: 0°→max, reinitialise, 0°→min, stitched ascending)
-yfoil plot     - visualisation (feature-gated)
+yfoil polar    - alpha sweep (state machine: 0°→max, reinitialise, 0°→min, stitched ascending);
+                 --label names the curve, -o writes the polar JSON
+yfoil plot     - analysis <file> | polar <file>... (feature-gated; several polars overlay for comparison)
 ```
 
-Analysis commands accept JSON geometry only; use `yfoil geom convert` for `.dat`.
+Analysis commands accept JSON geometry only; use `yfoil geometry convert` for `.dat`. Typical session:
+
+```bash
+yfoil geometry naca 4412 -n 160 -o naca4412.json
+yfoil polar naca4412.json --alpha-min -5 --alpha-max 15 --alpha-step 0.5 -r 1e6 --iterations 20 \
+    --label "NACA 4412" -o naca4412_polar.json
+yfoil plot polar --title "NACA 0012 vs 4412" naca0012_polar.json naca4412_polar.json -o compare.svg
+```
 
 ## Reference implementation
 

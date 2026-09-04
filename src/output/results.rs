@@ -81,6 +81,9 @@ impl FlowConditionsOutput {
 pub struct PolarOutput {
     /// Airfoil name/description
     pub airfoil: String,
+    /// Display label for this polar (legend entry when plotted); falls back to `airfoil`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     /// Flow conditions
     pub conditions: FlowConditionsOutput,
     /// Operating points
@@ -131,6 +134,7 @@ impl PolarOutput {
 
         Self {
             airfoil: airfoil_name.to_string(),
+            label: None,
             conditions: FlowConditionsOutput::from_spec(&result.spec),
             points,
             summary,
