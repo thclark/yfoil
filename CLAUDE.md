@@ -138,7 +138,7 @@ threshold-straddling cases — not a single worst-case number.
 **The measurement is mechanised.** `scripts/xfoil-build.sh --gcov` builds the pristine DP reference with
 `-fprofile-arcs -ftest-coverage`; `cargo xtask coverage` runs every tracked case through it from its tracked
 `xfoil.inp`/`panels.dat`, reads the counters back with gcov and writes `docs/validation/coverage.md`.
-`fixtures/coverage.toml` names the translated subroutine set (77 subroutines, 10 files) and carries the
+`xtask/fixtures-config/coverage.toml` names the translated subroutine set (77 subroutines, 10 files) and carries the
 annotations: `[[unreachable]]` entries with a class (*structural*, *mode*, *guard*, *compiler*) and a reason,
 `[[note]]` entries recording how an open branch can be reached, `[[dead]]` entries for subroutines XFOIL never
 calls. Every never-taken branch that is not annotated is **open**; annotations that stop matching are reported
@@ -261,7 +261,7 @@ explicitly in every equivalence run because the two codes' defaults differ: `ITE
 
 ## Fixture pipeline
 
-`cargo xtask fixtures [--case NAME] [--verify] [--big]` reads `fixtures/cases.toml`, builds the reference if
+`cargo xtask fixtures [--case NAME] [--verify] [--big]` reads `xtask/fixtures-config/cases.toml`, builds the reference if
 needed, generates panels **with YFoil**, runs instrumented XFOIL via `LOAD`, asserts the bitwise geometry
 handoff, and keeps the raw dumps plus `manifest.json` under `tests/fixtures/xfoil/<case>/` (`track = true`,
 budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`

@@ -276,7 +276,7 @@ pub fn require_fixture(rel: &str) -> std::path::PathBuf {
     let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
     assert!(
         p.exists(),
-        "fixture missing: {} — regenerate with `cargo xtask fixtures` (see fixtures/cases.toml)",
+        "fixture missing: {} — regenerate with `cargo xtask fixtures` (see xtask/fixtures-config/cases.toml)",
         p.display()
     );
     p

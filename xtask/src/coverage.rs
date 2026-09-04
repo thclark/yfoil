@@ -1,9 +1,9 @@
 //! `cargo xtask coverage [--case NAME]... [--big] [--rebuild]`
 //!
 //! Rule 6 completeness: build the reference with gcov instrumentation, run every case in
-//! `fixtures/cases.toml` through it (from the case's tracked `xfoil.inp`/`panels.dat`), read
+//! `xtask/fixtures-config/cases.toml` through it (from the case's tracked `xfoil.inp`/`panels.dat`), read
 //! the accumulated branch counters back with gcov, and report — per translated subroutine —
-//! every branch that was never taken. `fixtures/coverage.toml` names the translated set and
+//! every branch that was never taken. `xtask/fixtures-config/coverage.toml` names the translated set and
 //! carries the annotations for branches that are unreachable on the analysis path; anything
 //! never taken and not annotated is *open*, and the fixture set is complete when the open
 //! list is empty. The report is `docs/validation/coverage.md`.
@@ -118,7 +118,7 @@ struct Dead {
 enum Kind {
     /// a DO loop's zero-trip entry edge (the loop body always ran at least once)
     LoopEntry,
-    /// annotated in fixtures/coverage.toml
+    /// annotated in xtask/fixtures-config/coverage.toml
     Unreachable,
     /// never taken, no annotation — the objective for more cases / the fuzz harness
     Open,
@@ -159,7 +159,7 @@ pub(crate) fn run(flags: &[String]) {
 
     // run the cases from their tracked inputs
     let cases: super::Cases =
-        toml::from_str(&fs::read_to_string(root.join("fixtures/cases.toml")).expect("fixtures/cases.toml"))
+        toml::from_str(&fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("xtask/fixtures-config/cases.toml"))
             .expect("parse cases.toml");
     let mut ran: Vec<String> = vec![];
     let mut failures = 0;
@@ -214,7 +214,7 @@ pub(crate) fn run(flags: &[String]) {
 
     // read the counters back
     let spec: Spec =
-        toml::from_str(&fs::read_to_string(root.join("fixtures/coverage.toml")).expect("fixtures/coverage.toml"))
+        toml::from_str(&fs::read_to_string(root.join("xtask/fixtures-config/coverage.toml")).expect("xtask/fixtures-config/coverage.toml"))
             .expect("parse coverage.toml");
     let gcov = gcov_binary();
     let scratch = root.join("target/coverage/_gcov");
@@ -471,7 +471,7 @@ fn render(
           *other edges* column gives the counts of the remaining edges on the same line, so the dead arm \
           can be read off against the source.\n\n";
     s += &format!(
-        "**Toolchain.** gfortran/gcc {gcc_version}, `{gcov}`. **Subroutine set.** `fixtures/coverage.toml` \
+        "**Toolchain.** gfortran/gcc {gcc_version}, `{gcov}`. **Subroutine set.** `xtask/fixtures-config/coverage.toml` \
          ({} subroutines in {} files).\n\n",
         reports.len(),
         reports
@@ -494,7 +494,7 @@ fn render(
           unreached block). Listed separately because they are structurally impossible on the analysis \
           path (`DO IBL=2,NBL(IS)` with `NBL ≥ 2`). A `DO` loop that is an iteration cap (a Newton loop \
           that could be exhausted) carries a reach note and stays in the open list.\n\
-          - **unreachable** — annotated in `fixtures/coverage.toml` with a class and the reason: \
+          - **unreachable** — annotated in `xtask/fixtures-config/coverage.toml` with a class and the reason: \
           *structural* (impossible by construction on the analysis path), *mode* (a feature outside it: \
           inverse design, image airfoil, flap hinge, interactive prompts), *guard* (array-bound or \
           illegal-input STOP; YFoil has no fixed dimensions), *compiler* (no source-level decision).\n\n\
@@ -546,7 +546,7 @@ fn render(
     }
     if !missing.is_empty() {
         s += &format!(
-            "Not found in the gcov output (check the name in `fixtures/coverage.toml`): {}.\n\n",
+            "Not found in the gcov output (check the name in `xtask/fixtures-config/coverage.toml`): {}.\n\n",
             missing.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ")
         );
     }

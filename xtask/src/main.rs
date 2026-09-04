@@ -157,7 +157,7 @@ fn fixtures(flags: &[String]) {
         .collect();
 
     let cases: Cases =
-        toml::from_str(&fs::read_to_string(root.join("fixtures/cases.toml")).expect("fixtures/cases.toml"))
+        toml::from_str(&fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("xtask/fixtures-config/cases.toml"))
             .expect("parse cases.toml");
     let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
     if !xfoil.exists() {

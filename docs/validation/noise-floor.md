@@ -46,7 +46,7 @@ ulp: iterations=5 converged=True
   magnitude.
 
 **What it does not cover.** One case, one perturbation direction, M=0, blunt TE. Re-run on every case
-added to `fixtures/cases.toml` (the branch-coverage cases especially) before trusting a tolerance there,
+added to `xtask/fixtures-config/cases.toml` (the branch-coverage cases especially) before trusting a tolerance there,
 and on any other host before comparing fixtures across hosts (libm differences, addendum R2).
 
 
