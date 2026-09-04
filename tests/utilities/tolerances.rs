@@ -15,6 +15,12 @@ pub const TOL_PURE: f64 = 1e-12;
 pub const TOL_LINALG: f64 = 1e-11;
 /// State after one Newton iteration of a nonlinear solver, given identical branch trace.
 pub const TOL_SOLVER: f64 = 1e-10;
+/// Per-iteration *transients* (RLX, RMSBL, unconverged CL/CD) inside a multi-point sequence.
+/// Measured 2026-09-04 on the tracked polar script (11 VISCAL calls, 62 iterations): a 1-ULP
+/// geometry perturbation moves the reference's own intermediate RLX/RMSBL/CL by up to 5.1e-10
+/// absolute while the converged per-point CL/CD/CM move by ≤ 8e-14 and XTR by ≤ 1e-12. Converged
+/// points therefore stay at `TOL_SOLVER`; transients are gated at floor × 2.
+pub const TOL_TRANSIENT: f64 = 1e-9;
 
 /// The one error metric: `|a − b| ≤ tol · max(|a|, |b|, scale)`. Bare relative error is
 /// undefined at CL≈0, VDEL≈0, laminar CTAU≈0; `scale` is the physical scale of the variable.

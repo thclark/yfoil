@@ -22,7 +22,8 @@ XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it m
 (1-ULP input perturbation, per stage, per variable; results in `docs/validation/noise-floor.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
-Jacobian) can only be gated with a row-scaled metric. Three named constants live in `tests/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`);
+Jacobian) can only be gated with a row-scaled metric. Four named constants live in `tests/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, and
+`TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10);
 no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at ~1e-11, converged Newton
 state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in *both* codes: bit-identity
 is a same-host property, cross-host is an ULP budget.

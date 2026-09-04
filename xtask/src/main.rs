@@ -26,6 +26,10 @@ struct Case {
     alphas: Vec<f64>,
     #[serde(default)]
     alphas_after_reinit: Vec<f64>,
+    /// Drive the sweep with XFOIL's ASEQ (ALFA a0 / ASEQ a1 aN da / INIT / ALFA / ASEQ) instead
+    /// of one ALFA per point; ASEQ gives each point ITMAX+5 iterations, as the polar procedure does.
+    #[serde(default)]
+    polar: bool,
     re: f64,
     #[serde(default)]
     mach: f64,
@@ -67,11 +71,12 @@ const RAW_KEEP: &[&str] = &[
     "viscal_iter.dat",
     "viscal_final.dat",
     "viscal_inviscid.dat",
+    "viscal_points.dat",
+    "viscal_iters_all.dat",
     "blsolv_input.dat",
     "blsolv_output.dat",
     "blsolv_trace.dat",
     "blsolv_vz_trace.dat",
-    "xfoil_bl_debug.dat",
     "xfoil_newton_trace.dat",
     "xfoil_pointers.dat",
     "xfoil_uinv.dat",
@@ -189,13 +194,35 @@ fn fixtures(flags: &[String]) {
             "VISC {}\nMACH {}\nVPAR\nN {}\n\nITER {}\n",
             case.re, case.mach, case.ncrit, case.iter
         );
-        for a in &case.alphas {
-            s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
-        }
-        if !case.alphas_after_reinit.is_empty() {
-            s += "INIT\n";
-            for a in &case.alphas_after_reinit {
+        let seq = |s: &mut String, alphas: &[f64]| {
+            // ALFA for the first point, ASEQ for the rest (uniform step asserted)
+            s.push_str(&format!("ALFA {}\n", alphas[0]));
+            if alphas.len() > 1 {
+                let da = alphas[1] - alphas[0];
+                for w in alphas.windows(2) {
+                    assert!(
+                        ((w[1] - w[0]) - da).abs() < 1e-12,
+                        "polar alphas must be uniformly spaced"
+                    );
+                }
+                s.push_str(&format!("ASEQ {} {} {}\n", alphas[1], alphas[alphas.len() - 1], da));
+            }
+        };
+        if case.polar {
+            seq(&mut s, &case.alphas);
+            if !case.alphas_after_reinit.is_empty() {
+                s += "INIT\n";
+                seq(&mut s, &case.alphas_after_reinit);
+            }
+        } else {
+            for a in &case.alphas {
                 s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
+            }
+            if !case.alphas_after_reinit.is_empty() {
+                s += "INIT\n";
+                for a in &case.alphas_after_reinit {
+                    s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
+                }
             }
         }
         s += "\nQUIT\n";
@@ -229,7 +256,7 @@ fn fixtures(flags: &[String]) {
         let manifest = serde_json::json!({
             "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "iter": case.iter },
+                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",

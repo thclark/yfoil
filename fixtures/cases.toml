@@ -17,6 +17,19 @@ iter = 20
 track = true
 
 [[case]]
+name = "naca0012_n60_polar_re1e6"        # polar state machine gate (S10): ALFA 0, ASEQ 1..5, INIT, ALFA -1, ASEQ -2..-5
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+alphas_after_reinit = [-1.0, -2.0, -3.0, -4.0, -5.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+polar = true
+track = true
+
+[[case]]
 name = "naca0012_n160_a0_re1e6"         # full-resolution headline case (S9 acceptance)
 airfoil = "naca4:0012"
 n_panels = 160
@@ -28,7 +41,7 @@ iter = 20
 track = false
 
 [[case]]
-name = "naca0012_n160_polar_re1e6"      # polar state machine (S10): 0..15, reinit, -1..-15
+name = "naca0012_n160_polar_re1e6"      # full ±15° polar (S10 validation set, --big)
 airfoil = "naca4:0012"
 n_panels = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
@@ -37,4 +50,5 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 iter = 20
+polar = true
 track = false

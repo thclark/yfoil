@@ -28,6 +28,23 @@ pub fn alfa_command(st: &mut BlState, sys: &mut Option<InviscidSystem>, alfa: f6
     }
 }
 
+/// One point of OPER's `ASEQ`: sets ALFA, invalidates the wake/converged flags (ASEQ tests
+/// them *before* SPECAL, the ALFA command after — the numbers do not depend on the order), then
+/// SPECAL. The caller runs VISCAL with ITMAX + 5, as ASEQ does.
+pub fn aseq_point(st: &mut BlState, sys: &mut Option<InviscidSystem>, alfa: f64) {
+    st.alfa = alfa;
+    if (st.alfa - st.awake).abs() > 1.0e-5 {
+        st.lwake = false;
+    }
+    if (st.alfa - st.avisc).abs() > 1.0e-5 {
+        st.lvconv = false;
+    }
+    if (st.minf - st.mvisc).abs() > 1.0e-5 {
+        st.lvconv = false;
+    }
+    specal(st, sys);
+}
+
 /// SPECAL. `sys` holds the inviscid system (GGCALC's AIJ factors, BIJ, GAMU in `st.qinvu`);
 /// it is built here when absent (LGAMU/LQAIJ false).
 pub fn specal(st: &mut BlState, sys: &mut Option<InviscidSystem>) {

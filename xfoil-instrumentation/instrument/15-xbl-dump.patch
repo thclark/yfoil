@@ -224,17 +224,17 @@
        RETURN
        END
  
-@@ -535,10 +708,72 @@
+@@ -535,6 +708,68 @@
        NSYS = IV
        IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
  C
 +C---- INSTRUMENTATION (S2): pointer layer after STFIND/IBLPAN/XICALC/IBLSYS
 +      CALL DUMPPTR
 +C
-       RETURN
-       END
- 
- 
++      RETURN
++      END
++
++
 +      SUBROUTINE DUMPPTR
 +C---------------------------------------------------------------
 +C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
@@ -290,147 +290,188 @@
 +        WRITE(93,'(I6,ES24.16)') IW, WGAP(IW)
 +   30 CONTINUE
 +      CLOSE(93)
-+      RETURN
-+      END
-+
-+
-       SUBROUTINE MRCHUE
- C----------------------------------------------------
- C     Marches the BLs and wake in direct mode using
-@@ -549,9 +784,26 @@
+       RETURN
+       END
+ 
+@@ -549,9 +784,44 @@
  C----------------------------------------------------
        INCLUDE 'XFOIL.INC'
        INCLUDE 'XBL.INC'
 +C---- INSTRUMENTATION: enable TRDIF dumps while MRCHUE's trace is open
 +      LOGICAL LTRDIF
 +      COMMON/TRD_INST/ LTRDIF
++      INTEGER NMRCHUE
++      SAVE NMRCHUE
++      DATA NMRCHUE / 0 /
        LOGICAL DIRECT
        REAL MSQ
  C
 +C---- DEBUG: Open output file and write header
-+      OPEN(77, FILE='xfoil_bl_debug.dat', STATUS='REPLACE')
-+      WRITE(77,'(A)') '# IBL IS TURB X S THETA DSTAR HK UE CF RT AMPL'
 +C---- DEBUG: Open Newton iteration trace file
++      NMRCHUE = NMRCHUE + 1
++      LTRDIF = NMRCHUE.EQ.1
++      IF(LTRDIF) THEN
 +      OPEN(78, FILE='xfoil_newton_trace.dat', STATUS='REPLACE')
-+      LTRDIF = .TRUE.
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# Newton iteration trace'
++      ENDIF
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# FORMAT: STATION IBL IS ITBL'
++      ENDIF
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# PRIMARY: X2 U2 T2 D2 S2'
++      ENDIF
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# KINEMATIC: M2 H2 HK2 RT2 V2'
++      ENDIF
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# CLOSURE: HS2 US2 CQ2 CF2 DI2'
++      ENDIF
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# RESIDUAL: RES1 RES2 RES3'
++      ENDIF
++      IF(LTRDIF) THEN
 +      WRITE(78,'(A)') '# UPDATE: DZ1 DZ2 DZ3 DMAX RLX'
++      ENDIF
++      ENDIF
 +C
  C---- shape parameters for separation criteria
        HLMAX = 3.8
        HTMAX = 2.5
-@@ -618,6 +870,13 @@
+@@ -618,6 +888,21 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
 +C-------- DEBUG: Output primary and kinematic variables
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,3I4)') 'STATION', IBL, IS, ITBL
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,4ES24.16,L2,I4)') 'AMPL:', AMPL1, AMPL2, XT,
 +     &       AMCRIT, TRAN, ITRAN(IS)
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,5ES24.16)') 'PRIMARY:', X2, U2, T2, D2, S2
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,5ES24.16)') 'KINEMATIC:', M2, H2, HK2, RT2, V2
++          ENDIF
 +C
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -646,7 +905,17 @@
+@@ -646,7 +931,27 @@
             CALL BLSYS
            ENDIF
  C
 -
 +C-------- DEBUG: Output closure variables and residuals after BLSYS
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,5ES24.16)') 'CLOSURE:', HS2, US2, CQ2, CF2, DI2
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,4ES24.16)') 'RESIDUAL:', VSREZ(1),VSREZ(2),
 +     &       VSREZ(3),VSREZ(4)
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,5ES24.16)') 'VS2_1:', VS2(1,1),VS2(1,2),VS2(1,3),
 +     &       VS2(1,4),VS2(1,5)
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,5ES24.16)') 'VS2_2:', VS2(2,1),VS2(2,2),VS2(2,3),
 +     &       VS2(2,4),VS2(2,5)
++          ENDIF
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,5ES24.16)') 'VS2_3:', VS2(3,1),VS2(3,2),VS2(3,3),
 +     &       VS2(3,4),VS2(3,5)
++          ENDIF
 +C
            IF(DIRECT) THEN
  C
  C--------- try direct mode (set dUe = 0 in currently empty 4th line)
-@@ -659,6 +928,10 @@
+@@ -659,6 +964,12 @@
  C--------- solve Newton system for current "2" station
             CALL GAUSS(4,4,VS2,VSREZ,1)
  C
 +C--------- DEBUG: Output Newton solution (update vector)
++           IF(LTRDIF) THEN
 +           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
 +     &        VSREZ(3),VSREZ(4)
++           ENDIF
 +C
  C--------- determine max changes and underrelax if necessary
             DMAX = MAX( ABS(VSREZ(2)/THI),
       &                 ABS(VSREZ(3)/DSI)  )
-@@ -668,6 +941,9 @@
+@@ -668,6 +979,11 @@
             RLX = 1.0
             IF(DMAX.GT.0.3) RLX = 0.3/DMAX
  C
 +C--------- DEBUG: Output relaxation info
++           IF(LTRDIF) THEN
 +           WRITE(78,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
++           ENDIF
 +C
  C--------- see if direct mode is not applicable
             IF(IBL .NE. IBLTE(IS)+1) THEN
  C
-@@ -738,6 +1014,9 @@
+@@ -738,6 +1054,11 @@
             VSREZ(4) = HTARG - HK2
  C
             CALL GAUSS(4,4,VS2,VSREZ,1)
 +C--------- DEBUG: Output Newton solution (inverse branch)
++           IF(LTRDIF) THEN
 +           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
 +     &        VSREZ(3),VSREZ(4)
++           ENDIF
  C
  C--------- added Ue clamp   MD  3 Apr 03
             DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -750,6 +1029,8 @@
+@@ -750,6 +1071,10 @@
  C
  C--------- update variables
  ccc           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
 +C--------- DEBUG: Output relaxation (inverse branch)
++           IF(LTRDIF) THEN
 +           WRITE(78,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
++           ENDIF
             IF(IBL.GE.ITRAN(IS)) CTI = CTI + RLX*VSREZ(1)
             THI = THI + RLX*VSREZ(2)
             DSI = DSI + RLX*VSREZ(3)
-@@ -773,8 +1054,14 @@
+@@ -773,8 +1098,18 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
 -          IF(DMAX.LE.1.0E-5) GO TO 110
 +C-------- DEBUG: Output updated values
++          IF(LTRDIF) THEN
 +          WRITE(78,'(A,4ES24.16)') 'UPDATED:', CTI, THI, DSI, UEI
++          ENDIF
  C
 +          IF(DMAX.LE.1.0E-5) THEN
++           IF(LTRDIF) THEN
 +           WRITE(78,'(A,I4,ES24.16)') 'CONVERGED:', ITBL, DMAX
++           ENDIF
 +           GO TO 110
 +          ENDIF
 +C
    100   CONTINUE
          WRITE(*,1350) IBL, IS, DMAX 
   1350   FORMAT(' MRCHUE: Convergence failed at',I4,'  side',I2,
-@@ -842,6 +1129,10 @@
+@@ -842,6 +1177,7 @@
          DELT(IBL,IS) = DE2
          TSTR(IBL,IS) = HS2*T2
  C
-+C------ DEBUG: Output BL values at each station for comparison
-+        WRITE(77,'(I4,I2,1X,L1,9ES24.16)') IBL, IS, TURB,
-+     &        X2, S2, T2, D2, HK2, U2, CF2, RT2, AMPL2
 +C
  C------ set "1" variables to "2" variables for next streamwise station
          CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
          CALL BLKIN
-@@ -868,10 +1159,14 @@
+@@ -868,10 +1204,14 @@
   1000 CONTINUE
   2000 CONTINUE
  C
 +C---- DEBUG: Close output file
-+      CLOSE(77)
 +C
++      IF(LTRDIF) CLOSE(78)
 +      LTRDIF = .FALSE.
        RETURN
        END
@@ -441,7 +482,7 @@
        SUBROUTINE MRCHDU
  C----------------------------------------------------
  C     Marches the BLs and wake in mixed mode using
-@@ -888,6 +1183,10 @@
+@@ -888,6 +1228,10 @@
        REAL MSQ
  ccc   REAL MDI
  C
@@ -452,7 +493,7 @@
        DATA DEPS / 5.0E-6 /
  C
  C---- constant controlling how far Hk is allowed to deviate
-@@ -962,6 +1261,12 @@
+@@ -962,6 +1306,12 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
@@ -465,7 +506,7 @@
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -980,6 +1285,12 @@
+@@ -980,6 +1330,12 @@
             CALL BLSYS
            ENDIF
  C
@@ -478,7 +519,7 @@
  C-------- set stuff at first iteration...
            IF(ITBL.EQ.1) THEN
  C
-@@ -1048,6 +1359,7 @@
+@@ -1048,6 +1404,7 @@
             ELSE IF(ITBL.LE.15) THEN
              SENS = 0.5*(SENS + SENNEW)
             ENDIF
@@ -486,10 +527,12 @@
  C
  C--------- set prescribed Ue-Hk combination
             VS2(4,1) = 0.
-@@ -1059,9 +1371,21 @@
+@@ -1057,11 +1414,23 @@
+            VSREZ(4) = -(HKREF**2)*(HK2 / HKREF - 1.0)
+      &                     - SENS*(U2  / UEREF - 1.0)
  C
-           ENDIF
- C
++          ENDIF
++C
 +          IF(LMDUTR) THEN
 +           WRITE(79,'(A,2ES24.16)') 'REF:', UEREF, HKREF
 +           WRITE(79,'(A,4ES24.16)') 'RESIDUAL:', VSREZ(1),VSREZ(2),
@@ -497,8 +540,8 @@
 +           DO 8110 K=1, 4
 +             WRITE(79,'(A,I1,A,5ES24.16)') 'VS2_',K,':',(VS2(K,L),L=1,5)
 + 8110      CONTINUE
-+          ENDIF
-+C
+           ENDIF
+ C
  C-------- solve Newton system for current "2" station
            CALL GAUSS(4,4,VS2,VSREZ,1)
  C
@@ -508,7 +551,7 @@
  C-------- determine max changes and underrelax if necessary
  C-------- (added Ue clamp   MD  3 Apr 03)
            DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -1071,6 +1395,7 @@
+@@ -1071,6 +1440,7 @@
  C
            RLX = 1.0
            IF(DMAX.GT.0.3) RLX = 0.3/DMAX
@@ -516,7 +559,7 @@
  C
  C-------- update as usual
            IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
-@@ -1095,10 +1420,16 @@
+@@ -1095,10 +1465,16 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
@@ -533,7 +576,7 @@
          WRITE(*,1350) IBL, IS, DMAX 
   1350   FORMAT(' MRCHDU: Convergence failed at',I4,'  side',I2,
       &         '    Res =', E12.4)
-@@ -1267,6 +1598,11 @@
+@@ -1267,6 +1643,11 @@
        EQUIVALENCE (VA(1,1,IVX), U_AC(1,1)) ,
       &            (VB(1,1,IVX), Q_AC(1)  )
        REAL MSQ
@@ -545,7 +588,7 @@
  C
  C---- max allowable alpha changes per iteration
        DALMAX =  0.5*DTOR
-@@ -1281,6 +1617,8 @@
+@@ -1281,6 +1662,8 @@
  C
  C---- calculate new Ue distribution assuming no under-relaxation
  C-    also set the sensitivity of Ue wrt to alpha or Re
@@ -554,7 +597,7 @@
        DO 1 IS=1, 2
          DO 10 IBL=2, NBL(IS)
            I = IPAN(IBL,IS)
-@@ -1307,9 +1645,11 @@
+@@ -1307,9 +1690,11 @@
            UNEW(IBL,IS) = UINV(IBL,IS) + DUI
            U_AC(IBL,IS) = UINV_AC      + DUI_AC
  C
@@ -566,7 +609,7 @@
  C---- set new Qtan from new Ue with appropriate sign change
        DO 2 IS=1, 2
          DO 20 IBL=2, IBLTE(IS)
-@@ -1556,6 +1896,39 @@
+@@ -1556,6 +1941,39 @@
          TSTR(IBLTE(1)+KBL,1) = TSTR(IBLTE(2)+KBL,2)
      6 CONTINUE
  C

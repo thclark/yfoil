@@ -6,7 +6,7 @@
 use crate::geometry::PaneledAirfoil;
 use crate::solver::blstate::BlState;
 use crate::solver::ggcalc::InviscidSystem;
-use crate::solver::specal::alfa_command;
+use crate::solver::specal::{alfa_command, aseq_point};
 use crate::solver::viscal::{viscal, ViscalIter};
 
 /// Flow specification (the OPER settings that must be pinned explicitly).
@@ -139,15 +139,25 @@ impl Session {
         }
     }
 
-    /// OPER `ALFA`: SPECAL for the new angle, then VISCAL when viscous.
+    /// OPER `ALFA`: SPECAL for the new angle, then VISCAL(ITMAX) when viscous.
     pub fn alfa(&mut self, alpha: f64) -> OperatingPoint {
         alfa_command(&mut self.st, &mut self.sys, alpha);
+        self.run_viscal(self.spec.itmax)
+    }
+
+    /// One point of OPER `ASEQ`: SPECAL for the new angle, then VISCAL(ITMAX + 5) when viscous.
+    pub fn aseq(&mut self, alpha: f64) -> OperatingPoint {
+        aseq_point(&mut self.st, &mut self.sys, alpha);
+        self.run_viscal(self.spec.itmax + 5)
+    }
+
+    fn run_viscal(&mut self, niter: usize) -> OperatingPoint {
         let mut trace = Vec::new();
         let converged = if self.st.lvisc {
             viscal(
                 &mut self.st,
                 self.sys.as_mut(),
-                self.spec.itmax,
+                niter,
                 self.spec.waklen,
                 Some(&mut trace),
             )
@@ -219,8 +229,8 @@ pub struct PolarConfig {
     /// Step size (degrees, positive)
     pub alpha_step: f64,
     pub spec: FlowSpec,
-    /// Consecutive non-converged points after which a sweep direction stops
-    pub max_failures: usize,
+    /// NSEQEX: an ASEQ sequence halts once this many consecutive points fail to converge
+    pub nseqex: usize,
 }
 
 impl Default for PolarConfig {
@@ -230,52 +240,52 @@ impl Default for PolarConfig {
             alpha_min: -5.0,
             alpha_step: 0.5,
             spec: FlowSpec::default(),
-            max_failures: 3,
+            nseqex: 4,
         }
     }
 }
 
-/// Result of a polar sweep: points sorted by ascending alpha.
+/// Result of a polar sweep: points sorted by ascending alpha, in the order XFOIL's `PACC`
+/// would keep them (unconverged viscous points are recorded in `failed_alphas`, not in `points`).
 #[derive(Debug, Clone)]
 pub struct PolarResult {
     pub points: Vec<OperatingPoint>,
     /// Alphas (radians) that did not converge
     pub failed_alphas: Vec<f64>,
     pub spec: FlowSpec,
-    /// Neither sweep direction stopped on max_failures
+    /// Neither sequence was halted by NSEQEX consecutive failures
     pub completed: bool,
 }
 
 impl PolarResult {
-    /// (CL_max, alpha in degrees at CL_max) over converged points
+    /// (CL_max, alpha in degrees at CL_max)
     pub fn cl_max(&self) -> Option<(f64, f64)> {
         self.points
             .iter()
-            .filter(|p| p.converged)
             .map(|p| (p.cl, p.alpha.to_degrees()))
             .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
     }
-    /// (max L/D, CL at max L/D) over converged points
+    /// (max L/D, CL at max L/D)
     pub fn ld_max(&self) -> Option<(f64, f64)> {
         self.points
             .iter()
-            .filter(|p| p.converged && p.cd > 1e-10)
+            .filter(|p| p.cd > 1e-10)
             .map(|p| (p.cl / p.cd, p.cl))
             .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
     }
-    /// CD at the converged point with the smallest |CL|
+    /// CD at the point with the smallest |CL|
     pub fn cd0(&self) -> Option<f64> {
         self.points
             .iter()
-            .filter(|p| p.converged)
             .min_by(|a, b| a.cl.abs().partial_cmp(&b.cl.abs()).unwrap())
             .map(|p| p.cd)
     }
 }
 
-/// The polar as a state machine (CLAUDE.md): sweep 0° → alpha_max with the previous point's
-/// BL as the initial condition, `INIT`, then −step → alpha_min, and stitch ascending. Each
-/// direction stops after `max_failures` consecutive non-converged points.
+/// The polar as XFOIL's OPER script runs it (CLAUDE.md):
+/// `ALFA 0` / `ASEQ step alpha_max step` / `INIT` / `ALFA -step` / `ASEQ -2step alpha_min -step`,
+/// with one persistent session so each point starts from the previous point's BL, and each
+/// ASEQ halting after NSEQEX consecutive non-converged points. Points are stitched ascending.
 pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarResult {
     let step = config.alpha_step.abs();
     let mut session = Session::new(airfoil, config.spec.clone());
@@ -283,42 +293,65 @@ pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarRes
     let mut failed = Vec::new();
     let mut completed = true;
 
-    let mut sweep = |session: &mut Session, alphas: Vec<f64>, points: &mut Vec<OperatingPoint>| {
-        let mut consecutive = 0;
-        for adeg in alphas {
-            let p = session.alfa(adeg.to_radians());
-            if p.converged {
-                consecutive = 0;
-            } else {
-                consecutive += 1;
-                failed.push(p.alpha);
-            }
+    // ASEQ: NPOINT = INT((A2-A1)/DA + 0.5) + 1 points from A1 in steps of DA
+    let aseq_alphas = |a1: f64, a2: f64, da: f64| -> Vec<f64> {
+        if da == 0.0 || (a2 - a1) * da < 0.0 {
+            return Vec::new();
+        }
+        let npoint = ((a2 - a1) / da + 0.5).floor() as usize + 1;
+        (0..npoint).map(|i| a1 + da * i as f64).collect()
+    };
+    let record = |p: OperatingPoint, points: &mut Vec<OperatingPoint>, failed: &mut Vec<f64>| {
+        if p.converged {
             points.push(p);
-            if consecutive >= config.max_failures {
-                completed = false;
-                break;
-            }
+        } else {
+            failed.push(p.alpha);
         }
     };
+    let aseq =
+        |session: &mut Session, alphas: Vec<f64>, points: &mut Vec<OperatingPoint>, failed: &mut Vec<f64>| -> bool {
+            let mut iseqex = 0;
+            for adeg in alphas {
+                let p = session.aseq(adeg.to_radians());
+                let conv = p.converged;
+                record(p, points, failed);
+                if session.st.lvisc && !conv {
+                    iseqex += 1;
+                    if iseqex >= config.nseqex {
+                        // 'Sequence halted since previous N points did not converge'
+                        return false;
+                    }
+                } else {
+                    iseqex = 0;
+                }
+            }
+            true
+        };
 
-    // 0° → alpha_max
-    let mut up = Vec::new();
-    let mut a = 0.0;
-    while a <= config.alpha_max + 1e-9 {
-        up.push(a);
-        a += step;
+    // ALFA 0, ASEQ step alpha_max step
+    record(session.alfa(0.0), &mut points, &mut failed);
+    if config.alpha_max >= step {
+        completed &= aseq(
+            &mut session,
+            aseq_alphas(step, config.alpha_max, step),
+            &mut points,
+            &mut failed,
+        );
     }
-    sweep(&mut session, up, &mut points);
 
-    // reinitialise, then −step → alpha_min
-    session.init();
-    let mut down = Vec::new();
-    let mut a = -step;
-    while a >= config.alpha_min - 1e-9 {
-        down.push(a);
-        a -= step;
+    // INIT, ALFA -step, ASEQ -2step alpha_min -step
+    if config.alpha_min <= -step {
+        session.init();
+        record(session.alfa(-step.to_radians()), &mut points, &mut failed);
+        if config.alpha_min <= -2.0 * step {
+            completed &= aseq(
+                &mut session,
+                aseq_alphas(-2.0 * step, config.alpha_min, -step),
+                &mut points,
+                &mut failed,
+            );
+        }
     }
-    sweep(&mut session, down, &mut points);
 
     points.sort_by(|p, q| p.alpha.partial_cmp(&q.alpha).unwrap());
     PolarResult {

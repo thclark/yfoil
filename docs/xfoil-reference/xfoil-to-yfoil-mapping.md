@@ -313,3 +313,11 @@ compute_polar}` is the OPER driver (one persistent `BlState` per session, as XFO
 The legacy `SetblState`/station-at-a-time/`bl::wake`/`bl::newton`/`forces` implementations are
 deleted; `panel::solve_inviscid` remains only for the pre-S3 inviscid tests (removed with
 stage G).
+
+Stage S10: the polar is XFOIL's OPER script run through one persistent `Session`
+(`analysis::compute_polar`): `ALFA 0` (`Session::alfa`, VISCAL(ITMAX)), `ASEQ step alpha_max step`
+(`Session::aseq` → `specal::aseq_point` — invalidations, SPECAL — then VISCAL(ITMAX + 5), as ASEQ
+does), `INIT` (`Session::init`, the LBLINI toggle that also clears LIPAN), `ALFA -step`, `ASEQ`
+down to alpha_min; each ASEQ halts after `NSEQEX` (4) consecutive non-converged points, PACC keeps
+only converged points, and the result is stitched ascending. `QDCALC` keeps the airfoil DIJ block
+across calls (LADIJ) and refreshes only the wake part when XYWAKE has moved the wake (LWDIJ).

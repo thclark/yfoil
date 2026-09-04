@@ -165,7 +165,11 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
     let n = st.n;
     let nw = st.nw;
     let np = n + nw;
-    st.dij = vec![vec![0.0; np + 1]; np + 1];
+    // DIJ persists in COMMON: the airfoil block (1..N, 1..N) is computed once (LADIJ) and only the
+    // wake rows/columns are refreshed here when the wake moves (LWDIJ)
+    if st.dij.len() != np + 1 || st.dij.iter().any(|r| r.len() != np + 1) {
+        st.dij = vec![vec![0.0; np + 1]; np + 1];
+    }
 
     if !sys.ladij {
         // source influence matrix for airfoil surface: multiply each dPsi/dSig vector by the

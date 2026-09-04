@@ -29,9 +29,11 @@ W=sys.argv[1]
 tok=re.compile(r'[-+]?(?:\d+\.\d*|\.\d+)(?:[EeDd][-+]?\d+)?')
 def parse(p): return [[float(t.replace('D','E')) for t in tok.findall(l)] for l in open(p,errors='ignore')]
 files=[('xfoil_panels.dat','geometry after ABCOPY'),('xfoil_inviscid.dat','inviscid GAM/QINV'),('xfoil_dij.dat','DIJ matrix'),
-       ('mrchdu_input.dat','BL state after MRCHUE init'),('mrchdu_output.dat','BL state after MRCHDU #1'),
-       ('blsolv_input.dat','SETBL VA/VB/VM/VDEL (calls 1..3)'),('blsolv_output.dat','BLSOLV VDEL out'),
-       ('xfoil_update.dat','UPDATE DUI/UNEW'),('xfoil_iter_simple.dat','per-iteration CL/CD/RMSBL')]
+       ('mrchdu_input_1.dat','BL state after MRCHUE init'),('mrchdu_output_1.dat','BL state after MRCHDU #1'),
+       ('blsolv_input.dat','SETBL VA/VB/VM/VDEL (calls 1..3)'),('blsolv_output.dat','BLSOLV VDEL out (calls 1..3)'),
+       ('update_output_1.dat','UPDATE state/RLX/RMSBL (call 1)'),('viscal_iter.dat','per-iteration CL/CD/RMSBL/RLX (VISCAL call 1)'),
+       ('viscal_final.dat','converged point (VISCAL call 1)'),('viscal_iters_all.dat','per-iteration record, all VISCAL calls'),
+       ('viscal_points.dat','per-point CL/CD/CM/XTR (all VISCAL calls)')]
 print(f"| file | lines | misaligned | max abs diff | max rel (abs>1e-8) | p99 rel | median rel | stage |")
 print("|---|---|---|---|---|---|---|---|")
 for f,desc in files:
