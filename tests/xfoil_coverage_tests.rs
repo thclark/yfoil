@@ -15,6 +15,7 @@
 //! | `naca0012_n60_a2_re1e6_type3` | TYPE 3 (MATYP 1, RETYP 3): MRCL's 1/CL Re scaling |
 //! | `naca0012_n60_a2_re1e6_m03_type2` | MATYP = 2 with M > 0: SPECAL's Mach–CL Newton loop |
 //! | `naca0012_n60_a2_re1e6_xtr_coinc` | trip in the natural-transition interval: TRCHEK2 TRFREE .AND. TRFORC |
+//! | `naca0012_n60_a2_re1e6_damp` | OPER DAMP: IDAMPV = 1, the modified-envelope amplification (DAMPL2) |
 //!
 //! The last five were added from the gcov measurement (`cargo xtask coverage`,
 //! `docs/validation/coverage.md`): each wakes branches the earlier set left open.
@@ -320,6 +321,19 @@ fn test_trip_in_transition_interval_matches_xfoil() {
         "naca0012_n60_a2_re1e6_xtr_coinc",
         FlowSpec {
             xstrip: [0.48, 0.87],
+            ..FlowSpec::default()
+        },
+        &[2.0],
+    );
+    assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
+}
+
+#[test]
+fn test_modified_amplification_damp_matches_xfoil() {
+    let outcomes = run_case(
+        "naca0012_n60_a2_re1e6_damp",
+        FlowSpec {
+            idamp: true,
             ..FlowSpec::default()
         },
         &[2.0],

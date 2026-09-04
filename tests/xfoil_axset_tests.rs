@@ -99,7 +99,7 @@ fn test_axset_against_xfoil_fixtures() {
         let out = &f.output;
 
         let result = axset(
-            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit,
+            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit, 0,
         );
 
         // Check each output value
@@ -159,7 +159,7 @@ fn test_axset_sample_cases() {
         let out = &f.output;
 
         let result = axset(
-            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit,
+            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit, 0,
         );
 
         check_value("AX", 1, out.ax, result.ax);
@@ -180,7 +180,7 @@ fn test_axset_sample_cases() {
         let out = &f.output;
 
         let result = axset(
-            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit,
+            inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit, 0,
         );
 
         check_value("AX", idx, out.ax, result.ax);

@@ -182,6 +182,19 @@ minimal = true
 track = true
 
 [[case]]
+name = "naca0012_n60_a2_re1e6_damp"      # coverage: OPER DAMP (IDAMPV = 1, modified envelope e^n, DAMPL2)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+damp = true
+minimal = true
+track = true
+
+[[case]]
 name = "pangen_naca0012_n160"              # stage G: XFOIL's NACA generator + PANGEN at NPAN = 160
 airfoil = "xfoil-naca:0012"
 n_panels = 160

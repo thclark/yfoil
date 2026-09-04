@@ -351,3 +351,11 @@ uses the same `lefind`). CLI: `yfoil geom naca --naca-model xfoil`. The pipeline
 cases (`airfoil = "xfoil-naca:dddd"`, `geometry_only = true`) run `NACA dddd / PPAR / N n` and dump
 `xfoil_pangen.dat` from PANGEN. `panel::solve_inviscid` (the pre-S3 inviscid solver) is deleted;
 GGCALC/PSILIN on `BlState` are the inviscid solve.
+
+## OPER DAMP (2026-09-04)
+
+| XFOIL | YFoil | Notes |
+|---|---|---|
+| `IDAMP` (OPER `DAMP` toggle) | `BlState.idamp`, `FlowSpec.idamp` | 0/false = envelope e^n (`DAMPL`), 1/true = modified envelope (`DAMPL2`) |
+| `IDAMPV` (SETBL: `IDAMPV = IDAMP`) | `BLGlobalParams.idampv` | read by `axset` (AXSET's `IF(IDAMPV.EQ.0)`), reached through `trchek` and `bldif` |
+| `DAMPL2` | `bl::system::dampl2` | verbatim; gated end-to-end by `naca0012_n60_a2_re1e6_damp` |

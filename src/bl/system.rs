@@ -152,7 +152,18 @@ pub fn trchek(
     let (x1, x2) = (s1.x, s2.x);
 
     // calculate average amplification rate AX over X1..X2 interval, with the current AMPL2
-    let r0 = axset(s1.hk, s1.theta, s1.rt, ampl1, s2.hk, s2.theta, s2.rt, s2.ampl, acrit);
+    let r0 = axset(
+        s1.hk,
+        s1.theta,
+        s1.rt,
+        ampl1,
+        s2.hk,
+        s2.theta,
+        s2.rt,
+        s2.ampl,
+        acrit,
+        params.idampv,
+    );
     // set initial guess for iterate N2 (AMPL2) at X2
     let mut ampl2 = ampl1 + r0.ax * (x2 - x1);
 
@@ -229,7 +240,18 @@ pub fn trchek(
         st.blkin(params);
 
         // calculate amplification rate AX over current X1-XT interval
-        r = axset(s1.hk, s1.theta, s1.rt, ampl1, st.hk, tt, st.rt, amplt, acrit);
+        r = axset(
+            s1.hk,
+            s1.theta,
+            s1.rt,
+            ampl1,
+            st.hk,
+            tt,
+            st.rt,
+            amplt,
+            acrit,
+            params.idampv,
+        );
 
         // punch out early if there is no amplification here
         if r.ax <= 0.0 {
@@ -495,6 +517,142 @@ pub fn dampl(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     }
 }
 
+/// DAMPL2 (xblsys.f): amplification rate for the *modified* envelope e^n method (Nov 1996) —
+/// the envelope rate of `dampl`, blended for Hk > 3.5 with the Orr–Sommerfeld maximum
+/// amplification correlation for separated profiles. Selected by OPER `DAMP` (IDAMPV = 1).
+pub fn dampl2(hk: f64, th: f64, rt: f64) -> AmplificationRate {
+    const DGR: f64 = 0.08;
+    const HK1: f64 = 3.5;
+    const HK2: f64 = 4.0;
+
+    let hmi = 1.0 / (hk - 1.0);
+    let hmi_hk = -hmi * hmi;
+
+    // log10(Critical Rth) -- H   correlation for Falkner-Skan profiles
+    let aa = 2.492 * hmi.powf(0.43);
+    let aa_hk = (aa / hmi) * 0.43 * hmi_hk;
+
+    let bb = (14.0 * hmi - 9.24).tanh();
+    let bb_hk = (1.0 - bb * bb) * 14.0 * hmi_hk;
+
+    let grc = aa + 0.7 * (bb + 1.0);
+    let grc_hk = aa_hk + 0.7 * bb_hk;
+
+    let gr = rt.log10();
+    let gr_rt = 1.0 / (2.3025851 * rt);
+
+    let (mut ax, mut ax_hk, mut ax_th, mut ax_rt);
+    if gr < grc - DGR {
+        // no amplification for Rtheta < Rcrit
+        ax = 0.0;
+        ax_hk = 0.0;
+        ax_th = 0.0;
+        ax_rt = 0.0;
+    } else {
+        // Set steep cubic ramp used to turn on AX smoothly as Rtheta exceeds Rcrit
+        let rnorm = (gr - (grc - DGR)) / (2.0 * DGR);
+        let rn_hk = -grc_hk / (2.0 * DGR);
+        let rn_rt = gr_rt / (2.0 * DGR);
+
+        let (rfac, rfac_hk, rfac_rt);
+        if rnorm >= 1.0 {
+            rfac = 1.0;
+            rfac_hk = 0.0;
+            rfac_rt = 0.0;
+        } else {
+            rfac = 3.0 * rnorm * rnorm - 2.0 * rnorm * rnorm * rnorm;
+            let rfac_rn = 6.0 * rnorm - 6.0 * rnorm * rnorm;
+            rfac_hk = rfac_rn * rn_hk;
+            rfac_rt = rfac_rn * rn_rt;
+        }
+
+        // set envelope amplification rate with respect to Rtheta: DADR = d(N)/d(Rtheta) = f(H)
+        let arg = 3.87 * hmi - 2.52;
+        let arg_hk = 3.87 * hmi_hk;
+
+        let ex = (-arg * arg).exp();
+        let ex_hk = ex * (-2.0 * arg * arg_hk);
+
+        let dadr = 0.028 * (hk - 1.0) - 0.0345 * ex;
+        let dadr_hk = 0.028 - 0.0345 * ex_hk;
+
+        // set conversion factor from d/d(Rtheta) to d/dx: AF = Theta d(Rtheta)/dx = f(H)
+        let brg = -20.0 * hmi;
+        let af = -0.05 + 2.7 * hmi - 5.5 * hmi * hmi + 3.0 * hmi * hmi * hmi + 0.1 * brg.exp();
+        let af_hmi = 2.7 - 11.0 * hmi + 9.0 * hmi * hmi - 2.0 * brg.exp();
+        let af_hk = af_hmi * hmi_hk;
+
+        // set amplification rate with respect to x, with RFAC shutting off amplification below Rcrit
+        ax = (af * dadr / th) * rfac;
+        ax_hk = (af_hk * dadr / th + af * dadr_hk / th) * rfac + (af * dadr / th) * rfac_hk;
+        ax_th = -ax / th;
+        ax_rt = (af * dadr / th) * rfac_rt;
+    }
+
+    if hk < HK1 {
+        return AmplificationRate {
+            ax,
+            ax_hk,
+            ax_th,
+            ax_rt,
+        };
+    }
+
+    // non-envelope max-amplification correction for separated profiles
+    let hnorm = (hk - HK1) / (HK2 - HK1);
+    let hn_hk = 1.0 / (HK2 - HK1);
+
+    // set blending fraction HFAC = 0..1 over HK1 < HK < HK2
+    let (hfac, hf_hk);
+    if hnorm >= 1.0 {
+        hfac = 1.0;
+        hf_hk = 0.0;
+    } else {
+        hfac = 3.0 * hnorm * hnorm - 2.0 * hnorm * hnorm * hnorm;
+        hf_hk = (6.0 * hnorm - 6.0 * hnorm * hnorm) * hn_hk;
+    }
+
+    // "normal" envelope amplification rate AX1
+    let ax1 = ax;
+    let ax1_hk = ax_hk;
+    let ax1_th = ax_th;
+    let ax1_rt = ax_rt;
+
+    // set modified amplification rate AX2
+    let gr0 = 0.30 + 0.35 * (-0.15 * (hk - 5.0)).exp();
+    let gr0_hk = -0.35 * (-0.15 * (hk - 5.0)).exp() * 0.15;
+
+    let tnr = (1.2 * (gr - gr0)).tanh();
+    let tnr_rt = (1.0 - tnr * tnr) * 1.2 * gr_rt;
+    let tnr_hk = -(1.0 - tnr * tnr) * 1.2 * gr0_hk;
+
+    let (mut ax2, mut ax2_hk, mut ax2_rt, mut ax2_th);
+    ax2 = (0.086 * tnr - 0.25 / (hk - 1.0).powf(1.5)) / th;
+    ax2_hk = (0.086 * tnr_hk + 1.5 * 0.25 / (hk - 1.0).powf(2.5)) / th;
+    ax2_rt = (0.086 * tnr_rt) / th;
+    ax2_th = -ax2 / th;
+
+    if ax2 < 0.0 {
+        ax2 = 0.0;
+        ax2_hk = 0.0;
+        ax2_rt = 0.0;
+        ax2_th = 0.0;
+    }
+
+    // blend the two amplification rates
+    ax = hfac * ax2 + (1.0 - hfac) * ax1;
+    ax_hk = hfac * ax2_hk + (1.0 - hfac) * ax1_hk + hf_hk * (ax2 - ax1);
+    ax_rt = hfac * ax2_rt + (1.0 - hfac) * ax1_rt;
+    ax_th = hfac * ax2_th + (1.0 - hfac) * ax1_th;
+
+    AmplificationRate {
+        ax,
+        ax_hk,
+        ax_th,
+        ax_rt,
+    }
+}
+
 /// Result from AXSET - averaged amplification rate over interval
 #[derive(Debug, Clone, Default)]
 pub struct AveragedAmplification {
@@ -539,10 +697,15 @@ pub fn axset(
     rt2: f64,
     a2: f64,
     acrit: f64,
+    idampv: usize,
 ) -> AveragedAmplification {
-    // Calculate local amplification rates at both stations
-    let ax1_result = dampl(hk1, t1, rt1);
-    let ax2_result = dampl(hk2, t2, rt2);
+    // 2nd-order: local amplification rates at both stations, envelope (IDAMPV = 0) or
+    // modified-envelope (IDAMPV = 1, OPER DAMP) method
+    let (ax1_result, ax2_result) = if idampv == 0 {
+        (dampl(hk1, t1, rt1), dampl(hk2, t2, rt2))
+    } else {
+        (dampl2(hk1, t1, rt1), dampl2(hk2, t2, rt2))
+    };
 
     let ax1 = ax1_result.ax;
     let ax2 = ax2_result.ax;
@@ -612,6 +775,8 @@ pub enum BLFlowType {
 /// flow condition (Mach, Reynolds number).
 #[derive(Debug, Clone)]
 pub struct BLGlobalParams {
+    /// IDAMPV: amplification model selected in SETBL from IDAMP (0 = DAMPL, 1 = DAMPL2)
+    pub idampv: usize,
     /// Freestream velocity qinf
     pub qinf: f64,
 
@@ -693,6 +858,7 @@ impl BLGlobalParams {
         let reybl_ms = reybl * (1.5 / herat - 1.0 / (herat + hvrat)) * herat_ms;
 
         Self {
+            idampv: 0,
             qinf,
             tk,
             tk_ms,
@@ -1541,6 +1707,7 @@ impl BLLocalSystem {
         flow_type: BLFlowType,
         is_similarity: bool,
         acrit: f64,
+        idampv: usize,
     ) {
         // Initialize to zero
         for k in 0..4 {
@@ -1582,7 +1749,9 @@ impl BLLocalSystem {
             BLFlowType::Laminar => {
                 // laminar part --> set amplification equation (BLDIF ITYP=1), verbatim:
                 // set average amplification AX over interval X1..X2
-                let r = axset(s1.hk, s1.theta, s1.rt, s1.ampl, s2.hk, s2.theta, s2.rt, s2.ampl, acrit);
+                let r = axset(
+                    s1.hk, s1.theta, s1.rt, s1.ampl, s2.hk, s2.theta, s2.rt, s2.ampl, acrit, idampv,
+                );
                 let ax = r.ax;
                 let rezc = s2.ampl - s1.ampl - ax * (s2.x - s1.x);
                 let z_ax = -(s2.x - s1.x);
@@ -2037,7 +2206,7 @@ impl BLLocalSystem {
 
         // Call BLDIF for laminar part (X1 to XT)
         let mut lam_sys = BLLocalSystem::default();
-        lam_sys.bldif(s1, &st, &cfm_lam, BLFlowType::Laminar, false, acrit);
+        lam_sys.bldif(s1, &st, &cfm_lam, BLFlowType::Laminar, false, acrit, params.idampv);
 
         // Convert laminar system sensitivities from "T" variables to "1" and "2" variables
         // Using chain rule for derivatives
@@ -2155,7 +2324,7 @@ impl BLLocalSystem {
 
         // Call BLDIF for turbulent part (XT to X2)
         let mut turb_sys = BLLocalSystem::default();
-        turb_sys.bldif(&st, s2, &cfm_turb, BLFlowType::Turbulent, false, acrit);
+        turb_sys.bldif(&st, s2, &cfm_turb, BLFlowType::Turbulent, false, acrit, params.idampv);
 
         // Convert turbulent system sensitivities from "T" variables to "1" and "2" variables
         let mut bt1: [[f64; 5]; 4] = [[0.0; 5]; 4];
@@ -2472,7 +2641,7 @@ impl BLNewtonSystem {
 
             // Set up local BL system
             let mut local_sys = BLLocalSystem::default();
-            local_sys.bldif(s1, s2, &cfm, flow_type, is_simi, 9.0);
+            local_sys.bldif(s1, s2, &cfm, flow_type, is_simi, 9.0, params.idampv);
 
             // Handle similarity station: "1" and "2" variables are the same
             if is_simi {
@@ -3556,7 +3725,7 @@ mod tests {
 
         // Run BLDIF
         let mut sys = BLLocalSystem::default();
-        sys.bldif(&s1, &s2, &cfm, BLFlowType::Turbulent, false, 9.0);
+        sys.bldif(&s1, &s2, &cfm, BLFlowType::Turbulent, false, 9.0, 0);
 
         // Check momentum equation residual (row 2)
         // VSREZ[2] = -0.7123274356e-1 from Fortran
@@ -3742,6 +3911,7 @@ mod tests {
             2.5, 0.0015, 1800.0, 3.0, // Station 1: HK, T, RT, A
             2.6, 0.0018, 2200.0, 4.5, // Station 2
             9.0, // ACRIT
+            0,   // IDAMPV
         );
 
         // AX = 0.1160733819E+01
@@ -3764,6 +3934,7 @@ mod tests {
             2.5, 0.002, 2500.0, 7.5, // Station 1
             2.55, 0.0022, 2750.0, 8.5, // Station 2
             9.0, // ACRIT
+            0,   // IDAMPV
         );
 
         // AX = 0.7944293022E+00

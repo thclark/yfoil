@@ -111,6 +111,8 @@ pub struct BlState {
     pub reinf1: f64,
     pub matyp: usize,
     pub retyp: usize,
+    /// IDAMP: 0 = envelope e^n (DAMPL), 1 = modified envelope method (DAMPL2), OPER `DAMP`
+    pub idamp: usize,
     pub minf: f64,
     pub reinf: f64,
     /// LALFA (fixed alpha; else fixed CL = CLSPEC), CL, CLSPEC
@@ -238,6 +240,7 @@ impl BlState {
             reinf1: 0.0,
             matyp: 1,
             retyp: 1,
+            idamp: 0,
             minf: 0.0,
             reinf: 0.0,
             lalfa: true,

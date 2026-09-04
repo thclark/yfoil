@@ -613,12 +613,6 @@ reach = "an island of negative Ue after UPDATE: strongly separated or diverging 
 
 [[note]]
 file = "xblsys.f"
-line = 70
-branch = 1
-reach = "OPER DAMP (IDAMP = 1, modified amplification): not yet translated in YFoil (no IDAMPV switch, no DAMPL2)"
-
-[[note]]
-file = "xblsys.f"
 line = 390
 reach = "AX <= 0 at a transition check (no amplification between the two stations)"
 
@@ -882,36 +876,6 @@ file = "xblsys.f"
 subroutine = "DIT"
 why = "its only call site is commented out (xblsys.f:944)"
 [[note]]
-file = "xblsys.f"
-line = 2159
-reach = "OPER DAMP (IDAMP = 1): DAMPL2 not yet translated in YFoil"
-
-[[note]]
-file = "xblsys.f"
-line = 2177
-reach = "OPER DAMP (IDAMP = 1): DAMPL2 not yet translated in YFoil"
-
-[[note]]
-file = "xblsys.f"
-line = 2223
-reach = "OPER DAMP (IDAMP = 1): DAMPL2 not yet translated in YFoil"
-
-[[note]]
-file = "xblsys.f"
-line = 2231
-reach = "OPER DAMP (IDAMP = 1): DAMPL2 not yet translated in YFoil"
-
-[[note]]
-file = "xblsys.f"
-line = 2258
-reach = "OPER DAMP (IDAMP = 1): DAMPL2 not yet translated in YFoil"
-
-[[dead]]
-file = "xblsys.f"
-subroutine = "DAMPL2"
-open = true
-why = "reachable through OPER DAMP (IDAMP = 1, modified amplification); not yet translated in YFoil (translation gap)"
-[[note]]
 file = "xoper.f"
 line = 2945
 branch = 1
@@ -998,3 +962,8 @@ file = "xgeom.f"
 line = 60
 branch = 1
 reach = "iteration cap: LEFIND's 50-iteration LE Newton exhausted"
+
+[[note]]
+file = "xblsys.f"
+line = 2258
+reach = "DAMP with a separated laminar profile (Hk > 3.5) at a log10(Rtheta) below GR0(Hk): the modified rate AX2 negative and clamped to 0 (low-Re laminar bubble with DAMP)"

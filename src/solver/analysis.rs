@@ -29,6 +29,8 @@ pub struct FlowSpec {
     /// MATYP / RETYP: Mach and Re dependence on CL (1 = fixed)
     pub matyp: usize,
     pub retyp: usize,
+    /// OPER `DAMP`: modified envelope e^n amplification (IDAMP = 1, DAMPL2)
+    pub idamp: bool,
 }
 
 impl Default for FlowSpec {
@@ -43,6 +45,7 @@ impl Default for FlowSpec {
             xstrip: [1.0, 1.0],
             matyp: 1,
             retyp: 1,
+            idamp: false,
         }
     }
 }
@@ -120,6 +123,7 @@ impl Session {
         st.minf = spec.mach;
         st.matyp = spec.matyp;
         st.retyp = spec.retyp;
+        st.idamp = usize::from(spec.idamp);
         st.acrit = [0.0, spec.ncrit, spec.ncrit];
         st.vaccel = spec.vaccel;
         st.xstrip = [0.0, spec.xstrip[0], spec.xstrip[1]];

@@ -51,13 +51,16 @@ pub fn blsys(
             params,
         );
     } else if flags.simi {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Laminar, true, acrit); // BLDIF(0)
+        sys.bldif(s1, s2, &cfm, BLFlowType::Laminar, true, acrit, params.idampv);
+    // BLDIF(0)
     } else if !flags.turb {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Laminar, false, acrit); // BLDIF(1)
+        sys.bldif(s1, s2, &cfm, BLFlowType::Laminar, false, acrit, params.idampv);
+    // BLDIF(1)
     } else if flags.wake {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Wake, false, acrit); // BLDIF(3)
+        sys.bldif(s1, s2, &cfm, BLFlowType::Wake, false, acrit, params.idampv); // BLDIF(3)
     } else {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Turbulent, false, acrit); // BLDIF(2)
+        sys.bldif(s1, s2, &cfm, BLFlowType::Turbulent, false, acrit, params.idampv);
+        // BLDIF(2)
     }
 
     if flags.simi {

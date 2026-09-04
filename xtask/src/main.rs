@@ -46,6 +46,9 @@ struct Case {
     /// Forced transition XTR xu xl (VPAR menu); empty = free transition
     #[serde(default)]
     xtr: Vec<f64>,
+    /// OPER `DAMP`: modified envelope e^n amplification (IDAMP = 1)
+    #[serde(default)]
+    damp: bool,
     /// SETBL/UPDATE call numbers whose per-subroutine dumps to keep (default 1, 2, 3); the
     /// replay harness seeds from `mrchdu_input_<k>.dat` and checks `update_output_<k>.dat`
     #[serde(default)]
@@ -290,6 +293,9 @@ fn fixtures(flags: &[String]) {
         if case.matyp != 0 {
             s += &format!("TYPE {}\n", case.matyp);
         }
+        if case.damp {
+            s += "DAMP\n";
+        }
         let seq = |s: &mut String, alphas: &[f64]| {
             // ALFA for the first point, ASEQ for the rest (uniform step asserted)
             s.push_str(&format!("ALFA {}\n", alphas[0]));
@@ -369,7 +375,7 @@ fn fixtures(flags: &[String]) {
         let manifest = serde_json::json!({
             "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "dump_calls": case.dump_calls },
+                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",

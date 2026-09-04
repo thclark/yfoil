@@ -106,9 +106,10 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
     // set compressibility parameter TKLAM and derivative TK_MSQ (COMSET), gas constant, the
     // parameters for compressibility correction, stagnation density and 1/enthalpy, and the
     // Reynolds number based on freestream density, velocity, viscosity
-    let params = BLGlobalParams::new(st.minf, st.reinf, st.gamma);
+    let mut params = BLGlobalParams::new(st.minf, st.reinf, st.gamma);
 
-    // (IDAMPV = IDAMP: pinned at 0)
+    // IDAMPV = IDAMP
+    params.idampv = st.idamp;
     // save TE thickness
     let _dwte = st.wgap[1];
 
