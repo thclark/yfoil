@@ -56,6 +56,68 @@ minimal = true
 track = true
 
 [[case]]
+name = "naca0012_n60_sharp_a2_re1e6"     # coverage: SHARP trailing edge (GGCALC/QDCALC bisector rows, TECALC ANTE=0)
+airfoil = "naca4:0012:sharp"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_re1e6_m03"       # coverage: M = 0.3 (Karman-Tsien, every *_MS sensitivity, HSTINV/REYBL_MS)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.3
+ncrit = 9.0
+iter = 20
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a12_re1e6"          # coverage: high alpha, turbulent separation (RLX limiting, Hk clamps, negative-Ue fix-up)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [12.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+minimal = true
+dump_calls = [18, 19]                    # replay harness: iteration 19 is where the unconverged trajectories part
+track = true
+
+[[case]]
+name = "naca0012_n60_a4_re1e5"           # coverage: low Re, laminar separation bubble (MRCHUE DIRECT switch, HLMAX/HTMAX)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [4.0]
+re = 1.0e5
+mach = 0.0
+ncrit = 9.0
+iter = 20
+minimal = true
+track = true
+
+[[case]]
+name = "naca0012_n60_a2_re1e6_xtr03"     # coverage: forced transition XTR 0.3 0.3 (XIFSET XSTRIP<1, TRCHEK2 TRFORC)
+airfoil = "naca4:0012"
+n_panels = 60
+alphas = [2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+iter = 20
+xtr = [0.3, 0.3]
+minimal = true
+track = true
+
+[[case]]
 name = "naca0012_n160_a0_re1e6"         # full-resolution headline case (S9 acceptance)
 airfoil = "naca4:0012"
 n_panels = 160

@@ -40,6 +40,13 @@ struct Case {
     /// converged points rather than the per-subroutine dumps
     #[serde(default)]
     minimal: bool,
+    /// Forced transition XTR xu xl (VPAR menu); empty = free transition
+    #[serde(default)]
+    xtr: Vec<f64>,
+    /// SETBL/UPDATE call numbers whose per-subroutine dumps to keep (default 1, 2, 3); the
+    /// replay harness seeds from `mrchdu_input_<k>.dat` and checks `update_output_<k>.dat`
+    #[serde(default)]
+    dump_calls: Vec<usize>,
     re: f64,
     #[serde(default)]
     mach: f64,
@@ -83,6 +90,7 @@ const RAW_KEEP: &[&str] = &[
     "viscal_inviscid.dat",
     "viscal_points.dat",
     "viscal_iters_all.dat",
+    "noise_floor.json",
     "blsolv_input.dat",
     "blsolv_output.dat",
     "blsolv_trace.dat",
@@ -165,22 +173,17 @@ fn fixtures(flags: &[String]) {
         fs::create_dir_all(&work).unwrap();
 
         // 1. geometry, by YFoil only
-        let (kind, spec) = case.airfoil.split_once(':').expect("airfoil = \"naca4:0012\"");
+        let mut parts = case.airfoil.split(':');
+        let kind = parts.next().unwrap();
+        let spec = parts.next().expect("airfoil = \"naca4:0012[:sharp]\"");
+        let sharp = matches!(parts.next(), Some("sharp"));
         assert_eq!(kind, "naca4", "only naca4 supported so far");
-        run(
-            Command::new(&yfoil)
-                .args([
-                    "geom",
-                    "naca",
-                    spec,
-                    "-n",
-                    &case.n_panels.to_string(),
-                    "-o",
-                    "panels.json",
-                ])
-                .current_dir(&work),
-            "yfoil geom naca",
-        );
+        let npan = case.n_panels.to_string();
+        let mut gargs = vec!["geom", "naca", spec, "-n", &npan, "-o", "panels.json"];
+        if sharp {
+            gargs.push("--sharp");
+        }
+        run(Command::new(&yfoil).args(&gargs).current_dir(&work), "yfoil geom naca");
         run(
             Command::new(&yfoil)
                 .args([
@@ -200,8 +203,14 @@ fn fixtures(flags: &[String]) {
 
         // 2. XFOIL script: LOAD (never NACA/PANE/PPAR), pinned defaults, alpha sequence
         let mut s = String::from("PLOP\nG F\n\nLOAD panels.dat\nOPER\n");
+        let xtr = if case.xtr.is_empty() {
+            String::new()
+        } else {
+            assert_eq!(case.xtr.len(), 2, "xtr = [xu, xl]");
+            format!("XTR {} {}\n", case.xtr[0], case.xtr[1])
+        };
         s += &format!(
-            "VISC {}\nMACH {}\nVPAR\nN {}\n\nITER {}\n",
+            "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
             case.re, case.mach, case.ncrit, case.iter
         );
         if case.matyp != 0 {
@@ -243,6 +252,10 @@ fn fixtures(flags: &[String]) {
         }
         s += "\nQUIT\n";
         fs::write(work.join("xfoil.inp"), &s).unwrap();
+        if !case.dump_calls.is_empty() {
+            let list: Vec<String> = case.dump_calls.iter().map(|k| k.to_string()).collect();
+            fs::write(work.join("dump_calls.txt"), list.join("\n") + "\n").unwrap();
+        }
         let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
         let out = fs::File::create(work.join("stdout.txt")).unwrap();
         let st = Command::new(&xfoil)
@@ -268,11 +281,21 @@ fn fixtures(flags: &[String]) {
             }
         }
 
+        // 3b. the +1-ULP twin: the reference's own noise floor for this case (CLAUDE.md Rule 1)
+        match ulp_twin(&xfoil, &work) {
+            Ok(summary) => println!("  noise floor: {summary}"),
+            Err(e) => {
+                eprintln!("  NOISE FLOOR FAILED: {e}");
+                failures += 1;
+                continue;
+            }
+        }
+
         // 4. manifest
         let manifest = serde_json::json!({
             "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar, "cls": case.cls, "matyp": case.matyp },
+                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "dump_calls": case.dump_calls },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",
@@ -296,6 +319,7 @@ fn fixtures(flags: &[String]) {
                     && !name.starts_with("panels")
                     && *name != "manifest.json"
                     && *name != "xfoil.inp"
+                    && *name != "noise_floor.json"
                 {
                     continue;
                 }
@@ -307,6 +331,14 @@ fn fixtures(flags: &[String]) {
             for entry in fs::read_dir(&work).unwrap().flatten() {
                 let n = entry.file_name().to_string_lossy().to_string();
                 if !case.minimal && (n.starts_with("cp_a") || n.starts_with("bl_a")) {
+                    staged.push((dst.join(&n), fs::read(entry.path()).unwrap()));
+                }
+                // per-call replay dumps beyond the default 1..3 (already in RAW_KEEP)
+                let per_call = ["mrchdu_input_", "mrchdu_output_", "setbl_output_", "update_output_"];
+                if !case.dump_calls.is_empty()
+                    && per_call.iter().any(|p| n.starts_with(p))
+                    && !RAW_KEEP.contains(&n.as_str())
+                {
                     staged.push((dst.join(&n), fs::read(entry.path()).unwrap()));
                 }
             }
@@ -412,4 +444,254 @@ fn run(cmd: &mut Command, what: &str) {
         eprintln!("{what} failed: {st}");
         std::process::exit(1);
     }
+}
+
+/// Run the case again on panels perturbed by +1 ULP in every coordinate and write
+/// `noise_floor.json`: per VISCAL call, the absolute spread of the per-point values and of every
+/// per-iteration value, plus whether the branch trace (iteration counts, convergence, IST,
+/// ITRAN) survived the perturbation.
+fn ulp_twin(xfoil: &Path, work: &Path) -> Result<String, String> {
+    let ulp = work.join("ulp");
+    let _ = fs::remove_dir_all(&ulp);
+    fs::create_dir_all(&ulp).map_err(|e| e.to_string())?;
+    let src = fs::read_to_string(work.join("panels.dat")).map_err(|e| e.to_string())?;
+    let mut lines = src.lines();
+    let mut out = String::new();
+    out.push_str(lines.next().unwrap_or(""));
+    out.push('\n');
+    for l in lines {
+        let t: Vec<&str> = l.split_whitespace().collect();
+        if t.len() < 2 {
+            continue;
+        }
+        let x: f64 = t[0].parse().map_err(|_| format!("bad coordinate {l}"))?;
+        let y: f64 = t[1].parse().map_err(|_| format!("bad coordinate {l}"))?;
+        out.push_str(&format!(" {:.17e}  {:.17e}\n", next_up(x), next_up(y)));
+    }
+    fs::write(ulp.join("panels.dat"), out).map_err(|e| e.to_string())?;
+    fs::copy(work.join("xfoil.inp"), ulp.join("xfoil.inp")).map_err(|e| e.to_string())?;
+    if work.join("dump_calls.txt").exists() {
+        fs::copy(work.join("dump_calls.txt"), ulp.join("dump_calls.txt")).map_err(|e| e.to_string())?;
+    }
+    let inp = fs::File::open(ulp.join("xfoil.inp")).map_err(|e| e.to_string())?;
+    let so = fs::File::create(ulp.join("stdout.txt")).map_err(|e| e.to_string())?;
+    let st = Command::new(xfoil)
+        .current_dir(&ulp)
+        .stdin(inp)
+        .stdout(so)
+        .stderr(Stdio::inherit())
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !st.success() {
+        return Err(format!("xfoil (ulp twin) exited {st}"));
+    }
+
+    let pa = parse_points(&work.join("viscal_points.dat"))?;
+    let pb = parse_points(&ulp.join("viscal_points.dat"))?;
+    let ia = parse_iters(&work.join("viscal_iters_all.dat"))?;
+    let ib = parse_iters(&ulp.join("viscal_iters_all.dat"))?;
+
+    // call 1's viscal_iter.dat carries UPDATE's RMXBL and the reported limiter VMXBL/IMXBL/ISMXBL
+    let qa = parse_blocks(&work.join("viscal_iter.dat"), "ITER").unwrap_or_default();
+    let qb = parse_blocks(&ulp.join("viscal_iter.dat"), "ITER").unwrap_or_default();
+
+    let mut flips: Vec<String> = Vec::new();
+    if pa.len() != pb.len() {
+        flips.push(format!("VISCAL call count {} vs {}", pa.len(), pb.len()));
+    }
+    let point_keys = [
+        "ALFA", "CL", "CM", "CD", "CDF", "CDP", "XOCTR1", "XOCTR2", "MINF", "REINF", "RMSBL",
+    ];
+    let iter_keys = ["RMSBL", "RLX", "CL", "CD", "CM", "ALFA", "MINF", "REINF"];
+    let iter_cols = [1usize, 2, 3, 4, 5, 10, 11, 12];
+    let mut calls = Vec::new();
+    for (k, (a, b)) in pa.iter().zip(&pb).enumerate() {
+        let call = k + 1;
+        for key in ["NITDONE", "LVCONV", "IST", "ITRAN1", "ITRAN2"] {
+            if a.get(key) != b.get(key) {
+                flips.push(format!(
+                    "call {call}: {key} {} vs {}",
+                    a.get(key).cloned().unwrap_or_default(),
+                    b.get(key).cloned().unwrap_or_default()
+                ));
+            }
+        }
+        let mut point = serde_json::Map::new();
+        for key in point_keys {
+            if let (Some(x), Some(y)) = (a.get(key), b.get(key)) {
+                let (x, y): (f64, f64) = (x.parse().unwrap_or(0.0), y.parse().unwrap_or(0.0));
+                point.insert(key.to_string(), serde_json::json!((x - y).abs()));
+            }
+        }
+        let (ra, rb) = (
+            ia.get(&call).cloned().unwrap_or_default(),
+            ib.get(&call).cloned().unwrap_or_default(),
+        );
+        if ra.len() != rb.len() {
+            flips.push(format!("call {call}: iteration count {} vs {}", ra.len(), rb.len()));
+        }
+        let mut iterations = Vec::new();
+        for (i, (x, y)) in ra.iter().zip(&rb).enumerate() {
+            for (name, col) in [("IST", 7usize), ("ITRAN1", 8), ("ITRAN2", 9)] {
+                if x[col] != y[col] {
+                    flips.push(format!(
+                        "call {call} iteration {}: {name} {} vs {}",
+                        i + 1,
+                        x[col],
+                        y[col]
+                    ));
+                }
+            }
+            let mut m = serde_json::Map::new();
+            for (key, col) in iter_keys.iter().zip(iter_cols) {
+                m.insert(key.to_string(), serde_json::json!((x[col] - y[col]).abs()));
+            }
+            if call == 1 {
+                if let (Some(ba), Some(bb)) = (qa.get(i), qb.get(i)) {
+                    let (ra, rb): (f64, f64) = (
+                        ba.get("RMXBL").and_then(|v| v.parse().ok()).unwrap_or(0.0),
+                        bb.get("RMXBL").and_then(|v| v.parse().ok()).unwrap_or(0.0),
+                    );
+                    m.insert("RMXBL".to_string(), serde_json::json!((ra - rb).abs()));
+                    let same = ba.get("VMXBL") == bb.get("VMXBL")
+                        && ba.get("IMXBL") == bb.get("IMXBL")
+                        && ba.get("ISMXBL") == bb.get("ISMXBL");
+                    m.insert(
+                        "LIMITER_FLIP".to_string(),
+                        serde_json::json!(if same { 0.0 } else { 1.0 }),
+                    );
+                }
+            }
+            iterations.push(serde_json::Value::Object(m));
+        }
+        calls.push(serde_json::json!({ "call": call, "point": point, "iterations": iterations }));
+    }
+    // per-station spreads of the dumped post-UPDATE arrays (replay harness): max |base - twin|
+    // over stations, per array, keyed by call number
+    let mut arrays = serde_json::Map::new();
+    for entry in fs::read_dir(work).map_err(|e| e.to_string())?.flatten() {
+        let n = entry.file_name().to_string_lossy().to_string();
+        let Some(k) = n.strip_prefix("update_output_").and_then(|r| r.strip_suffix(".dat")) else {
+            continue;
+        };
+        let twin = ulp.join(&n);
+        if !twin.exists() {
+            continue;
+        }
+        let names = ["XSSI", "UEDG", "THET", "DSTR", "CTAU", "MASS"];
+        let mut worst = [0.0_f64; 6];
+        let rows = |p: &Path| -> Vec<Vec<f64>> {
+            fs::read_to_string(p)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| l.starts_with("BL("))
+                .map(|l| {
+                    l.split_once(")=")
+                        .unwrap()
+                        .1
+                        .split_whitespace()
+                        .map(|t| t.parse().unwrap_or(f64::NAN))
+                        .collect()
+                })
+                .collect()
+        };
+        for (a, b) in rows(&entry.path()).iter().zip(rows(&twin)) {
+            for m in 0..6 {
+                worst[m] = worst[m].max((a[m] - b[m]).abs());
+            }
+        }
+        let mut per = serde_json::Map::new();
+        for (m, name) in names.iter().enumerate() {
+            per.insert(name.to_string(), serde_json::json!(worst[m]));
+        }
+        arrays.insert(k.to_string(), serde_json::Value::Object(per));
+    }
+    let branch_identical = flips.is_empty();
+    let j = serde_json::json!({
+        "method": "every panel coordinate +1 ULP; same OPER script; absolute |base - twin| per value",
+        "branch_identical": branch_identical,
+        "flips": flips,
+        "calls": calls,
+        "update_output": arrays,
+    });
+    fs::write(work.join("noise_floor.json"), serde_json::to_string_pretty(&j).unwrap()).map_err(|e| e.to_string())?;
+    let worst_point = calls
+        .iter()
+        .flat_map(|c| c["point"].as_object().unwrap().values().map(|v| v.as_f64().unwrap()))
+        .fold(0.0_f64, f64::max);
+    let worst_iter = calls
+        .iter()
+        .flat_map(|c| c["iterations"].as_array().unwrap().iter())
+        .flat_map(|m| {
+            m.as_object()
+                .unwrap()
+                .iter()
+                .filter(|(k, _)| k.as_str() != "LIMITER_FLIP")
+                .map(|(_, v)| v.as_f64().unwrap())
+        })
+        .fold(0.0_f64, f64::max);
+    Ok(if branch_identical {
+        format!(
+            "branch trace identical; worst point spread {worst_point:.2e}, worst per-iteration spread {worst_iter:.2e}"
+        )
+    } else {
+        format!("THRESHOLD-STRADDLING ({} flips: {})", flips.len(), flips.join("; "))
+    })
+}
+
+/// The next representable f64 towards +∞ (f64::next_up needs Rust 1.86).
+fn next_up(x: f64) -> f64 {
+    if x.is_nan() || x == f64::INFINITY {
+        return x;
+    }
+    if x == 0.0 {
+        return f64::from_bits(1);
+    }
+    let bits = x.to_bits();
+    if x > 0.0 {
+        f64::from_bits(bits + 1)
+    } else {
+        f64::from_bits(bits - 1)
+    }
+}
+
+fn parse_blocks(p: &Path, start_key: &str) -> Result<Vec<std::collections::HashMap<String, String>>, String> {
+    let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let mut out: Vec<std::collections::HashMap<String, String>> = Vec::new();
+    for l in text.lines() {
+        let Some((k, v)) = l.split_once('=') else { continue };
+        if k.trim() == start_key {
+            out.push(Default::default());
+        }
+        if let Some(cur) = out.last_mut() {
+            cur.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    Ok(out)
+}
+
+fn parse_points(p: &Path) -> Result<Vec<std::collections::HashMap<String, String>>, String> {
+    let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let mut out: Vec<std::collections::HashMap<String, String>> = Vec::new();
+    for l in text.lines() {
+        let Some((k, v)) = l.split_once('=') else { continue };
+        if k.trim() == "CALL" {
+            out.push(Default::default());
+        }
+        if let Some(cur) = out.last_mut() {
+            cur.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    Ok(out)
+}
+
+fn parse_iters(p: &Path) -> Result<std::collections::HashMap<usize, Vec<Vec<f64>>>, String> {
+    let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let mut out: std::collections::HashMap<usize, Vec<Vec<f64>>> = Default::default();
+    for l in text.lines() {
+        let Some(r) = l.strip_prefix("IT ") else { continue };
+        let v: Vec<f64> = r.split_whitespace().map(|t| t.parse().unwrap_or(f64::NAN)).collect();
+        out.entry(v[0] as usize).or_default().push(v[1..].to_vec());
+    }
+    Ok(out)
 }

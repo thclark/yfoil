@@ -166,6 +166,10 @@ enum GeomAction {
         #[arg(long, default_value = "json")]
         to: String,
 
+        /// Close the trailing edge (zero TE gap; XFOIL's SHARP path)
+        #[arg(long)]
+        sharp: bool,
+
         /// Output file path
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -574,6 +578,7 @@ fn handle_geom(action: GeomAction) {
             spec,
             panels,
             to,
+            sharp,
             output,
         } => {
             let geometry = if spec.len() == 4 {
@@ -596,6 +601,7 @@ fn handle_geom(action: GeomAction) {
                 eprintln!("Invalid NACA specification: {} (must be 4 or 5 digits)", spec);
                 std::process::exit(1);
             };
+            let geometry = if sharp { geometry.sharpen() } else { geometry };
 
             let name = format!("NACA {}", spec);
             let output_path = output.unwrap_or_else(|| PathBuf::from(format!("naca{}.{}", spec, to)));

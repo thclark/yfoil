@@ -109,3 +109,41 @@ The *path* to convergence is not a fixed point: intermediate RLX/RMSBL/CL move b
 converged flags, IST and ITRAN still compared exactly. YFoil's polar replay meets both: worst
 per-iteration transient difference 1.5e-10 (RLX, point 4 iteration 2), all converged points
 within `TOL_SOLVER`.
+
+
+## 2026-09-04 — per-case floors (mechanised) and the coverage cases
+
+`cargo xtask fixtures` now runs the +1-ULP twin of every case and records `noise_floor.json`
+next to the fixtures: per VISCAL call the spread of the converged point, and per iteration the
+spread of RMSBL/RLX/CL/CD/CM/ALFA/MINF/REINF (plus RMXBL and whether UPDATE's reported limiter
+flipped, on call 1). Gates use `max(tol·scale, FLOOR_FACTOR · floor)` with `FLOOR_FACTOR = 4`.
+
+| case | branch trace under 1 ULP | worst point spread | worst per-iteration spread | YFoil outcome |
+|---|---|---|---|---|
+| naca0012_n60_a2_re1e6 | identical | 2.3e-13 | 6.5e-12 | match |
+| naca0012_n60_polar_re1e6 (11 calls) | identical | 1.2e-12 | 5.1e-10 | match |
+| naca0012_n60_cl03_re1e6 (CL 0.3) | identical | 3.3e-13 | 2.8e-10 | match |
+| naca0012_n60_a2_re1e6_type2 (TYPE 2) | identical | 3.0e-8 | 3.8e-6 | match |
+| naca0012_n60_sharp_a2_re1e6 | identical | 2.6e-9 | 1.0 (reported limiter flips at a tie, iteration 3) | match (tie confirmed by the twin) |
+| naca0012_n60_a2_re1e6_m03 (M 0.3) | identical | 8.7e-14 | 2.8e-11 | match |
+| naca0012_n60_a12_re1e6 (12°, unconverged) | identical | 1.5e-3 | 4.6e-2 | **threshold-straddling at iteration 19** |
+| naca0012_n60_a4_re1e5 (Re 1e5) | identical | 5.4e-14 | 8.5e-12 | match |
+| naca0012_n60_a2_re1e6_xtr03 (XTR 0.3) | identical | 1.2e-14 | 8.8e-13 | match |
+
+**The 12° case, in full.** Through iteration 17 YFoil differs from the reference by 1.5–2× the
+reference's own 1-ULP spread at every iteration (e.g. 1.09e-8 vs 6.7e-9 on RMSBL at 17): it
+behaves as a ~2-ULP perturbation of XFOIL, which is what a translation with identical branch
+trace and libm should look like. At iteration 18 the reference becomes hypersensitive (its own
+spread jumps from 6.7e-9 to 5.1e-5 on RMSBL and 7.7e-4 on RLX); YFoil is still at 1.7× the
+floor there. At iteration 19 the runs part (RMSBL 1.87 vs 0.54). Replaying iterations 18 and
+19 from XFOIL's dumped state (`dump_calls = [18, 19]`) reproduces XFOIL's own next state within
+the floor (iteration 19: every BL array within 1.9e-13, RLX/RMSBL identical, same limiter),
+so the step map is faithful and the departure is accumulated 2-ULP-level differences crossing
+a threshold the reference itself cannot hold to better than 3.5e-4. Classified
+threshold-straddling (`STRADDLE_FLOOR = 1e-6`), reported, not passed.
+
+**Ties in UPDATE's bookkeeping.** VMXBL/IMXBL record which normalised change was largest; at
+the sharp-TE case's iteration 3 the θ and δ* changes at the side-2 similarity station are equal
+to 7 digits and the label flips — in the twin as well. RLX is a minimum over every variable and
+is unaffected; such flips are accepted only when |RMXBL| agrees within the recorded floor or the
+twin flips too.

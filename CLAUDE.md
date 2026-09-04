@@ -41,6 +41,13 @@ and produces O(1) differences that are **not translation bugs**. So:
 - For iterative solvers the iteration count must be identical and per-iteration `RMSBL` is compared.
 - When a branch flips, show both inputs lie within the noise floor of the threshold and record the case as
   **threshold-straddling** — a third outcome, reported separately, never silently passed or failed.
+- **Mechanised per case:** `cargo xtask fixtures` runs every case twice — as generated and with every panel
+  coordinate +1 ULP — and writes `noise_floor.json` (the reference's own spread of every recorded value, and
+  whether its branch trace survived). Tests gate a value at `max(tol · scale, FLOOR_FACTOR · floor)`
+  (`tests/utilities/records.rs`); a twin that flips its own branch trace, or a run that matches every
+  iteration until one where the reference moves by more than `STRADDLE_FLOOR` under 1 ULP, is classified
+  threshold-straddling — and the one-step replay from XFOIL's dumped state at that iteration (`dump_calls`)
+  is the evidence that the step itself is faithful. The 12° NACA 0012 case is the worked example.
 
 Under those conditions: if values differ by more than tolerance, **it is a bug**. 1%, 0.1%, 1e-6 — all bugs. There
 is no "acceptable engineering tolerance" in this project.

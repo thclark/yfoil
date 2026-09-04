@@ -330,3 +330,12 @@ DALMAX/DALMIN). `MRCL` with MATYP/RETYP = 2 (Re, M ∝ 1/√CL, re-evaluated fro
 UPDATE) is gated by the `naca0012_n60_a2_re1e6_type2` case (`FlowSpec { matyp, retyp }`; the
 pipeline emits OPER `TYPE n`). Minimal cases (`minimal = true`) keep only the `viscal_*.dat`
 records (~50 KB each) so coverage cases stay cheap to track.
+
+Coverage cases and the replay harness: `cases.toml` options `airfoil = "naca4:0012:sharp"` (`geom
+naca --sharp`, `Geometry::sharpen`), `xtr = [xu, xl]` (OPER `VPAR`/`XTR`), `dump_calls = [k, ...]`
+(the SETBL/UPDATE per-call dumps for arbitrary iterations; `RDDUMP` reads `dump_calls.txt`), and
+the +1-ULP twin run behind every case (`noise_floor.json`, `xtask::ulp_twin`). `tests/utilities/
+records.rs` is the VISCAL-level checker (exact branch trace, floor-derived value tolerances, the
+threshold-straddling outcome); `tests/xfoil_coverage_tests.rs::replay_iteration` seeds a
+`Session` with XFOIL's dumped state at call k (pointers rebuilt from IST/SST) and runs one
+SETBL → BLSOLV → UPDATE against `update_output_k.dat`.

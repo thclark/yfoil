@@ -21,6 +21,18 @@ pub const TOL_SOLVER: f64 = 1e-10;
 /// absolute while the converged per-point CL/CD/CM move by ≤ 8e-14 and XTR by ≤ 1e-12. Converged
 /// points therefore stay at `TOL_SOLVER`; transients are gated at floor × 2.
 pub const TOL_TRANSIENT: f64 = 1e-9;
+/// Safety factor applied to a case's own measured 1-ULP floor (`noise_floor.json`, written by the
+/// fixture pipeline from the +1-ULP twin run): a value is accepted when it is within the base
+/// tolerance *or* within `FLOOR_FACTOR` × the reference's own spread of that value. Chaotic
+/// trajectories (separated flow, sharp-TE transients) are gated by what the reference can
+/// reproduce itself, never by an asserted number.
+pub const FLOOR_FACTOR: f64 = 4.0;
+/// Hypersensitivity threshold for the third outcome. When the reference's own +1-ULP twin moves a
+/// per-iteration value by more than this (absolute), the reference cannot reproduce itself there;
+/// a YFoil run that matched every earlier iteration within `FLOOR_FACTOR` × floor and departs at
+/// such an iteration is classified **threshold-straddling** (reported, not passed or failed),
+/// provided the one-step replay from XFOIL's exact state at that iteration matches.
+pub const STRADDLE_FLOOR: f64 = 1e-6;
 
 /// The one error metric: `|a − b| ≤ tol · max(|a|, |b|, scale)`. Bare relative error is
 /// undefined at CL≈0, VDEL≈0, laminar CTAU≈0; `scale` is the physical scale of the variable.

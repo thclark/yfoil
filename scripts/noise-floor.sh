@@ -50,5 +50,5 @@ for f,desc in files:
     print(f"| {f} | {n} | {mis} | {max(absd):.2e} | {rel[-1]:.2e} | {rel[int(0.99*(len(rel)-1))]:.2e} | {rel[len(rel)//2]:.2e} | {desc} |")
 for d in ('base','ulp'):
     s=open(f'{W}/{d}/stdout.txt').read(); its=re.findall(r'^\s+(\d+)\s+rms:', s, re.M)
-    print(f"\n{d}: iterations={its[-1] if its else '?'} converged={'Convergence failed' not in s}")
+    print(f"\n{d}: iterations={its[-1] if its else '?'} converged={'VISCAL:  Convergence failed' not in s}")
 PY

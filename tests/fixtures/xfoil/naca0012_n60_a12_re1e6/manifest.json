@@ -1,24 +1,27 @@
 {
   "case": {
     "airfoil": "naca4:0012",
-    "alphas": [],
-    "alphas_after_reinit": [],
-    "cls": [
-      0.3
+    "alphas": [
+      12.0
     ],
-    "dump_calls": [],
+    "alphas_after_reinit": [],
+    "cls": [],
+    "dump_calls": [
+      18,
+      19
+    ],
     "iter": 20,
     "mach": 0.0,
     "matyp": 0,
     "n_panels": 60,
-    "name": "naca0012_n60_cl03_re1e6",
+    "name": "naca0012_n60_a12_re1e6",
     "ncrit": 9.0,
     "polar": false,
     "re": 1000000.0,
     "xtr": []
   },
   "generated_by": "cargo xtask fixtures",
-  "panels_dat_sha256": "587124557980d4710cdf0274873ee0bb9eff178c7f1b53cb5b0b994e0cb4444d",
+  "panels_dat_sha256": "f3a4c29813e094df6037da3f06909428c302c1692d6b8376ca9669d4882e8eb8",
   "xfoil_ref": [
     "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
     "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
