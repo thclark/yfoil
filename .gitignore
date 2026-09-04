@@ -7,11 +7,11 @@
 # ---------------------------------------------------------------------------
 
 # Build output
-/target
-/.tmp/
+target/
+.tmp/
 
 # Editor / OS
-/.idea/
+.idea/
 .DS_Store
 ._*
 

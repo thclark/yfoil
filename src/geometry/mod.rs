@@ -238,6 +238,8 @@ pub use io::{
     read_dat_file, read_geometry_auto, read_geometry_from_file, write_dat_file, write_geometry_to_json,
     GeometryReadError,
 };
-pub use naca::{naca_4digit, naca_5digit, NacaError};
-pub use panel::{create_paneled_airfoil, repanel_cosine, repanel_xfoil, PaneConfig};
+pub use naca::{naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, NacaError, XFOIL_NACA_NSIDE};
+pub use panel::{
+    create_paneled_airfoil, curv, lefind, repanel_cosine, repanel_xfoil, scalc, segspl, trisol, PaneConfig,
+};
 pub use spline::{d2val, deval, seval, spline};

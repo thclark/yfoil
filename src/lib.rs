@@ -20,7 +20,6 @@ pub mod geometry;
 // Placeholder modules (to be implemented)
 pub mod bl;
 pub mod output;
-pub mod panel;
 pub mod solver;
 
 pub use error::{Result, YfoilError};

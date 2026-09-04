@@ -47,6 +47,11 @@ struct Case {
     /// replay harness seeds from `mrchdu_input_<k>.dat` and checks `update_output_<k>.dat`
     #[serde(default)]
     dump_calls: Vec<usize>,
+    /// Geometry-only case: XFOIL generates the airfoil itself (`airfoil = "xfoil-naca:0012"`,
+    /// OPER never entered); the gate is the PANGEN dump against YFoil's XFOIL-model generator
+    #[serde(default)]
+    geometry_only: bool,
+    #[serde(default)]
     re: f64,
     #[serde(default)]
     mach: f64,
@@ -91,6 +96,7 @@ const RAW_KEEP: &[&str] = &[
     "viscal_points.dat",
     "viscal_iters_all.dat",
     "noise_floor.json",
+    "xfoil_pangen.dat",
     "blsolv_input.dat",
     "blsolv_output.dat",
     "blsolv_trace.dat",
@@ -171,6 +177,70 @@ fn fixtures(flags: &[String]) {
         let work = root.join("target/fixtures").join(&case.name);
         let _ = fs::remove_dir_all(&work);
         fs::create_dir_all(&work).unwrap();
+
+        if case.geometry_only {
+            // XFOIL's own NACA generator and PANGEN: `NACA dddd` (which calls PANGEN with the
+            // default NPAN) then `PPAR / N n` to repanel at the case's n_panels
+            let (kind, spec) = case.airfoil.split_once(':').expect("airfoil = \"xfoil-naca:0012\"");
+            assert_eq!(kind, "xfoil-naca", "geometry_only cases use xfoil-naca:<digits>");
+            let script = format!("PLOP\nG F\n\nNACA {spec}\nPPAR\nN {}\n\n\n\nQUIT\n", case.n_panels);
+            fs::write(work.join("xfoil.inp"), &script).unwrap();
+            let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
+            let out = fs::File::create(work.join("stdout.txt")).unwrap();
+            let st = Command::new(&xfoil)
+                .current_dir(&work)
+                .stdin(inp)
+                .stdout(out)
+                .stderr(Stdio::inherit())
+                .status()
+                .expect("run xfoil");
+            if !st.success() || !work.join("xfoil_pangen.dat").exists() {
+                eprintln!("  xfoil geometry run failed: {st}");
+                failures += 1;
+                continue;
+            }
+            let manifest = serde_json::json!({
+                "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "geometry_only": true },
+                "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
+                "generated_by": "cargo xtask fixtures",
+            });
+            fs::write(
+                work.join("manifest.json"),
+                serde_json::to_string_pretty(&manifest).unwrap(),
+            )
+            .unwrap();
+            if case.track {
+                let dst = root.join("tests/fixtures/xfoil").join(&case.name);
+                let staged: Vec<(PathBuf, Vec<u8>)> = ["manifest.json", "xfoil.inp", "xfoil_pangen.dat"]
+                    .iter()
+                    .map(|n| (dst.join(n), fs::read(work.join(n)).unwrap()))
+                    .collect();
+                if verify {
+                    let mut diffs = 0;
+                    for (p, b) in &staged {
+                        if p.file_name().unwrap() == "manifest.json" {
+                            continue;
+                        }
+                        if fs::read(p).ok().as_deref() != Some(b.as_slice()) {
+                            eprintln!("  DIFFERS: {}", p.display());
+                            diffs += 1;
+                        }
+                    }
+                    if diffs > 0 {
+                        failures += 1;
+                    } else {
+                        println!("  verify: {} tracked files byte-identical", staged.len() - 1);
+                    }
+                } else {
+                    fs::create_dir_all(&dst).unwrap();
+                    for (p, b) in &staged {
+                        fs::write(p, b).unwrap();
+                    }
+                    println!("  tracked {} files -> {}", staged.len(), dst.display());
+                }
+            }
+            continue;
+        }
 
         // 1. geometry, by YFoil only
         let mut parts = case.airfoil.split(':');

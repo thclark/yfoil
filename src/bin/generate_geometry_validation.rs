@@ -11,7 +11,7 @@
 use std::fs;
 use std::path::Path;
 
-use yfoil::geometry::{naca_4digit, repanel_xfoil, Geometry, PaneConfig};
+use yfoil::geometry::{naca_4digit_xfoil, repanel_xfoil, Geometry, PaneConfig};
 use yfoil::output::{parse_xfoil_dat_file, plot_geometry_comparison_svg, GeometryComparisonPlotConfig, PlotError};
 
 /// Test case definition
@@ -115,7 +115,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Generate YFoil geometry for a test case
 fn generate_yfoil_geometry(case: &TestCase) -> Result<Vec<(f64, f64)>, Box<dyn std::error::Error>> {
     // Generate base NACA geometry with extra points
-    let base_geometry = naca_4digit(case.designation, 300)?;
+    // XFOIL's own generator (vertical thickness, 245-point buffer): what its NACA command produces
+    let base_geometry = naca_4digit_xfoil(case.designation)?;
 
     // Repanel using XFOIL's algorithm
     let config = PaneConfig::default();

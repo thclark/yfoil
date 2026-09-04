@@ -1,0 +1,18 @@
+{
+  "case": {
+    "airfoil": "xfoil-naca:4412",
+    "geometry_only": true,
+    "n_panels": 81,
+    "name": "pangen_naca4412_n81"
+  },
+  "generated_by": "cargo xtask fixtures",
+  "xfoil_ref": [
+    "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
+    "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
+    "series_instr_sha256:    63e0978952f107a63fe118f5ee2afee87206cb26105487e45b15320eb5663619",
+    "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
+    "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
+    "host:                   arm64-Darwin-24.6.0",
+    "libm:                   /usr/lib/libSystem.B.dylib 1345.120.2)"
+  ]
+}

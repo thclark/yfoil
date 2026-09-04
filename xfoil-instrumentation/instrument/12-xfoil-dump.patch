@@ -21,19 +21,18 @@
         STOP
  C
  C===============================================
-@@ -1567,7 +1574,12 @@
+@@ -1567,6 +1574,11 @@
  
        SUBROUTINE NACA(IDES1)
        INCLUDE 'XFOIL.INC'
 +      INCLUDE 'XLOG.INC'
- C
++C
 +C---- INSTRUMENTATION: Log subroutine entry
 +      CALL LOGENTER('NACA')
 +      CALL LOGINT('IDES1', IDES1)
-+C
+ C
  C---- number of points per side
        NSIDE = IQX/3
- C
 @@ -1615,6 +1627,12 @@
  C---- set paneling
        CALL PANGEN(.TRUE.)
@@ -47,7 +46,7 @@
  C
        RETURN
        END ! NACA
-@@ -1624,14 +1642,20 @@
+@@ -1624,15 +1642,21 @@
  C---------------------------------------------------
  C     Set paneling distribution from buffer airfoil
  C     geometry, thus creating current airfoil.
@@ -61,19 +60,40 @@
        INCLUDE 'XFOIL.INC'
 +      INCLUDE 'XLOG.INC'
        LOGICAL SHOPAR
-+C
+ C
 +C---- INSTRUMENTATION: Log subroutine entry
 +      CALL LOGENTER('PANGEN')
 +      CALL LOGINT('NB', NB)
 +      CALL LOGINT('NPAN', NPAN)
- C
++C
        IF(NB.LT.2) THEN
         WRITE(*,*) 'PANGEN: Buffer airfoil not available.'
-@@ -2102,6 +2126,26 @@
+        N = 0
+@@ -2102,7 +2126,47 @@
  C
  C---- calculate panel angles for panel routines
        CALL APCALC
 +C
++C---- INSTRUMENTATION: buffer airfoil, paneling parameters and the paneled result
++      OPEN(79, FILE='xfoil_pangen.dat', STATUS='REPLACE')
++      WRITE(79,'(A,I5)') 'NB=', NB
++      WRITE(79,'(A,I5)') 'NPAN=', NPAN
++      WRITE(79,'(A,ES24.16)') 'CVPAR=', CVPAR
++      WRITE(79,'(A,ES24.16)') 'CTERAT=', CTERAT
++      WRITE(79,'(A,ES24.16)') 'CTRRAT=', CTRRAT
++      WRITE(79,'(A,4ES24.16)') 'XREF=', XSREF1, XSREF2, XPREF1, XPREF2
++      WRITE(79,'(A,ES24.16)') 'SBLE=', SBLE
++      WRITE(79,'(A,I5)') 'N=', N
++      WRITE(79,'(A,ES24.16)') 'SLE=', SLE
++      WRITE(79,'(A,L1)') 'SHARP=', SHARP
++      DO 8095 I=1, NB
++        WRITE(79,'(A,I4,A,3ES24.16)') 'B(',I,')=', XB(I), YB(I), SB(I)
++ 8095 CONTINUE
++      DO 8096 I=1, N
++        WRITE(79,'(A,I4,A,3ES24.16)') 'P(',I,')=', X(I), Y(I), S(I)
++ 8096 CONTINUE
++      CLOSE(79)
+ C
 +C---- INSTRUMENTATION: Output panel geometry to file
 +      OPEN(UNIT=99,FILE='xfoil_panels.dat',STATUS='REPLACE')
 +      WRITE(99,*) '=== PANEL GEOMETRY ==='
@@ -93,10 +113,11 @@
 +      ENDDO
 +      CLOSE(99)
 +      WRITE(*,*) '=== Wrote panel geometry to /tmp/xfoil_panels.dat ==='
- C
++C
        IF(SHARP) THEN
         WRITE(*,1090) 'Sharp trailing edge'
-@@ -2120,6 +2164,12 @@
+       ELSE
+@@ -2120,6 +2184,12 @@
       &       /'   Refined-area/LE panel density ratio   ' , F6.3
       &       /'   Top    side refined area x/c limits ' , 2F6.3
       &       /'   Bottom side refined area x/c limits ' , 2F6.3)

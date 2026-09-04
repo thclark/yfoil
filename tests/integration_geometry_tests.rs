@@ -231,8 +231,10 @@ fn test_thickness_values() {
 // Panel Method Validation Tests
 // ============================================================================
 
-use yfoil::panel::solve_inviscid;
 use yfoil::solver::analysis::{analyze, FlowSpec, Session};
+use yfoil::solver::blstate::BlState;
+use yfoil::solver::ggcalc::ggcalc;
+use yfoil::solver::specal::specal;
 
 fn inviscid_cl(airfoil: &yfoil::geometry::PaneledAirfoil, alpha: f64) -> f64 {
     analyze(
@@ -516,41 +518,29 @@ fn test_te_type_lift_slope_comparison() {
 /// Test Kutta condition is satisfied for both sharp and blunt TE
 #[test]
 fn test_kutta_condition_both_te_types() {
-    // Sharp TE
-    let geom_sharp = naca_4digit("0012", 160).unwrap();
-    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
-    let solution_sharp = solve_inviscid(&airfoil_sharp);
+    // GGCALC's Kutta row: GAMU(1) + GAMU(N) = 0 for both the alpha = 0 and alpha = 90 solutions
+    let kutta = |airfoil: &yfoil::geometry::PaneledAirfoil| -> (f64, f64) {
+        let mut st = BlState::from_airfoil(airfoil, airfoil.n / 12 + 10);
+        ggcalc(&mut st);
+        let n = airfoil.n;
+        (st.qinvu[1][1] + st.qinvu[1][n], st.qinvu[2][1] + st.qinvu[2][n])
+    };
 
-    let kutta_sharp_0 = solution_sharp.gam_0[0] + solution_sharp.gam_0[airfoil_sharp.n - 1];
-    let kutta_sharp_90 = solution_sharp.gam_90[0] + solution_sharp.gam_90[airfoil_sharp.n - 1];
-    assert!(
-        kutta_sharp_0.abs() < 1e-9,
-        "Sharp TE Kutta condition violated for α=0°: {}",
-        kutta_sharp_0
-    );
-    assert!(
-        kutta_sharp_90.abs() < 1e-9,
-        "Sharp TE Kutta condition violated for α=90°: {}",
-        kutta_sharp_90
-    );
+    // Sharp TE
+    let geom_sharp = naca_4digit("0012", 160).unwrap().sharpen();
+    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
+    assert!(airfoil_sharp.sharp_te);
+    let (k0, k90) = kutta(&airfoil_sharp);
+    assert!(k0.abs() < 1e-9, "Sharp TE Kutta condition violated for α=0°: {k0}");
+    assert!(k90.abs() < 1e-9, "Sharp TE Kutta condition violated for α=90°: {k90}");
 
     // Blunt TE
-    let geom_blunt = geom_sharp.blunten(0.002);
+    let geom_blunt = naca_4digit("0012", 160).unwrap();
     let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
-    let solution_blunt = solve_inviscid(&airfoil_blunt);
-
-    let kutta_blunt_0 = solution_blunt.gam_0[0] + solution_blunt.gam_0[airfoil_blunt.n - 1];
-    let kutta_blunt_90 = solution_blunt.gam_90[0] + solution_blunt.gam_90[airfoil_blunt.n - 1];
-    assert!(
-        kutta_blunt_0.abs() < 1e-9,
-        "Blunt TE Kutta condition violated for α=0°: {}",
-        kutta_blunt_0
-    );
-    assert!(
-        kutta_blunt_90.abs() < 1e-9,
-        "Blunt TE Kutta condition violated for α=90°: {}",
-        kutta_blunt_90
-    );
+    assert!(!airfoil_blunt.sharp_te);
+    let (k0, k90) = kutta(&airfoil_blunt);
+    assert!(k0.abs() < 1e-9, "Blunt TE Kutta condition violated for α=0°: {k0}");
+    assert!(k90.abs() < 1e-9, "Blunt TE Kutta condition violated for α=90°: {k90}");
 }
 
 /// Test that the gamma distribution is smooth near TE for sharp case
@@ -559,33 +549,25 @@ fn test_kutta_condition_both_te_types() {
 /// from both upper and lower surfaces.
 #[test]
 fn test_sharp_te_smooth_gamma() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    // For the symmetric airfoil at α = 0 the TE vorticity is small and the second differences
+    // approaching the TE from both sides agree (the sharp-TE bisector row of GGCALC)
+    let geom = naca_4digit("0012", 160).unwrap().sharpen();
     let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
-    // For α=0° symmetric case, check gamma at TE nodes
+    let mut st = BlState::from_airfoil(&airfoil, airfoil.n / 12 + 10);
+    let mut sys = None;
+    st.alfa = 0.0;
+    st.qinf = 1.0;
+    specal(&mut st, &mut sys);
     let n = airfoil.n;
-    let gam = solution.gamma_at_alpha(0.0);
-
-    // TE gammas should be small (Kutta condition + smooth approach)
+    let gam = &st.gam;
+    assert!(gam[1].abs() < 2.0, "Upper TE gamma {} should be small", gam[1]);
+    assert!(gam[n].abs() < 2.0, "Lower TE gamma {} should be small", gam[n]);
+    // XFOIL's GAM is antisymmetric on a symmetric section at α = 0 (GAM(I) = −GAM(N+1−I)), so
+    // the second differences approaching the TE are equal and opposite
+    let curv_upper = gam[3] - 2.0 * gam[2] + gam[1];
+    let curv_lower = gam[n - 2] - 2.0 * gam[n - 1] + gam[n];
     assert!(
-        gam[0].abs() < 2.0,
-        "Upper TE gamma {} should be small with curvature extrapolation",
-        gam[0]
-    );
-    assert!(
-        gam[n - 1].abs() < 2.0,
-        "Lower TE gamma {} should be small with curvature extrapolation",
-        gam[n - 1]
-    );
-
-    // Second derivatives at TE should be similar (curvature condition)
-    let curv_upper = gam[2] - 2.0 * gam[1] + gam[0];
-    let curv_lower = gam[n - 3] - 2.0 * gam[n - 2] + gam[n - 1];
-    assert!(
-        (curv_upper - curv_lower).abs() < 0.1,
-        "TE curvatures should match: upper={}, lower={}",
-        curv_upper,
-        curv_lower
+        (curv_upper + curv_lower).abs() < 1e-9,
+        "TE curvatures should be antisymmetric: upper={curv_upper}, lower={curv_lower}"
     );
 }

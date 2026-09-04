@@ -359,6 +359,130 @@ pub enum NacaError {
     InvalidDesignation(String),
 }
 
+/// XFOIL's own NACA generator (`naca.f`, `NACA4`/`NACA5`, called by the `NACA` command with
+/// NSIDE = IQX/3 = 123 points per side). Reproduced as XFOIL does it, including the thickness
+/// applied *vertically* (`YB = YC ± YT`) rather than perpendicular to the camber line, which
+/// is CLAUDE.md's documented divergence from the NACA definition. The result is the 245-point
+/// buffer airfoil XFOIL splines and then repanels with PANGEN (`repanel_xfoil`); it takes no
+/// panel count.
+pub const XFOIL_NACA_NSIDE: usize = 123;
+
+fn xfoil_naca_xx(nside: usize) -> Vec<f64> {
+    // TE point bunching parameter
+    let an: f64 = 1.5;
+    let anp = an + 1.0;
+    (1..=nside)
+        .map(|i| {
+            let frac = (i - 1) as f64 / (nside - 1) as f64;
+            if i == nside {
+                1.0
+            } else {
+                1.0 - anp * frac * (1.0 - frac).powf(an) - (1.0 - frac).powf(anp)
+            }
+        })
+        .collect()
+}
+
+fn xfoil_naca_yt(xx: f64, t: f64) -> f64 {
+    let x2 = xx * xx;
+    let x3 = x2 * xx;
+    let x4 = x2 * x2;
+    (0.29690 * xx.sqrt() - 0.12600 * xx - 0.35160 * x2 + 0.28430 * x3 - 0.10150 * x4) * t / 0.20
+}
+
+fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
+    let nside = xx.len();
+    let mut x_c = Vec::with_capacity(2 * nside - 1);
+    let mut y_c = Vec::with_capacity(2 * nside - 1);
+    for i in (0..nside).rev() {
+        x_c.push(xx[i]);
+        y_c.push(yc[i] + yt[i]);
+    }
+    for i in 1..nside {
+        x_c.push(xx[i]);
+        y_c.push(yc[i] - yt[i]);
+    }
+    Geometry {
+        reference: [0.25, 0.0],
+        x_c,
+        y_c,
+    }
+}
+
+/// `NACA4` as XFOIL runs it (vertical thickness, AN = 1.5 spacing, 2·NSIDE − 1 = 245 points).
+pub fn naca_4digit_xfoil(designation: &str) -> Result<Geometry, NacaError> {
+    if designation.len() != 4 || !designation.chars().all(|c| c.is_ascii_digit()) {
+        return Err(NacaError::InvalidDesignation(
+            "NACA 4-digit designation must be exactly 4 digits".to_string(),
+        ));
+    }
+    let ides: i64 = designation.parse().unwrap();
+    let n4 = ides / 1000;
+    let n3 = (ides - n4 * 1000) / 100;
+    let n2 = (ides - n4 * 1000 - n3 * 100) / 10;
+    let n1 = ides - n4 * 1000 - n3 * 100 - n2 * 10;
+    let m = n4 as f64 / 100.0;
+    let p = n3 as f64 / 10.0;
+    let t = (n2 * 10 + n1) as f64 / 100.0;
+
+    let xx = xfoil_naca_xx(XFOIL_NACA_NSIDE);
+    let yt: Vec<f64> = xx.iter().map(|&x| xfoil_naca_yt(x, t)).collect();
+    let yc: Vec<f64> = xx
+        .iter()
+        .map(|&x| {
+            if x < p {
+                m / (p * p) * (2.0 * p * x - x * x)
+            } else {
+                m / ((1.0 - p) * (1.0 - p)) * ((1.0 - 2.0 * p) + 2.0 * p * x - x * x)
+            }
+        })
+        .collect();
+    Ok(xfoil_naca_assemble(&xx, &yt, &yc))
+}
+
+/// `NACA5` as XFOIL runs it (210xx … 250xx camber lines by its M/C table, vertical thickness).
+pub fn naca_5digit_xfoil(designation: &str) -> Result<Geometry, NacaError> {
+    if designation.len() != 5 || !designation.chars().all(|c| c.is_ascii_digit()) {
+        return Err(NacaError::InvalidDesignation(
+            "NACA 5-digit designation must be exactly 5 digits".to_string(),
+        ));
+    }
+    let ides: i64 = designation.parse().unwrap();
+    let n5 = ides / 10000;
+    let n4 = (ides - n5 * 10000) / 1000;
+    let n3 = (ides - n5 * 10000 - n4 * 1000) / 100;
+    let n2 = (ides - n5 * 10000 - n4 * 1000 - n3 * 100) / 10;
+    let n1 = ides - n5 * 10000 - n4 * 1000 - n3 * 100 - n2 * 10;
+    let n543 = 100 * n5 + 10 * n4 + n3;
+    let (m, c) = match n543 {
+        210 => (0.0580, 361.4),
+        220 => (0.1260, 51.64),
+        230 => (0.2025, 15.957),
+        240 => (0.2900, 6.643),
+        250 => (0.3910, 3.230),
+        _ => {
+            return Err(NacaError::InvalidDesignation(
+                "Illegal 5-digit designation: first three digits must be 210, 220, ... 250".to_string(),
+            ))
+        }
+    };
+    let t = (n2 * 10 + n1) as f64 / 100.0;
+
+    let xx = xfoil_naca_xx(XFOIL_NACA_NSIDE);
+    let yt: Vec<f64> = xx.iter().map(|&x| xfoil_naca_yt(x, t)).collect();
+    let yc: Vec<f64> = xx
+        .iter()
+        .map(|&x| {
+            if x < m {
+                (c / 6.0) * (x * x * x - 3.0 * m * (x * x) + m * m * (3.0 - m) * x)
+            } else {
+                (c / 6.0) * (m * m * m) * (1.0 - x)
+            }
+        })
+        .collect();
+    Ok(xfoil_naca_assemble(&xx, &yt, &yc))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

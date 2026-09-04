@@ -34,91 +34,103 @@ impl Default for PaneConfig {
     }
 }
 
-/// Repanel an airfoil using XFOIL's PANE algorithm (curvature-based)
-///
-/// This implements XFOIL's PANGEN subroutine which distributes panels
-/// based on local curvature, placing more panels in high-curvature regions
-/// (leading edge) and fewer in low-curvature regions (mid-chord).
-///
-/// # Arguments
-/// * `geometry` - Input geometry
-/// * `n_panels` - Target number of panels
-/// * `config` - PANE configuration parameters
-///
-/// # Returns
-/// New geometry with redistributed points matching XFOIL's PANE output
+/// PANGEN (xfoil.f), line for line: the curvature-based panel distribution XFOIL generates
+/// from the buffer airfoil (`PANE`, and the `NACA` command). `n_panels` is NPAN;
+/// `config` carries CVPAR/CTERAT/CTRRAT/XSREF/XPREF. Includes the sharp-LE (IBLE) and
+/// corner (doubled-point) paths. The returned geometry is the N node coordinates; SCALC,
+/// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `create_paneled_airfoil` exactly as
+/// PANGEN's tail does.
 pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
     let nb = geometry.x_c.len();
     if nb < 2 {
         return geometry.clone();
     }
+    let xb = &geometry.x_c;
+    let yb = &geometry.y_c;
+    let (xsref1, xsref2) = config.xsref.unwrap_or((1.0, 1.0));
+    let (xpref1, xpref2) = config.xpref.unwrap_or((1.0, 1.0));
 
-    // Calculate arc length along the buffer airfoil
-    let sb = calculate_arc_length(&geometry.x_c, &geometry.y_c);
+    // Number of temporary nodes for panel distribution calculation exceeds the specified
+    // panel number by factor of IPFAC.
+    let ipfac = 5;
+    // number of airfoil panel points
+    let mut n = n_panels;
 
-    // Spline the buffer airfoil coordinates
-    let xbp = spline(&geometry.x_c, &sb);
-    let ybp = spline(&geometry.y_c, &sb);
+    // set arc length spline parameter; spline raw airfoil coordinates
+    let sb = scalc(xb, yb);
+    let xbp = segspl(xb, &sb);
+    let ybp = segspl(yb, &sb);
 
-    // Normalizing length (~ chord)
+    // normalizing length (~ chord)
     let sbref = 0.5 * (sb[nb - 1] - sb[0]);
 
-    // Compute curvature at each buffer point
+    // set up curvature array
     let mut w5: Vec<f64> = (0..nb)
-        .map(|i| curvature(sb[i], &geometry.x_c, &xbp, &geometry.y_c, &ybp, &sb).abs() * sbref)
+        .map(|i| curv(sb[i], xb, &xbp, yb, &ybp, &sb).abs() * sbref)
         .collect();
 
-    // Find LE point arc length and curvature
-    let sble = find_le_arc_length(&geometry.x_c, &xbp, &geometry.y_c, &ybp, &sb);
-    let cvle = curvature(sble, &geometry.x_c, &xbp, &geometry.y_c, &ybp, &sb).abs() * sbref;
+    // locate LE point arc length value and the normalized curvature there
+    let sble = lefind(xb, &xbp, yb, &ybp, &sb);
+    let cvle = curv(sble, xb, &xbp, yb, &ybp, &sb).abs() * sbref;
 
-    // TE coordinates
-    let xbte = 0.5 * (geometry.x_c[0] + geometry.x_c[nb - 1]);
-    let ybte = 0.5 * (geometry.y_c[0] + geometry.y_c[nb - 1]);
+    // check for doubled point (sharp corner) at LE; IBLE is 1-based like the Fortran (0 = none)
+    let mut ible = 0usize;
+    for i in 1..nb {
+        if sble == sb[i - 1] && sble == sb[i] {
+            ible = i;
+            // 'Sharp leading edge'
+            break;
+        }
+    }
 
-    // LE coordinates
-    let xble = seval(sble, &geometry.x_c, &xbp, &sb);
-    let yble = seval(sble, &geometry.y_c, &ybp, &sb);
-    let chbsq = (xbte - xble).powi(2) + (ybte - yble).powi(2);
+    // set LE, TE points
+    let xble = seval(sble, xb, &xbp, &sb);
+    let yble = seval(sble, yb, &ybp, &sb);
+    let xbte = 0.5 * (xb[0] + xb[nb - 1]);
+    let ybte = 0.5 * (yb[0] + yb[nb - 1]);
+    let chbsq = (xbte - xble) * (xbte - xble) + (ybte - yble) * (ybte - yble);
 
-    // Set average curvature over region near LE
-    let nk = 3;
+    // set average curvature over 2*NK+1 points within Rcurv of LE point
+    let nk: i32 = 3;
     let mut cvsum = 0.0;
     for k in -nk..=nk {
         let frac = k as f64 / nk as f64;
         let sbk = sble + frac * sbref / cvle.max(20.0);
-        let cvk = curvature(sbk, &geometry.x_c, &xbp, &geometry.y_c, &ybp, &sb).abs() * sbref;
+        let cvk = curv(sbk, xb, &xbp, yb, &ybp, &sb).abs() * sbref;
         cvsum += cvk;
     }
-    let cvavg = cvsum / (2 * nk + 1) as f64;
+    let mut cvavg = cvsum / (2 * nk + 1) as f64;
 
-    // Curvature attraction coefficient
+    // dummy curvature for sharp LE
+    if ible != 0 {
+        cvavg = 10.0;
+    }
+
+    // set curvature attraction coefficient actually used
     let cc = 6.0 * config.cvpar;
 
-    // Set artificial curvature at TE to bunch panels there
+    // set artificial curvature at TE to bunch panels there
     let cvte = cvavg * config.cterat;
     w5[0] = cvte;
     w5[nb - 1] = cvte;
 
-    // Smooth curvature array
-    let smool = (1.0 / cvavg.max(20.0)).max(0.25 / (n_panels / 2) as f64);
-    let smoosq = (smool * sbref).powi(2);
+    // set smoothing length = 1 / averaged LE curvature, but no more than 5% of chord and no
+    // less than 1/4 average panel spacing
+    let smool = (1.0 / cvavg.max(20.0)).max(0.25 / ((n_panels / 2) as f64));
+    let smoosq = (smool * sbref) * (smool * sbref);
 
-    // Set up tri-diagonal system for smoothed curvatures
+    // set up tri-diagonal system for smoothed curvatures
     let mut w1 = vec![0.0; nb];
     let mut w2 = vec![0.0; nb];
     let mut w3 = vec![0.0; nb];
-
     w2[0] = 1.0;
     w3[0] = 0.0;
-
     for i in 1..nb - 1 {
         let dsm = sb[i] - sb[i - 1];
         let dsp = sb[i + 1] - sb[i];
         let dso = 0.5 * (sb[i + 1] - sb[i - 1]);
-
         if dsm == 0.0 || dsp == 0.0 {
-            // Leave curvature at corner point unchanged
+            // leave curvature at corner point unchanged
             w1[i] = 0.0;
             w2[i] = 1.0;
             w3[i] = 0.0;
@@ -128,35 +140,55 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
             w3[i] = smoosq * (-1.0 / dsp) / dso;
         }
     }
-
     w1[nb - 1] = 0.0;
     w2[nb - 1] = 1.0;
 
-    // Fix curvature at LE point
+    // fix curvature at LE point by modifying equations adjacent to LE
     for i in 1..nb - 1 {
-        if (sb[i] - sble).abs() < 1e-10 {
+        // (I is 1-based in the Fortran: I = i + 1)
+        if sb[i] == sble || i + 1 == ible || i + 1 == ible + 1 {
+            // if node falls right on LE point, fix curvature there
             w1[i] = 0.0;
             w2[i] = 1.0;
             w3[i] = 0.0;
             w5[i] = cvle;
         } else if sb[i - 1] < sble && sb[i] > sble {
-            // Modify equation at node just after LE point
+            // modify equation at node just before LE point
+            let dsm = sb[i - 1] - sb[i - 2];
+            let dsp = sble - sb[i - 1];
+            let dso = 0.5 * (sble - sb[i - 2]);
+            w1[i - 1] = smoosq * (-1.0 / dsm) / dso;
+            w2[i - 1] = smoosq * (1.0 / dsp + 1.0 / dsm) / dso + 1.0;
+            w3[i - 1] = 0.0;
+            w5[i - 1] += smoosq * cvle / (dsp * dso);
+
+            // modify equation at node just after LE point
             let dsm = sb[i] - sble;
             let dsp = sb[i + 1] - sb[i];
             let dso = 0.5 * (sb[i + 1] - sble);
             w1[i] = 0.0;
             w2[i] = smoosq * (1.0 / dsp + 1.0 / dsm) / dso + 1.0;
             w3[i] = smoosq * (-1.0 / dsp) / dso;
-            w5[i] = w5[i] + smoosq * cvle / (dsm * dso);
+            w5[i] += smoosq * cvle / (dsm * dso);
             break;
         }
     }
 
-    // Set artificial curvature at refinement regions
-    if let Some((xsref1, xsref2)) = config.xsref {
-        for i in 1..nb - 1 {
-            let xoc = ((geometry.x_c[i] - xble) * (xbte - xble) + (geometry.y_c[i] - yble) * (ybte - yble)) / chbsq;
-            if sb[i] < sble && xoc > xsref1 && xoc < xsref2 {
+    // set artificial curvature at bunching points and fix it there
+    for i in 1..nb - 1 {
+        // chord-based x/c coordinate
+        let xoc = ((xb[i] - xble) * (xbte - xble) + (yb[i] - yble) * (ybte - yble)) / chbsq;
+        if sb[i] < sble {
+            // check if top side point is in refinement area
+            if xoc > xsref1 && xoc < xsref2 {
+                w1[i] = 0.0;
+                w2[i] = 1.0;
+                w3[i] = 0.0;
+                w5[i] = cvle * config.ctrrat;
+            }
+        } else {
+            // check if bottom side point is in refinement area
+            if xoc > xpref1 && xoc < xpref2 {
                 w1[i] = 0.0;
                 w2[i] = 1.0;
                 w3[i] = 0.0;
@@ -165,94 +197,97 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
         }
     }
 
-    if let Some((xpref1, xpref2)) = config.xpref {
-        for i in 1..nb - 1 {
-            let xoc = ((geometry.x_c[i] - xble) * (xbte - xble) + (geometry.y_c[i] - yble) * (ybte - yble)) / chbsq;
-            if sb[i] >= sble && xoc > xpref1 && xoc < xpref2 {
-                w1[i] = 0.0;
-                w2[i] = 1.0;
-                w3[i] = 0.0;
-                w5[i] = cvle * config.ctrrat;
-            }
-        }
+    // solve for smoothed curvature array W5
+    if ible == 0 {
+        trisol(&mut w2, &w1, &mut w3, &mut w5);
+    } else {
+        let i = ible;
+        trisol(&mut w2[..i], &w1[..i], &mut w3[..i], &mut w5[..i]);
+        trisol(&mut w2[i..], &w1[i..], &mut w3[i..], &mut w5[i..]);
     }
 
-    // Solve tri-diagonal system for smoothed curvature
-    w5 = trisol_curvature(&w1, &w2, &w3, &w5);
-
-    // Normalize curvature array
-    let cvmax = w5.iter().fold(0.0_f64, |m, &v| m.max(v.abs()));
-    if cvmax > 0.0 {
-        for v in &mut w5 {
-            *v /= cvmax;
-        }
+    // find max curvature; normalize curvature array
+    let mut cvmax = 0.0_f64;
+    for v in &w5 {
+        cvmax = cvmax.max(v.abs());
+    }
+    for v in &mut w5 {
+        *v /= cvmax;
     }
 
-    // Spline the normalized curvature
-    let w6 = spline(&w5, &sb);
+    // spline curvature array
+    let w6 = segspl(&w5, &sb);
 
-    // Set initial guess for node positions
-    // Use more nodes than specified for more reliable convergence
-    let ipfac = 5;
-    let nn = ipfac * (n_panels - 1) + 1;
+    // Set initial guess for node positions uniform in s. More nodes than specified (by
+    // factor of IPFAC) are temporarily used for more reliable convergence.
+    let nn = ipfac * (n - 1) + 1;
 
-    // Ratio of panel lengths at TE
+    // ratio of lengths of panel at TE to one away from the TE
     let rdste = 0.667;
     let rtf = (rdste - 1.0) * 2.0 + 1.0;
 
-    let dsavg = (sb[nb - 1] - sb[0]) / ((nn - 3) as f64 + 2.0 * rtf);
     let mut snew = vec![0.0; nn];
-    snew[0] = sb[0];
-    for i in 1..nn - 1 {
-        snew[i] = sb[0] + dsavg * ((i - 1) as f64 + rtf);
+    let mut nn1 = 0usize;
+    if ible == 0 {
+        let dsavg = (sb[nb - 1] - sb[0]) / ((nn - 3) as f64 + 2.0 * rtf);
+        snew[0] = sb[0];
+        for i in 1..nn - 1 {
+            snew[i] = sb[0] + dsavg * ((i - 1) as f64 + rtf);
+        }
+        snew[nn - 1] = sb[nb - 1];
+    } else {
+        let nfrac1 = (n * ible) / nb;
+        nn1 = ipfac * (nfrac1 - 1) + 1;
+        let dsavg1 = (sble - sb[0]) / ((nn1 - 2) as f64 + rtf);
+        snew[0] = sb[0];
+        for i in 1..nn1 {
+            snew[i] = sb[0] + dsavg1 * ((i - 1) as f64 + rtf);
+        }
+        let nn2 = nn - nn1 + 1;
+        let dsavg2 = (sb[nb - 1] - sble) / ((nn2 - 2) as f64 + rtf);
+        for i in 1..nn2 - 1 {
+            snew[i - 1 + nn1] = sble + dsavg2 * ((i - 1) as f64 + rtf);
+        }
+        snew[nn - 1] = sb[nb - 1];
     }
-    snew[nn - 1] = sb[nb - 1];
 
-    // Newton iteration for new node positions
-    for _iter in 0..20 {
-        let mut w1_n = vec![0.0; nn];
-        let mut w2_n = vec![0.0; nn];
-        let mut w3_n = vec![0.0; nn];
-        let mut w4 = vec![0.0; nn];
-
-        let cv1 = seval(snew[0], &w5, &w6, &sb);
+    // Newton iteration loop for new node positions
+    let mut w1n = vec![0.0; nn];
+    let mut w2n = vec![0.0; nn];
+    let mut w3n = vec![0.0; nn];
+    let mut w4 = vec![0.0; nn];
+    for _iter in 1..=20 {
+        // set up tri-diagonal system for node position deltas
         let mut cv2 = seval(snew[1], &w5, &w6, &sb);
-        let cvs1 = deval(snew[0], &w5, &w6, &sb);
         let mut cvs2 = deval(snew[1], &w5, &w6, &sb);
-
-        let mut cavm = (cv1.powi(2) + cv2.powi(2)).sqrt();
+        let cv1 = seval(snew[0], &w5, &w6, &sb);
+        let cvs1 = deval(snew[0], &w5, &w6, &sb);
+        let mut cavm = (cv1 * cv1 + cv2 * cv2).sqrt();
         let (mut cavm_s1, mut cavm_s2) = if cavm == 0.0 {
             (0.0, 0.0)
         } else {
             (cvs1 * cv1 / cavm, cvs2 * cv2 / cavm)
         };
-
         for i in 1..nn - 1 {
             let dsm = snew[i] - snew[i - 1];
             let dsp = snew[i] - snew[i + 1];
             let cv3 = seval(snew[i + 1], &w5, &w6, &sb);
             let cvs3 = deval(snew[i + 1], &w5, &w6, &sb);
-
-            let cavp = (cv3.powi(2) + cv2.powi(2)).sqrt();
+            let cavp = (cv3 * cv3 + cv2 * cv2).sqrt();
             let (cavp_s2, cavp_s3) = if cavp == 0.0 {
                 (0.0, 0.0)
             } else {
                 (cvs2 * cv2 / cavp, cvs3 * cv3 / cavp)
             };
-
             let fm = cc * cavm + 1.0;
             let fp = cc * cavp + 1.0;
-
             let rez = dsp * fp + dsm * fm;
-
-            // Lower, main, and upper diagonals
-            w1_n[i] = -fm + cc * dsm * cavm_s1;
-            w2_n[i] = fp + fm + cc * (dsp * cavp_s2 + dsm * cavm_s2);
-            w3_n[i] = -fp + cc * dsp * cavp_s3;
-
-            // Residual
+            // lower, main, and upper diagonals
+            w1n[i] = -fm + cc * dsm * cavm_s1;
+            w2n[i] = fp + fm + cc * (dsp * cavp_s2 + dsm * cavm_s2);
+            w3n[i] = -fp + cc * dsp * cavp_s3;
+            // residual, requiring that (1 + C*curv)*deltaS is equal on both sides of node i
             w4[i] = -rez;
-
             cv2 = cv3;
             cvs2 = cvs3;
             cavm = cavp;
@@ -260,33 +295,41 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
             cavm_s2 = cavp_s3;
         }
 
-        // Fix endpoints at TE
-        w2_n[0] = 1.0;
-        w3_n[0] = 0.0;
+        // fix endpoints (at TE)
+        w2n[0] = 1.0;
+        w3n[0] = 0.0;
         w4[0] = 0.0;
-        w1_n[nn - 1] = 0.0;
-        w2_n[nn - 1] = 1.0;
+        w1n[nn - 1] = 0.0;
+        w2n[nn - 1] = 1.0;
         w4[nn - 1] = 0.0;
 
-        // Fudge equations adjacent to TE to get TE panel length ratio RTF
         if rtf != 1.0 {
+            // fudge equations adjacent to TE to get TE panel length ratio RTF
             let i = 1;
             w4[i] = -((snew[i] - snew[i - 1]) + rtf * (snew[i] - snew[i + 1]));
-            w1_n[i] = -1.0;
-            w2_n[i] = 1.0 + rtf;
-            w3_n[i] = -rtf;
-
+            w1n[i] = -1.0;
+            w2n[i] = 1.0 + rtf;
+            w3n[i] = -rtf;
             let i = nn - 2;
             w4[i] = -((snew[i] - snew[i + 1]) + rtf * (snew[i] - snew[i - 1]));
-            w3_n[i] = -1.0;
-            w2_n[i] = 1.0 + rtf;
-            w1_n[i] = -rtf;
+            w3n[i] = -1.0;
+            w2n[i] = 1.0 + rtf;
+            w1n[i] = -rtf;
         }
 
-        // Solve for changes in node positions
-        w4 = trisol_curvature(&w1_n, &w2_n, &w3_n, &w4);
+        // fix sharp LE point
+        if ible != 0 {
+            let i = nn1 - 1;
+            w1n[i] = 0.0;
+            w2n[i] = 1.0;
+            w3n[i] = 0.0;
+            w4[i] = sble - snew[i];
+        }
 
-        // Find under-relaxation factor
+        // solve for changes W4 in node position arc length values
+        trisol(&mut w2n, &w1n, &mut w3n, &mut w4);
+
+        // find under-relaxation factor to keep nodes from changing order
         let mut rlx = 1.0;
         let mut dmax = 0.0_f64;
         for i in 0..nn - 1 {
@@ -299,140 +342,201 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
             if dsrat < 0.2 {
                 rlx = (0.2 - 1.0) * ds / dds;
             }
-            dmax = dmax.max(w4[i].abs());
+            dmax = w4[i].abs().max(dmax);
         }
 
-        // Update node positions
+        // update node position
         for i in 1..nn - 1 {
             snew[i] += rlx * w4[i];
         }
 
-        if dmax.abs() < 1e-3 {
+        if dmax.abs() < 1.0e-3 {
             break;
         }
     }
+    // 'Paneling convergence failed.  Continuing anyway...' if the loop ran out
 
-    // Set new panel node coordinates by sampling every IPFAC-th point
-    let mut x_c = Vec::with_capacity(n_panels);
-    let mut y_c = Vec::with_capacity(n_panels);
-
-    for i in 0..n_panels {
+    // set new panel node coordinates
+    let mut s = Vec::with_capacity(n + 4);
+    let mut x = Vec::with_capacity(n + 4);
+    let mut y = Vec::with_capacity(n + 4);
+    for i in 0..n {
         let ind = ipfac * i;
-        x_c.push(seval(snew[ind], &geometry.x_c, &xbp, &sb));
-        y_c.push(seval(snew[ind], &geometry.y_c, &ybp, &sb));
+        s.push(snew[ind]);
+        x.push(seval(snew[ind], xb, &xbp, &sb));
+        y.push(seval(snew[ind], yb, &ybp, &sb));
+    }
+
+    // go over buffer airfoil again, checking for corners (double points)
+    for ib in 0..nb - 1 {
+        if sb[ib] == sb[ib + 1] {
+            // found one !
+            let xbcorn = xb[ib];
+            let ybcorn = yb[ib];
+            let sbcorn = sb[ib];
+            // find current-airfoil panel which contains corner (the node count grows on insertion,
+            // so this is a while loop rather than a range)
+            let mut i = 0;
+            while i < n {
+                // keep stepping until first node past corner
+                if s[i] <= sbcorn {
+                    i += 1;
+                    continue;
+                }
+                // move remainder of panel nodes to make room for additional node
+                x.insert(i, xbcorn);
+                y.insert(i, ybcorn);
+                s.insert(i, sbcorn);
+                n += 1;
+                // shift nodes adjacent to corner to keep panel sizes comparable
+                if i >= 2 {
+                    s[i - 1] = 0.5 * (s[i] + s[i - 2]);
+                    x[i - 1] = seval(s[i - 1], xb, &xbp, &sb);
+                    y[i - 1] = seval(s[i - 1], yb, &ybp, &sb);
+                }
+                if i + 2 < n {
+                    s[i + 1] = 0.5 * (s[i] + s[i + 2]);
+                    x[i + 1] = seval(s[i + 1], xb, &xbp, &sb);
+                    y[i + 1] = seval(s[i + 1], yb, &ybp, &sb);
+                }
+                // go on to next input geometry point to check for corner
+                break;
+            }
+        }
     }
 
     Geometry {
         reference: geometry.reference,
-        x_c,
-        y_c,
+        x_c: x,
+        y_c: y,
     }
 }
 
-/// Compute curvature of splined curve at arc length parameter ss
-///
-/// Curvature κ = (x'*y'' - y'*x'') / |r'|³
-fn curvature(ss: f64, x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
-    let xd = deval(ss, x, xp, s);
-    let yd = deval(ss, y, yp, s);
-    let xdd = d2val(ss, x, xp, s);
-    let ydd = d2val(ss, y, yp, s);
-
-    let sd = (xd.powi(2) + yd.powi(2)).sqrt();
-    let sd = sd.max(0.001 * (s[s.len() - 1] - s[0]) / s.len() as f64);
-
-    (xd * ydd - yd * xdd) / sd.powi(3)
+/// SCALC: arc length array of a 2-D point array.
+pub fn scalc(x: &[f64], y: &[f64]) -> Vec<f64> {
+    let mut s = vec![0.0; x.len()];
+    for i in 1..x.len() {
+        let dx = x[i] - x[i - 1];
+        let dy = y[i] - y[i - 1];
+        s[i] = s[i - 1] + (dx * dx + dy * dy).sqrt();
+    }
+    s
 }
 
-/// Find leading edge arc length parameter using XFOIL's LEFIND algorithm
-fn find_le_arc_length(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
+/// SEGSPL: splines X(S) like SPLINE but allows derivative discontinuities at segment joints,
+/// defined by identical successive S values.
+pub fn segspl(x: &[f64], s: &[f64]) -> Vec<f64> {
     let n = x.len();
+    assert!(s[0] != s[1], "SEGSPL:  First input point duplicated");
+    assert!(s[n - 1] != s[n - 2], "SEGSPL:  Last  input point duplicated");
+    let mut xs = vec![0.0; n];
+    let mut iseg0 = 0;
+    for iseg in 1..n - 2 {
+        if s[iseg] == s[iseg + 1] {
+            let seg = spline(&x[iseg0..=iseg], &s[iseg0..=iseg]);
+            xs[iseg0..=iseg].copy_from_slice(&seg);
+            iseg0 = iseg + 1;
+        }
+    }
+    let seg = spline(&x[iseg0..], &s[iseg0..]);
+    xs[iseg0..].copy_from_slice(&seg);
+    xs
+}
 
-    // TE coordinates
+/// CURV: curvature of the splined 2-D curve at S = SS, evaluated from the spline's own cubic.
+pub fn curv(ss: f64, x: &[f64], xs: &[f64], y: &[f64], ys: &[f64], s: &[f64]) -> f64 {
+    let n = s.len();
+    let mut ilow = 0usize;
+    let mut i = n - 1;
+    while i - ilow > 1 {
+        let imid = (i + ilow) / 2;
+        if ss < s[imid] {
+            i = imid;
+        } else {
+            ilow = imid;
+        }
+    }
+    let ds = s[i] - s[i - 1];
+    let t = (ss - s[i - 1]) / ds;
+    let cx1 = ds * xs[i - 1] - x[i] + x[i - 1];
+    let cx2 = ds * xs[i] - x[i] + x[i - 1];
+    let xd = x[i] - x[i - 1] + (1.0 - 4.0 * t + 3.0 * t * t) * cx1 + t * (3.0 * t - 2.0) * cx2;
+    let xdd = (6.0 * t - 4.0) * cx1 + (6.0 * t - 2.0) * cx2;
+    let cy1 = ds * ys[i - 1] - y[i] + y[i - 1];
+    let cy2 = ds * ys[i] - y[i] + y[i - 1];
+    let yd = y[i] - y[i - 1] + (1.0 - 4.0 * t + 3.0 * t * t) * cy1 + t * (3.0 * t - 2.0) * cy2;
+    let ydd = (6.0 * t - 4.0) * cy1 + (6.0 * t - 2.0) * cy2;
+    let mut sd = (xd * xd + yd * yd).sqrt();
+    sd = sd.max(0.001 * ds);
+    (xd * ydd - yd * xdd) / (sd * sd * sd)
+}
+
+/// LEFIND: the leading-edge spline parameter SLE where the surface tangent is normal to the
+/// chord line from the TE point.
+pub fn lefind(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
+    let n = x.len();
+    // convergence tolerance
+    let dseps = (s[n - 1] - s[0]) * 1.0e-5;
+    // set trailing edge point coordinates
     let xte = 0.5 * (x[0] + x[n - 1]);
     let yte = 0.5 * (y[0] + y[n - 1]);
-
-    // Find first guess for SLE by locating where dot product changes sign
-    let mut i_le = n / 2;
-    for i in 2..n - 2 {
-        let xi = seval(s[i], x, xp, s);
-        let yi = seval(s[i], y, yp, s);
-        let dxte = xi - xte;
-        let dyte = yi - yte;
-
-        let xip = seval(s[i + 1], x, xp, s);
-        let yip = seval(s[i + 1], y, yp, s);
-        let dx = xip - xi;
-        let dy = yip - yi;
-
+    // get first guess for SLE (I = 3..N-2 in the Fortran; the loop variable ends at N-1)
+    let mut i = n - 2;
+    for ii in 2..n - 2 {
+        let dxte = x[ii] - xte;
+        let dyte = y[ii] - yte;
+        let dx = x[ii + 1] - x[ii];
+        let dy = y[ii + 1] - y[ii];
         let dotp = dxte * dx + dyte * dy;
         if dotp < 0.0 {
-            i_le = i;
+            i = ii;
             break;
         }
     }
-
-    let mut sle = s[i_le];
-    let dseps = (s[n - 1] - s[0]) * 1e-5;
-
-    // Newton iteration
-    for _ in 0..50 {
+    let mut sle = s[i];
+    // check for sharp LE case
+    if s[i] == s[i - 1] {
+        return sle;
+    }
+    // Newton iteration to get exact SLE value
+    for _iter in 1..=50 {
         let xle = seval(sle, x, xp, s);
         let yle = seval(sle, y, yp, s);
         let dxds = deval(sle, x, xp, s);
         let dyds = deval(sle, y, yp, s);
         let dxdd = d2val(sle, x, xp, s);
         let dydd = d2val(sle, y, yp, s);
-
         let xchord = xle - xte;
         let ychord = yle - yte;
-
         let res = xchord * dxds + ychord * dyds;
-        let ress = dxds.powi(2) + dyds.powi(2) + xchord * dxdd + ychord * dydd;
-
+        let ress = dxds * dxds + dyds * dyds + xchord * dxdd + ychord * dydd;
         let mut dsle = -res / ress;
-        let dsle_limit = 0.02 * (xchord + ychord).abs();
-        dsle = dsle.clamp(-dsle_limit, dsle_limit);
-
+        dsle = dsle.max(-0.02 * (xchord + ychord).abs());
+        dsle = dsle.min(0.02 * (xchord + ychord).abs());
         sle += dsle;
-
         if dsle.abs() < dseps {
-            break;
+            return sle;
         }
     }
-
-    sle
+    // 'LEFIND:  LE point not found.  Continuing...'
+    s[i]
 }
 
-/// Solve tri-diagonal system for curvature smoothing
-fn trisol_curvature(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
-    let n = b.len();
-    let mut cp = vec![0.0; n];
-    let mut dp = vec![0.0; n];
-    let mut x = vec![0.0; n];
-
-    // Forward elimination
-    cp[0] = c[0] / b[0];
-    dp[0] = d[0] / b[0];
-
-    for i in 1..n {
-        let m = b[i] - a[i] * cp[i - 1];
-        if m.abs() < 1e-20 {
-            cp[i] = 0.0;
-            dp[i] = 0.0;
-        } else {
-            cp[i] = c[i] / m;
-            dp[i] = (d[i] - a[i] * dp[i - 1]) / m;
-        }
+/// TRISOL: solves the tri-diagonal system with main diagonal `a`, lower `b`, upper `c` and
+/// right-hand side `d`; `d` is replaced by the solution, `a` and `c` are destroyed.
+pub fn trisol(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64]) {
+    let kk = a.len();
+    for k in 1..kk {
+        let km = k - 1;
+        c[km] /= a[km];
+        d[km] /= a[km];
+        a[k] -= b[k] * c[km];
+        d[k] -= b[k] * d[km];
     }
-
-    // Back substitution
-    x[n - 1] = dp[n - 1];
-    for i in (0..n - 1).rev() {
-        x[i] = dp[i] - cp[i] * x[i + 1];
+    d[kk - 1] /= a[kk - 1];
+    for k in (0..kk - 1).rev() {
+        d[k] -= c[k] * d[k + 1];
     }
-
-    x
 }
 
 /// Repanel an airfoil with a new number of panels using modified cosine spacing
@@ -463,7 +567,7 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     let s_total = s[n - 1];
 
     // Find LE arc length (approximately midway for a closed airfoil)
-    let sle = find_le_arc_length(&geometry.x_c, &xp, &geometry.y_c, &yp, &s);
+    let sle = lefind(&geometry.x_c, &xp, &geometry.y_c, &yp, &s);
 
     // Generate new parameter values using modified cosine spacing
     // with different densities at TE vs LE
@@ -665,77 +769,14 @@ fn apcalc(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64>
     apanel
 }
 
-/// Find leading edge arc length parameter and index
-///
-/// Uses XFOIL's LEFIND algorithm: finds where the surface tangent is perpendicular
-/// to the chord line connecting the LE point to the TE.
-///
-/// The defining condition is: (X-XTE, Y-YTE) · (X', Y') = 0 at S = SLE
-///
-/// Returns (sle, le_index)
+/// LEFIND plus the index of the first node past the LE (kept for callers that want it).
 fn find_leading_edge(x: &[f64], y: &[f64], s: &[f64], xp: &[f64], yp: &[f64]) -> (f64, usize) {
-    let n = x.len();
-
-    // Convergence tolerance (matches XFOIL)
-    let dseps = (s[n - 1] - s[0]) * 1.0e-5;
-
-    // Trailing edge coordinates
-    let x_te = 0.5 * (x[0] + x[n - 1]);
-    let y_te = 0.5 * (y[0] + y[n - 1]);
-
-    // Get first guess for SLE by finding where dot product changes sign
-    // This matches XFOIL's approach exactly
-    let mut i_le = n / 2; // fallback
-    for i in 2..n - 2 {
-        let dxte = x[i] - x_te;
-        let dyte = y[i] - y_te;
-        let dx = x[i + 1] - x[i];
-        let dy = y[i + 1] - y[i];
-        let dotp = dxte * dx + dyte * dy;
-        if dotp < 0.0 {
-            i_le = i;
-            break;
-        }
-    }
-
-    let mut s_le = s[i_le];
-
-    // Check for sharp LE case (doubled point)
-    if i_le > 0 && (s[i_le] - s[i_le - 1]).abs() < 1e-14 {
-        return (s_le, i_le);
-    }
-
-    // Newton iteration to get exact SLE value (matches XFOIL exactly)
-    for _ in 0..50 {
-        let x_le = seval(s_le, x, xp, s);
-        let y_le = seval(s_le, y, yp, s);
-        let dxds = deval(s_le, x, xp, s);
-        let dyds = deval(s_le, y, yp, s);
-        let dxdd = d2val(s_le, x, xp, s);
-        let dydd = d2val(s_le, y, yp, s);
-
-        let xchord = x_le - x_te;
-        let ychord = y_le - y_te;
-
-        // Drive dot product between chord line and LE tangent to zero
-        let res = xchord * dxds + ychord * dyds;
-        let ress = dxds * dxds + dyds * dyds + xchord * dxdd + ychord * dydd;
-
-        // Newton delta for SLE
-        let mut dsle = -res / ress;
-
-        // Limit step size (matches XFOIL exactly: ABS(XCHORD+YCHORD), not ABS(XCHORD)+ABS(YCHORD))
-        let dsle_limit = 0.02 * (xchord + ychord).abs();
-        dsle = dsle.max(-dsle_limit).min(dsle_limit);
-
-        s_le += dsle;
-
-        if dsle.abs() < dseps {
-            break;
-        }
-    }
-
-    (s_le, i_le)
+    let sle = lefind(x, xp, y, yp, s);
+    // YFoil convenience only (XFOIL works with SLE): the node nearest the spline LE
+    let i_le = (0..x.len())
+        .min_by(|&i, &j| (s[i] - sle).abs().partial_cmp(&(s[j] - sle).abs()).unwrap())
+        .unwrap_or(0);
+    (sle, i_le)
 }
 
 #[cfg(test)]

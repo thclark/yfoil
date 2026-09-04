@@ -339,3 +339,15 @@ records.rs` is the VISCAL-level checker (exact branch trace, floor-derived value
 threshold-straddling outcome); `tests/xfoil_coverage_tests.rs::replay_iteration` seeds a
 `Session` with XFOIL's dumped state at call k (pointers rebuilt from IST/SST) and runs one
 SETBL → BLSOLV → UPDATE against `update_output_k.dat`.
+
+Stage G (optional, off the solver's critical path): `NACA4/NACA5 (naca.f) → geometry::naca::{naca_4digit_xfoil,
+naca_5digit_xfoil}` (NSIDE = IQX/3 = 123, AN = 1.5 spacing, thickness applied *vertically* — the
+documented divergence from the NACA definition that `naca_4digit` does not share; 245-point buffer,
+no panel count), `PANGEN → geometry::panel::repanel_xfoil` line for line (IPFAC = 5, RDSTE = 0.667,
+the LE-adjacent smoothing equations on both neighbours, exact-equality corner/LE tests, TRISOL
+split at a sharp LE, corner insertion), with `SCALC/SEGSPL/CURV/LEFIND/TRISOL →
+geometry::panel::{scalc, segspl, curv, lefind, trisol}` as XFOIL has them (`create_paneled_airfoil`
+uses the same `lefind`). CLI: `yfoil geom naca --naca-model xfoil`. The pipeline's geometry-only
+cases (`airfoil = "xfoil-naca:dddd"`, `geometry_only = true`) run `NACA dddd / PPAR / N n` and dump
+`xfoil_pangen.dat` from PANGEN. `panel::solve_inviscid` (the pre-S3 inviscid solver) is deleted;
+GGCALC/PSILIN on `BlState` are the inviscid solve.

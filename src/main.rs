@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use yfoil::geometry::{
-    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file, repanel_cosine,
-    repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
+    create_paneled_airfoil, naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, read_dat_file,
+    read_geometry_from_file, repanel_cosine, repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry,
+    PaneConfig,
 };
 use yfoil::output::{AnalysisOutput, InviscidAnalysisOutput, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, FlowSpec, PolarConfig, Session};
@@ -169,6 +170,11 @@ enum GeomAction {
         /// Close the trailing edge (zero TE gap; XFOIL's SHARP path)
         #[arg(long)]
         sharp: bool,
+        /// Generator model: "exact" (NACA definition, thickness perpendicular to the camber
+        /// line, YFoil's spacing) or "xfoil" (XFOIL's NACA4/NACA5: vertical thickness, 245-point
+        /// buffer, then PANGEN to the requested panel count)
+        #[arg(long, default_value = "exact")]
+        naca_model: String,
 
         /// Output file path
         #[arg(short, long)]
@@ -579,9 +585,23 @@ fn handle_geom(action: GeomAction) {
             panels,
             to,
             sharp,
+            naca_model,
             output,
         } => {
-            let geometry = if spec.len() == 4 {
+            let geometry = if naca_model == "xfoil" {
+                let buffer = if spec.len() == 4 {
+                    naca_4digit_xfoil(&spec)
+                } else {
+                    naca_5digit_xfoil(&spec)
+                };
+                match buffer {
+                    Ok(b) => repanel_xfoil(&b, panels, &PaneConfig::default()),
+                    Err(e) => {
+                        eprintln!("Error generating NACA airfoil: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else if spec.len() == 4 {
                 match naca_4digit(&spec, panels) {
                     Ok(g) => g,
                     Err(e) => {
