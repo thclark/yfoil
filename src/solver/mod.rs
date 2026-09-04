@@ -18,6 +18,7 @@ pub mod psilin;
 pub mod qdcalc;
 pub mod setbl;
 pub mod setbl_legacy;
+pub mod update;
 pub mod velocity;
 mod viscal;
 pub mod xywake;

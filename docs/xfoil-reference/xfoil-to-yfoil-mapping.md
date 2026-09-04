@@ -287,3 +287,12 @@ back by every march like `com1`/`com2`. `IDAMPV` is pinned at 0. `BLGlobalParams
 TKLAM exactly as COMSET (was `1/beta - 1`; dead at M = 0). The legacy `SetblState` path is
 `solver::setbl_legacy` (with `bl::march_legacy`, `bl::wake`), used only by the legacy VISCAL and
 deleted with the S9 rewrite.
+
+Stage S8: `UPDATE → solver::update::update(&mut st, &vdel, minf_cl) -> UpdateResult { rlx,
+rmsbl, rmxbl, vmxbl, imxbl, ismxbl, dac, clnew, cl_a, cl_ms, cl_ac }` — UNEW/U_AC from DIJ and
+the solved VDEL, QNEW/Q_AC, the Kármán–Tsien CLNEW integral with CL_A/CL_MS/CL_AC, DAC for CL
+(LALFA) or alpha, the two-pass RLX search (DHI = 1.5, DLO = −0.5, DCLMAX/DALMAX), RMSBL/RMXBL,
+the under-relaxed update with the CTAU ≤ 0.25 clamp for IBL ≥ ITRAN, DSLIM, MASS = DSTR·UEDG,
+the negative-Ue island fix-up and the wake array equating. `UNEW/U_AC/QNEW/Q_AC` are locals (XFOIL
+EQUIVALENCEs them onto VA/VB; `blsolv` consumes its input, so nothing can read VA/VB after the
+solve). `CL`/`ALFA` updated in place on `BlState`.

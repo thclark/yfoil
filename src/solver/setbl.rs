@@ -25,6 +25,8 @@ pub struct SetblResult {
     /// RE_CLMR, MSQ_CLMR: d(Re)/d(CL) and d(M²)/d(CL) for the fixed-CL sensitivity column.
     pub re_clmr: f64,
     pub msq_clmr: f64,
+    /// MA_CLMR: d(M)/d(CL) (MRCL's M_CLS); VISCAL's MINF_CL is the same quantity
+    pub ma_clmr: f64,
     /// DULE1, DULE2: the LE Ue mismatch between UEDG and USAV = UINV + DIJ·MASS, per side.
     pub dule: [f64; 3],
 }
@@ -439,6 +441,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
         params,
         re_clmr,
         msq_clmr,
+        ma_clmr,
         dule: [0.0, dule1, dule2],
     }
 }

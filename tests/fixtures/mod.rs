@@ -400,6 +400,7 @@ pub fn state_before_setbl_march(k: usize) -> (BlState, BLGlobalParams, BlDump) {
     st.cl = d.real("CLMR");
     st.clspec = d.real("CLMR");
     st.qinf = d.real("QINF");
+    st.alfa = u.alfa;
     st.vaccel = d.real("VACCEL");
     st.acrit = [0.0, d.real("ACRIT1"), d.real("ACRIT2")];
     st.xstrip = [0.0, d.real("XSTRIP1"), d.real("XSTRIP2")];

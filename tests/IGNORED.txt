@@ -4,7 +4,6 @@ src/bl/system.rs: #[ignore = "S9: expected values were unsourced (derived with T
 src/solver/viscal.rs: #[ignore = "S9: VISCAL loop closure"]
 src/solver/viscal.rs: #[ignore = "S9: VISCAL loop closure"]
 src/solver/viscal.rs: #[ignore = "S9: VISCAL loop closure"]
-tests/xfoil_setbl_tests.rs: #[ignore = "S8: UPDATE RLX"]
 tests/xfoil_viscous_tests.rs: #[ignore = "S6: BLKIN fixtures from pipeline"]
 tests/xfoil_viscous_tests.rs: #[ignore = "S6: closure fixtures from pipeline (blvar/trchek/blsys)"]
 tests/xfoil_viscous_tests.rs: #[ignore = "S6: closure fixtures from pipeline (blvar/trchek/blsys)"]

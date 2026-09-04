@@ -34,7 +34,7 @@
  C---- set the CL used to define Mach, Reynolds numbers
        IF(LALFA) THEN
         CLMR = CL
-@@ -89,8 +104,96 @@
+@@ -89,9 +104,97 @@
  C
        WRITE(*,*)
  C
@@ -102,7 +102,7 @@
 +C
  C---- march BL with current Ue and Ds to establish transition
        CALL MRCHDU
-+C
+ C
 +      IF(LMDUTR) CLOSE(79)
 +      LMDUTR = .FALSE.
 +C
@@ -128,9 +128,10 @@
 + 8003  CONTINUE
 +       CLOSE(95)
 +      ENDIF
- C
++C
        DO 5 IS=1, 2
          DO 6 IBL=2, NBL(IS)
+           USAV(IBL,IS) = UEDG(IBL,IS)
 @@ -238,6 +341,22 @@
         DTE = DSTR(IBLTE(1),1) + DSTR(IBLTE(2),2) + ANTE
         CTE = ( CTAU(IBLTE(1),1)*THET(IBLTE(1),1)
@@ -154,12 +155,9 @@
         CALL TESYS(CTE,TTE,DTE)
  C
         TTE_TTE1 = 1.0
-@@ -270,7 +389,26 @@
-       ELSE
+@@ -273,7 +392,26 @@
  C
-        CALL BLSYS
-+C
-+      ENDIF
+       ENDIF
  C
 +C---- INSTRUMENTATION: Log wake station data
 +      IF(WAKE) THEN
@@ -178,9 +176,12 @@
 +        WRITE(98,'(A,ES24.16)') 'HS2=', HS2
 +        WRITE(98,'(A,ES24.16)') 'CF2=', CF2
 +        WRITE(98,'(A,ES24.16)') 'DI2=', DI2
-       ENDIF
++      ENDIF
  C
- C
++C
+ C---- Save wall shear and equil. max shear coefficient for plotting output
+       TAU(IBL,IS) = 0.5*R2*U2*U2*CF2
+       DIS(IBL,IS) =     R2*U2*U2*U2*DI2*HS2*0.5
 @@ -512,6 +650,41 @@
  C---- next airfoil side
   2000 CONTINUE
@@ -223,17 +224,17 @@
        RETURN
        END
  
-@@ -535,6 +708,68 @@
+@@ -535,10 +708,72 @@
        NSYS = IV
        IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
  C
 +C---- INSTRUMENTATION (S2): pointer layer after STFIND/IBLPAN/XICALC/IBLSYS
 +      CALL DUMPPTR
 +C
-+      RETURN
-+      END
-+
-+
+       RETURN
+       END
+ 
+ 
 +      SUBROUTINE DUMPPTR
 +C---------------------------------------------------------------
 +C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
@@ -289,9 +290,13 @@
 +        WRITE(93,'(I6,ES24.16)') IW, WGAP(IW)
 +   30 CONTINUE
 +      CLOSE(93)
-       RETURN
-       END
- 
++      RETURN
++      END
++
++
+       SUBROUTINE MRCHUE
+ C----------------------------------------------------
+ C     Marches the BLs and wake in direct mode using
 @@ -549,9 +784,26 @@
  C----------------------------------------------------
        INCLUDE 'XFOIL.INC'
@@ -460,19 +465,19 @@
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -978,6 +1283,12 @@
-            CALL TESYS(CTE,TTE,DTE)
-           ELSE
+@@ -980,6 +1285,12 @@
             CALL BLSYS
-+          ENDIF
-+C
+           ENDIF
+ C
 +          IF(LMDUTR) THEN
 +           WRITE(79,'(A,5ES24.16)') 'PRIMARY:', X2, U2, T2, D2, S2
 +           WRITE(79,'(A,5ES24.16)') 'KINEMATIC:', M2, H2, HK2, RT2, V2
 +           WRITE(79,'(A,5ES24.16)') 'CLOSURE:', HS2, US2, CQ2, CF2, DI2
-           ENDIF
- C
++          ENDIF
++C
  C-------- set stuff at first iteration...
+           IF(ITBL.EQ.1) THEN
+ C
 @@ -1048,6 +1359,7 @@
             ELSE IF(ITBL.LE.15) THEN
              SENS = 0.5*(SENS + SENNEW)
@@ -528,78 +533,76 @@
          WRITE(*,1350) IBL, IS, DMAX 
   1350   FORMAT(' MRCHDU: Convergence failed at',I4,'  side',I2,
       &         '    Res =', E12.4)
-@@ -1281,6 +1612,12 @@
+@@ -1267,6 +1598,11 @@
+       EQUIVALENCE (VA(1,1,IVX), U_AC(1,1)) ,
+      &            (VB(1,1,IVX), Q_AC(1)  )
+       REAL MSQ
++C---- INSTRUMENTATION: UPDATE call counter (fixture files are per call)
++      INTEGER NUPDATE, NBLD
++      SAVE NUPDATE
++      DATA NUPDATE / 0 /
++      CHARACTER*32 FNINST
+ C
+ C---- max allowable alpha changes per iteration
+       DALMAX =  0.5*DTOR
+@@ -1281,6 +1617,8 @@
  C
  C---- calculate new Ue distribution assuming no under-relaxation
  C-    also set the sensitivity of Ue wrt to alpha or Re
 +C
-+C---- INSTRUMENTATION: Open UPDATE log file (append mode)
-+      OPEN(UNIT=95,FILE='xfoil_update.dat',ACCESS='APPEND')
-+      WRITE(95,*) '=== UPDATE START ==='
-+      WRITE(95,*) 'NBL(1)=', NBL(1), ' NBL(2)=', NBL(2)
 +C
        DO 1 IS=1, 2
          DO 10 IBL=2, NBL(IS)
            I = IPAN(IBL,IS)
-@@ -1307,9 +1644,28 @@
+@@ -1307,9 +1645,11 @@
            UNEW(IBL,IS) = UINV(IBL,IS) + DUI
            U_AC(IBL,IS) = UINV_AC      + DUI_AC
  C
-+C---- INSTRUMENTATION: Log DUI computation for each station
-+          WRITE(95,'(A,I2,A,I3,A,I4,6ES24.16)') 'DUI IS=', IS,
-+     &      ' IBL=', IBL, ' I=', I, UINV(IBL,IS), DUI,
-+     &      UNEW(IBL,IS), UEDG(IBL,IS), MASS(IBL,IS), DSTR(IBL,IS)
 +C
     10   CONTINUE
      1 CONTINUE
  C
-+C---- INSTRUMENTATION: Log MASS and VDEL for each BL station
-+      WRITE(95,*) '--- MASS+VDEL breakdown ---'
-+      DO 1001 IIS=1, 2
-+        DO 1002 JBL=2, NBL(IIS)
-+          JV = ISYS(JBL,IIS)
-+          WRITE(95,'(A,I2,A,I3,A,I4,4ES24.16)') 'M+V IS=', IIS,
-+     &      ' JBL=', JBL, ' JV=', JV,
-+     &      MASS(JBL,IIS), VDEL(3,1,JV), MASS(JBL,IIS)+VDEL(3,1,JV),
-+     &      THET(JBL,IIS)
-+ 1002   CONTINUE
-+ 1001 CONTINUE
-+      WRITE(95,*) '=== UPDATE UNEW COMPLETE ==='
-+      CLOSE(95)
 +C
  C---- set new Qtan from new Ue with appropriate sign change
        DO 2 IS=1, 2
          DO 20 IBL=2, IBLTE(IS)
-@@ -1479,6 +1835,32 @@
- C---- set true rms change
-       RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
+@@ -1556,6 +1896,39 @@
+         TSTR(IBLTE(1)+KBL,1) = TSTR(IBLTE(2)+KBL,2)
+     6 CONTINUE
  C
-+C---- INSTRUMENTATION: Output RLX and RMSBL for validation
-+      OPEN(UNIT=96,FILE='xfoil_rlx.dat',STATUS='REPLACE')
-+      WRITE(96,'(A,ES24.16)') 'RLX = ', RLX
-+      WRITE(96,'(A,ES24.16)') 'RMSBL = ', RMSBL
-+      WRITE(96,'(A,ES24.16)') 'DAC = ', DAC
-+      WRITE(96,'(A,I4,A,I4)') 'NBL1 = ', NBL(1), ', NBL2 = ', NBL(2)
-+      WRITE(96,*) '--- DN values for each station ---'
-+      WRITE(96,'(A)') 'IS IBL DN1 DN2 DN3 DN4 DCTAU DTHET DDSTR DUEDG'
-+      DO 41 IIS=1, 2
-+        DO 410 JBL=2, NBL(IIS)
-+          JV = ISYS(JBL,IIS)
-+          DCTAU2 = VDEL(1,1,JV) - DAC*VDEL(1,2,JV)
-+          DTHET2 = VDEL(2,1,JV) - DAC*VDEL(2,2,JV)
-+          DMASS2 = VDEL(3,1,JV) - DAC*VDEL(3,2,JV)
-+          DUEDG2 = UNEW(JBL,IIS) + DAC*U_AC(JBL,IIS) - UEDG(JBL,IIS)
-+          DDSTR2 = (DMASS2 - DSTR(JBL,IIS)*DUEDG2)/UEDG(JBL,IIS)
-+          IF(JBL.LT.ITRAN(IIS)) DN1X = DCTAU2 / 10.0
-+          IF(JBL.GE.ITRAN(IIS)) DN1X = DCTAU2 / CTAU(JBL,IIS)
-+          DN2X = DTHET2 / THET(JBL,IIS)
-+          DN3X = DDSTR2 / DSTR(JBL,IIS)
-+          DN4X = ABS(DUEDG2)/0.25
-+          WRITE(96,'(I2,I4,8ES24.16)') IIS, JBL,
-+     &      DN1X, DN2X, DN3X, DN4X, DCTAU2, DTHET2, DDSTR2, DUEDG2
-+  410   CONTINUE
-+   41 CONTINUE
-+      CLOSE(96)
- C
-       IF(LALFA) THEN
- C----- set underrelaxed change in Reynolds number from change in lift
++C---- INSTRUMENTATION: state after UPDATE (calls 1..3); side 1 includes the equated wake
++      NUPDATE = NUPDATE + 1
++      IF(NUPDATE.LE.3) THEN
++       WRITE(FNINST,'(A,I1,A)') 'update_output_', NUPDATE, '.dat'
++       OPEN(95, FILE=FNINST, STATUS='REPLACE')
++       WRITE(95,'(A,ES24.16)') 'RLX=', RLX
++       WRITE(95,'(A,ES24.16)') 'RMSBL=', RMSBL
++       WRITE(95,'(A,ES24.16)') 'RMXBL=', RMXBL
++       WRITE(95,'(A,A1)') 'VMXBL=', VMXBL
++       WRITE(95,'(A,I5)') 'IMXBL=', IMXBL
++       WRITE(95,'(A,I5)') 'ISMXBL=', ISMXBL
++       WRITE(95,'(A,ES24.16)') 'DAC=', DAC
++       WRITE(95,'(A,ES24.16)') 'CL=', CL
++       WRITE(95,'(A,ES24.16)') 'ALFA=', ALFA
++       WRITE(95,'(A,ES24.16)') 'CLNEW=', CLNEW
++       WRITE(95,'(A,ES24.16)') 'CL_A=', CL_A
++       WRITE(95,'(A,ES24.16)') 'CL_MS=', CL_MS
++       WRITE(95,'(A,ES24.16)') 'CL_AC=', CL_AC
++       WRITE(95,'(A,ES24.16)') 'MINF_CL=', MINF_CL
++       DO 8007 IS=1, 2
++         NBLD = NBL(IS)
++         IF(IS.EQ.1) NBLD = IBLTE(1) + NBL(2) - IBLTE(2)
++         DO 8008 IBL=1, NBLD
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++           WRITE(95,'(A,I2,A,I4,A,5ES24.16)') 'BLX(',IS,',',IBL,')=',
++     &       TAU(IBL,IS), DIS(IBL,IS), CTQ(IBL,IS),
++     &       DELT(IBL,IS), TSTR(IBL,IS)
++ 8008    CONTINUE
++ 8007  CONTINUE
++       CLOSE(95)
++      ENDIF
+       RETURN
+       END
+ 
