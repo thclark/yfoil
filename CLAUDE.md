@@ -286,10 +286,14 @@ tests/
 All test files end in `_tests.rs`. CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `ignore-drift`,
 `no-deviations`, `examples`, and nightly `xfoil-parity` (rebuild reference, regenerate, compare).
 
-Validation generators are binaries in `src/bin/` (`generate_geometry_validation`,
-`generate_analysis_validation`, `generate_subroutine_validation`), rerun whenever YFoil changes. Reports go to
-`docs/validation/{geometry,analysis,subroutines}/`; every report tabulates numeric differences from `E24.16` dumps
-as well as plotting them.
+**Validation reports are generated, never hand-fed.** `docs/validation/` holds only Markdown and SVG; every
+number in it is derived from a fixture directory (`tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/`
+for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report is generated. No XFOIL dump,
+`.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
+it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
+Current generators: `cargo xtask coverage` (coverage.md), `scripts/noise-floor.sh` (noise-floor.md),
+`generate_subroutine_validation` (subroutines/). The analysis report (BL-distribution difference tables and
+plots for the ±15° N=160 polar) is generated from the `--big` fixture case and is the remaining validation stage.
 
 ## Conventions
 
