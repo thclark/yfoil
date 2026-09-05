@@ -2,10 +2,10 @@
 
 ## Committing
 
-When making commits in git, NEVER attribute Claude (yourself) as a contributor. Reasons: 
-1. A contributor is a human who takes responsibility for the code; LLMs (you) cannot do this. 
-2. We (the Open-Source community) built the code that was used to train Claude (you), and never got any credit or compensation for that. Not attributing Anthropic/Claude to our outputs built with this tool is consistent with Anthropic's own practice.
-3. Years of Mark Drela's work went into building XFOIL; to claim credit for somthing that's bit-for-bit translated is crass at best.
+When making commits in git, NEVER attribute Claude (yourself) as a contributor. Reasons:
+1. A contributor is a human who takes responsibility for the code; LLMs (you) cannot do this.
+2. We (the Open-Source community) built the code that was used to train Claude (you), and never got any credit or compensation for that. Not attributing Anthropic/Claude to our outputs is consistent with Anthropic's own practice.
+
 
 ## STOP. READ THIS FIRST.
 
@@ -72,6 +72,10 @@ Newton loop). If XFOIL does X, YFoil does X — including XFOIL's own bugs and q
 | NACA 4/5-digit thickness applied perpendicular to the camber line | XFOIL's `NACA4` (`naca.f:62`) applies it vertically, which is not the NACA definition. Irrelevant for validation because YFoil generates the panels and XFOIL consumes them (Rule 4). XFOIL's variant is available as `--naca-model xfoil`. | `src/geometry/naca.rs` |
 
 Adding a row to that table requires the same evidence standard as a bug report against XFOIL.
+
+Every XFOIL quirk, dated fix, silent self-correction, uninitialised variable and dead branch found during
+the translation, with how YFoil handles it (replicated / overcome / out of scope), is registered in
+`docs/xfoil-known-issues.md`. Add to it whenever you find another.
 
 ### Rule 3: Debug by forward-stepping through XFOIL's execution
 
