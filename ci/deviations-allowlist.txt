@@ -1,4 +1,3 @@
 # Deliberate, temporary deviations from XFOIL that CI's no-deviations gate tolerates.
 # Format: <file>:<pattern>   # <stage that removes it>
 # Each line here is a debt; the plan stage named removes it and the line is deleted.
-
