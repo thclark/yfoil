@@ -61,10 +61,8 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
 
     let mut x_coords = Vec::new();
     let mut y_coords = Vec::new();
-    let mut line_num = 1;
-
-    for line_result in lines {
-        line_num += 1;
+    // line 1 is the name; data lines are numbered from 2 for error messages
+    for (line_num, line_result) in (2..).zip(lines) {
         let line = line_result?;
         let trimmed = line.trim();
 

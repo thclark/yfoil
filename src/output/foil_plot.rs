@@ -1119,7 +1119,10 @@ mod tests {
             quantities: vec![BlQuantity::Dstar],
             ..Default::default()
         };
-        assert!(matches!(layout(&[g.clone()], &config), Err(PlotError::Config(_))));
+        assert!(matches!(
+            layout(std::slice::from_ref(&g), &config),
+            Err(PlotError::Config(_))
+        ));
         let wake_cfg = FoilPlotConfig {
             show_wake: true,
             ..Default::default()

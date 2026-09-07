@@ -554,9 +554,8 @@ pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64])
 /// # Arguments
 /// * `geometry` - Input geometry
 /// * `n_panels` - Target number of panels
-/// * `te_le_ratio` - Ratio of TE panel density to LE panel density (XFOIL default: 0.15)
-///                   Values < 1.0 mean coarser panels at TE, finer at LE
-///                   Value of 1.0 gives symmetric cosine spacing
+/// * `te_le_ratio` - Ratio of TE panel density to LE panel density (XFOIL default: 0.15).
+///   Values < 1.0 mean coarser panels at TE, finer at LE; 1.0 gives symmetric cosine spacing
 ///
 /// # Returns
 /// New geometry with redistributed points
