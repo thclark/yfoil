@@ -1,4 +1,4 @@
-use yfoil::bl::{dampl, rtheta_crit};
+use yfoil::bl::{amplification_rate, rtheta_crit};
 
 fn main() {
     println!("=== Critical Rtheta vs Hk ===\n");
@@ -34,7 +34,7 @@ fn main() {
 
     let theta = 0.0005; // Typical momentum thickness
     for (hk, rt) in [(2.4_f64, 300.0), (2.5, 400.0), (2.6, 500.0), (2.7, 600.0), (2.8, 700.0), (3.0, 800.0)] {
-        let (ax, _, _, _) = dampl(hk, theta, rt);
+        let (ax, _, _, _) = amplification_rate(hk, theta, rt);
         let dn = ax * 0.02; // typical ds
         println!("{:>6.1} {:>8.0} {:>12.4} {:>12.4}", hk, rt, ax, dn);
     }

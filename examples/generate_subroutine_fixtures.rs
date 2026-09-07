@@ -312,7 +312,7 @@ struct ParsedFixtures {
     dil: Vec<DilFixture>,
     hst: Vec<HstFixture>,
     cft: Vec<CftFixture>,
-    dampl: Vec<DamplFixture>,
+    amplification_rate: Vec<DamplFixture>,
     blkin: Vec<BlkinFixture>,
     blvar: Vec<BlvarFixture>,
     trchek2: Vec<Trchek2Fixture>,
@@ -587,9 +587,9 @@ fn save_fixture(
                 values.get("AX_RT"),
             ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", hk, th, rt);
-                if !seen_dampl.contains(&key) && fixtures.dampl.len() < 200 {
+                if !seen_dampl.contains(&key) && fixtures.amplification_rate.len() < 200 {
                     seen_dampl.insert(key);
-                    fixtures.dampl.push(DamplFixture {
+                    fixtures.amplification_rate.push(DamplFixture {
                         input: DamplInput { hk, th, rt },
                         output: DamplOutput {
                             ax,
@@ -805,7 +805,7 @@ fn write_fixtures(fixtures: &ParsedFixtures, output_dir: &Path) -> Result<(), Bo
     write_fixture_files(&fixtures.dil, &output_dir.join("dil"), "dil")?;
     write_fixture_files(&fixtures.hst, &output_dir.join("hst"), "hst")?;
     write_fixture_files(&fixtures.cft, &output_dir.join("cft"), "cft")?;
-    write_fixture_files(&fixtures.dampl, &output_dir.join("dampl"), "dampl")?;
+    write_fixture_files(&fixtures.amplification_rate, &output_dir.join("dampl"), "dampl")?;
     write_fixture_files(&fixtures.blkin, &output_dir.join("blkin"), "blkin")?;
     write_fixture_files(&fixtures.blvar, &output_dir.join("blvar"), "blvar")?;
     write_fixture_files(&fixtures.trchek2, &output_dir.join("trchek"), "trchek2")?;
@@ -865,7 +865,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  DIL:     {} cases", fixtures.dil.len());
     println!("  HST:     {} cases", fixtures.hst.len());
     println!("  CFT:     {} cases", fixtures.cft.len());
-    println!("  DAMPL:   {} cases", fixtures.dampl.len());
+    println!("  DAMPL:   {} cases", fixtures.amplification_rate.len());
     println!("  BLKIN:   {} cases", fixtures.blkin.len());
     println!("  BLVAR:   {} cases", fixtures.blvar.len());
     println!("  TRCHEK2: {} cases", fixtures.trchek2.len());

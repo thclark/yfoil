@@ -12,11 +12,11 @@ use crate::solver::velocity::qiset;
 /// OPER's `ALFA` command: sets LALFA, ALFA (radians) and QINF = 1, runs SPECAL, then
 /// invalidates the wake and the converged flag when alpha or Mach moved by more than 1e-5
 /// (in exactly XFOIL's order: SPECAL first, then the tests).
-pub fn alfa_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: f64) {
+pub fn alpha_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: f64) {
     st.alpha_specified = true;
     st.alpha = alfa;
     st.qinf = 1.0;
-    specal(st, sys);
+    solve_inviscid_at_alpha(st, sys);
     if (st.alpha - st.alpha_wake).abs() > 1.0e-5 {
         st.wake_built = false;
     }
@@ -31,7 +31,7 @@ pub fn alfa_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa
 /// One point of OPER's `ASEQ`: sets ALFA, invalidates the wake/converged flags (ASEQ tests
 /// them *before* SPECAL, the ALFA command after — the numbers do not depend on the order), then
 /// SPECAL. The caller runs VISCAL with ITMAX + 5, as ASEQ does.
-pub fn aseq_point(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: f64) {
+pub fn sequence_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: f64) {
     st.alpha = alfa;
     if (st.alpha - st.alpha_wake).abs() > 1.0e-5 {
         st.wake_built = false;
@@ -42,12 +42,12 @@ pub fn aseq_point(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: 
     if (st.mach - st.mach_converged).abs() > 1.0e-5 {
         st.converged = false;
     }
-    specal(st, sys);
+    solve_inviscid_at_alpha(st, sys);
 }
 
 /// SPECAL. `sys` holds the inviscid system (GGCALC's AIJ factors, BIJ, GAMU in `st.qinvu`);
 /// it is built here when absent (LGAMU/LQAIJ false).
-pub fn specal(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
+pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
         *sys = Some(build_inviscid_system(st));
@@ -127,7 +127,7 @@ pub fn specal(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
 
 /// SPECCL: converges to the specified inviscid CL by Newton iteration on alpha (20 iterations,
 /// |DALFA| ≤ 1e-6), with MINF/REINF set from CLSPEC by MRCL and held fixed.
-pub fn speccl(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
+pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
         *sys = Some(build_inviscid_system(st));
@@ -190,7 +190,7 @@ pub fn cl_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, clspec
     st.alpha_specified = false;
     st.alpha = 0.0;
     st.qinf = 1.0;
-    speccl(st, sys);
+    solve_inviscid_at_cl(st, sys);
     if (st.alpha - st.alpha_wake).abs() > 1.0e-5 {
         st.wake_built = false;
     }

@@ -12,19 +12,19 @@ use std::path::PathBuf;
 use utilities::tolerances::TOL_SOLVER;
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
 use yfoil::output::{AnalysisOutput, BlQuantity, PolarOutput, SeparationKind};
-use yfoil::solver::analysis::{compute_polar_with, FlowSpec, PolarConfig, Session};
+use yfoil::solver::analysis::{compute_polar_with, FlowConditions, PolarConfig, Session};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
-fn spec() -> FlowSpec {
-    FlowSpec {
+fn spec() -> FlowConditions {
+    FlowConditions {
         re: 1.0e6,
         mach: 0.0,
         ncrit: 9.0,
-        itmax: 20,
-        ..FlowSpec::default()
+        max_iterations: 20,
+        ..FlowConditions::default()
     }
 }
 
@@ -37,10 +37,10 @@ fn ref_case_session() -> Session {
 #[test]
 fn analysis_output_carries_geometry_wake_and_every_station() {
     let mut session = ref_case_session();
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
     assert!(p.converged, "the reference case converges");
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
-    let st = &session.st;
+    let st = &session.state;
 
     // geometry: airfoil nodes and the wake, as the solver holds them
     assert_eq!(out.geometry.n(), st.n_foil_nodes);
@@ -116,7 +116,7 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
 #[test]
 fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
     let mut session = ref_case_session();
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
     let bl = out.boundary_layer.as_ref().unwrap();
 
@@ -124,7 +124,7 @@ fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
     // columns on the state after its correction. RMSBL is the rms of the normalised corrections,
     // so the two agree to a modest multiple of it, and a wrong flow type (laminar closures on a
     // turbulent station) would show as an O(1) difference.
-    let bound = 50.0 * p.rmsbl.max(1e-6);
+    let bound = 50.0 * p.residual.max(1e-6);
     let mut largest: f64 = 0.0;
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         for k in 0..side.len() {
@@ -148,10 +148,10 @@ fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
 #[test]
 fn markers_and_wake_split_follow_xfoil() {
     let mut session = ref_case_session();
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
     let bl = out.boundary_layer.as_ref().unwrap();
-    let st = &session.st;
+    let st = &session.state;
 
     // transition: XOCTR is what the operating point reports; the point lies on the surface
     assert_eq!(bl.transition[0].x_c.to_bits(), out.result.xtr_upper.to_bits());
@@ -182,9 +182,9 @@ fn markers_and_wake_split_follow_xfoil() {
     // residual, not to the noise floor
     let closure = (bl.wake_split[0] + bl.wake_split[1] - 1.0).abs();
     assert!(
-        closure <= p.rmsbl.max(TOL_SOLVER),
+        closure <= p.residual.max(TOL_SOLVER),
         "DSF1 + DSF2 - 1 = {closure:.3e} exceeds the final RMSBL {:.3e}",
-        p.rmsbl
+        p.residual
     );
 
     // derived separation: consistent with the cf sign pattern it was read from
@@ -202,18 +202,18 @@ fn markers_and_wake_split_follow_xfoil() {
 #[test]
 fn json_round_trips_and_inviscid_has_no_boundary_layer() {
     let mut session = ref_case_session();
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
     let json = out.to_json().unwrap();
     let back: AnalysisOutput = serde_json::from_str(&json).unwrap();
     assert_eq!(back.geometry, out.geometry);
     assert_eq!(back.boundary_layer, out.boundary_layer);
 
-    let inviscid = FlowSpec { re: 0.0, ..spec() };
+    let inviscid = FlowConditions { re: 0.0, ..spec() };
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).unwrap();
     let airfoil = create_paneled_airfoil(&geometry);
     let mut session = Session::new(&airfoil, inviscid.clone());
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &inviscid, true);
     assert!(out.boundary_layer.is_none());
     assert!(out.geometry.wake.is_none());
@@ -228,25 +228,25 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
         alpha_max: 2.0,
         alpha_min: -2.0,
         alpha_step: 1.0,
-        spec: spec(),
+        conditions: spec(),
         ..Default::default()
     };
     let mut records: Vec<AnalysisOutput> = Vec::new();
     let mut visited: Vec<f64> = Vec::new();
     let result = compute_polar_with(&airfoil, &config, &mut |session, p| {
         visited.push(p.alpha.to_degrees());
-        assert_eq!(session.st.alpha, p.alpha, "the session is in the point's state");
+        assert_eq!(session.state.alpha, p.alpha, "the session is in the point's state");
         records.push(AnalysisOutput::from_session(
             session,
             p,
             "naca0012",
-            &config.spec,
+            &config.conditions,
             false,
         ));
     });
     // 0, 1, 2 then (after INIT) -1, -2: the sweep order, every point once
     assert_eq!(visited, vec![0.0, 1.0, 2.0, -1.0, -2.0]);
-    assert_eq!(records.len(), result.points.len() + result.failed_alphas.len());
+    assert_eq!(records.len(), result.results.len() + result.failed_alphas.len());
 
     records.sort_by(|a, b| a.result.alpha_deg.partial_cmp(&b.result.alpha_deg).unwrap());
     let mut polar = PolarOutput::from_polar(&result, "naca0012");

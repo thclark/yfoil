@@ -231,18 +231,18 @@ fn test_thickness_values() {
 // Panel Method Validation Tests
 // ============================================================================
 
-use yfoil::solver::analysis::{analyze, FlowSpec, Session};
+use yfoil::solver::analysis::{analyse, FlowConditions, Session};
 use yfoil::solver::blstate::SolverState;
 use yfoil::solver::ggcalc::build_inviscid_system;
-use yfoil::solver::specal::specal;
+use yfoil::solver::specal::solve_inviscid_at_alpha;
 
 fn inviscid_cl(airfoil: &yfoil::geometry::PaneledAirfoil, alpha: f64) -> f64 {
-    analyze(
+    analyse(
         airfoil,
         alpha,
-        &FlowSpec {
+        &FlowConditions {
             re: 0.0,
-            ..FlowSpec::default()
+            ..FlowConditions::default()
         },
     )
     .cl
@@ -419,13 +419,13 @@ fn test_blunt_te_reasonable_results() {
 
     let mut session = Session::new(
         &airfoil,
-        FlowSpec {
+        FlowConditions {
             re: 0.0,
-            ..FlowSpec::default()
+            ..FlowConditions::default()
         },
     );
-    let coeffs = session.alfa(0.0);
-    let vel: Vec<f64> = session.st.q_inviscid[1..=airfoil.n].to_vec();
+    let coeffs = session.alpha(0.0);
+    let vel: Vec<f64> = session.state.q_inviscid[1..=airfoil.n].to_vec();
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(
@@ -437,9 +437,9 @@ fn test_blunt_te_reasonable_results() {
     // CDp may not be exactly zero but should be small
     // The blunt TE may cause some small asymmetry in the solution
     assert!(
-        coeffs.cdp.abs() < 0.01,
+        coeffs.cd_pressure.abs() < 0.01,
         "CDp = {} should be small for blunt TE",
-        coeffs.cdp
+        coeffs.cd_pressure
     );
 
     // Velocities should be smooth (no huge spikes)
@@ -538,7 +538,7 @@ fn test_sharp_te_smooth_gamma() {
     let mut sys = None;
     st.alpha = 0.0;
     st.qinf = 1.0;
-    specal(&mut st, &mut sys);
+    solve_inviscid_at_alpha(&mut st, &mut sys);
     let n = airfoil.n;
     let gam = &st.gamma;
     assert!(gam[1].abs() < 2.0, "Upper TE gamma {} should be small", gam[1]);

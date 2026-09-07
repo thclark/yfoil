@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER, TOL_TRANSIENT};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
-use yfoil::solver::analysis::{compute_polar, FlowSpec, OperatingPoint, PolarConfig, Session};
+use yfoil::solver::analysis::{compute_polar, FlowConditions, PointResult, PolarConfig, Session};
 
 const CASE: &str = "tests/fixtures/xfoil/naca0012_n60_polar_re1e6";
 
@@ -37,13 +37,13 @@ fn parse_points(path: &PathBuf) -> Vec<HashMap<String, String>> {
     out
 }
 
-fn spec() -> FlowSpec {
-    FlowSpec {
+fn spec() -> FlowConditions {
+    FlowConditions {
         re: 1.0e6,
         mach: 0.0,
         ncrit: 9.0,
-        itmax: 20,
-        ..FlowSpec::default()
+        max_iterations: 20,
+        ..FlowConditions::default()
     }
 }
 
@@ -59,12 +59,12 @@ fn parse_iters_all(path: &PathBuf) -> HashMap<usize, Vec<Vec<f64>>> {
     out
 }
 
-fn check_point(k: usize, p: &OperatingPoint, x: &HashMap<String, String>, entry_lblini: bool, niter1: usize) {
+fn check_point(k: usize, p: &PointResult, x: &HashMap<String, String>, entry_lblini: bool, niter1: usize) {
     let ctx = format!("call {k} (alpha {:.1}°)", p.alpha.to_degrees());
     // per-iteration first: the first diverging iteration is the diagnostic
     let all = parse_iters_all(&fixture_path("viscal_iters_all.dat"));
     let xi = &all[&k];
-    for (y, xv) in p.trace.iter().zip(xi) {
+    for (y, xv) in p.iteration_records.iter().zip(xi) {
         let ictx = format!("{ctx} iteration {}", y.iteration);
         println!(
             "  {ictx}: yfoil rms {:.6e} rlx {:.4} CL {:.10} IST {} | xfoil rms {:.6e} rlx {:.4} CL {:.10} ISTB {} IST {}",
@@ -101,15 +101,15 @@ fn check_point(k: usize, p: &OperatingPoint, x: &HashMap<String, String>, entry_
     );
     assert_eq!(p.converged, x["LVCONV"] == "T", "{ctx}: LVCONV");
     for (name, ours) in [
-        ("RMSBL", p.rmsbl),
+        ("RMSBL", p.residual),
         ("CL", p.cl),
         ("CM", p.cm),
         ("CD", p.cd),
-        ("CDF", p.cdf),
-        ("CDP", p.cdp),
-        ("CL_ALF", p.cl_alf),
-        ("XOCTR1", p.xtr_upper),
-        ("XOCTR2", p.xtr_lower),
+        ("CDF", p.cd_friction),
+        ("CDP", p.cd_pressure),
+        ("CL_ALF", p.cl_d_alpha),
+        ("XOCTR1", p.transition_upper[0]),
+        ("XOCTR2", p.transition_lower[0]),
     ] {
         assert_within(
             ours,
@@ -120,7 +120,7 @@ fn check_point(k: usize, p: &OperatingPoint, x: &HashMap<String, String>, entry_
         );
     }
     assert_eq!(
-        p.itran[1..],
+        p.i_transition_station[1..],
         [
             x["ITRAN1"].parse::<usize>().unwrap(),
             x["ITRAN2"].parse::<usize>().unwrap()
@@ -129,7 +129,7 @@ fn check_point(k: usize, p: &OperatingPoint, x: &HashMap<String, String>, entry_
     );
     println!(
         "{ctx}: {:2} iterations, converged={} CL {:.8} CD {:.8} CM {:+.8} XTR {:.5}/{:.5} — match",
-        p.iterations, p.converged, p.cl, p.cd, p.cm, p.xtr_upper, p.xtr_lower
+        p.iterations, p.converged, p.cl, p.cd, p.cm, p.transition_upper[0], p.transition_lower[0]
     );
 }
 
@@ -143,11 +143,11 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
     let mut session = Session::new(&airfoil, spec());
     let mut k = 0;
     let run = |session: &mut Session, alpha_deg: f64, aseq: bool, k: &mut usize| {
-        let entry_lblini = session.st.bl_initialised;
+        let entry_lblini = session.state.bl_initialised;
         let p = if aseq {
-            session.aseq(alpha_deg.to_radians())
+            session.sequence_point(alpha_deg.to_radians())
         } else {
-            session.alfa(alpha_deg.to_radians())
+            session.alpha(alpha_deg.to_radians())
         };
         let niter1 = if aseq { 25 } else { 20 };
         check_point(*k + 1, &p, &xf[*k], entry_lblini, niter1);
@@ -163,7 +163,7 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
     // INIT / ALFA -1 / ASEQ -2 -5 -1
     session.init();
     assert!(
-        !session.st.bl_initialised && !session.st.pointers_built,
+        !session.state.bl_initialised && !session.state.pointers_built,
         "INIT clears LBLINI and LIPAN"
     );
     seq_points.push(run(&mut session, -1.0, false, &mut k));
@@ -179,14 +179,14 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
             alpha_max: 5.0,
             alpha_min: -5.0,
             alpha_step: 1.0,
-            spec: spec(),
+            conditions: spec(),
             ..PolarConfig::default()
         },
     );
     assert!(polar.completed);
-    let converged: Vec<&OperatingPoint> = seq_points.iter().filter(|p| p.converged).collect();
-    assert_eq!(polar.points.len(), converged.len(), "compute_polar point count");
-    for p in &polar.points {
+    let converged: Vec<&PointResult> = seq_points.iter().filter(|p| p.converged).collect();
+    assert_eq!(polar.results.len(), converged.len(), "compute_polar point count");
+    for p in &polar.results {
         let q = converged
             .iter()
             .find(|q| (q.alpha - p.alpha).abs() < 1e-12)
@@ -206,7 +206,7 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
         assert_eq!(p.iterations, q.iterations);
     }
     assert!(
-        polar.points.windows(2).all(|w| w[0].alpha < w[1].alpha),
+        polar.results.windows(2).all(|w| w[0].alpha < w[1].alpha),
         "points ascend in alpha"
     );
 }

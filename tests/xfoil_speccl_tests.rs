@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file, PaneledAirfoil};
-use yfoil::solver::analysis::{FlowSpec, OperatingPoint, Session};
+use yfoil::solver::analysis::{FlowConditions, PointResult, Session};
 use yfoil::solver::specal::cl_command;
 
 fn case_path(case: &str, name: &str) -> PathBuf {
@@ -49,7 +49,7 @@ fn airfoil(case: &str) -> PaneledAirfoil {
 }
 
 /// Compare one converged point and its iteration history with the reference records.
-fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverState) {
+fn check(case: &str, p: &PointResult, st: &yfoil::solver::blstate::SolverState) {
     let pt = header(&case_path(case, "viscal_points.dat"));
     let its = iters_call_1(&case_path(case, "viscal_iters_all.dat"));
 
@@ -60,7 +60,7 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverStat
     );
     assert_eq!(p.converged, pt["LVCONV"] == "T", "{case}: LVCONV");
     assert_eq!(p.iterations, its.len(), "{case}: per-iteration record length");
-    for (y, x) in p.trace.iter().zip(&its) {
+    for (y, x) in p.iteration_records.iter().zip(&its) {
         let ctx = format!("{case} iteration {}", y.iteration);
         for (name, ours, theirs, scale) in [
             ("RMSBL", y.residual, x[2], 1.0),
@@ -95,10 +95,10 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverStat
         ("CL", p.cl, 1.0),
         ("CM", p.cm, 1.0),
         ("CD", p.cd, 1.0),
-        ("CDF", p.cdf, 1.0),
-        ("CDP", p.cdp, 1.0),
-        ("XOCTR1", p.xtr_upper, 1.0),
-        ("XOCTR2", p.xtr_lower, 1.0),
+        ("CDF", p.cd_friction, 1.0),
+        ("CDP", p.cd_pressure, 1.0),
+        ("XOCTR1", p.transition_upper[0], 1.0),
+        ("XOCTR2", p.transition_lower[0], 1.0),
         ("MINF", st.mach, 1.0),
         ("REINF", st.re, st.re),
     ] {
@@ -112,7 +112,7 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverStat
     }
     assert_eq!(st.i_stagnation_node, pt["IST"].parse::<usize>().unwrap(), "{case}: IST");
     assert_eq!(
-        p.itran[1..],
+        p.i_transition_station[1..],
         [
             pt["ITRAN1"].parse::<usize>().unwrap(),
             pt["ITRAN2"].parse::<usize>().unwrap()
@@ -127,8 +127,8 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverStat
         p.cd,
         p.cm,
         st.re,
-        p.xtr_upper,
-        p.xtr_lower
+        p.transition_upper[0],
+        p.transition_lower[0]
     );
 }
 
@@ -136,24 +136,30 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverStat
 fn test_fixed_cl_point_matches_xfoil() {
     let case = "naca0012_n60_cl03_re1e6";
     let af = airfoil(case);
-    let mut session = Session::new(&af, FlowSpec::default());
+    let mut session = Session::new(&af, FlowConditions::default());
 
     // SPECCL alone: the inviscid alpha for CL = 0.3 that VISCAL starts from
-    cl_command(&mut session.st, &mut session.sys, 0.3);
+    cl_command(&mut session.state, &mut session.inviscid, 0.3);
     let inv = header(&case_path(case, "viscal_inviscid.dat"));
     assert_within(
-        session.st.alpha,
+        session.state.alpha,
         inv["ALFA"].parse().unwrap(),
         TOL_SOLVER,
         1.0,
         "SPECCL alpha",
     );
-    assert_within(session.st.cl, inv["CL"].parse().unwrap(), TOL_SOLVER, 1.0, "SPECCL CL");
-    assert!(!session.st.alpha_specified);
+    assert_within(
+        session.state.cl,
+        inv["CL"].parse().unwrap(),
+        TOL_SOLVER,
+        1.0,
+        "SPECCL CL",
+    );
+    assert!(!session.state.alpha_specified);
 
     // the full CL command: SPECCL again (identical), then VISCAL with alpha as the unknown
     let p = session.cl(0.3);
-    check(case, &p, &session.st);
+    check(case, &p, &session.state);
     assert_within(p.cl, 0.3, TOL_SOLVER, 1.0, "viscous CL meets CLSPEC");
 }
 
@@ -161,20 +167,20 @@ fn test_fixed_cl_point_matches_xfoil() {
 fn test_matyp_retyp_2_point_matches_xfoil() {
     let case = "naca0012_n60_a2_re1e6_type2";
     let af = airfoil(case);
-    let spec = FlowSpec {
-        matyp: 2,
-        retyp: 2,
-        ..FlowSpec::default()
+    let spec = FlowConditions {
+        mach_cl_dependence: 2,
+        re_cl_dependence: 2,
+        ..FlowConditions::default()
     };
     let mut session = Session::new(&af, spec);
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
     // Re = Re1 / sqrt(CL) through MRCL, updated every iteration from the current CL
     assert_within(
-        session.st.re,
+        session.state.re,
         1.0e6 / p.cl.sqrt(),
         TOL_SOLVER,
-        session.st.re,
+        session.state.re,
         "REINF = REINF1/sqrt(CL)",
     );
-    check(case, &p, &session.st);
+    check(case, &p, &session.state);
 }

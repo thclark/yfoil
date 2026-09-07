@@ -10,7 +10,7 @@ use yfoil::geometry::{
     PaneConfig,
 };
 use yfoil::output::{AnalysisOutput, InviscidAnalysisOutput, PolarOutput};
-use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowSpec, PolarConfig, Session};
+use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
 
 #[cfg(feature = "plotting")]
 use yfoil::output::{
@@ -374,17 +374,17 @@ fn main() {
             // Convert angle to radians
             let alpha_rad = alpha.to_radians();
 
-            let spec = FlowSpec {
+            let spec = FlowConditions {
                 re: if inviscid { 0.0 } else { reynolds },
                 mach,
                 ncrit,
-                itmax: iterations,
-                ..FlowSpec::default()
+                max_iterations: iterations,
+                ..FlowConditions::default()
             };
             let mut session = Session::new(&airfoil, spec.clone());
             let point = match cl {
                 Some(clspec) => session.cl(clspec),
-                None => session.alfa(alpha_rad),
+                None => session.alpha(alpha_rad),
             };
             let alpha = point.alpha.to_degrees();
 
@@ -397,18 +397,18 @@ fn main() {
                 println!();
                 println!("CL  = {:+.6}", point.cl);
                 println!("CM  = {:+.6}", point.cm);
-                println!("CDp = {:+.6} (pressure drag)", point.cdp);
+                println!("CDp = {:+.6} (pressure drag)", point.cd_pressure);
 
                 // Write JSON output if requested
                 if let Some(ref path) = output {
                     let n = airfoil.n;
-                    let velocity: Vec<f64> = session.st.q_inviscid[1..=n].to_vec();
-                    let cp: Vec<f64> = session.st.cp_inviscid[1..=n].to_vec();
+                    let velocity: Vec<f64> = session.state.q_inviscid[1..=n].to_vec();
+                    let cp: Vec<f64> = session.state.cp_inviscid[1..=n].to_vec();
                     let result = InviscidAnalysisOutput::new(
                         &airfoil,
                         &velocity,
                         &cp,
-                        (point.cl, point.cm, point.cdp),
+                        (point.cl, point.cm, point.cd_pressure),
                         alpha,
                         mach,
                         airfoil_name,
@@ -429,17 +429,17 @@ fn main() {
                 println!();
                 println!("CL  = {:+.6}", point.cl);
                 println!("CD  = {:+.6}", point.cd);
-                println!("  CDf = {:+.6} (friction)", point.cdf);
-                println!("  CDp = {:+.6} (pressure, CD - CDf)", point.cd - point.cdf);
+                println!("  CDf = {:+.6} (friction)", point.cd_friction);
+                println!("  CDp = {:+.6} (pressure, CD - CDf)", point.cd - point.cd_friction);
                 println!("CM  = {:+.6}", point.cm);
                 println!();
                 println!("Transition:");
-                println!("  Upper: {:.1}% chord", point.xtr_upper * 100.0);
-                println!("  Lower: {:.1}% chord", point.xtr_lower * 100.0);
+                println!("  Upper: {:.1}% chord", point.transition_upper[0] * 100.0);
+                println!("  Lower: {:.1}% chord", point.transition_lower[0] * 100.0);
                 println!();
                 println!("Convergence:");
                 println!("  Iterations: {}", point.iterations);
-                println!("  rms:        {:.2e}", point.rmsbl);
+                println!("  rms:        {:.2e}", point.residual);
                 if point.converged {
                     println!("  Status:     Converged");
                 } else {
@@ -479,12 +479,12 @@ fn main() {
                 alpha_max,
                 alpha_min,
                 alpha_step,
-                spec: FlowSpec {
+                conditions: FlowConditions {
                     re: reynolds,
                     mach,
                     ncrit,
-                    itmax: iterations,
-                    ..FlowSpec::default()
+                    max_iterations: iterations,
+                    ..FlowConditions::default()
                 },
                 ..Default::default()
             };
@@ -492,7 +492,7 @@ fn main() {
             // Run polar sweep, capturing every visited point's state when asked to
             let mut records: Vec<AnalysisOutput> = Vec::new();
             let result = if distributions {
-                let spec = config.spec.clone();
+                let spec = config.conditions.clone();
                 compute_polar_with(&airfoil, &config, &mut |session, p| {
                     records.push(AnalysisOutput::from_session(session, p, airfoil_name, &spec, false));
                 })

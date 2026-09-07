@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Single operating point result
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatingPoint {
+pub struct PolarPoint {
     /// Angle of attack (degrees)
     pub alpha_deg: f64,
     /// Lift coefficient
@@ -34,22 +34,22 @@ pub struct OperatingPoint {
     pub residual: f64,
 }
 
-impl OperatingPoint {
+impl PolarPoint {
     /// Create from an analysis operating point
-    pub fn from_point(p: &crate::solver::analysis::OperatingPoint) -> Self {
+    pub fn from_point(p: &crate::solver::analysis::PointResult) -> Self {
         Self {
             alpha_deg: p.alpha.to_degrees(),
             cl: p.cl,
             cd: p.cd,
             cm: p.cm,
-            cdf: p.cdf,
-            cdp: p.cdp,
+            cdf: p.cd_friction,
+            cdp: p.cd_pressure,
             ld: if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 },
-            xtr_upper: p.xtr_upper,
-            xtr_lower: p.xtr_lower,
+            xtr_upper: p.transition_upper[0],
+            xtr_lower: p.transition_lower[0],
             converged: p.converged,
             iterations: p.iterations,
-            residual: p.rmsbl,
+            residual: p.residual,
         }
     }
 }
@@ -67,7 +67,7 @@ pub struct FlowConditionsOutput {
 
 impl FlowConditionsOutput {
     /// Create from the flow specification
-    pub fn from_spec(spec: &crate::solver::analysis::FlowSpec) -> Self {
+    pub fn from_spec(spec: &crate::solver::analysis::FlowConditions) -> Self {
         Self {
             reynolds: spec.re,
             mach: spec.mach,
@@ -87,7 +87,7 @@ pub struct PolarOutput {
     /// Flow conditions
     pub conditions: FlowConditionsOutput,
     /// Operating points
-    pub points: Vec<OperatingPoint>,
+    pub points: Vec<PolarPoint>,
     /// Summary statistics
     pub summary: PolarSummary,
     /// Whether sweep completed without excessive failures
@@ -122,11 +122,13 @@ pub struct PolarSummary {
 impl PolarOutput {
     /// Create from PolarResult
     pub fn from_polar(result: &crate::solver::analysis::PolarResult, airfoil_name: &str) -> Self {
-        let points: Vec<OperatingPoint> = result.points.iter().map(OperatingPoint::from_point).collect();
+        let points: Vec<PolarPoint> = result.results.iter().map(PolarPoint::from_point).collect();
 
         let (cl_max, alpha_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| (Some(cl), Some(a)));
 
-        let (ld_max, cl_at_ld_max) = result.ld_max().map_or((None, None), |(ld, cl)| (Some(ld), Some(cl)));
+        let (ld_max, cl_at_ld_max) = result
+            .ldratio_max()
+            .map_or((None, None), |(ld, cl)| (Some(ld), Some(cl)));
 
         let summary = PolarSummary {
             cl_max,
@@ -134,14 +136,14 @@ impl PolarOutput {
             ld_max,
             cl_at_ld_max,
             cd0: result.cd0(),
-            num_converged: result.points.iter().filter(|p| p.converged).count(),
+            num_converged: result.results.iter().filter(|p| p.converged).count(),
             num_failed: result.failed_alphas.len(),
         };
 
         Self {
             airfoil: airfoil_name.to_string(),
             label: None,
-            conditions: FlowConditionsOutput::from_spec(&result.spec),
+            conditions: FlowConditionsOutput::from_spec(&result.conditions),
             points,
             summary,
             completed: result.completed,
@@ -164,7 +166,7 @@ pub struct AnalysisOutput {
     /// Flow conditions
     pub conditions: FlowConditionsOutput,
     /// Operating point result
-    pub result: OperatingPoint,
+    pub result: PolarPoint,
     /// Inviscid-only mode
     pub inviscid_only: bool,
     /// Panel nodes, normals and (after a viscous solve) the wake
@@ -177,12 +179,12 @@ impl AnalysisOutput {
     /// Create from a session's state after an operating point
     pub fn from_session(
         session: &crate::solver::analysis::Session,
-        p: &crate::solver::analysis::OperatingPoint,
+        p: &crate::solver::analysis::PointResult,
         airfoil_name: &str,
-        spec: &crate::solver::analysis::FlowSpec,
+        spec: &crate::solver::analysis::FlowConditions,
         inviscid_only: bool,
     ) -> Self {
-        let st = &session.st;
+        let st = &session.state;
         let boundary_layer = if st.viscous && st.bl_initialised {
             Some(crate::output::BoundaryLayerOutput::from_state(st))
         } else {
@@ -191,7 +193,7 @@ impl AnalysisOutput {
         Self {
             airfoil: airfoil_name.to_string(),
             conditions: FlowConditionsOutput::from_spec(spec),
-            result: OperatingPoint::from_point(p),
+            result: PolarPoint::from_point(p),
             inviscid_only,
             geometry: crate::output::FoilGeometryOutput::from_state(st),
             boundary_layer,
@@ -484,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_operating_point_serialization() {
-        let point = OperatingPoint {
+        let point = PolarPoint {
             alpha_deg: 5.0,
             cl: 0.55,
             cd: 0.0085,
@@ -505,7 +507,7 @@ mod tests {
         assert!(json.contains("\"residual\":"));
 
         // Deserialize back
-        let restored: OperatingPoint = serde_json::from_str(&json).unwrap();
+        let restored: PolarPoint = serde_json::from_str(&json).unwrap();
         assert!((restored.cl - 0.55).abs() < 1e-10);
         assert!((restored.residual - 1.2e-5).abs() < 1e-10);
     }

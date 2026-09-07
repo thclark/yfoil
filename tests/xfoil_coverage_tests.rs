@@ -26,14 +26,14 @@ mod utilities;
 use std::path::PathBuf;
 use utilities::records::{check_call, load, transient_tol, Outcome};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
-use yfoil::solver::analysis::{FlowSpec, Session};
+use yfoil::solver::analysis::{FlowConditions, Session};
 
 fn case_dir(case: &str) -> PathBuf {
     fixtures::require_fixture(&format!("tests/fixtures/xfoil/{case}"))
 }
 
 /// Run the case's ALFA sequence through one session and check every VISCAL call.
-fn run_case(case: &str, spec: FlowSpec, alphas_deg: &[f64]) -> Vec<Outcome> {
+fn run_case(case: &str, spec: FlowConditions, alphas_deg: &[f64]) -> Vec<Outcome> {
     let dir = case_dir(case);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = create_paneled_airfoil(&geometry);
@@ -42,8 +42,8 @@ fn run_case(case: &str, spec: FlowSpec, alphas_deg: &[f64]) -> Vec<Outcome> {
     let mut session = Session::new(&airfoil, spec);
     let mut outcomes = Vec::new();
     for (i, a) in alphas_deg.iter().enumerate() {
-        let p = session.alfa(a.to_radians());
-        outcomes.push(check_call(&rec, i + 1, &p, &session.st, transient_tol(i + 1)));
+        let p = session.alpha(a.to_radians());
+        outcomes.push(check_call(&rec, i + 1, &p, &session.state, transient_tol(i + 1)));
     }
     outcomes
 }
@@ -54,7 +54,7 @@ fn test_sharp_trailing_edge_matches_xfoil() {
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).unwrap();
     let airfoil = create_paneled_airfoil(&geometry);
     assert!(airfoil.sharp_te, "the case must actually take the SHARP path");
-    let outcomes = run_case("naca0012_n60_sharp_a2_re1e6", FlowSpec::default(), &[2.0]);
+    let outcomes = run_case("naca0012_n60_sharp_a2_re1e6", FlowConditions::default(), &[2.0]);
     assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
 }
 
@@ -62,9 +62,9 @@ fn test_sharp_trailing_edge_matches_xfoil() {
 fn test_mach_0_3_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_m03",
-        FlowSpec {
+        FlowConditions {
             mach: 0.3,
-            ..FlowSpec::default()
+            ..FlowConditions::default()
         },
         &[2.0],
     );
@@ -77,7 +77,7 @@ fn test_high_alpha_separated_matches_xfoil() {
     // → 1.4e-3, see noise_floor.json); YFoil tracks it like a ~2-ULP perturbation through
     // iteration 18 and parts at 19. The two replay tests below show the steps themselves are
     // faithful, so the documented outcome is threshold-straddling at iteration 19.
-    let outcomes = run_case("naca0012_n60_a12_re1e6", FlowSpec::default(), &[12.0]);
+    let outcomes = run_case("naca0012_n60_a12_re1e6", FlowConditions::default(), &[12.0]);
     match &outcomes[0] {
         Outcome::Straddling { at_iteration, .. } => assert_eq!(*at_iteration, 19, "{outcomes:?}"),
         Outcome::Match => println!("12° case now matches to the end (the straddle closed)"),
@@ -88,9 +88,9 @@ fn test_high_alpha_separated_matches_xfoil() {
 fn test_low_re_laminar_separation_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a4_re1e5",
-        FlowSpec {
+        FlowConditions {
             re: 1.0e5,
-            ..FlowSpec::default()
+            ..FlowConditions::default()
         },
         &[4.0],
     );
@@ -101,9 +101,9 @@ fn test_low_re_laminar_separation_matches_xfoil() {
 fn test_forced_transition_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_xtr03",
-        FlowSpec {
-            xstrip: [0.3, 0.3],
-            ..FlowSpec::default()
+        FlowConditions {
+            x_trip: [0.3, 0.3],
+            ..FlowConditions::default()
         },
         &[2.0],
     );
@@ -134,10 +134,10 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     let o = parse_bl_dump(&dir.join(format!("update_output_{k}.dat")));
 
     // prologue only (wake, QINVU/QINV, pointers, UINV, DIJ) — then XFOIL's state at call k
-    let mut session = Session::new(&airfoil, FlowSpec::default());
-    yfoil::solver::specal::alfa_command(&mut session.st, &mut session.sys, alpha_deg.to_radians());
-    solve_viscous(&mut session.st, session.sys.as_mut(), 0, 1.0, None);
-    let st = &mut session.st;
+    let mut session = Session::new(&airfoil, FlowConditions::default());
+    yfoil::solver::specal::alpha_command(&mut session.state, &mut session.inviscid, alpha_deg.to_radians());
+    solve_viscous(&mut session.state, session.inviscid.as_mut(), 0, 1.0, None);
+    let st = &mut session.state;
     st.bl_initialised = true;
     st.i_stagnation_node = d.int("IST");
     st.s_stagnation = d.real("SST");
@@ -274,7 +274,7 @@ fn test_high_alpha_iteration_19_replay_from_xfoil_state() {
 
 #[test]
 fn test_repeated_alpha_matches_xfoil() {
-    let outcomes = run_case("naca0012_n60_a2_repeat_re1e6", FlowSpec::default(), &[2.0, 2.0]);
+    let outcomes = run_case("naca0012_n60_a2_repeat_re1e6", FlowConditions::default(), &[2.0, 2.0]);
     assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
 }
 
@@ -286,11 +286,11 @@ fn test_cl_after_alpha_matches_xfoil() {
     let airfoil = create_paneled_airfoil(&geometry);
     let rec = load(&dir);
     assert_eq!(rec.points.len(), 2, "{case}: VISCAL call count");
-    let mut session = Session::new(&airfoil, FlowSpec::default());
-    let p = session.alfa(2.0_f64.to_radians());
-    let o1 = check_call(&rec, 1, &p, &session.st, transient_tol(1));
+    let mut session = Session::new(&airfoil, FlowConditions::default());
+    let p = session.alpha(2.0_f64.to_radians());
+    let o1 = check_call(&rec, 1, &p, &session.state, transient_tol(1));
     let p = session.cl(0.3);
-    let o2 = check_call(&rec, 2, &p, &session.st, transient_tol(2));
+    let o2 = check_call(&rec, 2, &p, &session.state, transient_tol(2));
     assert_eq!((o1, o2), (Outcome::Match, Outcome::Match));
 }
 
@@ -299,10 +299,10 @@ fn test_type_3_matches_xfoil() {
     // XFOIL's TYPE 3 is MATYP = 1, RETYP = 3 (xoper.f:362); MATYP = 3 is never set by TYPE
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_type3",
-        FlowSpec {
-            matyp: 1,
-            retyp: 3,
-            ..FlowSpec::default()
+        FlowConditions {
+            mach_cl_dependence: 1,
+            re_cl_dependence: 3,
+            ..FlowConditions::default()
         },
         &[2.0],
     );
@@ -313,11 +313,11 @@ fn test_type_3_matches_xfoil() {
 fn test_matyp_2_with_mach_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_m03_type2",
-        FlowSpec {
+        FlowConditions {
             mach: 0.3,
-            matyp: 2,
-            retyp: 2,
-            ..FlowSpec::default()
+            mach_cl_dependence: 2,
+            re_cl_dependence: 2,
+            ..FlowConditions::default()
         },
         &[2.0],
     );
@@ -328,9 +328,9 @@ fn test_matyp_2_with_mach_matches_xfoil() {
 fn test_trip_in_transition_interval_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_xtr_coinc",
-        FlowSpec {
-            xstrip: [0.48, 0.87],
-            ..FlowSpec::default()
+        FlowConditions {
+            x_trip: [0.48, 0.87],
+            ..FlowConditions::default()
         },
         &[2.0],
     );
@@ -341,9 +341,9 @@ fn test_trip_in_transition_interval_matches_xfoil() {
 fn test_modified_amplification_damp_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_damp",
-        FlowSpec {
-            idamp: true,
-            ..FlowSpec::default()
+        FlowConditions {
+            amplification_model: true,
+            ..FlowConditions::default()
         },
         &[2.0],
     );

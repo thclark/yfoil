@@ -13,7 +13,7 @@ use fixtures::mrchdu_fixtures::parse_bl_dump;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
-use yfoil::solver::analysis::{FlowSpec, Session};
+use yfoil::solver::analysis::{FlowConditions, Session};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -23,15 +23,15 @@ fn fixture_path(name: &str) -> PathBuf {
 fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = create_paneled_airfoil(&geometry);
-    let spec = FlowSpec {
+    let spec = FlowConditions {
         re: 1.0e6,
         mach: 0.0,
         ncrit: 9.0,
-        itmax: 20,
-        ..FlowSpec::default()
+        max_iterations: 20,
+        ..FlowConditions::default()
     };
     let mut session = Session::new(&airfoil, spec);
-    let p = session.alfa(2.0_f64.to_radians());
+    let p = session.alpha(2.0_f64.to_radians());
 
     let fin = parse_bl_dump(&fixture_path("viscal_final.dat"));
     let iters = std::fs::read_to_string(fixture_path("viscal_iter.dat"))
@@ -50,16 +50,20 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
         ("CL", p.cl),
         ("CM", p.cm),
         ("CD", p.cd),
-        ("CDF", p.cdf),
-        ("CDP", p.cdp),
-        ("CL_ALF", p.cl_alf),
-        ("XOCTR1", p.xtr_upper),
-        ("XOCTR2", p.xtr_lower),
+        ("CDF", p.cd_friction),
+        ("CDP", p.cd_pressure),
+        ("CL_ALF", p.cl_d_alpha),
+        ("XOCTR1", p.transition_upper[0]),
+        ("XOCTR2", p.transition_lower[0]),
     ] {
         assert_within(ours, fin.real(name), TOL_SOLVER, 1.0, &format!("end-to-end: {name}"));
     }
-    assert_eq!(session.st.i_stagnation_node, fin.int("IST"), "IST");
-    assert_eq!(p.itran[1..], [fin.int("ITRAN1"), fin.int("ITRAN2")], "ITRAN");
+    assert_eq!(session.state.i_stagnation_node, fin.int("IST"), "IST");
+    assert_eq!(
+        p.i_transition_station[1..],
+        [fin.int("ITRAN1"), fin.int("ITRAN2")],
+        "ITRAN"
+    );
 
     // per-iteration RMSBL/RLX/CL/CD
     let text = std::fs::read_to_string(fixture_path("viscal_iter.dat")).unwrap();
@@ -73,7 +77,7 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
             b.insert(k.trim().to_string(), v.trim().to_string());
         }
     }
-    for (y, x) in p.trace.iter().zip(&blocks) {
+    for (y, x) in p.iteration_records.iter().zip(&blocks) {
         for (name, ours) in [
             ("RMSBL", y.residual),
             ("RLX", y.relaxation),
@@ -108,14 +112,14 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
         let i: usize = idx.trim().parse().unwrap();
         let v: Vec<f64> = vals.split_whitespace().map(|t| t.parse().unwrap()).collect();
         assert_within(
-            session.st.cp_inviscid[i],
+            session.state.cp_inviscid[i],
             v[0],
             TOL_SOLVER,
             1.0,
             &format!("end-to-end: CPI({i})"),
         );
         assert_within(
-            session.st.cp_viscous[i],
+            session.state.cp_viscous[i],
             v[1],
             TOL_SOLVER,
             1.0,
@@ -123,10 +127,10 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
         );
         nodes += 1;
     }
-    assert_eq!(nodes, session.st.n_foil_nodes + session.st.n_wake_nodes);
+    assert_eq!(nodes, session.state.n_foil_nodes + session.state.n_wake_nodes);
 
     println!(
         "end-to-end alpha=2: {} iterations, CL {:.10} CD {:.10} CM {:.10} XTR {:.6}/{:.6} — all within {TOL_SOLVER:.0e} of XFOIL",
-        p.iterations, p.cl, p.cd, p.cm, p.xtr_upper, p.xtr_lower
+        p.iterations, p.cl, p.cd, p.cm, p.transition_upper[0], p.transition_lower[0]
     );
 }

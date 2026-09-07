@@ -22,7 +22,7 @@
 use super::tolerances::{FLOOR_FACTOR, STRADDLE_FLOOR, TOL_SOLVER, TOL_TRANSIENT};
 use std::collections::HashMap;
 use std::path::Path;
-use yfoil::solver::analysis::OperatingPoint;
+use yfoil::solver::analysis::PointResult;
 use yfoil::solver::blstate::SolverState;
 
 #[derive(Debug, Clone, Default)]
@@ -155,7 +155,7 @@ fn assert_value(a: f64, b: f64, tol: f64, scale: f64, floor: f64, what: &str) {
 
 /// Compare VISCAL call `k` (1-based) of the reference with a `Session` result.
 /// `transient_tol` is the base tolerance for the per-iteration values.
-pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &SolverState, transient_tol: f64) -> Outcome {
+pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, transient_tol: f64) -> Outcome {
     let x = &rec.points[k - 1];
     let ctx = format!("call {k} (alpha {:.3}°)", p.alpha.to_degrees());
     assert_eq!(k, x["CALL"].parse::<usize>().unwrap());
@@ -186,7 +186,7 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &SolverState,
     assert_eq!(p.iterations, its.len(), "{ctx}: per-iteration record length");
 
     let mut worst_ratio = 0.0_f64;
-    for (y, r) in p.trace.iter().zip(its) {
+    for (y, r) in p.iteration_records.iter().zip(its) {
         let ictx = format!("{ctx} iteration {}", y.iteration);
         let fi = cf.and_then(|c| c.iterations.get(y.iteration - 1));
         let floor_rmsbl = fl(fi, "RMSBL");
@@ -303,10 +303,10 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &SolverState,
         ("CL", p.cl, 1.0),
         ("CM", p.cm, 1.0),
         ("CD", p.cd, 1.0),
-        ("CDF", p.cdf, 1.0),
-        ("CDP", p.cdp, 1.0),
-        ("XOCTR1", p.xtr_upper, 1.0),
-        ("XOCTR2", p.xtr_lower, 1.0),
+        ("CDF", p.cd_friction, 1.0),
+        ("CDP", p.cd_pressure, 1.0),
+        ("XOCTR1", p.transition_upper[0], 1.0),
+        ("XOCTR2", p.transition_lower[0], 1.0),
         ("MINF", st.mach, 1.0),
         ("REINF", st.re, st.re),
     ] {
@@ -321,7 +321,7 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &SolverState,
     }
     assert_eq!(st.i_stagnation_node, x["IST"].parse::<usize>().unwrap(), "{ctx}: IST");
     assert_eq!(
-        p.itran[1..],
+        p.i_transition_station[1..],
         [
             x["ITRAN1"].parse::<usize>().unwrap(),
             x["ITRAN2"].parse::<usize>().unwrap()
@@ -330,7 +330,7 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &SolverState,
     );
     println!(
         "{ctx}: {:2} iterations, converged={} CL {:.8} CD {:.8} CM {:+.8} XTR {:.5}/{:.5} Re {:.0} M {:.3} — match (worst diff/floor {:.2})",
-        p.iterations, p.converged, p.cl, p.cd, p.cm, p.xtr_upper, p.xtr_lower, st.re, st.mach, worst_ratio
+        p.iterations, p.converged, p.cl, p.cd, p.cm, p.transition_upper[0], p.transition_lower[0], st.re, st.mach, worst_ratio
     );
     Outcome::Match
 }
