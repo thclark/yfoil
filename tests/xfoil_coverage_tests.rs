@@ -20,6 +20,7 @@
 //! The last five were added from the gcov measurement (`cargo xtask coverage`,
 //! `docs/validation/coverage.md`): each wakes branches the earlier set left open.
 
+use yfoil::bl::system::{AmplificationModel, MachClDependence, ReClDependence};
 mod fixtures;
 mod utilities;
 
@@ -300,8 +301,8 @@ fn test_type_3_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_type3",
         FlowConditions {
-            mach_cl_dependence: 1,
-            re_cl_dependence: 3,
+            mach_cl_dependence: MachClDependence::Fixed,
+            re_cl_dependence: ReClDependence::InverseCl,
             ..FlowConditions::default()
         },
         &[2.0],
@@ -315,8 +316,8 @@ fn test_matyp_2_with_mach_matches_xfoil() {
         "naca0012_n60_a2_re1e6_m03_type2",
         FlowConditions {
             mach: 0.3,
-            mach_cl_dependence: 2,
-            re_cl_dependence: 2,
+            mach_cl_dependence: MachClDependence::InverseSqrtCl,
+            re_cl_dependence: ReClDependence::InverseSqrtCl,
             ..FlowConditions::default()
         },
         &[2.0],
@@ -342,7 +343,7 @@ fn test_modified_amplification_damp_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a2_re1e6_damp",
         FlowConditions {
-            amplification_model: true,
+            amplification_model: AmplificationModel::ModifiedEnvelope,
             ..FlowConditions::default()
         },
         &[2.0],

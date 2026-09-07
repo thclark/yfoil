@@ -116,7 +116,7 @@ impl IntervalSystem {
         flow_type: FlowRegime,
         is_similarity: bool,
         acrit: f64,
-        idampv: usize,
+        amplification_model: AmplificationModel,
     ) {
         // Initialize to zero
         for k in 0..4 {
@@ -159,7 +159,16 @@ impl IntervalSystem {
                 // laminar part --> set amplification equation (BLDIF ITYP=1), verbatim:
                 // set average amplification AX over interval X1..X2
                 let r = interval_amplification_rate(
-                    s1.hk, s1.theta, s1.retheta, s1.ampl, s2.hk, s2.theta, s2.retheta, s2.ampl, acrit, idampv,
+                    s1.hk,
+                    s1.theta,
+                    s1.retheta,
+                    s1.ampl,
+                    s2.hk,
+                    s2.theta,
+                    s2.retheta,
+                    s2.ampl,
+                    acrit,
+                    amplification_model,
                 );
                 let ax = r.rate;
                 let rezc = s2.ampl - s1.ampl - ax * (s2.xi - s1.xi);
@@ -670,7 +679,15 @@ impl IntervalSystem {
 
         // Call BLDIF for laminar part (X1 to XT)
         let mut lam_sys = IntervalSystem::default();
-        lam_sys.assemble_interval_equations(s1, &st, &cfm_lam, FlowRegime::Laminar, false, acrit, params.idampv);
+        lam_sys.assemble_interval_equations(
+            s1,
+            &st,
+            &cfm_lam,
+            FlowRegime::Laminar,
+            false,
+            acrit,
+            params.amplification_model,
+        );
 
         // Convert laminar system sensitivities from "T" variables to "1" and "2" variables
         // Using chain rule for derivatives
@@ -788,7 +805,15 @@ impl IntervalSystem {
 
         // Call BLDIF for turbulent part (XT to X2)
         let mut turb_sys = IntervalSystem::default();
-        turb_sys.assemble_interval_equations(&st, s2, &cfm_turb, FlowRegime::Turbulent, false, acrit, params.idampv);
+        turb_sys.assemble_interval_equations(
+            &st,
+            s2,
+            &cfm_turb,
+            FlowRegime::Turbulent,
+            false,
+            acrit,
+            params.amplification_model,
+        );
 
         // Convert turbulent system sensitivities from "T" variables to "1" and "2" variables
         let mut bt1: [[f64; 5]; 4] = [[0.0; 5]; 4];
@@ -1054,7 +1079,15 @@ mod tests {
 
         // Run BLDIF
         let mut sys = IntervalSystem::default();
-        sys.assemble_interval_equations(&s1, &s2, &cfm, FlowRegime::Turbulent, false, 9.0, 0);
+        sys.assemble_interval_equations(
+            &s1,
+            &s2,
+            &cfm,
+            FlowRegime::Turbulent,
+            false,
+            9.0,
+            AmplificationModel::Envelope,
+        );
 
         // Check momentum equation residual (row 2)
         // VSREZ[2] = -0.7123274356e-1 from Fortran

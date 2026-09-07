@@ -8,7 +8,36 @@
 //! the solve by construction.
 
 use crate::bl::system::limit_dstar;
+use crate::bl::system::MachClDependence;
 use crate::solver::blstate::SolverState;
+
+/// VMXBL: which primary variable had the largest normalised Newton change. Displays as
+/// XFOIL's character (`n`, `C`, `T`, `D`, `U`; blank before any change).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResidualMaxVariable {
+    #[default]
+    Unset,
+    /// Amplification factor N (laminar)
+    Ampl,
+    /// Cτ^½ (turbulent)
+    Sqrtctau,
+    Theta,
+    Dstar,
+    Ue,
+}
+
+impl std::fmt::Display for ResidualMaxVariable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unset => " ",
+            Self::Ampl => "n",
+            Self::Sqrtctau => "C",
+            Self::Theta => "T",
+            Self::Dstar => "D",
+            Self::Ue => "U",
+        })
+    }
+}
 
 /// What UPDATE reports besides the arrays it writes into `SolverState`.
 #[derive(Debug, Clone, Default)]
@@ -18,7 +47,7 @@ pub struct UpdateSummary {
     /// Largest normalised change (signed; for Ue XFOIL stores the raw DUEDG)
     pub residual_max: f64,
     /// 'n' (amplification), 'C' (Ctau), 'T' (theta), 'D' (delta*) or 'U' (Ue)
-    pub residual_max_variable: char,
+    pub residual_max_variable: ResidualMaxVariable,
     pub i_residual_max_station: usize,
     pub residual_max_side: usize,
     /// Change in the global variable AC (CL or alpha) before under-relaxation
@@ -43,7 +72,7 @@ pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl
     // max allowable CL change per iteration
     let dclmax = 0.5;
     let mut dclmin = -0.5;
-    if st.mach_cl_dependence != 1 {
+    if st.mach_cl_dependence != MachClDependence::Fixed {
         dclmin = (-0.5_f64).max(-0.9 * st.cl);
     }
 
@@ -171,7 +200,7 @@ pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl
 
     let mut rmsbl = 0.0_f64;
     let mut rmxbl = 0.0_f64;
-    let mut vmxbl = ' ';
+    let mut vmxbl = ResidualMaxVariable::Unset;
     let mut imxbl = 0;
     let mut ismxbl = 0;
 
@@ -207,7 +236,11 @@ pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl
             let rdn1 = rlx * dn1;
             if dn1.abs() > rmxbl.abs() {
                 rmxbl = dn1;
-                vmxbl = if ibl < st.i_transition_station[is] { 'n' } else { 'C' };
+                vmxbl = if ibl < st.i_transition_station[is] {
+                    ResidualMaxVariable::Ampl
+                } else {
+                    ResidualMaxVariable::Sqrtctau
+                };
                 imxbl = ibl;
                 ismxbl = is;
             }
@@ -222,7 +255,7 @@ pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl
             let rdn2 = rlx * dn2;
             if dn2.abs() > rmxbl.abs() {
                 rmxbl = dn2;
-                vmxbl = 'T';
+                vmxbl = ResidualMaxVariable::Theta;
                 imxbl = ibl;
                 ismxbl = is;
             }
@@ -237,7 +270,7 @@ pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl
             let rdn3 = rlx * dn3;
             if dn3.abs() > rmxbl.abs() {
                 rmxbl = dn3;
-                vmxbl = 'D';
+                vmxbl = ResidualMaxVariable::Dstar;
                 imxbl = ibl;
                 ismxbl = is;
             }
@@ -252,7 +285,7 @@ pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl
             let rdn4 = rlx * dn4;
             if dn4.abs() > rmxbl.abs() {
                 rmxbl = duedg;
-                vmxbl = 'U';
+                vmxbl = ResidualMaxVariable::Ue;
                 imxbl = ibl;
                 ismxbl = is;
             }

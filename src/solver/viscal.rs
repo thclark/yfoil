@@ -12,7 +12,7 @@ use crate::solver::pointers::{
 };
 use crate::solver::qdcalc::build_dij;
 use crate::solver::setbl::{assemble_newton_system, set_mach_re_from_cl};
-use crate::solver::update::apply_newton_update;
+use crate::solver::update::{apply_newton_update, ResidualMaxVariable};
 use crate::solver::velocity::{set_gamma_from_q_viscous, set_q_inviscid, set_q_viscous_from_ue, set_ue_inviscid};
 use crate::solver::xywake::{build_wake, set_wake_q_basis};
 
@@ -25,7 +25,7 @@ pub struct IterationRecord {
     pub iteration: usize,
     pub residual: f64,
     pub residual_max: f64,
-    pub residual_max_variable: char,
+    pub residual_max_variable: ResidualMaxVariable,
     pub i_residual_max_station: usize,
     pub residual_max_side: usize,
     pub relaxation: f64,

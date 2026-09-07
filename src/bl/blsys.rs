@@ -51,16 +51,40 @@ pub fn assemble_interval_system(
             params,
         );
     } else if flags.similarity {
-        sys.assemble_interval_equations(s1, s2, &cfm, FlowRegime::Laminar, true, acrit, params.idampv);
+        sys.assemble_interval_equations(
+            s1,
+            s2,
+            &cfm,
+            FlowRegime::Laminar,
+            true,
+            acrit,
+            params.amplification_model,
+        );
     // BLDIF(0)
     } else if !flags.turbulent {
-        sys.assemble_interval_equations(s1, s2, &cfm, FlowRegime::Laminar, false, acrit, params.idampv);
+        sys.assemble_interval_equations(
+            s1,
+            s2,
+            &cfm,
+            FlowRegime::Laminar,
+            false,
+            acrit,
+            params.amplification_model,
+        );
     // BLDIF(1)
     } else if flags.wake {
-        sys.assemble_interval_equations(s1, s2, &cfm, FlowRegime::Wake, false, acrit, params.idampv);
+        sys.assemble_interval_equations(s1, s2, &cfm, FlowRegime::Wake, false, acrit, params.amplification_model);
     // BLDIF(3)
     } else {
-        sys.assemble_interval_equations(s1, s2, &cfm, FlowRegime::Turbulent, false, acrit, params.idampv);
+        sys.assemble_interval_equations(
+            s1,
+            s2,
+            &cfm,
+            FlowRegime::Turbulent,
+            false,
+            acrit,
+            params.amplification_model,
+        );
         // BLDIF(2)
     }
 

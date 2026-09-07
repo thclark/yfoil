@@ -9,7 +9,9 @@ use crate::bl::blsolv::NewtonSystem;
 use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
 use crate::bl::mrchdu::march_prescribed_dstar;
 use crate::bl::mrchue::march_direct;
-use crate::bl::system::{check_transition, FlowParameters, FlowRegime, IntervalSystem, TransitionCheck};
+use crate::bl::system::{
+    check_transition, FlowParameters, FlowRegime, IntervalSystem, MachClDependence, ReClDependence, TransitionCheck,
+};
 use crate::geometry::spline_value;
 use crate::solver::blstate::SolverState;
 use crate::solver::pointers::xi_trip;
@@ -35,40 +37,30 @@ pub struct AssembledSystem {
 /// CLS according to MATYP/RETYP. Returns (M_CLS, R_CLS).
 pub fn set_mach_re_from_cl(st: &mut SolverState, cls: f64) -> (f64, f64) {
     let cla = cls.max(0.000001);
-    if st.re_cl_dependence < 1 || st.re_cl_dependence > 3 {
-        // 'MRCL:  Illegal Re(CL) dependence trigger. Setting fixed Re.'
-        st.re_cl_dependence = 1;
-    }
-    if st.mach_cl_dependence < 1 || st.mach_cl_dependence > 3 {
-        // 'MRCL:  Illegal Mach(CL) dependence trigger. Setting fixed Mach.'
-        st.mach_cl_dependence = 1;
-    }
+    // XFOIL's 'MRCL: Illegal Re(CL) / Mach(CL) dependence trigger. Setting fixed ...' branches
+    // are unreachable here: the dependence enums cannot hold an illegal index.
     let mut m_cls;
     match st.mach_cl_dependence {
-        1 => {
+        MachClDependence::Fixed => {
             st.mach = st.mach_cl1;
             m_cls = 0.0;
         }
-        2 => {
+        MachClDependence::InverseSqrtCl => {
             st.mach = st.mach_cl1 / cla.sqrt();
             m_cls = -0.5 * st.mach / cla;
-        }
-        _ => {
-            st.mach = st.mach_cl1;
-            m_cls = 0.0;
         }
     }
     let mut r_cls;
     match st.re_cl_dependence {
-        1 => {
+        ReClDependence::Fixed => {
             st.re = st.re_cl1;
             r_cls = 0.0;
         }
-        2 => {
+        ReClDependence::InverseSqrtCl => {
             st.re = st.re_cl1 / cla.sqrt();
             r_cls = -0.5 * st.re / cla;
         }
-        _ => {
+        ReClDependence::InverseCl => {
             st.re = st.re_cl1 / cla;
             r_cls = -st.re / cla;
         }
@@ -109,7 +101,7 @@ pub fn assemble_newton_system(st: &mut SolverState) -> AssembledSystem {
     let mut params = FlowParameters::new(st.mach, st.re, st.gamma_gas);
 
     // IDAMPV = IDAMP
-    params.idampv = st.amplification_model;
+    params.amplification_model = st.amplification_model;
     // save TE thickness
     let _dwte = st.wake_gap[1];
 

@@ -4,6 +4,7 @@
 //! SPECCL's converged alpha), every iteration (`viscal_iters_all.dat`, with ALFA/MINF/REINF)
 //! and the converged point (`viscal_points.dat`).
 
+use yfoil::bl::system::{MachClDependence, ReClDependence};
 mod fixtures;
 mod utilities;
 
@@ -168,8 +169,8 @@ fn test_matyp_retyp_2_point_matches_xfoil() {
     let case = "naca0012_n60_a2_re1e6_type2";
     let af = airfoil(case);
     let spec = FlowConditions {
-        mach_cl_dependence: 2,
-        re_cl_dependence: 2,
+        mach_cl_dependence: MachClDependence::InverseSqrtCl,
+        re_cl_dependence: ReClDependence::InverseSqrtCl,
         ..FlowConditions::default()
     };
     let mut session = Session::new(&af, spec);

@@ -95,7 +95,7 @@ pub fn check_transition(
         s2.retheta,
         s2.ampl,
         acrit,
-        params.idampv,
+        params.amplification_model,
     );
     // set initial guess for iterate N2 (AMPL2) at X2
     let mut ampl2 = ampl1 + r0.rate * (x2 - x1);
@@ -183,7 +183,7 @@ pub fn check_transition(
             st.retheta,
             amplt,
             acrit,
-            params.idampv,
+            params.amplification_model,
         );
 
         // punch out early if there is no amplification here
@@ -648,11 +648,11 @@ pub fn interval_amplification_rate(
     rt2: f64,
     a2: f64,
     acrit: f64,
-    idampv: usize,
+    amplification_model: AmplificationModel,
 ) -> IntervalAmplificationRate {
     // 2nd-order: local amplification rates at both stations, envelope (IDAMPV = 0) or
     // modified-envelope (IDAMPV = 1, OPER DAMP) method
-    let (ax1_result, ax2_result) = if idampv == 0 {
+    let (ax1_result, ax2_result) = if amplification_model == AmplificationModel::Envelope {
         (amplification_rate(hk1, t1, rt1), amplification_rate(hk2, t2, rt2))
     } else {
         (
@@ -876,10 +876,16 @@ mod tests {
         // AXSET Test 1: Growing BL
         // XFOIL reference values
         let result = interval_amplification_rate(
-            2.5, 0.0015, 1800.0, 3.0, // Station 1: HK, T, RT, A
-            2.6, 0.0018, 2200.0, 4.5, // Station 2
-            9.0, // ACRIT
-            0,   // IDAMPV
+            2.5,
+            0.0015,
+            1800.0,
+            3.0, // Station 1: HK, T, RT, A
+            2.6,
+            0.0018,
+            2200.0,
+            4.5,                          // Station 2
+            9.0,                          // ACRIT
+            AmplificationModel::Envelope, // IDAMPV
         );
 
         // AX = 0.1160733819E+01
@@ -899,10 +905,16 @@ mod tests {
         // AXSET Test 2: Near transition
         // XFOIL reference values
         let result = interval_amplification_rate(
-            2.5, 0.002, 2500.0, 7.5, // Station 1
-            2.55, 0.0022, 2750.0, 8.5, // Station 2
-            9.0, // ACRIT
-            0,   // IDAMPV
+            2.5,
+            0.002,
+            2500.0,
+            7.5, // Station 1
+            2.55,
+            0.0022,
+            2750.0,
+            8.5,                          // Station 2
+            9.0,                          // ACRIT
+            AmplificationModel::Envelope, // IDAMPV
         );
 
         // AX = 0.7944293022E+00

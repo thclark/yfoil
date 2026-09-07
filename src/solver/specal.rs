@@ -2,6 +2,7 @@
 //! vorticity solutions, sets QINV, iterates M(CL) for MATYP ≠ 1, and sets CL/CM/CDP and the Cp
 //! distributions. Also the OPER-level bookkeeping that precedes it when a new alpha is specified.
 
+use crate::bl::system::MachClDependence;
 use crate::solver::blstate::SolverState;
 use crate::solver::clcalc::{compute_cl_cm, compute_cp, set_compressibility};
 use crate::solver::ggcalc::{build_inviscid_system, InviscidSystem};
@@ -93,7 +94,7 @@ pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSy
             minf_clm = m;
 
             // if Mach is OK, go do next Newton iteration
-            if st.mach_cl_dependence == 1 || st.mach == 0.0 || minf_clm != 0.0 {
+            if st.mach_cl_dependence == MachClDependence::Fixed || st.mach == 0.0 || minf_clm != 0.0 {
                 break;
             }
             rlx = 0.5 * rlx;

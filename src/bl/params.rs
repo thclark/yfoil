@@ -1,6 +1,66 @@
 //! BL closure constants (BLPAR.INC, set in BLPINI), the flow-regime selector (XFOIL's ITYP)
 //! and the global BL parameters of XBL.INC's /V_VAR/ block (COMSET / SETBL prologue).
 
+use serde::{Deserialize, Serialize};
+
+/// MATYP (OPER `TYPE`): how the freestream Mach number depends on CL. XFOIL's MRCL resets an
+/// illegal index to 1; here the type makes that branch unreachable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MachClDependence {
+    /// MATYP = 1: Mach constant
+    #[default]
+    Fixed = 1,
+    /// MATYP = 2: Mach ~ 1/sqrt(CL) (fixed lift)
+    InverseSqrtCl = 2,
+}
+
+impl MachClDependence {
+    /// From XFOIL's MATYP index; anything but 2 is `Fixed`, as MRCL treats it.
+    pub fn from_xfoil(matyp: usize) -> Self {
+        if matyp == 2 {
+            Self::InverseSqrtCl
+        } else {
+            Self::Fixed
+        }
+    }
+}
+
+/// RETYP (OPER `TYPE`): how the Reynolds number depends on CL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReClDependence {
+    /// RETYP = 1: Re constant
+    #[default]
+    Fixed = 1,
+    /// RETYP = 2: Re ~ 1/sqrt(CL) (fixed lift)
+    InverseSqrtCl = 2,
+    /// RETYP = 3: Re ~ 1/CL (fixed lift and dynamic pressure)
+    InverseCl = 3,
+}
+
+impl ReClDependence {
+    /// From XFOIL's RETYP index; anything but 2 or 3 is `Fixed`, as MRCL treats it.
+    pub fn from_xfoil(retyp: usize) -> Self {
+        match retyp {
+            2 => Self::InverseSqrtCl,
+            3 => Self::InverseCl,
+            _ => Self::Fixed,
+        }
+    }
+}
+
+/// IDAMP / IDAMPV (OPER `DAMP`): which laminar amplification correlation the e^N method uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AmplificationModel {
+    /// IDAMP = 0: the original envelope e^N f(H, Rtheta) for all profiles (DAMPL)
+    #[default]
+    Envelope = 0,
+    /// IDAMP = 1: the modified envelope method for separating profiles (DAMPL2)
+    ModifiedEnvelope = 1,
+}
+
 // ============================================================================
 // BL Closure Constants (from XFOIL's BLPAR.INC)
 // ============================================================================
@@ -66,8 +126,8 @@ pub enum FlowRegime {
 /// flow condition (Mach, Reynolds number).
 #[derive(Debug, Clone)]
 pub struct FlowParameters {
-    /// IDAMPV: amplification model selected in SETBL from IDAMP (0 = DAMPL, 1 = DAMPL2)
-    pub idampv: usize,
+    /// IDAMPV: amplification model selected in SETBL from IDAMP
+    pub amplification_model: AmplificationModel,
     /// Freestream velocity qinf
     pub qinf: f64,
 
@@ -149,7 +209,7 @@ impl FlowParameters {
         let reybl_ms = reybl * (1.5 / herat - 1.0 / (herat + hvrat)) * herat_ms;
 
         Self {
-            idampv: 0,
+            amplification_model: AmplificationModel::Envelope,
             qinf,
             karman_tsien: tk,
             karman_tsien_d_machsqd: tk_ms,

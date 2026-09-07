@@ -8,7 +8,7 @@
 //!
 //! Nothing here computes anything; the translated subroutines live beside it.
 
-use crate::bl::system::{StationState, Transition};
+use crate::bl::system::{AmplificationModel, MachClDependence, ReClDependence, StationState, Transition};
 use crate::geometry::PanelledFoil;
 
 /// BL and panel state (see module docs for indexing).
@@ -107,10 +107,10 @@ pub struct SolverState {
     /// MINF1/REINF1 (unit-CL values), MATYP/RETYP, and the current MINF/REINF set by MRCL
     pub mach_cl1: f64,
     pub re_cl1: f64,
-    pub mach_cl_dependence: usize,
-    pub re_cl_dependence: usize,
+    pub mach_cl_dependence: MachClDependence,
+    pub re_cl_dependence: ReClDependence,
     /// IDAMP: 0 = envelope e^n (DAMPL), 1 = modified envelope method (DAMPL2), OPER `DAMP`
-    pub amplification_model: usize,
+    pub amplification_model: AmplificationModel,
     pub mach: f64,
     pub re: f64,
     /// LALFA (fixed alpha; else fixed CL = CLSPEC), CL, CLSPEC
@@ -234,9 +234,9 @@ impl SolverState {
             transition: Transition::default(),
             mach_cl1: 0.0,
             re_cl1: 0.0,
-            mach_cl_dependence: 1,
-            re_cl_dependence: 1,
-            amplification_model: 0,
+            mach_cl_dependence: MachClDependence::Fixed,
+            re_cl_dependence: ReClDependence::Fixed,
+            amplification_model: AmplificationModel::Envelope,
             mach: 0.0,
             re: 0.0,
             alpha_specified: true,

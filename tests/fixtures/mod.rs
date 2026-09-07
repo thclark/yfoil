@@ -393,8 +393,8 @@ pub fn state_before_setbl_march(k: usize) -> (SolverState, FlowParameters, BlDum
     st.s_stagnation_d_gamma_node1 = d.real("SST_GP");
     // SETBL controls
     st.alpha_specified = d.logical("LALFA");
-    st.mach_cl_dependence = d.int("MATYP");
-    st.re_cl_dependence = d.int("RETYP");
+    st.mach_cl_dependence = yfoil::bl::system::MachClDependence::from_xfoil(d.int("MATYP"));
+    st.re_cl_dependence = yfoil::bl::system::ReClDependence::from_xfoil(d.int("RETYP"));
     st.mach_cl1 = d.real("MINF");
     st.re_cl1 = d.real("REINF");
     st.cl = d.real("CLMR");

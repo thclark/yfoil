@@ -3,6 +3,7 @@
 //! `init` = XFOIL's `INIT`, and the polar sweep as CLAUDE.md prescribes it (0° → max,
 //! reinitialise, −step → min, stitched ascending).
 
+use crate::bl::system::{AmplificationModel, MachClDependence, ReClDependence};
 use crate::geometry::PanelledFoil;
 use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
@@ -27,10 +28,10 @@ pub struct FlowConditions {
     /// XSTRIP(1..2): forced-transition x/c per side (1.0 = free transition)
     pub x_trip: [f64; 2],
     /// MATYP / RETYP: Mach and Re dependence on CL (1 = fixed)
-    pub mach_cl_dependence: usize,
-    pub re_cl_dependence: usize,
+    pub mach_cl_dependence: MachClDependence,
+    pub re_cl_dependence: ReClDependence,
     /// OPER `DAMP`: modified envelope e^n amplification (IDAMP = 1, DAMPL2)
-    pub amplification_model: bool,
+    pub amplification_model: AmplificationModel,
 }
 
 impl Default for FlowConditions {
@@ -43,9 +44,9 @@ impl Default for FlowConditions {
             wake_length: 1.0,
             elimination_threshold: 0.01,
             x_trip: [1.0, 1.0],
-            mach_cl_dependence: 1,
-            re_cl_dependence: 1,
-            amplification_model: false,
+            mach_cl_dependence: MachClDependence::Fixed,
+            re_cl_dependence: ReClDependence::Fixed,
+            amplification_model: AmplificationModel::Envelope,
         }
     }
 }
@@ -97,7 +98,7 @@ impl Session {
         st.mach = spec.mach;
         st.mach_cl_dependence = spec.mach_cl_dependence;
         st.re_cl_dependence = spec.re_cl_dependence;
-        st.amplification_model = usize::from(spec.amplification_model);
+        st.amplification_model = spec.amplification_model;
         st.ncrit = [0.0, spec.ncrit, spec.ncrit];
         st.elimination_threshold = spec.elimination_threshold;
         st.x_trip = [0.0, spec.x_trip[0], spec.x_trip[1]];
