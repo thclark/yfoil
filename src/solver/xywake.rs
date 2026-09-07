@@ -65,80 +65,88 @@ pub fn exponential_spacing(ds1: f64, smax: f64, nn: usize) -> Vec<f64> {
 /// nodes n+1..=n+nw from the current GAM (and SIG, though SIGLIN is off here) distribution.
 /// `waklen` is XFOIL's WAKLEN (chords). Requires `st.nw == n/12 + 10*INT(WAKLEN)`.
 #[doc(alias = "XYWAKE")]
-pub fn build_wake(st: &mut SolverState, waklen: f64) {
-    let n = st.n_foil_nodes;
-    let nw = st.n_wake_nodes;
+pub fn build_wake(state: &mut SolverState, waklen: f64) {
+    let n = state.n_foil_nodes;
+    let nw = state.n_wake_nodes;
     debug_assert_eq!(nw, n / 12 + 10 * (waklen as usize), "NW must follow XYWAKE's formula");
 
-    let ds1 = 0.5 * (st.s[2] - st.s[1] + st.s[n] - st.s[n - 1]);
-    let snew = exponential_spacing(ds1, waklen * st.chord, nw); // SNEW(N+1..N+NW) as snew[1..=nw]
+    let ds1 = 0.5 * (state.s[2] - state.s[1] + state.s[n] - state.s[n - 1]);
+    let snew = exponential_spacing(ds1, waklen * state.chord, nw); // SNEW(N+1..N+NW) as snew[1..=nw]
 
-    let xte = 0.5 * (st.x[1] + st.x[n]);
-    let yte = 0.5 * (st.y[1] + st.y[n]);
+    let xte = 0.5 * (state.x[1] + state.x[n]);
+    let yte = 0.5 * (state.y[1] + state.y[n]);
 
     // set first wake point a tiny distance behind TE
     let i = n + 1;
-    let sx = 0.5 * (st.dyds[n] - st.dyds[1]);
-    let sy = 0.5 * (st.dxds[1] - st.dxds[n]);
+    let sx = 0.5 * (state.dyds[n] - state.dyds[1]);
+    let sy = 0.5 * (state.dxds[1] - state.dxds[n]);
     let smod = (sx * sx + sy * sy).sqrt();
-    st.normal_x[i] = sx / smod;
-    st.normal_y[i] = sy / smod;
-    st.x[i] = xte - 0.0001 * st.normal_y[i];
-    st.y[i] = yte + 0.0001 * st.normal_x[i];
-    st.s[i] = st.s[n];
+    state.normal_x[i] = sx / smod;
+    state.normal_y[i] = sy / smod;
+    state.x[i] = xte - 0.0001 * state.normal_y[i];
+    state.y[i] = yte + 0.0001 * state.normal_x[i];
+    state.s[i] = state.s[n];
 
     // calculate streamfunction gradient components at first point
-    let psi_x = panel_influence(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_d_n;
-    let psi_y = panel_influence(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_d_n;
+    let psi_x = panel_influence(state, i, state.x[i], state.y[i], 1.0, 0.0, false).psi_d_n;
+    let psi_y = panel_influence(state, i, state.x[i], state.y[i], 0.0, 1.0, false).psi_d_n;
 
     // set unit vector normal to wake at first point
-    st.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
-    st.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
+    state.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
+    state.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
 
     // set angle of wake panel normal
-    st.panel_angle[i] = psi_y.atan2(psi_x);
+    state.panel_angle[i] = psi_y.atan2(psi_x);
 
     // set rest of wake points
     for i in (n + 2)..=(n + nw) {
         let ds = snew[i - n] - snew[i - n - 1];
 
         // set new point DS downstream of last point
-        st.x[i] = st.x[i - 1] - ds * st.normal_y[i];
-        st.y[i] = st.y[i - 1] + ds * st.normal_x[i];
-        st.s[i] = st.s[i - 1] + ds;
+        state.x[i] = state.x[i - 1] - ds * state.normal_y[i];
+        state.y[i] = state.y[i - 1] + ds * state.normal_x[i];
+        state.s[i] = state.s[i - 1] + ds;
 
         if i == n + nw {
             break;
         }
 
         // calculate normal vector for next point
-        let psi_x = panel_influence(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_d_n;
-        let psi_y = panel_influence(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_d_n;
+        let psi_x = panel_influence(state, i, state.x[i], state.y[i], 1.0, 0.0, false).psi_d_n;
+        let psi_y = panel_influence(state, i, state.x[i], state.y[i], 0.0, 1.0, false).psi_d_n;
 
-        st.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
-        st.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
+        state.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
+        state.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
 
         // set angle of wake panel normal
-        st.panel_angle[i] = psi_y.atan2(psi_x);
+        state.panel_angle[i] = psi_y.atan2(psi_x);
     }
     // LWAKE = .TRUE., AWAKE = ALFA, LWDIJ = .FALSE. (new wake geometry invalidates the wake DIJ)
-    st.wake_built = true;
-    st.alpha_wake = st.alpha;
-    st.dij_wake_built = false;
+    state.wake_built = true;
+    state.alpha_wake = state.alpha;
+    state.dij_wake_built = false;
 }
 
 /// QWCALC: inviscid tangential velocity for alpha = 0, 90 on the wake due to freestream and
 /// airfoil surface vorticity.
 #[doc(alias = "QWCALC")]
-pub fn set_wake_q_basis(st: &mut SolverState) {
-    let n = st.n_foil_nodes;
+pub fn set_wake_q_basis(state: &mut SolverState) {
+    let n = state.n_foil_nodes;
     // first wake point (same as TE)
-    st.q_inviscid_basis[1][n + 1] = st.q_inviscid_basis[1][n];
-    st.q_inviscid_basis[2][n + 1] = st.q_inviscid_basis[2][n];
+    state.q_inviscid_basis[1][n + 1] = state.q_inviscid_basis[1][n];
+    state.q_inviscid_basis[2][n + 1] = state.q_inviscid_basis[2][n];
     // rest of wake
-    for i in (n + 2)..=(n + st.n_wake_nodes) {
-        let p = panel_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], false);
-        st.q_inviscid_basis[1][i] = p.qtan_alpha0;
-        st.q_inviscid_basis[2][i] = p.qtan_alpha90;
+    for i in (n + 2)..=(n + state.n_wake_nodes) {
+        let p = panel_influence(
+            state,
+            i,
+            state.x[i],
+            state.y[i],
+            state.normal_x[i],
+            state.normal_y[i],
+            false,
+        );
+        state.q_inviscid_basis[1][i] = p.qtan_alpha0;
+        state.q_inviscid_basis[2][i] = p.qtan_alpha90;
     }
 }

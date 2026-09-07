@@ -111,7 +111,7 @@ pub fn check_transition(
     let (mut wf2, mut wf2_a1, mut wf2_a2, mut wf2_x1, mut wf2_x2, mut wf2_xf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     let (mut xt, mut tt, mut dt, mut ut) = (0.0, 0.0, 0.0, 0.0);
     let (mut xt_a2, mut tt_a2, mut dt_a2, mut ut_a2) = (0.0, 0.0, 0.0, 0.0);
-    let mut st = s2.clone();
+    let mut state = s2.clone();
     let mut r = r0.clone();
 
     // solve implicit system for amplification AMPL2
@@ -171,12 +171,12 @@ pub fn check_transition(
         ut_a2 = s1.ue * wf1_a2 + s2.ue * wf2_a2;
 
         // temporarily set "2" variables from "T" for BLKIN (U2_UEI, U2_MS, DW2 stay station 2's)
-        st = s2.clone();
-        st.xi = xt;
-        st.theta = tt;
-        st.dstar = dt;
-        st.ue = ut;
-        st.set_kinematic_variables(params);
+        state = s2.clone();
+        state.xi = xt;
+        state.theta = tt;
+        state.dstar = dt;
+        state.ue = ut;
+        state.set_kinematic_variables(params);
 
         // calculate amplification rate AX over current X1-XT interval
         r = interval_amplification_rate(
@@ -184,9 +184,9 @@ pub fn check_transition(
             s1.theta,
             s1.retheta,
             ampl1,
-            st.hk,
+            state.hk,
             tt,
-            st.retheta,
+            state.retheta,
             amplt,
             acrit,
             params.amplification_model,
@@ -198,12 +198,12 @@ pub fn check_transition(
         }
 
         // set sensitivity of AX(A2)
-        let ax_a2 = (r.rate_d_hk_station2 * st.hk_d_theta
+        let ax_a2 = (r.rate_d_hk_station2 * state.hk_d_theta
             + r.rate_d_theta_station2
-            + r.rate_d_retheta_station2 * st.retheta_d_theta)
+            + r.rate_d_retheta_station2 * state.retheta_d_theta)
             * tt_a2
-            + (r.rate_d_hk_station2 * st.hk_d_dstar) * dt_a2
-            + (r.rate_d_hk_station2 * st.hk_d_ue + r.rate_d_retheta_station2 * st.retheta_d_ue) * ut_a2
+            + (r.rate_d_hk_station2 * state.hk_d_dstar) * dt_a2
+            + (r.rate_d_hk_station2 * state.hk_d_ue + r.rate_d_retheta_station2 * state.retheta_d_ue) * ut_a2
             + r.rate_d_ampl_station2 * amplt_a2;
 
         // residual for implicit AMPL2 definition (amplification equation)
@@ -300,12 +300,12 @@ pub fn check_transition(
     let ut_xf = s1.ue * wf1_xf + s2.ue * wf2_xf;
 
     // at this point, AX = AX( HK1, T1, RT1, A1, HKT, TT, RTT, AT ) from the last loop pass
-    let (hkt_tt, hkt_dt, hkt_ut, hkt_ms) = (st.hk_d_theta, st.hk_d_dstar, st.hk_d_ue, st.hk_d_machsqd);
+    let (hkt_tt, hkt_dt, hkt_ut, hkt_ms) = (state.hk_d_theta, state.hk_d_dstar, state.hk_d_ue, state.hk_d_machsqd);
     let (rtt_tt, rtt_ut, rtt_ms, rtt_re) = (
-        st.retheta_d_theta,
-        st.retheta_d_ue,
-        st.retheta_d_machsqd,
-        st.retheta_d_re,
+        state.retheta_d_theta,
+        state.retheta_d_ue,
+        state.retheta_d_machsqd,
+        state.retheta_d_re,
     );
     let ax_t1 = r.rate_d_hk_station1 * s1.hk_d_theta
         + r.rate_d_theta_station1
@@ -760,7 +760,7 @@ mod tests {
         assert_relative_eq!(result.rate, 0.7412, epsilon = 0.001);
         assert_relative_eq!(result.rate_d_hk, 3.105, epsilon = 0.01);
         assert_relative_eq!(result.rate_d_theta, -370.6, epsilon = 0.5);
-        assert_eq!(result.rate_d_retheta, 0.0); // Above ramp, derivative is 0
+        assert_eq!(result.rate_d_retheta, 0.0); // Above ramp, derivative side 0
     }
 
     #[test]

@@ -36,7 +36,7 @@ pub fn pi_consts() -> (f64, f64, f64) {
 /// it only affects the self-influence skips and the arctan reflection flag.
 #[doc(alias = "PSILIN")]
 pub fn panel_influence(
-    st: &SolverState,
+    state: &SolverState,
     i: usize,
     xi: f64,
     yi: f64,
@@ -44,17 +44,17 @@ pub fn panel_influence(
     nyi: f64,
     siglin: bool,
 ) -> PanelInfluence {
-    let n = st.n_foil_nodes;
+    let n = state.n_foil_nodes;
     let (pi, hopi, qopi) = pi_consts();
-    let (x, y, s) = (&st.x, &st.y, &st.s);
-    let gamu1 = &st.q_inviscid_basis[1];
-    let gamu2 = &st.q_inviscid_basis[2];
+    let (x, y, s) = (&state.x, &state.y, &state.s);
+    let gamu1 = &state.q_inviscid_basis[1];
+    let gamu2 = &state.q_inviscid_basis[2];
 
     // distance tolerance for determining if two points are the same
     let seps = (s[n] - s[1]) * 1.0e-5;
     let io = i;
-    let cosa = st.alpha.cos();
-    let sina = st.alpha.sin();
+    let cosa = state.alpha.cos();
+    let sina = state.alpha.sin();
 
     let mut out = PanelInfluence {
         psi: 0.0,
@@ -70,10 +70,13 @@ pub fn panel_influence(
         qtan_d_sigma: vec![0.0; n + 1],
     };
 
-    let (scs, sds) = if st.sharp_te {
+    let (scs, sds) = if state.sharp_te {
         (1.0, 0.0)
     } else {
-        (st.te_thickness_normal / st.te_gap, st.te_thickness_parallel / st.te_gap)
+        (
+            state.te_thickness_normal / state.te_gap,
+            state.te_thickness_parallel / state.te_gap,
+        )
     };
 
     // carried out of the loop for the TE panel (labels 11/12)
@@ -107,7 +110,7 @@ pub fn panel_influence(
             continue;
         }
         let dsio = 1.0 / dso;
-        apan = st.panel_angle[jo];
+        apan = state.panel_angle[jo];
 
         let rx1 = xi - x[jo];
         let ry1 = yi - y[jo];
@@ -178,8 +181,8 @@ pub fn panel_influence(
             let dsm = ((x[jp] - x[jm]).powi(2) + (y[jp] - y[jm]).powi(2)).sqrt();
             let dsim = 1.0 / dsm;
 
-            let ssum = (st.sigma[jp] - st.sigma[jo]) * dsio + (st.sigma[jp] - st.sigma[jm]) * dsim;
-            let sdif = (st.sigma[jp] - st.sigma[jo]) * dsio - (st.sigma[jp] - st.sigma[jm]) * dsim;
+            let ssum = (state.sigma[jp] - state.sigma[jo]) * dsio + (state.sigma[jp] - state.sigma[jm]) * dsim;
+            let sdif = (state.sigma[jp] - state.sigma[jo]) * dsio - (state.sigma[jp] - state.sigma[jm]) * dsim;
 
             out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -214,8 +217,8 @@ pub fn panel_influence(
             let dsp = ((x[jq] - x[jo]).powi(2) + (y[jq] - y[jo]).powi(2)).sqrt();
             let dsip = 1.0 / dsp;
 
-            let ssum = (st.sigma[jq] - st.sigma[jo]) * dsip + (st.sigma[jp] - st.sigma[jo]) * dsio;
-            let sdif = (st.sigma[jq] - st.sigma[jo]) * dsip - (st.sigma[jp] - st.sigma[jo]) * dsio;
+            let ssum = (state.sigma[jq] - state.sigma[jo]) * dsip + (state.sigma[jp] - state.sigma[jo]) * dsio;
+            let sdif = (state.sigma[jq] - state.sigma[jo]) * dsip - (state.sigma[jp] - state.sigma[jo]) * dsio;
 
             out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -253,8 +256,8 @@ pub fn panel_influence(
         let gdif1 = gamu1[jp] - gamu1[jo];
         let gdif2 = gamu2[jp] - gamu2[jo];
 
-        let gsum = st.gamma[jp] + st.gamma[jo];
-        let gdif = st.gamma[jp] - st.gamma[jo];
+        let gsum = state.gamma[jp] + state.gamma[jo];
+        let gdif = state.gamma[jp] - state.gamma[jo];
 
         out.psi += qopi * (psis * gsum + psid * gdif);
 
@@ -294,8 +297,8 @@ pub fn panel_influence(
         let gamte1 = -0.5 * sds * (gamu1[jp] - gamu1[jo]);
         let gamte2 = -0.5 * sds * (gamu2[jp] - gamu2[jo]);
 
-        let sigte = 0.5 * scs * (st.gamma[jp] - st.gamma[jo]);
-        let gamte = -0.5 * sds * (st.gamma[jp] - st.gamma[jo]);
+        let sigte = 0.5 * scs * (state.gamma[jp] - state.gamma[jo]);
+        let gamte = -0.5 * sds * (state.gamma[jp] - state.gamma[jo]);
 
         // TE panel contribution to Psi
         out.psi += hopi * (psig * sigte + pgam * gamte);
@@ -316,12 +319,12 @@ pub fn panel_influence(
     }
 
     // label 12: freestream terms
-    out.psi += st.qinf * (cosa * yi - sina * xi);
-    out.psi_d_n += st.qinf * (cosa * nyi - sina * nxi);
-    out.qtan_alpha0 += st.qinf * nyi;
-    out.qtan_alpha90 -= st.qinf * nxi;
+    out.psi += state.qinf * (cosa * yi - sina * xi);
+    out.psi_d_n += state.qinf * (cosa * nyi - sina * nxi);
+    out.qtan_alpha0 += state.qinf * nyi;
+    out.qtan_alpha90 -= state.qinf * nxi;
     out.psi_d_qinf += cosa * yi - sina * xi;
-    out.psi_d_alpha -= st.qinf * (sina * yi + cosa * xi);
+    out.psi_d_alpha -= state.qinf * (sina * yi + cosa * xi);
 
     out
 }

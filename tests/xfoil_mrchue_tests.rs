@@ -101,10 +101,10 @@ fn test_mrchue_newton_trace_matches_xfoil_iteration_by_iteration() {
             ));
             break;
         };
-        if (y.is, y.ibl, y.itbl) != (x.is, x.ibl, x.itbl) {
+        if (y.side, y.i_station, y.iteration) != (x.is, x.ibl, x.itbl) {
             mism.push(format!(
                 "sequence diverged at record {k}: yfoil=(IS={},IBL={},ITBL={}) xfoil=(IS={},IBL={},ITBL={})",
-                y.is, y.ibl, y.itbl, x.is, x.ibl, x.itbl
+                y.side, y.i_station, y.iteration, x.is, x.ibl, x.itbl
             ));
             break;
         }

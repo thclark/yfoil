@@ -89,7 +89,7 @@ impl BlsolvTrace {
     pub fn tightest_skip_margin(&self) -> Option<(usize, usize, usize, f64)> {
         self.skips
             .iter()
-            .map(|&(iv, kv, k, v, vacc, _)| (iv, kv, k, (v - vacc) / vacc))
+            .map(|&(i_row, kv, k, v, vacc, _)| (i_row, kv, k, (v - vacc) / vacc))
             .min_by(|a, b| a.3.abs().partial_cmp(&b.3.abs()).unwrap())
     }
 }
@@ -143,76 +143,76 @@ pub fn solve_newton_system_traced(input: NewtonSystem, mut trace: Option<&mut Bl
     };
 
     // Forward sweep: IV = 0 to NSYS-1
-    for iv in 0..nsys {
-        let ivp = iv + 1;
+    for i_row in 0..nsys {
+        let ivp = i_row + 1;
 
         // ====== Invert VA(IV) block ======
 
         // Normalize first row by VA(1,1)
-        let pivot = 1.0 / input.diagonal[iv][0][0];
-        input.diagonal[iv][0][1] *= pivot;
-        for l in iv..nsys {
-            input.mass_influence[iv][l][0] *= pivot;
+        let pivot = 1.0 / input.diagonal[i_row][0][0];
+        input.diagonal[i_row][0][1] *= pivot;
+        for l in i_row..nsys {
+            input.mass_influence[i_row][l][0] *= pivot;
         }
-        input.rhs[iv][0][0] *= pivot;
-        input.rhs[iv][0][1] *= pivot;
+        input.rhs[i_row][0][0] *= pivot;
+        input.rhs[i_row][0][1] *= pivot;
 
         // Eliminate lower first column in VA block (rows 2,3)
         for k in 1..3 {
-            let vtmp = input.diagonal[iv][k][0];
-            input.diagonal[iv][k][1] -= vtmp * input.diagonal[iv][0][1];
-            for l in iv..nsys {
-                input.mass_influence[iv][l][k] -= vtmp * input.mass_influence[iv][l][0];
+            let vtmp = input.diagonal[i_row][k][0];
+            input.diagonal[i_row][k][1] -= vtmp * input.diagonal[i_row][0][1];
+            for l in i_row..nsys {
+                input.mass_influence[i_row][l][k] -= vtmp * input.mass_influence[i_row][l][0];
             }
-            input.rhs[iv][k][0] -= vtmp * input.rhs[iv][0][0];
-            input.rhs[iv][k][1] -= vtmp * input.rhs[iv][0][1];
+            input.rhs[i_row][k][0] -= vtmp * input.rhs[i_row][0][0];
+            input.rhs[i_row][k][1] -= vtmp * input.rhs[i_row][0][1];
         }
 
         // Normalize second row by VA(2,2)
-        let pivot = 1.0 / input.diagonal[iv][1][1];
-        for l in iv..nsys {
-            input.mass_influence[iv][l][1] *= pivot;
+        let pivot = 1.0 / input.diagonal[i_row][1][1];
+        for l in i_row..nsys {
+            input.mass_influence[i_row][l][1] *= pivot;
         }
-        input.rhs[iv][1][0] *= pivot;
-        input.rhs[iv][1][1] *= pivot;
+        input.rhs[i_row][1][0] *= pivot;
+        input.rhs[i_row][1][1] *= pivot;
 
         // Eliminate lower second column in VA block (row 3)
-        let vtmp = input.diagonal[iv][2][1];
-        for l in iv..nsys {
-            input.mass_influence[iv][l][2] -= vtmp * input.mass_influence[iv][l][1];
+        let vtmp = input.diagonal[i_row][2][1];
+        for l in i_row..nsys {
+            input.mass_influence[i_row][l][2] -= vtmp * input.mass_influence[i_row][l][1];
         }
-        input.rhs[iv][2][0] -= vtmp * input.rhs[iv][1][0];
-        input.rhs[iv][2][1] -= vtmp * input.rhs[iv][1][1];
+        input.rhs[i_row][2][0] -= vtmp * input.rhs[i_row][1][0];
+        input.rhs[i_row][2][1] -= vtmp * input.rhs[i_row][1][1];
 
         // Normalize third row by VM(3,IV,IV) - the diagonal mass coupling
-        let pivot = 1.0 / input.mass_influence[iv][iv][2];
+        let pivot = 1.0 / input.mass_influence[i_row][i_row][2];
         for l in ivp..nsys {
-            input.mass_influence[iv][l][2] *= pivot;
+            input.mass_influence[i_row][l][2] *= pivot;
         }
-        input.rhs[iv][2][0] *= pivot;
-        input.rhs[iv][2][1] *= pivot;
+        input.rhs[i_row][2][0] *= pivot;
+        input.rhs[i_row][2][1] *= pivot;
 
         // Eliminate upper third column in VA block (rows 1,2)
-        let vtmp1 = input.mass_influence[iv][iv][0];
-        let vtmp2 = input.mass_influence[iv][iv][1];
+        let vtmp1 = input.mass_influence[i_row][i_row][0];
+        let vtmp2 = input.mass_influence[i_row][i_row][1];
         for l in ivp..nsys {
-            input.mass_influence[iv][l][0] -= vtmp1 * input.mass_influence[iv][l][2];
-            input.mass_influence[iv][l][1] -= vtmp2 * input.mass_influence[iv][l][2];
+            input.mass_influence[i_row][l][0] -= vtmp1 * input.mass_influence[i_row][l][2];
+            input.mass_influence[i_row][l][1] -= vtmp2 * input.mass_influence[i_row][l][2];
         }
-        input.rhs[iv][0][0] -= vtmp1 * input.rhs[iv][2][0];
-        input.rhs[iv][1][0] -= vtmp2 * input.rhs[iv][2][0];
-        input.rhs[iv][0][1] -= vtmp1 * input.rhs[iv][2][1];
-        input.rhs[iv][1][1] -= vtmp2 * input.rhs[iv][2][1];
+        input.rhs[i_row][0][0] -= vtmp1 * input.rhs[i_row][2][0];
+        input.rhs[i_row][1][0] -= vtmp2 * input.rhs[i_row][2][0];
+        input.rhs[i_row][0][1] -= vtmp1 * input.rhs[i_row][2][1];
+        input.rhs[i_row][1][1] -= vtmp2 * input.rhs[i_row][2][1];
 
         // Eliminate upper second column in VA block (row 1)
-        let vtmp = input.diagonal[iv][0][1];
+        let vtmp = input.diagonal[i_row][0][1];
         for l in ivp..nsys {
-            input.mass_influence[iv][l][0] -= vtmp * input.mass_influence[iv][l][1];
+            input.mass_influence[i_row][l][0] -= vtmp * input.mass_influence[i_row][l][1];
         }
-        input.rhs[iv][0][0] -= vtmp * input.rhs[iv][1][0];
-        input.rhs[iv][0][1] -= vtmp * input.rhs[iv][1][1];
+        input.rhs[i_row][0][0] -= vtmp * input.rhs[i_row][1][0];
+        input.rhs[i_row][0][1] -= vtmp * input.rhs[i_row][1][1];
 
-        if iv == nsys - 1 {
+        if i_row == nsys - 1 {
             continue;
         }
 
@@ -220,30 +220,30 @@ pub fn solve_newton_system_traced(input: NewtonSystem, mut trace: Option<&mut Bl
         for k in 0..3 {
             let vtmp1 = input.subdiagonal[ivp][k][0];
             let vtmp2 = input.subdiagonal[ivp][k][1];
-            let vtmp3 = input.mass_influence[ivp][iv][k];
+            let vtmp3 = input.mass_influence[ivp][i_row][k];
             for l in ivp..nsys {
-                input.mass_influence[ivp][l][k] -= vtmp1 * input.mass_influence[iv][l][0]
-                    + vtmp2 * input.mass_influence[iv][l][1]
-                    + vtmp3 * input.mass_influence[iv][l][2];
+                input.mass_influence[ivp][l][k] -= vtmp1 * input.mass_influence[i_row][l][0]
+                    + vtmp2 * input.mass_influence[i_row][l][1]
+                    + vtmp3 * input.mass_influence[i_row][l][2];
             }
             input.rhs[ivp][k][0] -=
-                vtmp1 * input.rhs[iv][0][0] + vtmp2 * input.rhs[iv][1][0] + vtmp3 * input.rhs[iv][2][0];
+                vtmp1 * input.rhs[i_row][0][0] + vtmp2 * input.rhs[i_row][1][0] + vtmp3 * input.rhs[i_row][2][0];
             input.rhs[ivp][k][1] -=
-                vtmp1 * input.rhs[iv][0][1] + vtmp2 * input.rhs[iv][1][1] + vtmp3 * input.rhs[iv][2][1];
+                vtmp1 * input.rhs[i_row][0][1] + vtmp2 * input.rhs[i_row][1][1] + vtmp3 * input.rhs[i_row][2][1];
         }
 
         // Handle VZ block at trailing edge (coupling from upper to lower surface)
         if let (Some(ivte1), Some(ivz)) = (input.i_te_row_upper, input.i_wake_row) {
-            if iv == ivte1 {
+            if i_row == ivte1 {
                 for k in 0..3 {
                     let vtmp1 = input.te_block[k][0];
                     let vtmp2 = input.te_block[k][1];
                     for l in ivp..nsys {
                         input.mass_influence[ivz][l][k] -=
-                            vtmp1 * input.mass_influence[iv][l][0] + vtmp2 * input.mass_influence[iv][l][1];
+                            vtmp1 * input.mass_influence[i_row][l][0] + vtmp2 * input.mass_influence[i_row][l][1];
                     }
-                    input.rhs[ivz][k][0] -= vtmp1 * input.rhs[iv][0][0] + vtmp2 * input.rhs[iv][1][0];
-                    input.rhs[ivz][k][1] -= vtmp1 * input.rhs[iv][0][1] + vtmp2 * input.rhs[iv][1][1];
+                    input.rhs[ivz][k][0] -= vtmp1 * input.rhs[i_row][0][0] + vtmp2 * input.rhs[i_row][1][0];
+                    input.rhs[ivz][k][1] -= vtmp1 * input.rhs[i_row][0][1] + vtmp2 * input.rhs[i_row][1][1];
                 }
             }
         }
@@ -253,38 +253,38 @@ pub fn solve_newton_system_traced(input: NewtonSystem, mut trace: Option<&mut Bl
         }
 
         // ====== Eliminate lower VM column (sparse elimination) ======
-        for kv in (iv + 2)..nsys {
-            let vtmp1 = input.mass_influence[kv][iv][0];
-            let vtmp2 = input.mass_influence[kv][iv][1];
-            let vtmp3 = input.mass_influence[kv][iv][2];
+        for kv in (i_row + 2)..nsys {
+            let vtmp1 = input.mass_influence[kv][i_row][0];
+            let vtmp2 = input.mass_influence[kv][i_row][1];
+            let vtmp3 = input.mass_influence[kv][i_row][2];
             if let Some(t) = trace.as_mut() {
-                t.skips.push((iv, kv, 0, vtmp1.abs(), vacc1, vtmp1.abs() > vacc1));
-                t.skips.push((iv, kv, 1, vtmp2.abs(), vacc2, vtmp2.abs() > vacc2));
-                t.skips.push((iv, kv, 2, vtmp3.abs(), vacc3, vtmp3.abs() > vacc3));
+                t.skips.push((i_row, kv, 0, vtmp1.abs(), vacc1, vtmp1.abs() > vacc1));
+                t.skips.push((i_row, kv, 1, vtmp2.abs(), vacc2, vtmp2.abs() > vacc2));
+                t.skips.push((i_row, kv, 2, vtmp3.abs(), vacc3, vtmp3.abs() > vacc3));
             }
 
             if vtmp1.abs() > vacc1 {
                 for l in ivp..nsys {
-                    input.mass_influence[kv][l][0] -= vtmp1 * input.mass_influence[iv][l][2];
+                    input.mass_influence[kv][l][0] -= vtmp1 * input.mass_influence[i_row][l][2];
                 }
-                input.rhs[kv][0][0] -= vtmp1 * input.rhs[iv][2][0];
-                input.rhs[kv][0][1] -= vtmp1 * input.rhs[iv][2][1];
+                input.rhs[kv][0][0] -= vtmp1 * input.rhs[i_row][2][0];
+                input.rhs[kv][0][1] -= vtmp1 * input.rhs[i_row][2][1];
             }
 
             if vtmp2.abs() > vacc2 {
                 for l in ivp..nsys {
-                    input.mass_influence[kv][l][1] -= vtmp2 * input.mass_influence[iv][l][2];
+                    input.mass_influence[kv][l][1] -= vtmp2 * input.mass_influence[i_row][l][2];
                 }
-                input.rhs[kv][1][0] -= vtmp2 * input.rhs[iv][2][0];
-                input.rhs[kv][1][1] -= vtmp2 * input.rhs[iv][2][1];
+                input.rhs[kv][1][0] -= vtmp2 * input.rhs[i_row][2][0];
+                input.rhs[kv][1][1] -= vtmp2 * input.rhs[i_row][2][1];
             }
 
             if vtmp3.abs() > vacc3 {
                 for l in ivp..nsys {
-                    input.mass_influence[kv][l][2] -= vtmp3 * input.mass_influence[iv][l][2];
+                    input.mass_influence[kv][l][2] -= vtmp3 * input.mass_influence[i_row][l][2];
                 }
-                input.rhs[kv][2][0] -= vtmp3 * input.rhs[iv][2][0];
-                input.rhs[kv][2][1] -= vtmp3 * input.rhs[iv][2][1];
+                input.rhs[kv][2][0] -= vtmp3 * input.rhs[i_row][2][0];
+                input.rhs[kv][2][1] -= vtmp3 * input.rhs[i_row][2][1];
             }
         }
     }
@@ -294,20 +294,20 @@ pub fn solve_newton_system_traced(input: NewtonSystem, mut trace: Option<&mut Bl
     }
 
     // Backward sweep: IV = NSYS-1 down to 1
-    for iv in (1..nsys).rev() {
+    for i_row in (1..nsys).rev() {
         // Eliminate upper VM columns
-        let vtmp = input.rhs[iv][2][0];
-        for kv in (0..iv).rev() {
-            input.rhs[kv][0][0] -= input.mass_influence[kv][iv][0] * vtmp;
-            input.rhs[kv][1][0] -= input.mass_influence[kv][iv][1] * vtmp;
-            input.rhs[kv][2][0] -= input.mass_influence[kv][iv][2] * vtmp;
+        let vtmp = input.rhs[i_row][2][0];
+        for kv in (0..i_row).rev() {
+            input.rhs[kv][0][0] -= input.mass_influence[kv][i_row][0] * vtmp;
+            input.rhs[kv][1][0] -= input.mass_influence[kv][i_row][1] * vtmp;
+            input.rhs[kv][2][0] -= input.mass_influence[kv][i_row][2] * vtmp;
         }
 
-        let vtmp = input.rhs[iv][2][1];
-        for kv in (0..iv).rev() {
-            input.rhs[kv][0][1] -= input.mass_influence[kv][iv][0] * vtmp;
-            input.rhs[kv][1][1] -= input.mass_influence[kv][iv][1] * vtmp;
-            input.rhs[kv][2][1] -= input.mass_influence[kv][iv][2] * vtmp;
+        let vtmp = input.rhs[i_row][2][1];
+        for kv in (0..i_row).rev() {
+            input.rhs[kv][0][1] -= input.mass_influence[kv][i_row][0] * vtmp;
+            input.rhs[kv][1][1] -= input.mass_influence[kv][i_row][1] * vtmp;
+            input.rhs[kv][2][1] -= input.mass_influence[kv][i_row][2] * vtmp;
         }
     }
 
@@ -340,31 +340,31 @@ mod tests {
         };
 
         // Set diagonal VM entries for the third equation
-        for iv in 0..nsys {
-            input.mass_influence[iv][iv][2] = 1.0;
+        for i_row in 0..nsys {
+            input.mass_influence[i_row][i_row][2] = 1.0;
         }
 
         let input = solve_newton_system(input);
 
         // Solution should be [1, 2, 3] at each station
-        for iv in 0..nsys {
+        for i_row in 0..nsys {
             assert!(
-                (input.deltas[iv][0][0] - 1.0).abs() < 1e-10,
+                (input.deltas[i_row][0][0] - 1.0).abs() < 1e-10,
                 "Station {} row 0: expected 1.0, got {}",
-                iv,
-                input.deltas[iv][0][0]
+                i_row,
+                input.deltas[i_row][0][0]
             );
             assert!(
-                (input.deltas[iv][1][0] - 2.0).abs() < 1e-10,
+                (input.deltas[i_row][1][0] - 2.0).abs() < 1e-10,
                 "Station {} row 1: expected 2.0, got {}",
-                iv,
-                input.deltas[iv][1][0]
+                i_row,
+                input.deltas[i_row][1][0]
             );
             assert!(
-                (input.deltas[iv][2][0] - 3.0).abs() < 1e-10,
+                (input.deltas[i_row][2][0] - 3.0).abs() < 1e-10,
                 "Station {} row 2: expected 3.0, got {}",
-                iv,
-                input.deltas[iv][2][0]
+                i_row,
+                input.deltas[i_row][2][0]
             );
         }
     }

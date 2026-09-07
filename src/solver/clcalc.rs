@@ -5,11 +5,12 @@ use crate::solver::blstate::SolverState;
 /// COMSET: Kármán–Tsien parameter TKLAM and its M² derivative for the current MINF.
 /// (CPSTAR/QSTAR, the sonic Cp and speed, are plotting quantities and are not kept.)
 #[doc(alias = "COMSET")]
-pub fn set_compressibility(st: &mut SolverState) {
-    let beta = (1.0 - st.mach * st.mach).sqrt();
+pub fn set_compressibility(state: &mut SolverState) {
+    let beta = (1.0 - state.mach * state.mach).sqrt();
     let beta_msq = -0.5 / beta;
-    st.karman_tsien = (st.mach * st.mach) / ((1.0 + beta) * (1.0 + beta));
-    st.karman_tsien_d_machsqd = 1.0 / ((1.0 + beta) * (1.0 + beta)) - 2.0 * st.karman_tsien / (1.0 + beta) * beta_msq;
+    state.karman_tsien = (state.mach * state.mach) / ((1.0 + beta) * (1.0 + beta));
+    state.karman_tsien_d_machsqd =
+        1.0 / ((1.0 + beta) * (1.0 + beta)) - 2.0 * state.karman_tsien / (1.0 + beta) * beta_msq;
 }
 
 /// CPCALC: compressible Cp from speed, for `q[1..=n]` (1-based, slot 0 unused). Returns the
@@ -31,14 +32,14 @@ pub fn compute_cp(n: usize, q: &[f64], qinf: f64, minf: f64) -> Vec<f64> {
 /// CLCALC: integrates surface pressures from GAM to get CL, CM and CDP, and dCL/dalpha,
 /// dCL/dM² for the prescribed-CL routines. Uses the moment reference `st.xcmref/ycmref`.
 #[doc(alias = "CLCALC")]
-pub fn compute_cl_cm(st: &mut SolverState) {
-    let n = st.n_foil_nodes;
-    let (x, y, gam, gam_a) = (&st.x, &st.y, &st.gamma, &st.gamma_d_alpha);
-    let (xref, yref) = (st.cm_ref_x, st.cm_ref_y);
-    let (minf, qinf) = (st.mach, st.qinf);
+pub fn compute_cl_cm(state: &mut SolverState) {
+    let n = state.n_foil_nodes;
+    let (x, y, gam, gam_a) = (&state.x, &state.y, &state.gamma, &state.gamma_d_alpha);
+    let (xref, yref) = (state.cm_ref_x, state.cm_ref_y);
+    let (minf, qinf) = (state.mach, state.qinf);
 
-    let sa = st.alpha.sin();
-    let ca = st.alpha.cos();
+    let sa = state.alpha.sin();
+    let ca = state.alpha.cos();
 
     let beta = (1.0 - minf * minf).sqrt();
     let beta_msq = -0.5 / beta;
@@ -93,44 +94,45 @@ pub fn compute_cl_cm(st: &mut SolverState) {
         i += 1;
     }
 
-    st.cl = cl;
-    st.cm = cm;
-    st.cd_pressure = cdp;
-    st.cl_d_alpha = cl_alf;
-    st.cl_d_machsqd = cl_msq;
+    state.cl = cl;
+    state.cm = cm;
+    state.cd_pressure = cdp;
+    state.cl_d_alpha = cl_alf;
+    state.cl_d_machsqd = cl_msq;
 }
 
 /// CDCALC: total CD from the wake end by the Squire–Young extrapolation (with the
 /// Kármán–Tsien correction) and the friction drag CDF from the surface TAU integral.
 #[doc(alias = "CDCALC")]
-pub fn compute_cd(st: &mut SolverState) {
-    let sa = st.alpha.sin();
-    let ca = st.alpha.cos();
+pub fn compute_cd(state: &mut SolverState) {
+    let sa = state.alpha.sin();
+    let ca = state.alpha.cos();
 
-    if st.viscous && st.bl_initialised {
+    if state.viscous && state.bl_initialised {
         // set variables at the end of the wake
-        let nbl2 = st.n_stations[2];
-        let thwake = st.theta[2][nbl2];
-        let urat = st.ue[2][nbl2] / st.qinf;
-        let uewake = st.ue[2][nbl2] * (1.0 - st.karman_tsien) / (1.0 - st.karman_tsien * (urat * urat));
-        let shwake = st.dstar[2][nbl2] / st.theta[2][nbl2];
+        let nbl2 = state.n_stations[2];
+        let thwake = state.theta[2][nbl2];
+        let urat = state.ue[2][nbl2] / state.qinf;
+        let uewake = state.ue[2][nbl2] * (1.0 - state.karman_tsien) / (1.0 - state.karman_tsien * (urat * urat));
+        let shwake = state.dstar[2][nbl2] / state.theta[2][nbl2];
 
         // extrapolate wake to downstream infinity using Squire-Young relation
         // (reduces errors of the wake not being long enough)
-        st.cd = 2.0 * thwake * (uewake / st.qinf).powf(0.5 * (5.0 + shwake));
+        state.cd = 2.0 * thwake * (uewake / state.qinf).powf(0.5 * (5.0 + shwake));
     } else {
-        st.cd = 0.0;
+        state.cd = 0.0;
     }
 
     // calculate friction drag coefficient
     let mut cdf = 0.0;
-    for is in 1..=2 {
-        for ibl in 3..=st.i_te_station[is] {
-            let i = st.i_node[is][ibl];
-            let im = st.i_node[is][ibl - 1];
-            let dx = (st.x[i] - st.x[im]) * ca + (st.y[i] - st.y[im]) * sa;
-            cdf += 0.5 * (st.tau[is][ibl] + st.tau[is][ibl - 1]) * dx * 2.0 / (st.qinf * st.qinf);
+    for side in 1..=2 {
+        for i_station in 3..=state.i_te_station[side] {
+            let i = state.i_node[side][i_station];
+            let im = state.i_node[side][i_station - 1];
+            let dx = (state.x[i] - state.x[im]) * ca + (state.y[i] - state.y[im]) * sa;
+            cdf += 0.5 * (state.tau[side][i_station] + state.tau[side][i_station - 1]) * dx * 2.0
+                / (state.qinf * state.qinf);
         }
     }
-    st.cd_friction = cdf;
+    state.cd_friction = cdf;
 }

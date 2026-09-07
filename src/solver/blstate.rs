@@ -282,34 +282,34 @@ impl SolverState {
     /// Copies the airfoil geometry into the 1-based panel arrays and evaluates TECALC.
     pub fn from_foil(airfoil: &PanelledFoil, nw: usize) -> Self {
         let n = airfoil.n_foil_nodes;
-        let mut st = Self::empty(n, nw);
+        let mut state = Self::empty(n, nw);
         for i in 1..=n {
-            st.x[i] = airfoil.x[i - 1];
-            st.y[i] = airfoil.y[i - 1];
-            st.s[i] = airfoil.s[i - 1];
-            st.dxds[i] = airfoil.dxds[i - 1];
-            st.dyds[i] = airfoil.dyds[i - 1];
-            st.normal_x[i] = airfoil.normal_x[i - 1];
-            st.normal_y[i] = airfoil.normal_y[i - 1];
-            st.panel_angle[i] = airfoil.panel_angle[i - 1];
+            state.x[i] = airfoil.x[i - 1];
+            state.y[i] = airfoil.y[i - 1];
+            state.s[i] = airfoil.s[i - 1];
+            state.dxds[i] = airfoil.dxds[i - 1];
+            state.dyds[i] = airfoil.dyds[i - 1];
+            state.normal_x[i] = airfoil.normal_x[i - 1];
+            state.normal_y[i] = airfoil.normal_y[i - 1];
+            state.panel_angle[i] = airfoil.panel_angle[i - 1];
         }
-        st.chord = airfoil.chord;
-        st.s_le = airfoil.s_le;
-        st.x_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.x, &airfoil.dxds, &airfoil.s);
-        st.y_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.y, &airfoil.dyds, &airfoil.s);
-        st.x_te = 0.5 * (st.x[1] + st.x[n]);
-        st.y_te = 0.5 * (st.y[1] + st.y[n]);
-        crate::solver::pointers::set_te_thickness(&mut st);
-        st
+        state.chord = airfoil.chord;
+        state.s_le = airfoil.s_le;
+        state.x_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.x, &airfoil.dxds, &airfoil.s);
+        state.y_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.y, &airfoil.dyds, &airfoil.s);
+        state.x_te = 0.5 * (state.x[1] + state.x[n]);
+        state.y_te = 0.5 * (state.y[1] + state.y[n]);
+        crate::solver::pointers::set_te_thickness(&mut state);
+        state
     }
 
     /// Install wake node coordinates `n+1..=n+nw` (from XYWAKE, or from a fixture).
     pub fn set_wake_nodes(&mut self, x: &[f64], y: &[f64], s: &[f64]) {
         assert_eq!(x.len(), self.n_wake_nodes);
-        for iw in 1..=self.n_wake_nodes {
-            self.x[self.n_foil_nodes + iw] = x[iw - 1];
-            self.y[self.n_foil_nodes + iw] = y[iw - 1];
-            self.s[self.n_foil_nodes + iw] = s[iw - 1];
+        for i_wake in 1..=self.n_wake_nodes {
+            self.x[self.n_foil_nodes + i_wake] = x[i_wake - 1];
+            self.y[self.n_foil_nodes + i_wake] = y[i_wake - 1];
+            self.s[self.n_foil_nodes + i_wake] = s[i_wake - 1];
         }
     }
 }

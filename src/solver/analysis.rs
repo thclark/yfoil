@@ -125,22 +125,22 @@ impl Session {
     pub fn new(airfoil: &PanelledFoil, spec: FlowConditions) -> Self {
         // NW = N/12 + 10*INT(WAKLEN)
         let nw = airfoil.n_foil_nodes / 12 + 10 * (spec.wake_length as usize);
-        let mut st = SolverState::from_foil(airfoil, nw);
-        st.re_cl1 = spec.re.unwrap_or(0.0);
-        st.re = spec.re.unwrap_or(0.0);
-        st.mach_cl1 = spec.mach;
-        st.mach = spec.mach;
-        st.mach_cl_dependence = spec.mach_cl_dependence;
-        st.re_cl_dependence = spec.re_cl_dependence;
-        st.amplification_model = spec.amplification_model;
-        st.ncrit = [0.0, spec.ncrit, spec.ncrit];
-        st.elimination_threshold = spec.elimination_threshold;
-        st.x_trip = [0.0, spec.x_trip[0], spec.x_trip[1]];
-        st.viscous = spec.re.is_some();
-        st.alpha_specified = true;
-        st.qinf = 1.0;
+        let mut state = SolverState::from_foil(airfoil, nw);
+        state.re_cl1 = spec.re.unwrap_or(0.0);
+        state.re = spec.re.unwrap_or(0.0);
+        state.mach_cl1 = spec.mach;
+        state.mach = spec.mach;
+        state.mach_cl_dependence = spec.mach_cl_dependence;
+        state.re_cl_dependence = spec.re_cl_dependence;
+        state.amplification_model = spec.amplification_model;
+        state.ncrit = [0.0, spec.ncrit, spec.ncrit];
+        state.elimination_threshold = spec.elimination_threshold;
+        state.x_trip = [0.0, spec.x_trip[0], spec.x_trip[1]];
+        state.viscous = spec.re.is_some();
+        state.alpha_specified = true;
+        state.qinf = 1.0;
         Self {
-            state: st,
+            state,
             inviscid: None,
             conditions: spec,
         }
@@ -191,18 +191,18 @@ impl Session {
         } else {
             true
         };
-        let st = &self.state;
+        let state = &self.state;
         PointResult {
-            alpha: st.alpha,
-            cl: st.cl,
-            cd: st.cd,
-            cd_friction: st.cd_friction,
-            cd_pressure: st.cd_pressure,
-            cm: st.cm,
-            cl_d_alpha: st.cl_d_alpha,
-            transition_upper: [st.x_transition[1], st.y_transition[1]],
-            transition_lower: [st.x_transition[2], st.y_transition[2]],
-            i_transition_station: st.i_transition_station,
+            alpha: state.alpha,
+            cl: state.cl,
+            cd: state.cd,
+            cd_friction: state.cd_friction,
+            cd_pressure: state.cd_pressure,
+            cm: state.cm,
+            cl_d_alpha: state.cl_d_alpha,
+            transition_upper: [state.x_transition[1], state.y_transition[1]],
+            transition_lower: [state.x_transition[2], state.y_transition[2]],
+            i_transition_station: state.i_transition_station,
             converged,
             iterations: trace.len(),
             residual: trace.last().map(|t| t.residual).unwrap_or(0.0),

@@ -179,7 +179,7 @@ impl StationState {
         self.ampl = ami;
         self.sqrtctau = cti;
         self.theta = thi;
-        self.dstar = dsi - dswaki; // D2 is delta* without wake gap
+        self.dstar = dsi - dswaki; // D2 side delta* without wake gap
         self.wake_gap = dswaki;
 
         // Karman-Tsien velocity transformation: Ue_compressible from Ue_incompressible

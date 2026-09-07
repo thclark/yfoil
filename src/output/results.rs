@@ -191,23 +191,23 @@ impl AnalysisOutput {
         foil_name: &str,
         include_lagged_closures: bool,
     ) -> Self {
-        let st = session.state();
+        let state = session.state();
         let viscous = session.conditions().re.is_some();
-        let n = st.n_foil_nodes;
+        let n = state.n_foil_nodes;
         let surface = if viscous {
             SurfaceDistributions {
-                q: st.q_viscous[1..=n].to_vec(),
-                cp: st.cp_viscous[1..=n].to_vec(),
+                q: state.q_viscous[1..=n].to_vec(),
+                cp: state.cp_viscous[1..=n].to_vec(),
             }
         } else {
             SurfaceDistributions {
-                q: st.q_inviscid[1..=n].to_vec(),
-                cp: st.cp_inviscid[1..=n].to_vec(),
+                q: state.q_inviscid[1..=n].to_vec(),
+                cp: state.cp_inviscid[1..=n].to_vec(),
             }
         };
-        let boundary_layer = if viscous && st.bl_initialised {
+        let boundary_layer = if viscous && state.bl_initialised {
             Some(crate::output::BoundaryLayerOutput::from_state(
-                st,
+                state,
                 include_lagged_closures,
             ))
         } else {
@@ -217,7 +217,7 @@ impl AnalysisOutput {
             foil: foil_name.to_string(),
             conditions: session.conditions().clone(),
             results: PolarPoint::from_point(p, viscous),
-            geometry: crate::output::FoilNodes::from_state(st),
+            geometry: crate::output::FoilNodes::from_state(state),
             surface,
             boundary_layer,
         }

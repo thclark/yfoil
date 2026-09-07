@@ -29,16 +29,16 @@ pub fn continuous_atan2(y: f64, x: f64, thold: f64) -> f64 {
 
 /// GGCALC. Sets `st.gam = 0`, `st.qinvu[1..=2][1..=n]`, and returns the factored system.
 #[doc(alias = "GGCALC")]
-pub fn build_inviscid_system(st: &mut SolverState) -> InviscidSystem {
-    let n = st.n_foil_nodes;
-    let np = n + st.n_wake_nodes;
+pub fn build_inviscid_system(state: &mut SolverState) -> InviscidSystem {
+    let n = state.n_foil_nodes;
+    let np = n + state.n_wake_nodes;
     // distance of internal control point ahead of sharp TE (fraction of smaller panel length)
     let bwt = 0.1;
 
     for i in 1..=n {
-        st.gamma[i] = 0.0;
-        st.q_inviscid_basis[1][i] = 0.0;
-        st.q_inviscid_basis[2][i] = 0.0;
+        state.gamma[i] = 0.0;
+        state.q_inviscid_basis[1][i] = 0.0;
+        state.q_inviscid_basis[2][i] = 0.0;
     }
 
     let mut aij = vec![vec![0.0; n + 2]; n + 2];
@@ -48,10 +48,18 @@ pub fn build_inviscid_system(st: &mut SolverState) -> InviscidSystem {
 
     // Set up matrix system for Psi = Psio on airfoil surface; unknowns (dGamma)i and dPsio.
     for i in 1..=n {
-        let p = panel_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
+        let p = panel_influence(
+            state,
+            i,
+            state.x[i],
+            state.y[i],
+            state.normal_x[i],
+            state.normal_y[i],
+            true,
+        );
         // RES1 = PSI( 0) - PSIO,  RES2 = PSI(90) - PSIO
-        let res1 = st.qinf * st.y[i];
-        let res2 = -st.qinf * st.x[i];
+        let res1 = state.qinf * state.y[i];
+        let res2 = -state.qinf * state.x[i];
         for j in 1..=n {
             aij[i][j] = p.psi_d_gamma[j];
         }
@@ -77,22 +85,22 @@ pub fn build_inviscid_system(st: &mut SolverState) -> InviscidSystem {
         bij[n + 1][j] = 0.0;
     }
 
-    if st.sharp_te {
+    if state.sharp_te {
         // zero internal velocity in TE corner: TE bisector angle
-        let ag1 = (-st.dyds[1]).atan2(-st.dxds[1]);
-        let ag2 = continuous_atan2(st.dyds[n], st.dxds[n], ag1);
+        let ag1 = (-state.dyds[1]).atan2(-state.dxds[1]);
+        let ag2 = continuous_atan2(state.dyds[n], state.dxds[n], ag1);
         let abis = 0.5 * (ag1 + ag2);
         let cbis = abis.cos();
         let sbis = abis.sin();
         // minimum panel length adjacent to TE
-        let ds1 = ((st.x[1] - st.x[2]).powi(2) + (st.y[1] - st.y[2]).powi(2)).sqrt();
-        let ds2 = ((st.x[n] - st.x[n - 1]).powi(2) + (st.y[n] - st.y[n - 1]).powi(2)).sqrt();
+        let ds1 = ((state.x[1] - state.x[2]).powi(2) + (state.y[1] - state.y[2]).powi(2)).sqrt();
+        let ds2 = ((state.x[n] - state.x[n - 1]).powi(2) + (state.y[n] - state.y[n - 1]).powi(2)).sqrt();
         let dsmin = ds1.min(ds2);
         // control point on bisector just ahead of TE point
-        let xbis = st.x_te - bwt * dsmin * cbis;
-        let ybis = st.y_te - bwt * dsmin * sbis;
+        let xbis = state.x_te - bwt * dsmin * cbis;
+        let ybis = state.y_te - bwt * dsmin * sbis;
         // velocity component along bisector line (I = 0: off-surface point)
-        let p = panel_influence(st, 0, xbis, ybis, -sbis, cbis, true);
+        let p = panel_influence(state, 0, xbis, ybis, -sbis, cbis, true);
         for j in 1..=n {
             aij[n][j] = p.qtan_d_gamma[j];
         }
@@ -110,8 +118,8 @@ pub fn build_inviscid_system(st: &mut SolverState) -> InviscidSystem {
     lu_back_substitute(&lu, &mut gamu2);
 
     // inviscid alpha=0,90 surface speeds for this geometry
-    st.q_inviscid_basis[1][1..=n].copy_from_slice(&gamu1[1..=n]);
-    st.q_inviscid_basis[2][1..=n].copy_from_slice(&gamu2[1..=n]);
+    state.q_inviscid_basis[1][1..=n].copy_from_slice(&gamu1[1..=n]);
+    state.q_inviscid_basis[2][1..=n].copy_from_slice(&gamu2[1..=n]);
     // GAMU(N+1) is PSIO for each solution; keep it with the airfoil arrays via qinvu's slot n+1
     // only if there is no wake node there — the wake overwrites it in QWCALC as XFOIL does too.
     InviscidSystem {

@@ -76,43 +76,43 @@ pub struct FoilNodes {
 
 impl FoilNodes {
     /// Airfoil nodes `1..=n` and, if `st.lwake`, wake nodes `n+1..=n+nw`.
-    pub fn from_state(st: &SolverState) -> Self {
-        let n = st.n_foil_nodes;
-        let nw = st.n_wake_nodes;
-        let wake = if st.wake_built && nw > 0 {
+    pub fn from_state(state: &SolverState) -> Self {
+        let n = state.n_foil_nodes;
+        let nw = state.n_wake_nodes;
+        let wake = if state.wake_built && nw > 0 {
             Some(WakeNodes {
-                x: st.x[n + 1..=n + nw].to_vec(),
-                y: st.y[n + 1..=n + nw].to_vec(),
-                s: st.s[n + 1..=n + nw].to_vec(),
-                normal_x: st.normal_x[n + 1..=n + nw].to_vec(),
-                normal_y: st.normal_y[n + 1..=n + nw].to_vec(),
+                x: state.x[n + 1..=n + nw].to_vec(),
+                y: state.y[n + 1..=n + nw].to_vec(),
+                s: state.s[n + 1..=n + nw].to_vec(),
+                normal_x: state.normal_x[n + 1..=n + nw].to_vec(),
+                normal_y: state.normal_y[n + 1..=n + nw].to_vec(),
             })
         } else {
             None
         };
         Self {
-            x: st.x[1..=n].to_vec(),
-            y: st.y[1..=n].to_vec(),
-            s: st.s[1..=n].to_vec(),
-            normal_x: st.normal_x[1..=n].to_vec(),
-            normal_y: st.normal_y[1..=n].to_vec(),
-            chord: st.chord,
-            x_le: st.x_le,
-            y_le: st.y_le,
-            x_te: st.x_te,
-            y_te: st.y_te,
-            s_le: st.s_le,
+            x: state.x[1..=n].to_vec(),
+            y: state.y[1..=n].to_vec(),
+            s: state.s[1..=n].to_vec(),
+            normal_x: state.normal_x[1..=n].to_vec(),
+            normal_y: state.normal_y[1..=n].to_vec(),
+            chord: state.chord,
+            x_le: state.x_le,
+            y_le: state.y_le,
+            x_te: state.x_te,
+            y_te: state.y_te,
+            s_le: state.s_le,
             i_le_node: (1..=n)
                 .min_by(|&i, &j| {
-                    (st.s[i] - st.s_le)
+                    (state.s[i] - state.s_le)
                         .abs()
-                        .partial_cmp(&(st.s[j] - st.s_le).abs())
+                        .partial_cmp(&(state.s[j] - state.s_le).abs())
                         .unwrap()
                 })
                 .map(|i| i - 1)
                 .unwrap_or(0),
-            te_thickness_normal: st.te_thickness_normal,
-            sharp_te: st.sharp_te,
+            te_thickness_normal: state.te_thickness_normal,
+            sharp_te: state.sharp_te,
             wake,
         }
     }
@@ -527,13 +527,13 @@ struct Live {
 
 /// BLPRV → BLKIN → BLVAR on the converged primaries of station (is, ibl), with the flow type
 /// SETBL would use there (laminar ahead of ITRAN, turbulent from it, wake past IBLTE).
-fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usize) -> Live {
-    let wake = ibl > st.i_te_station[is];
-    let turb = ibl >= st.i_transition_station[is];
-    let ctau = st.sqrtctau[is][ibl];
+fn live_closures(state: &SolverState, params: &FlowParameters, side: usize, i_station: usize) -> Live {
+    let wake = i_station > state.i_te_station[side];
+    let turb = i_station >= state.i_transition_station[side];
+    let ctau = state.sqrtctau[side][i_station];
     let (ami, cti) = if turb { (0.0, ctau) } else { (ctau, 0.0) };
-    let uei = st.ue[is][ibl];
-    let thi = st.theta[is][ibl];
+    let uei = state.ue[side][i_station];
+    let thi = state.theta[side][i_station];
     if thi == 0.0 || uei == 0.0 {
         // an unsolved station (DUMP prints H = H* = 1 there)
         return Live {
@@ -551,15 +551,15 @@ fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usiz
         };
     }
     // DSI = MDI/UEI, DSWAKI = WGAP(IW), as SETBL sets the "2" station
-    let dsi = st.mass_defect[is][ibl] / uei;
+    let dsi = state.mass_defect[side][i_station] / uei;
     let dswaki = if wake {
-        st.wake_gap[ibl - st.i_te_station[is]]
+        state.wake_gap[i_station - state.i_te_station[side]]
     } else {
         0.0
     };
 
     let mut s = StationState::default();
-    s.set_primary_variables(st.xi[is][ibl], ami, cti, thi, dsi, dswaki, uei, params);
+    s.set_primary_variables(state.xi[side][i_station], ami, cti, thi, dsi, dswaki, uei, params);
     s.set_kinematic_variables(params);
     let (h, hk, retheta, machsqd_edge) = (s.h, s.hk, s.retheta, s.machsqd_edge);
     let flow = if wake {
@@ -571,7 +571,7 @@ fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usiz
     };
     s.set_closure_variables(flow, params);
 
-    let qinf = st.qinf;
+    let qinf = state.qinf;
     Live {
         ue_compressible: s.ue / qinf,
         h,
@@ -590,31 +590,31 @@ fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usiz
 }
 
 fn side_output(
-    st: &SolverState,
+    state: &SolverState,
     params: &FlowParameters,
-    is: usize,
+    side: usize,
     stations: impl Iterator<Item = usize>,
     include_lagged_closures: bool,
 ) -> SideStations {
     let mut out = SideStations::default();
     let mut lagged = LaggedClosures::default();
-    let qinf = st.qinf;
-    for ibl in stations {
-        let i = st.i_node[is][ibl];
-        let live = live_closures(st, params, is, ibl);
-        let theta = st.theta[is][ibl];
-        out.i_station.push(ibl);
+    let qinf = state.qinf;
+    for i_station in stations {
+        let i = state.i_node[side][i_station];
+        let live = live_closures(state, params, side, i_station);
+        let theta = state.theta[side][i_station];
+        out.i_station.push(i_station);
         out.i_node.push(i);
-        out.x.push(st.x[i]);
-        out.y.push(st.y[i]);
-        out.xi.push(st.xi[is][ibl]);
-        out.cp.push(st.cp_viscous[i]);
+        out.x.push(state.x[i]);
+        out.y.push(state.y[i]);
+        out.xi.push(state.xi[side][i_station]);
+        out.cp.push(state.cp_viscous[i]);
         let p = &mut out.primaries;
-        p.ue.push(st.ue[is][ibl]);
+        p.ue.push(state.ue[side][i_station]);
         p.theta.push(theta);
-        p.dstar.push(st.dstar[is][ibl]);
-        p.sqrtctau.push(st.sqrtctau[is][ibl]);
-        p.mass_defect.push(st.mass_defect[is][ibl]);
+        p.dstar.push(state.dstar[side][i_station]);
+        p.sqrtctau.push(state.sqrtctau[side][i_station]);
+        p.mass_defect.push(state.mass_defect[side][i_station]);
         let c = &mut out.closures;
         c.ue_compressible.push(live.ue_compressible);
         c.h.push(live.h);
@@ -628,19 +628,19 @@ fn side_output(
         c.retheta.push(live.retheta);
         c.machsqd_edge.push(live.machsqd_edge);
         if include_lagged_closures {
-            lagged.tau.push(st.tau[is][ibl]);
-            lagged.dissipation.push(st.dissipation[is][ibl]);
-            lagged.sqrtctaueq.push(st.sqrtctaueq[is][ibl]);
-            lagged.delta.push(st.delta[is][ibl]);
-            lagged.us_plot_scale.push(st.us_plot_scale[is][ibl]);
-            lagged.thetastar.push(st.thetastar[is][ibl]);
+            lagged.tau.push(state.tau[side][i_station]);
+            lagged.dissipation.push(state.dissipation[side][i_station]);
+            lagged.sqrtctaueq.push(state.sqrtctaueq[side][i_station]);
+            lagged.delta.push(state.delta[side][i_station]);
+            lagged.us_plot_scale.push(state.us_plot_scale[side][i_station]);
+            lagged.thetastar.push(state.thetastar[side][i_station]);
             // BLDUMP: IF(TH.EQ.0.0) HS = 1.0 ELSE HS = TS/TH
             lagged.hstar_dump.push(if theta == 0.0 {
                 1.0
             } else {
-                st.thetastar[is][ibl] / theta
+                state.thetastar[side][i_station] / theta
             });
-            lagged.cf_dump.push(st.tau[is][ibl] / (0.5 * qinf * qinf));
+            lagged.cf_dump.push(state.tau[side][i_station] / (0.5 * qinf * qinf));
         }
     }
     if include_lagged_closures {
@@ -650,18 +650,18 @@ fn side_output(
 }
 
 /// Position on the airfoil spline at arc length `s`
-fn spline_point(st: &SolverState, s: f64) -> (f64, f64) {
-    let n = st.n_foil_nodes;
-    let x = spline_value(s, &st.x[1..=n], &st.dxds[1..=n], &st.s[1..=n]);
-    let y = spline_value(s, &st.y[1..=n], &st.dyds[1..=n], &st.s[1..=n]);
+fn spline_point(state: &SolverState, s: f64) -> (f64, f64) {
+    let n = state.n_foil_nodes;
+    let x = spline_value(s, &state.x[1..=n], &state.dxds[1..=n], &state.s[1..=n]);
+    let y = spline_value(s, &state.y[1..=n], &state.dyds[1..=n], &state.s[1..=n]);
     (x, y)
 }
 
 /// Sign changes of the live `cf` along one side's surface stations, from the pair (2, 3) on
-fn separation_markers(st: &SolverState, side: &SideStations, is: usize) -> Vec<SeparationMarker> {
+fn separation_markers(state: &SolverState, stations: &SideStations, side: usize) -> Vec<SeparationMarker> {
     let mut out = Vec::new();
-    for k in 1..side.len() {
-        let (prev, cur) = (side.closures.cf[k - 1], side.closures.cf[k]);
+    for k in 1..stations.len() {
+        let (prev, cur) = (stations.closures.cf[k - 1], stations.closures.cf[k]);
         let kind = if prev >= 0.0 && cur < 0.0 {
             SeparationKind::Separation
         } else if prev < 0.0 && cur >= 0.0 {
@@ -669,14 +669,14 @@ fn separation_markers(st: &SolverState, side: &SideStations, is: usize) -> Vec<S
         } else {
             continue;
         };
-        let (s0, s1) = (st.s[side.i_node[k - 1]], st.s[side.i_node[k]]);
+        let (s0, s1) = (state.s[stations.i_node[k - 1]], state.s[stations.i_node[k]]);
         let frac = if cur == prev { 0.0 } else { prev / (prev - cur) };
         let s = s0 + frac * (s1 - s0);
-        let (x, y) = spline_point(st, s);
+        let (x, y) = spline_point(state, s);
         out.push(SeparationMarker {
-            side: is,
+            side,
             kind,
-            station_before: side.i_station[k - 1],
+            station_before: stations.i_station[k - 1],
             s,
             x,
             y,
@@ -689,45 +689,45 @@ impl BoundaryLayerOutput {
     /// Every station of a solved state. Requires the pointer layer and BL arrays (any state after
     /// a viscous VISCAL call, converged or not). `include_lagged_closures` adds XFOIL's lagged
     /// closure arrays to each side.
-    pub fn from_state(st: &SolverState, include_lagged_closures: bool) -> Self {
-        let params = FlowParameters::new(st.mach, st.re, st.gamma_gas);
+    pub fn from_state(state: &SolverState, include_lagged_closures: bool) -> Self {
+        let params = FlowParameters::new(state.mach, state.re, state.gamma_gas);
         let lag = include_lagged_closures;
-        let upper = side_output(st, &params, 1, 2..=st.i_te_station[1], lag);
-        let lower = side_output(st, &params, 2, 2..=st.i_te_station[2], lag);
-        let wake = side_output(st, &params, 2, st.i_te_station[2] + 1..=st.n_stations[2], lag);
+        let upper = side_output(state, &params, 1, 2..=state.i_te_station[1], lag);
+        let lower = side_output(state, &params, 2, 2..=state.i_te_station[2], lag);
+        let wake = side_output(state, &params, 2, state.i_te_station[2] + 1..=state.n_stations[2], lag);
 
-        let (sx, sy) = spline_point(st, st.s_stagnation);
+        let (sx, sy) = spline_point(state, state.s_stagnation);
         let stagnation = StagnationMarker {
-            i_stagnation_node: st.i_stagnation_node,
-            s_stagnation: st.s_stagnation,
+            i_stagnation_node: state.i_stagnation_node,
+            s_stagnation: state.s_stagnation,
             x: sx,
             y: sy,
         };
-        let transition_marker = |is: usize| {
-            let s = if is == 1 {
-                st.s_stagnation - st.xi_transition[is]
+        let transition_marker = |side: usize| {
+            let s = if side == 1 {
+                state.s_stagnation - state.xi_transition[side]
             } else {
-                st.s_stagnation + st.xi_transition[is]
+                state.s_stagnation + state.xi_transition[side]
             };
             TransitionMarker {
-                i_station: st.i_transition_station[is],
-                forced: st.transition_forced[is],
-                x_transition: st.x_transition[is],
-                y_transition: st.y_transition[is],
+                i_station: state.i_transition_station[side],
+                forced: state.transition_forced[side],
+                x_transition: state.x_transition[side],
+                y_transition: state.y_transition[side],
                 s_transition: s,
             }
         };
         let transition = [transition_marker(1), transition_marker(2)];
 
-        let mut derived_separation = separation_markers(st, &upper, 1);
-        derived_separation.extend(separation_markers(st, &lower, 2));
+        let mut derived_separation = separation_markers(state, &upper, 1);
+        derived_separation.extend(separation_markers(state, &lower, 2));
 
         // CPDISP: upper and lower wake Dstar fractions from the first wake point
-        let dstrte = st.dstar[2][st.i_te_station[2] + 1];
+        let dstrte = state.dstar[2][state.i_te_station[2] + 1];
         let wake_split = if dstrte != 0.0 {
             [
-                (st.dstar[1][st.i_te_station[1]] + 0.5 * st.te_thickness_normal) / dstrte,
-                (st.dstar[2][st.i_te_station[2]] + 0.5 * st.te_thickness_normal) / dstrte,
+                (state.dstar[1][state.i_te_station[1]] + 0.5 * state.te_thickness_normal) / dstrte,
+                (state.dstar[2][state.i_te_station[2]] + 0.5 * state.te_thickness_normal) / dstrte,
             ]
         } else {
             [0.5, 0.5]
@@ -737,11 +737,11 @@ impl BoundaryLayerOutput {
             upper,
             lower,
             wake,
-            i_te_station: [st.i_te_station[1], st.i_te_station[2]],
-            i_transition_station: [st.i_transition_station[1], st.i_transition_station[2]],
-            n_wake_nodes: st.n_wake_nodes,
-            qinf: st.qinf,
-            te_thickness_normal: st.te_thickness_normal,
+            i_te_station: [state.i_te_station[1], state.i_te_station[2]],
+            i_transition_station: [state.i_transition_station[1], state.i_transition_station[2]],
+            n_wake_nodes: state.n_wake_nodes,
+            qinf: state.qinf,
+            te_thickness_normal: state.te_thickness_normal,
             stagnation,
             transition,
             derived_separation,

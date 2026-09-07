@@ -139,10 +139,10 @@ fn test_mrchdu_newton_trace_matches_xfoil_iteration_by_iteration() {
     for i in 0..n {
         let (y, x) = (&tr.iters[i], &xf.iters[i]);
         let ctx = format!("IBL={:3} IS={} ITBL={:2}", x.ibl, x.is, x.itbl);
-        if (y.ibl, y.is, y.itbl) != (x.ibl, x.is, x.itbl) {
+        if (y.i_station, y.side, y.iteration) != (x.ibl, x.is, x.itbl) {
             mism.push(format!(
                 "{ctx}: sequence diverged (yfoil at IBL={} IS={} ITBL={})",
-                y.ibl, y.is, y.itbl
+                y.i_station, y.side, y.iteration
             ));
             break;
         }

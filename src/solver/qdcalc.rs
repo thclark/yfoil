@@ -18,12 +18,19 @@ pub struct WakeSourceInfluence {
 /// PSWLIN(I, XI, YI, NXI, NYI, PSI, PSI_NI): streamfunction at node I due to the wake
 /// sources. Note the branch-cut correction is `- (0.5-0.5*SGN)*PI` here (PSILIN has `+`).
 #[doc(alias = "PSWLIN")]
-pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> WakeSourceInfluence {
-    let n = st.n_foil_nodes;
-    let nw = st.n_wake_nodes;
+pub fn wake_source_influence(
+    state: &SolverState,
+    i: usize,
+    xi: f64,
+    yi: f64,
+    nxi: f64,
+    nyi: f64,
+) -> WakeSourceInfluence {
+    let n = state.n_foil_nodes;
+    let nw = state.n_wake_nodes;
     let np = n + nw;
     let (pi, _hopi, qopi) = pi_consts();
-    let (x, y) = (&st.x, &st.y);
+    let (x, y) = (&state.x, &state.y);
     let io = i;
 
     let mut out = WakeSourceInfluence {
@@ -45,7 +52,7 @@ pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: 
 
         let dso = ((x[jo] - x[jp]).powi(2) + (y[jo] - y[jp]).powi(2)).sqrt();
         let dsio = 1.0 / dso;
-        let apan = st.panel_angle[jo];
+        let apan = state.panel_angle[jo];
 
         let rx1 = xi - x[jo];
         let ry1 = yi - y[jo];
@@ -105,8 +112,8 @@ pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: 
         let dsm = ((x[jp] - x[jm]).powi(2) + (y[jp] - y[jm]).powi(2)).sqrt();
         let dsim = 1.0 / dsm;
 
-        let ssum = (st.sigma[jp] - st.sigma[jo]) * dsio + (st.sigma[jp] - st.sigma[jm]) * dsim;
-        let sdif = (st.sigma[jp] - st.sigma[jo]) * dsio - (st.sigma[jp] - st.sigma[jm]) * dsim;
+        let ssum = (state.sigma[jp] - state.sigma[jo]) * dsio + (state.sigma[jp] - state.sigma[jm]) * dsim;
+        let sdif = (state.sigma[jp] - state.sigma[jo]) * dsio - (state.sigma[jp] - state.sigma[jm]) * dsim;
 
         out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -139,8 +146,8 @@ pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: 
         let dsp = ((x[jq] - x[jo]).powi(2) + (y[jq] - y[jo]).powi(2)).sqrt();
         let dsip = 1.0 / dsp;
 
-        let ssum = (st.sigma[jq] - st.sigma[jo]) * dsip + (st.sigma[jp] - st.sigma[jo]) * dsio;
-        let sdif = (st.sigma[jq] - st.sigma[jo]) * dsip - (st.sigma[jp] - st.sigma[jo]) * dsio;
+        let ssum = (state.sigma[jq] - state.sigma[jo]) * dsip + (state.sigma[jp] - state.sigma[jo]) * dsio;
+        let sdif = (state.sigma[jq] - state.sigma[jo]) * dsip - (state.sigma[jp] - state.sigma[jo]) * dsio;
 
         out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -163,14 +170,14 @@ pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: 
 /// QDCALC: source panel influence coefficient matrix for the current airfoil and wake
 /// geometry, stored 1-based in `st.dij[i][j]` for i, j in 1..=N+NW.
 #[doc(alias = "QDCALC")]
-pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
-    let n = st.n_foil_nodes;
-    let nw = st.n_wake_nodes;
+pub fn build_dij(state: &mut SolverState, sys: &mut InviscidSystem) {
+    let n = state.n_foil_nodes;
+    let nw = state.n_wake_nodes;
     let np = n + nw;
     // DIJ persists in COMMON: the airfoil block (1..N, 1..N) is computed once (LADIJ) and only the
     // wake rows/columns are refreshed here when the wake moves (LWDIJ)
-    if st.dij.len() != np + 1 || st.dij.iter().any(|r| r.len() != np + 1) {
-        st.dij = vec![vec![0.0; np + 1]; np + 1];
+    if state.dij.len() != np + 1 || state.dij.iter().any(|r| r.len() != np + 1) {
+        state.dij = vec![vec![0.0; np + 1]; np + 1];
     }
 
     if !sys.dij_foil_built {
@@ -184,7 +191,7 @@ pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
             }
             // store resulting dGam/dSig = dQtan/dSig vector
             for i in 1..=n {
-                st.dij[i][j] = sys.bij[i][j];
+                state.dij[i][j] = sys.bij[i][j];
             }
         }
         sys.dij_foil_built = true;
@@ -192,7 +199,7 @@ pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
 
     // set up coefficient matrix of dPsi/dm on airfoil surface
     for i in 1..=n {
-        let p = wake_source_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
+        let p = wake_source_influence(state, i, state.x[i], state.y[i], state.normal_x[i], state.normal_y[i]);
         for j in (n + 1)..=np {
             sys.bij[i][j] = -p.psi_d_sigma[j];
         }
@@ -203,7 +210,7 @@ pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
         sys.bij[n + 1][j] = 0.0;
     }
     // sharp TE gamma extrapolation also has no source influence
-    if st.sharp_te {
+    if state.sharp_te {
         for j in (n + 1)..=np {
             sys.bij[n][j] = 0.0;
         }
@@ -221,54 +228,62 @@ pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
     // set the source influence matrix for the wake sources
     for i in 1..=n {
         for j in (n + 1)..=np {
-            st.dij[i][j] = sys.bij[i][j];
+            state.dij[i][j] = sys.bij[i][j];
         }
     }
 
     // influence of sources on the wake velocities: dQtan/dGam and dQtan/dSig at wake points
     let mut cij = vec![vec![0.0; n + 1]; nw + 1];
     for i in (n + 1)..=np {
-        let iw = i - n;
+        let i_wake = i - n;
         // airfoil contribution at wake panel node
-        let p = panel_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
+        let p = panel_influence(
+            state,
+            i,
+            state.x[i],
+            state.y[i],
+            state.normal_x[i],
+            state.normal_y[i],
+            true,
+        );
         for j in 1..=n {
-            cij[iw][j] = p.qtan_d_gamma[j];
+            cij[i_wake][j] = p.qtan_d_gamma[j];
         }
         for j in 1..=n {
-            st.dij[i][j] = p.qtan_d_sigma[j];
+            state.dij[i][j] = p.qtan_d_sigma[j];
         }
         // wake contribution
-        let w = wake_source_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
+        let w = wake_source_influence(state, i, state.x[i], state.y[i], state.normal_x[i], state.normal_y[i]);
         for j in (n + 1)..=np {
-            st.dij[i][j] = w.qtan_d_sigma[j];
+            state.dij[i][j] = w.qtan_d_sigma[j];
         }
     }
 
     // add on effect of all sources on airfoil vorticity which affects wake Qtan
     for i in (n + 1)..=np {
-        let iw = i - n;
+        let i_wake = i - n;
         // airfoil surface source contribution first
         for j in 1..=n {
             let mut sum = 0.0;
             for k in 1..=n {
-                sum += cij[iw][k] * st.dij[k][j];
+                sum += cij[i_wake][k] * state.dij[k][j];
             }
-            st.dij[i][j] += sum;
+            state.dij[i][j] += sum;
         }
         // wake source contribution next
         for j in (n + 1)..=np {
             let mut sum = 0.0;
             for k in 1..=n {
-                sum += cij[iw][k] * sys.bij[k][j];
+                sum += cij[i_wake][k] * sys.bij[k][j];
             }
-            st.dij[i][j] += sum;
+            state.dij[i][j] += sum;
         }
     }
 
     // make sure first wake point has same velocity as trailing edge
     for j in 1..=np {
-        st.dij[n + 1][j] = st.dij[n][j];
+        state.dij[n + 1][j] = state.dij[n][j];
     }
     // LWDIJ = .TRUE.
-    st.dij_wake_built = true;
+    state.dij_wake_built = true;
 }

@@ -14,9 +14,9 @@ use crate::solver::pointers::xi_trip;
 /// One Newton iteration of one station, as the reference trace records it.
 #[derive(Debug, Clone, Default)]
 pub struct MrchduIter {
-    pub is: usize,
-    pub ibl: usize,
-    pub itbl: usize,
+    pub side: usize,
+    pub i_station: usize,
+    pub iteration: usize,
     /// AMPL1 AMPL2 XT AMCRIT, TRAN, ITRAN(IS) — logged after BLKIN, before TRCHEK
     pub ampl: [f64; 4],
     pub tran: bool,
@@ -57,7 +57,7 @@ pub struct MrchduTrace {
 /// thresholds. Updates THET/DSTR/CTAU/UEDG/MASS/TAU/DIS/CTQ/DELT/TSTR, ITRAN, XSSITR and TFORCE.
 #[doc(alias = "MRCHDU")]
 pub fn march_prescribed_dstar(
-    st: &mut SolverState,
+    state: &mut SolverState,
     params: &FlowParameters,
     acrit: [f64; 3],
     mut trace: Option<&mut MrchduTrace>,
@@ -69,9 +69,9 @@ pub fn march_prescribed_dstar(
 
     // COM1/COM2 and XT are COMMON, and AMI, SENS/SENNEW, UEREF/HKREF and CTE/TTE/DTE are
     // MRCHDU locals never re-initialised per side: all persist across sides and stations.
-    let mut s1 = std::mem::take(&mut st.station1);
-    let mut s2 = std::mem::take(&mut st.station2);
-    let mut trloc = std::mem::take(&mut st.transition);
+    let mut s1 = std::mem::take(&mut state.station1);
+    let mut s2 = std::mem::take(&mut state.station2);
+    let mut trloc = std::mem::take(&mut state.transition);
     let mut ami = 0.0;
     let (mut sens, mut sennew) = (0.0, 0.0);
     let (mut ueref, mut hkref) = (0.0, 0.0);
@@ -79,54 +79,54 @@ pub fn march_prescribed_dstar(
     let mut sys = IntervalSystem::default();
     let mut trforc = false;
 
-    for is in 1..=2 {
-        let amcrit = acrit[is];
+    for side in 1..=2 {
+        let amcrit = acrit[side];
 
         // set forced transition arc length position
-        let xiforc = xi_trip(st, is);
+        let xiforc = xi_trip(state, side);
 
         // (leading edge pressure gradient parameter BULE = 1.0 is the constant BLDIF uses)
 
         // old transition station
-        let itrold = st.i_transition_station[is];
+        let itrold = state.i_transition_station[side];
 
         let mut tran = false;
         let mut turb = false;
-        st.i_transition_station[is] = st.i_te_station[is];
+        state.i_transition_station[side] = state.i_te_station[side];
 
         // march downstream
-        for ibl in 2..=st.n_stations[is] {
-            let ibm = ibl - 1;
-            let simi = ibl == 2;
-            let wake = ibl > st.i_te_station[is];
+        for i_station in 2..=state.n_stations[side] {
+            let ibm = i_station - 1;
+            let simi = i_station == 2;
+            let wake = i_station > state.i_te_station[side];
 
             // initialize current station to existing variables
-            let xsi = st.xi[is][ibl];
-            let mut uei = st.ue[is][ibl];
-            let mut thi = st.theta[is][ibl];
-            let mut dsi = st.dstar[is][ibl];
+            let xsi = state.xi[side][i_station];
+            let mut uei = state.ue[side][i_station];
+            let mut thi = state.theta[side][i_station];
+            let mut dsi = state.dstar[side][i_station];
 
             // fixed BUG   MD 7 June 99
             let mut cti;
-            if ibl < itrold {
-                ami = st.sqrtctau[is][ibl];
+            if i_station < itrold {
+                ami = state.sqrtctau[side][i_station];
                 cti = 0.03;
             } else {
-                cti = st.sqrtctau[is][ibl];
+                cti = state.sqrtctau[side][i_station];
                 if cti <= 0.0 {
                     cti = 0.03;
                 }
             }
 
             let dswaki = if wake {
-                st.wake_gap[ibl - st.i_te_station[is]]
+                state.wake_gap[i_station - state.i_te_station[side]]
             } else {
                 0.0
             };
-            if ibl <= st.i_te_station[is] {
+            if i_station <= state.i_te_station[side] {
                 dsi = (dsi - dswaki).max(1.02000 * thi) + dswaki;
             }
-            if ibl > st.i_te_station[is] {
+            if i_station > state.i_te_station[side] {
                 dsi = (dsi - dswaki).max(1.00005 * thi) + dswaki;
             }
 
@@ -143,7 +143,7 @@ pub fn march_prescribed_dstar(
                 let pre = (
                     [s1.ampl, s2.ampl, trloc.xi_transition, amcrit],
                     tran,
-                    st.i_transition_station[is],
+                    state.i_transition_station[side],
                 );
 
                 // check for transition and set appropriate flags and things
@@ -153,7 +153,7 @@ pub fn march_prescribed_dstar(
                             ami = ampl2;
                             tran = false;
                             trloc.xi_transition = s2.xi;
-                            st.i_transition_station[is] = ibl + 2;
+                            state.i_transition_station[side] = i_station + 2;
                         }
                         TransitionCheck::Free {
                             transition: location,
@@ -163,13 +163,13 @@ pub fn march_prescribed_dstar(
                             tran = true;
                             trforc = false;
                             trloc = location;
-                            st.i_transition_station[is] = ibl;
+                            state.i_transition_station[side] = i_station;
                         }
                         TransitionCheck::Forced { transition: location } => {
                             tran = true;
                             trforc = true;
                             trloc = location;
-                            st.i_transition_station[is] = ibl;
+                            state.i_transition_station[side] = i_station;
                         }
                     }
                     s2.ampl = ami;
@@ -181,11 +181,13 @@ pub fn march_prescribed_dstar(
                     turbulent: turb,
                     wake,
                 };
-                if ibl == st.i_te_station[is] + 1 {
-                    tte = st.theta[1][st.i_te_station[1]] + st.theta[2][st.i_te_station[2]];
-                    dte = st.dstar[1][st.i_te_station[1]] + st.dstar[2][st.i_te_station[2]] + st.te_thickness_normal;
-                    cte = (st.sqrtctau[1][st.i_te_station[1]] * st.theta[1][st.i_te_station[1]]
-                        + st.sqrtctau[2][st.i_te_station[2]] * st.theta[2][st.i_te_station[2]])
+                if i_station == state.i_te_station[side] + 1 {
+                    tte = state.theta[1][state.i_te_station[1]] + state.theta[2][state.i_te_station[2]];
+                    dte = state.dstar[1][state.i_te_station[1]]
+                        + state.dstar[2][state.i_te_station[2]]
+                        + state.te_thickness_normal;
+                    cte = (state.sqrtctau[1][state.i_te_station[1]] * state.theta[1][state.i_te_station[1]]
+                        + state.sqrtctau[2][state.i_te_station[2]] * state.theta[2][state.i_te_station[2]])
                         / tte;
                     assemble_te_system(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
@@ -193,9 +195,9 @@ pub fn march_prescribed_dstar(
                 }
 
                 let mut rec = MrchduIter {
-                    is,
-                    ibl,
-                    itbl,
+                    side,
+                    i_station,
+                    iteration: itbl,
                     ampl: pre.0,
                     tran: pre.1,
                     itran: pre.2,
@@ -212,11 +214,11 @@ pub fn march_prescribed_dstar(
                     hkref = s2.hk;
 
                     // if current point IBL was turbulent and is now laminar, then...
-                    if ibl < st.i_transition_station[is] && ibl >= itrold {
+                    if i_station < state.i_transition_station[side] && i_station >= itrold {
                         // extrapolate baseline Hk
-                        let uem = st.ue[is][ibl - 1];
-                        let dsm = st.dstar[is][ibl - 1];
-                        let thm = st.theta[is][ibl - 1];
+                        let uem = state.ue[side][i_station - 1];
+                        let dsm = state.dstar[side][i_station - 1];
+                        let thm = state.theta[side][i_station - 1];
                         let msq = uem * uem * params.h_stagnation_inv
                             / (params.gamma_gas_m1 * (1.0 - 0.5 * uem * uem * params.h_stagnation_inv));
                         let (hk, _, _) = hk_from_h(dsm / thm, msq);
@@ -224,22 +226,22 @@ pub fn march_prescribed_dstar(
                     }
 
                     // if current point IBL was laminar, then...
-                    if ibl < itrold {
+                    if i_station < itrold {
                         // reinitialize or extrapolate Ctau if it's now turbulent
                         if tran {
-                            st.sqrtctau[is][ibl] = 0.03;
+                            state.sqrtctau[side][i_station] = 0.03;
                         }
                         if turb {
-                            st.sqrtctau[is][ibl] = st.sqrtctau[is][ibl - 1];
+                            state.sqrtctau[side][i_station] = state.sqrtctau[side][i_station - 1];
                         }
                         if tran || turb {
-                            cti = st.sqrtctau[is][ibl];
+                            cti = state.sqrtctau[side][i_station];
                             s2.sqrtctau = cti;
                         }
                     }
                 }
 
-                if simi || ibl == st.i_te_station[is] + 1 {
+                if simi || i_station == state.i_te_station[side] + 1 {
                     // for similarity station or first wake point, prescribe Ue
                     sys.jacobian_station2[3][0] = 0.0;
                     sys.jacobian_station2[3][1] = 0.0;
@@ -303,16 +305,16 @@ pub fn march_prescribed_dstar(
                 // determine max changes and underrelax if necessary
                 // (added Ue clamp   MD  3 Apr 03)
                 dmax = (r[1] / thi).abs().max((r[2] / dsi).abs()).max((r[3] / uei).abs());
-                if ibl >= st.i_transition_station[is] {
+                if i_station >= state.i_transition_station[side] {
                     dmax = dmax.max((r[0] / (10.0 * cti)).abs());
                 }
                 let rlx = if dmax > 0.3 { 0.3 / dmax } else { 1.0 };
 
                 // update as usual
-                if ibl < st.i_transition_station[is] {
+                if i_station < state.i_transition_station[side] {
                     ami += rlx * r[0];
                 }
-                if ibl >= st.i_transition_station[is] {
+                if i_station >= state.i_transition_station[side] {
                     cti += rlx * r[0];
                 }
                 thi += rlx * r[1];
@@ -320,11 +322,15 @@ pub fn march_prescribed_dstar(
                 uei += rlx * r[3];
 
                 // eliminate absurd transients
-                if ibl >= st.i_transition_station[is] {
+                if i_station >= state.i_transition_station[side] {
                     cti = cti.min(0.30);
                     cti = cti.max(0.0000001);
                 }
-                let hklim = if ibl <= st.i_te_station[is] { 1.02 } else { 1.00005 };
+                let hklim = if i_station <= state.i_te_station[side] {
+                    1.02
+                } else {
+                    1.00005
+                };
                 let msq = uei * uei * params.h_stagnation_inv
                     / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
                 let mut dsw = dsi - dswaki;
@@ -349,32 +355,33 @@ pub fn march_prescribed_dstar(
             if !converged {
                 // 'MRCHDU: Convergence failed at IBL side IS Res = DMAX'
                 if let Some(t) = trace.as_mut() {
-                    t.failed.push((ibl, is, dmax));
+                    t.failed.push((i_station, side, dmax));
                 }
                 // the current unconverged solution might still be reasonable...
                 if dmax > 0.1 {
                     // the current solution is garbage --> extrapolate values instead
-                    if ibl > 3 {
-                        if ibl <= st.i_te_station[is] {
-                            thi = st.theta[is][ibm] * (st.xi[is][ibl] / st.xi[is][ibm]).powf(0.5);
-                            dsi = st.dstar[is][ibm] * (st.xi[is][ibl] / st.xi[is][ibm]).powf(0.5);
-                            uei = st.ue[is][ibm];
-                        } else if ibl == st.i_te_station[is] + 1 {
+                    if i_station > 3 {
+                        if i_station <= state.i_te_station[side] {
+                            thi = state.theta[side][ibm] * (state.xi[side][i_station] / state.xi[side][ibm]).powf(0.5);
+                            dsi = state.dstar[side][ibm] * (state.xi[side][i_station] / state.xi[side][ibm]).powf(0.5);
+                            uei = state.ue[side][ibm];
+                        } else if i_station == state.i_te_station[side] + 1 {
                             cti = cte;
                             thi = tte;
                             dsi = dte;
-                            uei = st.ue[is][ibm];
+                            uei = state.ue[side][ibm];
                         } else {
-                            thi = st.theta[is][ibm];
-                            let ratlen = (st.xi[is][ibl] - st.xi[is][ibm]) / (10.0 * st.dstar[is][ibm]);
-                            dsi = (st.dstar[is][ibm] + thi * ratlen) / (1.0 + ratlen);
-                            uei = st.ue[is][ibm];
+                            thi = state.theta[side][ibm];
+                            let ratlen =
+                                (state.xi[side][i_station] - state.xi[side][ibm]) / (10.0 * state.dstar[side][ibm]);
+                            dsi = (state.dstar[side][ibm] + thi * ratlen) / (1.0 + ratlen);
+                            uei = state.ue[side][ibm];
                         }
-                        if ibl == st.i_transition_station[is] {
+                        if i_station == state.i_transition_station[side] {
                             cti = 0.05;
                         }
-                        if ibl > st.i_transition_station[is] {
-                            cti = st.sqrtctau[is][ibm];
+                        if i_station > state.i_transition_station[side] {
+                            cti = state.sqrtctau[side][ibm];
                         }
                     }
                 }
@@ -388,7 +395,7 @@ pub fn march_prescribed_dstar(
                             ami = ampl2;
                             tran = false;
                             trloc.xi_transition = s2.xi;
-                            st.i_transition_station[is] = ibl + 2;
+                            state.i_transition_station[side] = i_station + 2;
                         }
                         TransitionCheck::Free {
                             transition: location,
@@ -398,13 +405,13 @@ pub fn march_prescribed_dstar(
                             tran = true;
                             trforc = false;
                             trloc = location;
-                            st.i_transition_station[is] = ibl;
+                            state.i_transition_station[side] = i_station;
                         }
                         TransitionCheck::Forced { transition: location } => {
                             tran = true;
                             trforc = true;
                             trloc = location;
-                            st.i_transition_station[is] = ibl;
+                            state.i_transition_station[side] = i_station;
                         }
                     }
                     s2.ampl = ami;
@@ -412,10 +419,10 @@ pub fn march_prescribed_dstar(
                 // set all other extrapolated values for current station — XFOIL calls BLVAR in
                 // this order, each call clamping HK2 in place, so the sequence is kept.
                 // (BLMID only sets the interval CFM, which nothing reads after this point.)
-                if ibl < st.i_transition_station[is] {
+                if i_station < state.i_transition_station[side] {
                     s2.set_closure_variables(FlowRegime::Laminar, params);
                 }
-                if ibl >= st.i_transition_station[is] {
+                if i_station >= state.i_transition_station[side] {
                     s2.set_closure_variables(FlowRegime::Turbulent, params);
                 }
                 if wake {
@@ -427,16 +434,20 @@ pub fn march_prescribed_dstar(
             sens = sennew;
 
             // store primary variables
-            st.sqrtctau[is][ibl] = if ibl < st.i_transition_station[is] { ami } else { cti };
-            st.theta[is][ibl] = thi;
-            st.dstar[is][ibl] = dsi;
-            st.ue[is][ibl] = uei;
-            st.mass_defect[is][ibl] = dsi * uei;
-            st.tau[is][ibl] = 0.5 * s2.rho * s2.ue * s2.ue * s2.cf;
-            st.dissipation[is][ibl] = s2.rho * s2.ue * s2.ue * s2.ue * s2.cdiss * s2.hstar * 0.5;
-            st.sqrtctaueq[is][ibl] = s2.sqrtctaueq;
-            st.delta[is][ibl] = s2.delta;
-            st.thetastar[is][ibl] = s2.hstar * s2.theta;
+            state.sqrtctau[side][i_station] = if i_station < state.i_transition_station[side] {
+                ami
+            } else {
+                cti
+            };
+            state.theta[side][i_station] = thi;
+            state.dstar[side][i_station] = dsi;
+            state.ue[side][i_station] = uei;
+            state.mass_defect[side][i_station] = dsi * uei;
+            state.tau[side][i_station] = 0.5 * s2.rho * s2.ue * s2.ue * s2.cf;
+            state.dissipation[side][i_station] = s2.rho * s2.ue * s2.ue * s2.ue * s2.cdiss * s2.hstar * 0.5;
+            state.sqrtctaueq[side][i_station] = s2.sqrtctaueq;
+            state.delta[side][i_station] = s2.delta;
+            state.thetastar[side][i_station] = s2.hstar * s2.theta;
 
             // set "1" variables to "2" variables for next streamwise station
             s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, params);
@@ -444,16 +455,16 @@ pub fn march_prescribed_dstar(
             s1 = s2.clone();
 
             // turbulent intervals will follow transition interval or TE
-            if tran || ibl == st.i_te_station[is] {
+            if tran || i_station == state.i_te_station[side] {
                 turb = true;
                 // save transition location
-                st.transition_forced[is] = trforc;
-                st.xi_transition[is] = trloc.xi_transition;
+                state.transition_forced[side] = trforc;
+                state.xi_transition[side] = trloc.xi_transition;
             }
             tran = false;
         }
     }
-    st.station1 = s1;
-    st.station2 = s2;
-    st.transition = trloc;
+    state.station1 = s1;
+    state.station2 = s2;
+    state.transition = trloc;
 }

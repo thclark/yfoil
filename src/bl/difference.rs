@@ -681,24 +681,24 @@ impl IntervalSystem {
         // set primary "T" variables at XT (really placed into "2" variables): XFOIL overwrites
         // X2/T2/D2/U2/AMPL2/S2 on the saved station-2 COMMON, so U2_UEI, U2_MS and DW2 are
         // those of station 2 — no BLPRV here.
-        let mut st = s2.clone();
-        st.xi = trans.xi_transition;
-        st.theta = tt;
-        st.dstar = dt;
-        st.ue = ut;
-        st.ampl = acrit;
-        st.sqrtctau = 0.0;
-        st.set_kinematic_variables(params);
-        st.set_closure_variables(FlowRegime::Laminar, params);
+        let mut state = s2.clone();
+        state.xi = trans.xi_transition;
+        state.theta = tt;
+        state.dstar = dt;
+        state.ue = ut;
+        state.ampl = acrit;
+        state.sqrtctau = 0.0;
+        state.set_kinematic_variables(params);
+        state.set_closure_variables(FlowRegime::Laminar, params);
 
         // Calculate midpoint Cf for X1-XT
-        let cfm_lam = MidpointCf::compute(s1, &st, FlowRegime::Laminar, false);
+        let cfm_lam = MidpointCf::compute(s1, &state, FlowRegime::Laminar, false);
 
         // Call BLDIF for laminar part (X1 to XT)
         let mut lam_sys = IntervalSystem::default();
         lam_sys.assemble_interval_equations(
             s1,
-            &st,
+            &state,
             &cfm_lam,
             FlowRegime::Laminar,
             false,
@@ -760,7 +760,7 @@ impl IntervalSystem {
                 + lam_sys.jacobian_station2[k][3] * ut_x1
                 + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_xi_station1;
 
-            bl2[k][0] = 0.0; // No dA2 dependence (A2 is turbulent Ctau)
+            bl2[k][0] = 0.0; // No dA2 dependence (A2 side turbulent Ctau)
             bl2[k][1] = lam_sys.jacobian_station2[k][1] * tt_t2
                 + lam_sys.jacobian_station2[k][2] * dt_t2
                 + lam_sys.jacobian_station2[k][3] * ut_t2
@@ -782,20 +782,20 @@ impl IntervalSystem {
         // *** PART 2: Turbulent from XT to X2 ***
 
         // Calculate equilibrium shear coefficient CQT at transition
-        st.set_closure_variables(FlowRegime::Turbulent, params);
+        state.set_closure_variables(FlowRegime::Turbulent, params);
 
         // Set initial shear stress: ST = CTR * CQ
         // where CTR = CTRCON * exp(-CTRCEX/(HK-1))
-        let hk_minus_one = st.hk - 1.0;
+        let hk_minus_one = state.hk - 1.0;
         let ctr = TRANSITION_SQRTCTAU_FACTOR * (-TRANSITION_SQRTCTAU_EXPONENT / hk_minus_one).exp();
         let ctr_hk = ctr * TRANSITION_SQRTCTAU_EXPONENT / (hk_minus_one * hk_minus_one);
 
-        let s_t = ctr * st.sqrtctaueq;
-        let st_tt = ctr * st.sqrtctaueq_d_theta + st.sqrtctaueq * ctr_hk * st.hk_d_theta;
-        let st_dt = ctr * st.sqrtctaueq_d_dstar + st.sqrtctaueq * ctr_hk * st.hk_d_dstar;
-        let st_ut = ctr * st.sqrtctaueq_d_ue + st.sqrtctaueq * ctr_hk * st.hk_d_ue;
-        let st_ms = ctr * st.sqrtctaueq_d_machsqd + st.sqrtctaueq * ctr_hk * st.hk_d_machsqd;
-        let st_re = ctr * st.sqrtctaueq_d_re;
+        let s_t = ctr * state.sqrtctaueq;
+        let st_tt = ctr * state.sqrtctaueq_d_theta + state.sqrtctaueq * ctr_hk * state.hk_d_theta;
+        let st_dt = ctr * state.sqrtctaueq_d_dstar + state.sqrtctaueq * ctr_hk * state.hk_d_dstar;
+        let st_ut = ctr * state.sqrtctaueq_d_ue + state.sqrtctaueq * ctr_hk * state.hk_d_ue;
+        let st_ms = ctr * state.sqrtctaueq_d_machsqd + state.sqrtctaueq * ctr_hk * state.hk_d_machsqd;
+        let st_re = ctr * state.sqrtctaueq_d_re;
 
         // ST sensitivities w.r.t. actual "1" and "2" variables
         let st_a1 = st_tt * tt_a1 + st_dt * dt_a1 + st_ut * ut_a1;
@@ -812,18 +812,18 @@ impl IntervalSystem {
         let st_xf = st_tt * tt_xf + st_dt * dt_xf + st_ut * ut_xf;
 
         // Update transition station with turbulent initial condition
-        st.sqrtctau = s_t;
+        state.sqrtctau = s_t;
 
         // Recalculate turbulent secondary variables with proper CTI
-        st.set_closure_variables(FlowRegime::Turbulent, params);
+        state.set_closure_variables(FlowRegime::Turbulent, params);
 
         // Calculate midpoint Cf for XT-X2
-        let cfm_turb = MidpointCf::compute(&st, s2, FlowRegime::Turbulent, false);
+        let cfm_turb = MidpointCf::compute(&state, s2, FlowRegime::Turbulent, false);
 
         // Call BLDIF for turbulent part (XT to X2)
         let mut turb_sys = IntervalSystem::default();
         turb_sys.assemble_interval_equations(
-            &st,
+            &state,
             s2,
             &cfm_turb,
             FlowRegime::Turbulent,
