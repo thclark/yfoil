@@ -3,7 +3,7 @@
 //! `init` = XFOIL's `INIT`, and the polar sweep as CLAUDE.md prescribes it (0° → max,
 //! reinitialise, −step → min, stitched ascending).
 
-use crate::geometry::PaneledAirfoil;
+use crate::geometry::PanelledFoil;
 use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::specal::{alpha_command, cl_command, sequence_command};
@@ -87,9 +87,9 @@ pub struct Session {
 
 impl Session {
     /// LOAD + OPER settings: geometry in, VISC/MACH/N/ITER/VACCEL/XTR pinned.
-    pub fn new(airfoil: &PaneledAirfoil, spec: FlowConditions) -> Self {
+    pub fn new(airfoil: &PanelledFoil, spec: FlowConditions) -> Self {
         // NW = N/12 + 10*INT(WAKLEN)
-        let nw = airfoil.n / 12 + 10 * (spec.wake_length as usize);
+        let nw = airfoil.n_foil_nodes / 12 + 10 * (spec.wake_length as usize);
         let mut st = SolverState::from_foil(airfoil, nw);
         st.re_cl1 = spec.re;
         st.re = spec.re;
@@ -174,7 +174,7 @@ impl Session {
 }
 
 /// Single operating point from scratch (fresh session).
-pub fn analyse(airfoil: &PaneledAirfoil, alpha: f64, spec: &FlowConditions) -> PointResult {
+pub fn analyse(airfoil: &PanelledFoil, alpha: f64, spec: &FlowConditions) -> PointResult {
     Session::new(airfoil, spec.clone()).alpha(alpha)
 }
 
@@ -245,7 +245,7 @@ impl PolarResult {
 /// `ALFA 0` / `ASEQ step alpha_max step` / `INIT` / `ALFA -step` / `ASEQ -2step alpha_min -step`,
 /// with one persistent session so each point starts from the previous point's BL, and each
 /// ASEQ halting after NSEQEX consecutive non-converged points. Points are stitched ascending.
-pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarResult {
+pub fn compute_polar(airfoil: &PanelledFoil, config: &PolarConfig) -> PolarResult {
     compute_polar_with(airfoil, config, &mut |_, _| {})
 }
 
@@ -254,7 +254,7 @@ pub fn compute_polar(airfoil: &PaneledAirfoil, config: &PolarConfig) -> PolarRes
 /// `yfoil polar --distributions` captures the BL of each point: a point reached inside a sweep
 /// starts from the previous alpha's BL and is not the same solve as a fresh `analyze`.
 pub fn compute_polar_with(
-    airfoil: &PaneledAirfoil,
+    airfoil: &PanelledFoil,
     config: &PolarConfig,
     observe: &mut dyn FnMut(&Session, &PointResult),
 ) -> PolarResult {

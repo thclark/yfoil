@@ -9,7 +9,7 @@
 //! Nothing here computes anything; the translated subroutines live beside it.
 
 use crate::bl::system::{StationState, Transition};
-use crate::geometry::PaneledAirfoil;
+use crate::geometry::PanelledFoil;
 
 /// BL and panel state (see module docs for indexing).
 #[derive(Debug, Clone)]
@@ -276,23 +276,23 @@ impl SolverState {
 
     /// State for a paneled airfoil with `nw` wake nodes to be set later (XYWAKE, stage S3).
     /// Copies the airfoil geometry into the 1-based panel arrays and evaluates TECALC.
-    pub fn from_foil(airfoil: &PaneledAirfoil, nw: usize) -> Self {
-        let n = airfoil.n;
+    pub fn from_foil(airfoil: &PanelledFoil, nw: usize) -> Self {
+        let n = airfoil.n_foil_nodes;
         let mut st = Self::empty(n, nw);
         for i in 1..=n {
             st.x[i] = airfoil.x[i - 1];
             st.y[i] = airfoil.y[i - 1];
             st.s[i] = airfoil.s[i - 1];
-            st.dxds[i] = airfoil.xp[i - 1];
-            st.dyds[i] = airfoil.yp[i - 1];
-            st.normal_x[i] = airfoil.nx[i - 1];
-            st.normal_y[i] = airfoil.ny[i - 1];
-            st.panel_angle[i] = airfoil.apanel[i - 1];
+            st.dxds[i] = airfoil.dxds[i - 1];
+            st.dyds[i] = airfoil.dyds[i - 1];
+            st.normal_x[i] = airfoil.normal_x[i - 1];
+            st.normal_y[i] = airfoil.normal_y[i - 1];
+            st.panel_angle[i] = airfoil.panel_angle[i - 1];
         }
         st.chord = airfoil.chord;
-        st.s_le = airfoil.sle;
-        st.x_le = crate::geometry::spline_value(airfoil.sle, &airfoil.x, &airfoil.xp, &airfoil.s);
-        st.y_le = crate::geometry::spline_value(airfoil.sle, &airfoil.y, &airfoil.yp, &airfoil.s);
+        st.s_le = airfoil.s_le;
+        st.x_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.x, &airfoil.dxds, &airfoil.s);
+        st.y_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.y, &airfoil.dyds, &airfoil.s);
         st.x_te = 0.5 * (st.x[1] + st.x[n]);
         st.y_te = 0.5 * (st.y[1] + st.y[n]);
         crate::solver::pointers::set_te_thickness(&mut st);

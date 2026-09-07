@@ -417,7 +417,7 @@ mod tests {
         );
 
         // LE should be at index 9 (the 0,0 point)
-        assert_eq!(paneled.le_index, 9, "LE should be at index 9");
+        assert_eq!(paneled.i_le_node, 9, "LE should be at index 9");
 
         // Arc lengths should be monotonically increasing
         for i in 1..paneled.s.len() {
@@ -429,8 +429,8 @@ mod tests {
         }
 
         // Normal vectors should have unit length
-        for i in 0..paneled.n {
-            let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+        for i in 0..paneled.n_foil_nodes {
+            let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
             assert!((mag - 1.0).abs() < 1e-10, "Normal at {} should be unit length", i);
         }
     }

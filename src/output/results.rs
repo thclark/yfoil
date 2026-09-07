@@ -17,15 +17,15 @@ pub struct PolarPoint {
     /// Moment coefficient (about quarter chord)
     pub cm: f64,
     /// Friction drag coefficient
-    pub cdf: f64,
+    pub cd_friction: f64,
     /// Pressure drag coefficient
-    pub cdp: f64,
+    pub cd_pressure: f64,
     /// Lift-to-drag ratio
-    pub ld: f64,
+    pub ldratio: f64,
     /// Transition location on upper surface (x/c)
-    pub xtr_upper: f64,
+    pub transition_upper: f64,
     /// Transition location on lower surface (x/c)
-    pub xtr_lower: f64,
+    pub transition_lower: f64,
     /// Whether solution converged
     pub converged: bool,
     /// Number of iterations to converge
@@ -42,11 +42,11 @@ impl PolarPoint {
             cl: p.cl,
             cd: p.cd,
             cm: p.cm,
-            cdf: p.cd_friction,
-            cdp: p.cd_pressure,
-            ld: if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 },
-            xtr_upper: p.transition_upper[0],
-            xtr_lower: p.transition_lower[0],
+            cd_friction: p.cd_friction,
+            cd_pressure: p.cd_pressure,
+            ldratio: if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 },
+            transition_upper: p.transition_upper[0],
+            transition_lower: p.transition_lower[0],
             converged: p.converged,
             iterations: p.iterations,
             residual: p.residual,
@@ -58,7 +58,7 @@ impl PolarPoint {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowConditionsOutput {
     /// Reynolds number
-    pub reynolds: f64,
+    pub re: f64,
     /// Mach number
     pub mach: f64,
     /// Critical amplification factor (Ncrit)
@@ -69,7 +69,7 @@ impl FlowConditionsOutput {
     /// Create from the flow specification
     pub fn from_spec(spec: &crate::solver::analysis::FlowConditions) -> Self {
         Self {
-            reynolds: spec.re,
+            re: spec.re,
             mach: spec.mach,
             ncrit: spec.ncrit,
         }
@@ -80,14 +80,14 @@ impl FlowConditionsOutput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolarOutput {
     /// Airfoil name/description
-    pub airfoil: String,
+    pub foil: String,
     /// Display label for this polar (legend entry when plotted); falls back to `airfoil`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// Flow conditions
     pub conditions: FlowConditionsOutput,
     /// Operating points
-    pub points: Vec<PolarPoint>,
+    pub results: Vec<PolarPoint>,
     /// Summary statistics
     pub summary: PolarSummary,
     /// Whether sweep completed without excessive failures
@@ -106,17 +106,17 @@ pub struct PolarSummary {
     /// Maximum lift coefficient
     pub cl_max: Option<f64>,
     /// Alpha at CL_max (degrees)
-    pub alpha_cl_max: Option<f64>,
+    pub alpha_at_cl_max: Option<f64>,
     /// Maximum L/D ratio
-    pub ld_max: Option<f64>,
+    pub ldratio_max: Option<f64>,
     /// CL at maximum L/D
-    pub cl_at_ld_max: Option<f64>,
+    pub cl_at_ldratio_max: Option<f64>,
     /// Zero-lift drag coefficient
     pub cd0: Option<f64>,
     /// Number of converged points
-    pub num_converged: usize,
+    pub n_converged: usize,
     /// Number of failed points
-    pub num_failed: usize,
+    pub n_failed: usize,
 }
 
 impl PolarOutput {
@@ -132,19 +132,19 @@ impl PolarOutput {
 
         let summary = PolarSummary {
             cl_max,
-            alpha_cl_max,
-            ld_max,
-            cl_at_ld_max,
+            alpha_at_cl_max: alpha_cl_max,
+            ldratio_max: ld_max,
+            cl_at_ldratio_max: cl_at_ld_max,
             cd0: result.cd0(),
-            num_converged: result.results.iter().filter(|p| p.converged).count(),
-            num_failed: result.failed_alphas.len(),
+            n_converged: result.results.iter().filter(|p| p.converged).count(),
+            n_failed: result.failed_alphas.len(),
         };
 
         Self {
-            airfoil: airfoil_name.to_string(),
+            foil: airfoil_name.to_string(),
             label: None,
             conditions: FlowConditionsOutput::from_spec(&result.conditions),
-            points,
+            results: points,
             summary,
             completed: result.completed,
             distributions: Vec::new(),
@@ -162,15 +162,15 @@ impl PolarOutput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisOutput {
     /// Airfoil name/description
-    pub airfoil: String,
+    pub foil: String,
     /// Flow conditions
     pub conditions: FlowConditionsOutput,
     /// Operating point result
-    pub result: PolarPoint,
+    pub results: PolarPoint,
     /// Inviscid-only mode
     pub inviscid_only: bool,
     /// Panel nodes, normals and (after a viscous solve) the wake
-    pub geometry: crate::output::FoilGeometryOutput,
+    pub geometry: crate::output::FoilNodes,
     /// Boundary-layer distributions and markers; `None` for an inviscid point
     pub boundary_layer: Option<crate::output::BoundaryLayerOutput>,
 }
@@ -191,11 +191,11 @@ impl AnalysisOutput {
             None
         };
         Self {
-            airfoil: airfoil_name.to_string(),
+            foil: airfoil_name.to_string(),
             conditions: FlowConditionsOutput::from_spec(spec),
-            result: PolarPoint::from_point(p),
+            results: PolarPoint::from_point(p),
             inviscid_only,
-            geometry: crate::output::FoilGeometryOutput::from_state(st),
+            geometry: crate::output::FoilNodes::from_state(st),
             boundary_layer,
         }
     }
@@ -222,7 +222,7 @@ pub struct InviscidAnalysisOutput {
     /// Force coefficients
     pub coefficients: InviscidCoefficients,
     /// Station distributions
-    pub stations: StationDistributions,
+    pub stations: SurfaceDistributions,
 }
 
 /// Inviscid force coefficients
@@ -238,7 +238,7 @@ pub struct InviscidCoefficients {
 
 /// Distributions at each station
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StationDistributions {
+pub struct SurfaceDistributions {
     /// X-coordinates (x/c)
     pub x: Vec<f64>,
     /// Y-coordinates (y/c)
@@ -254,7 +254,7 @@ pub struct StationDistributions {
 impl InviscidAnalysisOutput {
     /// Create from inviscid solution and airfoil geometry
     pub fn new(
-        airfoil: &crate::geometry::PaneledAirfoil,
+        airfoil: &crate::geometry::PanelledFoil,
         velocity: &[f64],
         cp: &[f64],
         (cl, cm, cdp): (f64, f64, f64),
@@ -266,10 +266,10 @@ impl InviscidAnalysisOutput {
             airfoil: airfoil_name.to_string(),
             alpha_deg,
             mach,
-            n_stations: airfoil.n,
-            le_index: airfoil.le_index,
+            n_stations: airfoil.n_foil_nodes,
+            le_index: airfoil.i_le_node,
             coefficients: InviscidCoefficients { cl, cm, cdp },
-            stations: StationDistributions {
+            stations: SurfaceDistributions {
                 x: airfoil.x.clone(),
                 y: airfoil.y.clone(),
                 s: airfoil.s.clone(),
@@ -323,7 +323,7 @@ pub struct GeometryInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeometrySummary {
     /// Number of panel nodes
-    pub n_points: usize,
+    pub n_foil_nodes: usize,
     /// Chord length
     pub chord: f64,
     /// X-coordinate range [min, max]
@@ -331,19 +331,19 @@ pub struct GeometrySummary {
     /// Y-coordinate range [min, max]
     pub y_range: [f64; 2],
     /// Maximum thickness (max_y - min_y)
-    pub max_thickness: f64,
+    pub y_extent: f64,
     /// Trailing edge gap (distance between first and last points)
     pub te_gap: f64,
     /// Whether trailing edge is sharp (gap < 0.01% chord)
     pub sharp_te: bool,
     /// Reference point for moment calculation [x/c, y/c]
-    pub reference: [f64; 2],
+    pub cm_ref: [f64; 2],
     /// Leading edge node index
-    pub le_index: usize,
+    pub i_le_node: usize,
     /// Leading edge arc length parameter
-    pub sle: f64,
+    pub s_le: f64,
     /// Total arc length around the airfoil
-    pub total_arc_length: f64,
+    pub s_total: f64,
     /// Maximum curvature (typically at leading edge)
     pub max_curvature: f64,
     /// First point coordinates [x, y] (trailing edge upper)
@@ -364,17 +364,17 @@ pub struct GeometryDistributions {
     /// Curvature at each node
     pub curvature: Vec<f64>,
     /// Panel angle at each node (radians)
-    pub apanel: Vec<f64>,
+    pub panel_angle: Vec<f64>,
     /// Normal vector x-component at each node
-    pub nx: Vec<f64>,
+    pub normal_x: Vec<f64>,
     /// Normal vector y-component at each node
-    pub ny: Vec<f64>,
+    pub normal_y: Vec<f64>,
 }
 
 impl GeometryInfo {
-    /// Create from a PaneledAirfoil
-    pub fn from_paneled(airfoil: &crate::geometry::PaneledAirfoil) -> Self {
-        let n = airfoil.n;
+    /// Create from a PanelledFoil
+    pub fn from_panelled(airfoil: &crate::geometry::PanelledFoil) -> Self {
+        let n = airfoil.n_foil_nodes;
 
         // Calculate ranges
         let min_x = airfoil.x.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -392,17 +392,17 @@ impl GeometryInfo {
         let total_arc_length = airfoil.s[n - 1];
 
         let summary = GeometrySummary {
-            n_points: n,
+            n_foil_nodes: n,
             chord: airfoil.chord,
             x_range: [min_x, max_x],
             y_range: [min_y, max_y],
-            max_thickness: max_y - min_y,
+            y_extent: max_y - min_y,
             te_gap,
             sharp_te: airfoil.sharp_te,
-            reference: airfoil.reference,
-            le_index: airfoil.le_index,
-            sle: airfoil.sle,
-            total_arc_length,
+            cm_ref: airfoil.cm_ref,
+            i_le_node: airfoil.i_le_node,
+            s_le: airfoil.s_le,
+            s_total: total_arc_length,
             max_curvature,
             first_point: [airfoil.x[0], airfoil.y[0]],
             last_point: [airfoil.x[n - 1], airfoil.y[n - 1]],
@@ -413,9 +413,9 @@ impl GeometryInfo {
             y: airfoil.y.clone(),
             s: airfoil.s.clone(),
             curvature,
-            apanel: airfoil.apanel.clone(),
-            nx: airfoil.nx.clone(),
-            ny: airfoil.ny.clone(),
+            panel_angle: airfoil.panel_angle.clone(),
+            normal_x: airfoil.normal_x.clone(),
+            normal_y: airfoil.normal_y.clone(),
         };
 
         Self { summary, distributions }
@@ -424,8 +424,8 @@ impl GeometryInfo {
     /// Calculate curvature at each node
     ///
     /// Uses κ = dθ/ds where θ is the panel angle
-    fn calculate_curvature(airfoil: &crate::geometry::PaneledAirfoil) -> Vec<f64> {
-        let n = airfoil.n;
+    fn calculate_curvature(airfoil: &crate::geometry::PanelledFoil) -> Vec<f64> {
+        let n = airfoil.n_foil_nodes;
         let mut curvature = vec![0.0; n];
 
         // Central differences for interior points
@@ -433,7 +433,7 @@ impl GeometryInfo {
             let ds = airfoil.s[i + 1] - airfoil.s[i - 1];
             if ds > 1e-12 {
                 // Handle angle wrap-around
-                let mut dtheta = airfoil.apanel[i + 1] - airfoil.apanel[i - 1];
+                let mut dtheta = airfoil.panel_angle[i + 1] - airfoil.panel_angle[i - 1];
                 if dtheta > std::f64::consts::PI {
                     dtheta -= 2.0 * std::f64::consts::PI;
                 } else if dtheta < -std::f64::consts::PI {
@@ -447,7 +447,7 @@ impl GeometryInfo {
         if n > 1 {
             let ds = airfoil.s[1] - airfoil.s[0];
             if ds > 1e-12 {
-                let mut dtheta = airfoil.apanel[1] - airfoil.apanel[0];
+                let mut dtheta = airfoil.panel_angle[1] - airfoil.panel_angle[0];
                 if dtheta > std::f64::consts::PI {
                     dtheta -= 2.0 * std::f64::consts::PI;
                 } else if dtheta < -std::f64::consts::PI {
@@ -461,7 +461,7 @@ impl GeometryInfo {
         if n > 1 {
             let ds = airfoil.s[n - 1] - airfoil.s[n - 2];
             if ds > 1e-12 {
-                let mut dtheta = airfoil.apanel[n - 1] - airfoil.apanel[n - 2];
+                let mut dtheta = airfoil.panel_angle[n - 1] - airfoil.panel_angle[n - 2];
                 if dtheta > std::f64::consts::PI {
                     dtheta -= 2.0 * std::f64::consts::PI;
                 } else if dtheta < -std::f64::consts::PI {
@@ -491,11 +491,11 @@ mod tests {
             cl: 0.55,
             cd: 0.0085,
             cm: -0.05,
-            cdf: 0.005,
-            cdp: 0.0035,
-            ld: 64.7,
-            xtr_upper: 0.15,
-            xtr_lower: 0.45,
+            cd_friction: 0.005,
+            cd_pressure: 0.0035,
+            ldratio: 64.7,
+            transition_upper: 0.15,
+            transition_lower: 0.45,
             converged: true,
             iterations: 12,
             residual: 1.2e-5,
@@ -516,12 +516,12 @@ mod tests {
     fn test_polar_summary_serialization() {
         let summary = PolarSummary {
             cl_max: Some(1.2),
-            alpha_cl_max: Some(12.0),
-            ld_max: Some(80.0),
-            cl_at_ld_max: Some(0.6),
+            alpha_at_cl_max: Some(12.0),
+            ldratio_max: Some(80.0),
+            cl_at_ldratio_max: Some(0.6),
             cd0: Some(0.006),
-            num_converged: 25,
-            num_failed: 2,
+            n_converged: 25,
+            n_failed: 2,
         };
 
         let json = serde_json::to_string_pretty(&summary).unwrap();
@@ -535,16 +535,16 @@ mod tests {
 
         let geom = naca_4digit("0012", 160).unwrap();
         let airfoil = panel_foil(&geom);
-        let info = GeometryInfo::from_paneled(&airfoil);
+        let info = GeometryInfo::from_panelled(&airfoil);
 
         // Check summary fields
-        assert_eq!(info.summary.n_points, 160);
+        assert_eq!(info.summary.n_foil_nodes, 160);
         assert!((info.summary.chord - 1.0).abs() < 0.05);
         assert!(info.summary.x_range[0] < 0.01); // LE near x=0
         assert!(info.summary.x_range[1] > 0.99); // TE near x=1
-        assert!(info.summary.max_thickness > 0.10); // NACA 0012 has 12% thickness
-        assert!(info.summary.max_thickness < 0.14);
-        assert!(info.summary.total_arc_length > 1.8); // Arc length > chord
+        assert!(info.summary.y_extent > 0.10); // NACA 0012 has 12% thickness
+        assert!(info.summary.y_extent < 0.14);
+        assert!(info.summary.s_total > 1.8); // Arc length > chord
         assert!(info.summary.max_curvature > 0.0); // Should have positive curvature
 
         // Check distributions
@@ -552,9 +552,9 @@ mod tests {
         assert_eq!(info.distributions.y.len(), 160);
         assert_eq!(info.distributions.s.len(), 160);
         assert_eq!(info.distributions.curvature.len(), 160);
-        assert_eq!(info.distributions.apanel.len(), 160);
-        assert_eq!(info.distributions.nx.len(), 160);
-        assert_eq!(info.distributions.ny.len(), 160);
+        assert_eq!(info.distributions.panel_angle.len(), 160);
+        assert_eq!(info.distributions.normal_x.len(), 160);
+        assert_eq!(info.distributions.normal_y.len(), 160);
 
         // Arc length should be monotonically increasing
         for i in 1..info.distributions.s.len() {
@@ -568,29 +568,29 @@ mod tests {
 
         let geom = naca_4digit("0012", 120).unwrap();
         let airfoil = panel_foil(&geom);
-        let info = GeometryInfo::from_paneled(&airfoil);
+        let info = GeometryInfo::from_panelled(&airfoil);
 
         // Serialize to JSON
         let json = info.to_json().unwrap();
 
         // Check that key fields are present
-        assert!(json.contains("\"n_points\""));
+        assert!(json.contains("\"n_foil_nodes\""));
         assert!(json.contains("\"chord\""));
         assert!(json.contains("\"x_range\""));
         assert!(json.contains("\"y_range\""));
-        assert!(json.contains("\"max_thickness\""));
+        assert!(json.contains("\"y_extent\""));
         assert!(json.contains("\"te_gap\""));
         assert!(json.contains("\"sharp_te\""));
-        assert!(json.contains("\"le_index\""));
-        assert!(json.contains("\"sle\""));
-        assert!(json.contains("\"total_arc_length\""));
+        assert!(json.contains("\"i_le_node\""));
+        assert!(json.contains("\"s_le\""));
+        assert!(json.contains("\"s_total\""));
         assert!(json.contains("\"max_curvature\""));
         assert!(json.contains("\"curvature\""));
-        assert!(json.contains("\"apanel\""));
+        assert!(json.contains("\"panel_angle\""));
 
         // Deserialize back
         let restored: GeometryInfo = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.summary.n_points, info.summary.n_points);
+        assert_eq!(restored.summary.n_foil_nodes, info.summary.n_foil_nodes);
         assert!((restored.summary.chord - info.summary.chord).abs() < 1e-10);
         assert_eq!(restored.distributions.x.len(), info.distributions.x.len());
     }
@@ -598,30 +598,30 @@ mod tests {
     #[test]
     fn test_geometry_summary_serialization() {
         let summary = GeometrySummary {
-            n_points: 160,
+            n_foil_nodes: 160,
             chord: 1.0,
             x_range: [0.0, 1.0],
             y_range: [-0.06, 0.06],
-            max_thickness: 0.12,
+            y_extent: 0.12,
             te_gap: 0.00252,
             sharp_te: false,
-            reference: [0.25, 0.0],
-            le_index: 80,
-            sle: 1.05,
-            total_arc_length: 2.1,
+            cm_ref: [0.25, 0.0],
+            i_le_node: 80,
+            s_le: 1.05,
+            s_total: 2.1,
             max_curvature: 50.0,
             first_point: [1.0, 0.00126],
             last_point: [1.0, -0.00126],
         };
 
         let json = serde_json::to_string_pretty(&summary).unwrap();
-        assert!(json.contains("\"n_points\": 160"));
+        assert!(json.contains("\"n_foil_nodes\": 160"));
         assert!(json.contains("\"chord\": 1.0"));
         assert!(json.contains("\"sharp_te\": false"));
 
         // Deserialize back
         let restored: GeometrySummary = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.n_points, 160);
-        assert!((restored.max_thickness - 0.12).abs() < 1e-10);
+        assert_eq!(restored.n_foil_nodes, 160);
+        assert!((restored.y_extent - 0.12).abs() < 1e-10);
     }
 }

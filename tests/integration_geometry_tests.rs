@@ -159,7 +159,7 @@ fn test_full_geometry_pipeline() {
     let paneled = panel_foil(&repaneled);
 
     // Verify paneled airfoil has correct properties
-    assert!(paneled.n > 150);
+    assert!(paneled.n_foil_nodes > 150);
     assert_relative_eq!(paneled.chord, 1.0, epsilon = 0.05);
 
     // Arc length should be monotonically increasing
@@ -168,14 +168,14 @@ fn test_full_geometry_pipeline() {
     }
 
     // All normal vectors should be unit length
-    for i in 0..paneled.n {
-        let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+    for i in 0..paneled.n_foil_nodes {
+        let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
         assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
     }
 
     // Leading edge should be found
-    assert!(paneled.sle > 0.0);
-    assert!(paneled.sle < paneled.s[paneled.n - 1]);
+    assert!(paneled.s_le > 0.0);
+    assert!(paneled.s_le < paneled.s[paneled.n_foil_nodes - 1]);
 }
 
 /// Test that symmetric airfoils are indeed symmetric
@@ -236,7 +236,7 @@ use yfoil::solver::blstate::SolverState;
 use yfoil::solver::ggcalc::build_inviscid_system;
 use yfoil::solver::specal::solve_inviscid_at_alpha;
 
-fn inviscid_cl(airfoil: &yfoil::geometry::PaneledAirfoil, alpha: f64) -> f64 {
+fn inviscid_cl(airfoil: &yfoil::geometry::PanelledFoil, alpha: f64) -> f64 {
     analyse(
         airfoil,
         alpha,
@@ -425,7 +425,7 @@ fn test_blunt_te_reasonable_results() {
         },
     );
     let coeffs = session.alpha(0.0);
-    let vel: Vec<f64> = session.state.q_inviscid[1..=airfoil.n].to_vec();
+    let vel: Vec<f64> = session.state.q_inviscid[1..=airfoil.n_foil_nodes].to_vec();
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(
@@ -497,10 +497,10 @@ fn test_te_type_lift_slope_comparison() {
 #[test]
 fn test_kutta_condition_both_te_types() {
     // GGCALC's Kutta row: GAMU(1) + GAMU(N) = 0 for both the alpha = 0 and alpha = 90 solutions
-    let kutta = |airfoil: &yfoil::geometry::PaneledAirfoil| -> (f64, f64) {
-        let mut st = SolverState::from_foil(airfoil, airfoil.n / 12 + 10);
+    let kutta = |airfoil: &yfoil::geometry::PanelledFoil| -> (f64, f64) {
+        let mut st = SolverState::from_foil(airfoil, airfoil.n_foil_nodes / 12 + 10);
         build_inviscid_system(&mut st);
-        let n = airfoil.n;
+        let n = airfoil.n_foil_nodes;
         (
             st.q_inviscid_basis[1][1] + st.q_inviscid_basis[1][n],
             st.q_inviscid_basis[2][1] + st.q_inviscid_basis[2][n],
@@ -534,12 +534,12 @@ fn test_sharp_te_smooth_gamma() {
     // approaching the TE from both sides agree (the sharp-TE bisector row of GGCALC)
     let geom = naca_4digit("0012", 160).unwrap().sharpen();
     let airfoil = panel_foil(&geom);
-    let mut st = SolverState::from_foil(&airfoil, airfoil.n / 12 + 10);
+    let mut st = SolverState::from_foil(&airfoil, airfoil.n_foil_nodes / 12 + 10);
     let mut sys = None;
     st.alpha = 0.0;
     st.qinf = 1.0;
     solve_inviscid_at_alpha(&mut st, &mut sys);
-    let n = airfoil.n;
+    let n = airfoil.n_foil_nodes;
     let gam = &st.gamma;
     assert!(gam[1].abs() < 2.0, "Upper TE gamma {} should be small", gam[1]);
     assert!(gam[n].abs() < 2.0, "Lower TE gamma {} should be small", gam[n]);

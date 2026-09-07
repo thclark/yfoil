@@ -39,8 +39,8 @@ fn state_at_first_viscal_call() -> (
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = panel_foil(&geom);
     for i in 1..=f.n {
-        st.dxds[i] = af.xp[i - 1];
-        st.dyds[i] = af.yp[i - 1];
+        st.dxds[i] = af.dxds[i - 1];
+        st.dyds[i] = af.dyds[i - 1];
     }
     st.chord = f.chord;
     st.te_thickness_normal = f.ante;

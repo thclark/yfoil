@@ -2,7 +2,7 @@
 //!
 //! Functions for redistributing panel points on an airfoil surface.
 
-use super::airfoil::{Geometry, PaneledAirfoil};
+use super::airfoil::{Geometry, PanelledFoil};
 use super::spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};
 
 /// Configuration for XFOIL PANE algorithm
@@ -636,7 +636,7 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     }
 }
 
-/// Create a PaneledAirfoil from raw geometry
+/// Create a PanelledFoil from raw geometry
 ///
 /// Computes all derived quantities needed for aerodynamic analysis:
 /// - Arc length parameterization
@@ -644,7 +644,7 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
 /// - Normal vectors
 /// - Panel angles
 /// - Leading edge location
-pub fn panel_foil(geometry: &Geometry) -> PaneledAirfoil {
+pub fn panel_foil(geometry: &Geometry) -> PanelledFoil {
     let n = geometry.x_c.len();
     let x = geometry.x_c.clone();
     let y = geometry.y_c.clone();
@@ -677,21 +677,21 @@ pub fn panel_foil(geometry: &Geometry) -> PaneledAirfoil {
     // APCALC: panel angles (needs SHARP for the TE panel)
     let apanel = panel_angles(&x, &y, &nx, &ny, sharp_te);
 
-    PaneledAirfoil {
+    PanelledFoil {
         x,
         y,
         s,
-        xp,
-        yp,
-        nx,
-        ny,
-        apanel,
-        n,
-        sle,
-        le_index,
+        dxds: xp,
+        dyds: yp,
+        normal_x: nx,
+        normal_y: ny,
+        panel_angle: apanel,
+        n_foil_nodes: n,
+        s_le: sle,
+        i_le_node: le_index,
         chord,
         sharp_te,
-        reference: geometry.reference,
+        cm_ref: geometry.reference,
     }
 }
 
@@ -811,7 +811,7 @@ mod tests {
         let paneled = panel_foil(&geom);
 
         // Check basic properties - should produce exactly requested panels
-        assert_eq!(paneled.n, 100);
+        assert_eq!(paneled.n_foil_nodes, 100);
         assert_relative_eq!(paneled.chord, 1.0, epsilon = 0.05);
 
         // Arc length should be monotonically increasing
@@ -820,11 +820,11 @@ mod tests {
         }
 
         // Total arc length should be roughly 2x chord for thin airfoil
-        let total_arc = paneled.s[paneled.n - 1];
+        let total_arc = paneled.s[paneled.n_foil_nodes - 1];
         assert!(total_arc > 1.8 && total_arc < 2.5);
 
         // Leading edge should be approximately at the midpoint of arc length
-        assert!(paneled.sle > total_arc * 0.3 && paneled.sle < total_arc * 0.7);
+        assert!(paneled.s_le > total_arc * 0.3 && paneled.s_le < total_arc * 0.7);
     }
 
     #[test]
@@ -835,8 +835,8 @@ mod tests {
         let paneled = panel_foil(&geom);
 
         // All normal vectors should have unit length
-        for i in 0..paneled.n {
-            let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+        for i in 0..paneled.n_foil_nodes {
+            let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
             assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
         }
     }
@@ -856,25 +856,25 @@ mod tests {
         let mut upper_count = 0;
         let mut lower_count = 0;
 
-        for i in 0..paneled.n {
+        for i in 0..paneled.n_foil_nodes {
             if paneled.y[i] > 0.02 {
                 // Upper surface
                 assert!(
-                    paneled.ny[i] > 0.0,
+                    paneled.normal_y[i] > 0.0,
                     "Upper surface normal should point up at index {}, y={}, ny={}",
                     i,
                     paneled.y[i],
-                    paneled.ny[i]
+                    paneled.normal_y[i]
                 );
                 upper_count += 1;
             } else if paneled.y[i] < -0.02 {
                 // Lower surface
                 assert!(
-                    paneled.ny[i] < 0.0,
+                    paneled.normal_y[i] < 0.0,
                     "Lower surface normal should point down at index {}, y={}, ny={}",
                     i,
                     paneled.y[i],
-                    paneled.ny[i]
+                    paneled.normal_y[i]
                 );
                 lower_count += 1;
             }

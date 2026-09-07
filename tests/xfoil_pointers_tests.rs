@@ -41,8 +41,8 @@ fn state_from_fixture(f: &PointersFixture) -> SolverState {
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = panel_foil(&geom);
     for i in 1..=f.n {
-        st.dxds[i] = af.xp[i - 1];
-        st.dyds[i] = af.yp[i - 1];
+        st.dxds[i] = af.dxds[i - 1];
+        st.dyds[i] = af.dyds[i - 1];
     }
     st
 }
@@ -233,8 +233,14 @@ fn test_airfoil_normals_and_panel_angles_match_xfoil() {
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = panel_foil(&geom);
     for i in 1..=f.n {
-        assert_within(af.nx[i - 1], f.nx[i], TOL_PURE, 1.0, &format!("NX({i})"));
-        assert_within(af.ny[i - 1], f.ny[i], TOL_PURE, 1.0, &format!("NY({i})"));
-        assert_within(af.apanel[i - 1], f.apanel[i], TOL_PURE, 1.0, &format!("APANEL({i})"));
+        assert_within(af.normal_x[i - 1], f.nx[i], TOL_PURE, 1.0, &format!("NX({i})"));
+        assert_within(af.normal_y[i - 1], f.ny[i], TOL_PURE, 1.0, &format!("NY({i})"));
+        assert_within(
+            af.panel_angle[i - 1],
+            f.apanel[i],
+            TOL_PURE,
+            1.0,
+            &format!("APANEL({i})"),
+        );
     }
 }

@@ -15,9 +15,9 @@
 //! on an unconverged one).
 //!
 //! YFoil reproduces those stored arrays exactly (they are fixture-gated). The canonical columns of
-//! [`BlSideOutput`] are therefore computed *live* here by running XFOIL's own BLPRV → BLKIN → BLVAR
+//! [`SideStations`] are therefore computed *live* here by running XFOIL's own BLPRV → BLKIN → BLVAR
 //! on the converged primaries, and the lagged arrays are also emitted verbatim under
-//! [`BlSideOutput::stored`] so a column-for-column comparison with an XFOIL `DUMP` is possible. A
+//! [`SideStations::stored`] so a column-for-column comparison with an XFOIL `DUMP` is possible. A
 //! side-by-side of the live `hs` against DUMP's `H*` differs at that ~1e-4 level by construction.
 
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::bl::system::{FlowParameters, FlowRegime, StationState};
-use crate::geometry::{spline_value, PaneledAirfoil};
+use crate::geometry::{spline_value, PanelledFoil};
 use crate::solver::blstate::SolverState;
 
 // ============================================================================
@@ -35,54 +35,54 @@ use crate::solver::blstate::SolverState;
 /// Wake node geometry: XYWAKE's nodes `N+1..=N+NW` and their normals. The wake normal is
 /// `-grad(psi)/|grad(psi)|` (`xpanel.f:1311-1330`), which points towards the *lower* side.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WakeGeometryOutput {
+pub struct WakeNodes {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
     /// Arc length continued from the airfoil's S(N)
     pub s: Vec<f64>,
-    pub nx: Vec<f64>,
-    pub ny: Vec<f64>,
+    pub normal_x: Vec<f64>,
+    pub normal_y: Vec<f64>,
 }
 
 /// Airfoil node geometry as the solver holds it (XFOIL's `X, Y, S, NX, NY` for `I = 1..N`), with
 /// the TECALC scalars and, after a viscous solve, the wake.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FoilGeometryOutput {
+pub struct FoilNodes {
     /// Node coordinates, TE → upper → LE → lower → TE
     pub x: Vec<f64>,
     pub y: Vec<f64>,
     /// Spline arc length at each node
     pub s: Vec<f64>,
     /// Outward unit normals at the nodes (NCALC: spline normals, corner-averaged at doubled nodes)
-    pub nx: Vec<f64>,
-    pub ny: Vec<f64>,
+    pub normal_x: Vec<f64>,
+    pub normal_y: Vec<f64>,
     pub chord: f64,
-    pub xle: f64,
-    pub yle: f64,
-    pub xte: f64,
-    pub yte: f64,
+    pub x_le: f64,
+    pub y_le: f64,
+    pub x_te: f64,
+    pub y_te: f64,
     /// Arc length of the leading edge
-    pub sle: f64,
+    pub s_le: f64,
     /// TE gap area projected normal to the TE bisector (TECALC's ANTE)
-    pub ante: f64,
+    pub te_thickness_normal: f64,
     pub sharp_te: bool,
     /// Present once XYWAKE has run (any viscous point)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wake: Option<WakeGeometryOutput>,
+    pub wake: Option<WakeNodes>,
 }
 
-impl FoilGeometryOutput {
+impl FoilNodes {
     /// Airfoil nodes `1..=n` and, if `st.lwake`, wake nodes `n+1..=n+nw`.
     pub fn from_state(st: &SolverState) -> Self {
         let n = st.n_foil_nodes;
         let nw = st.n_wake_nodes;
         let wake = if st.wake_built && nw > 0 {
-            Some(WakeGeometryOutput {
+            Some(WakeNodes {
                 x: st.x[n + 1..=n + nw].to_vec(),
                 y: st.y[n + 1..=n + nw].to_vec(),
                 s: st.s[n + 1..=n + nw].to_vec(),
-                nx: st.normal_x[n + 1..=n + nw].to_vec(),
-                ny: st.normal_y[n + 1..=n + nw].to_vec(),
+                normal_x: st.normal_x[n + 1..=n + nw].to_vec(),
+                normal_y: st.normal_y[n + 1..=n + nw].to_vec(),
             })
         } else {
             None
@@ -91,22 +91,22 @@ impl FoilGeometryOutput {
             x: st.x[1..=n].to_vec(),
             y: st.y[1..=n].to_vec(),
             s: st.s[1..=n].to_vec(),
-            nx: st.normal_x[1..=n].to_vec(),
-            ny: st.normal_y[1..=n].to_vec(),
+            normal_x: st.normal_x[1..=n].to_vec(),
+            normal_y: st.normal_y[1..=n].to_vec(),
             chord: st.chord,
-            xle: st.x_le,
-            yle: st.y_le,
-            xte: st.x_te,
-            yte: st.y_te,
-            sle: st.s_le,
-            ante: st.te_thickness_normal,
+            x_le: st.x_le,
+            y_le: st.y_le,
+            x_te: st.x_te,
+            y_te: st.y_te,
+            s_le: st.s_le,
+            te_thickness_normal: st.te_thickness_normal,
             sharp_te: st.sharp_te,
             wake,
         }
     }
 
     /// Geometry only (no wake), for plotting panelings without a solve.
-    pub fn from_paneled(airfoil: &PaneledAirfoil) -> Self {
+    pub fn from_panelled(airfoil: &PanelledFoil) -> Self {
         Self::from_state(&SolverState::from_foil(airfoil, 0))
     }
 
@@ -143,23 +143,23 @@ pub enum BlQuantity {
     /// Kinematic shape factor Hk (HKIN; unclamped, as DUMP prints it)
     Hk,
     /// Kinetic-energy shape factor H* (live BLVAR value; see module docs for DUMP's lagged `H*`)
-    Hs,
+    Hstar,
     /// Edge velocity Ue/Vinf after the Karman–Tsien transformation (unsigned on both sides)
     Ue,
     /// Skin-friction coefficient Cf = τ/(½ρ∞V∞²) (zero in the wake)
     Cf,
     /// Dissipation coefficient CD = Di/(ρ∞V∞³) (DUMP's `CDIS`)
-    Cdis,
+    Cdiss,
     /// Shear-stress coefficient √Cτ (turbulent) or amplification N (laminar): CTAU
-    Ctau,
+    Sqrtctau,
     /// Equilibrium shear-stress coefficient √Cτ_eq: CTQ
-    Ctq,
+    Sqrtctaueq,
     /// Slip-velocity parameter 1.6/(1+Us): USLP
-    Uslp,
+    Us,
     /// Viscous pressure coefficient at the node: CPV
     Cp,
     /// Mass defect m = Ue·δ*: MASS
-    Mass,
+    MassDefect,
 }
 
 impl BlQuantity {
@@ -170,15 +170,15 @@ impl BlQuantity {
         BlQuantity::Delta,
         BlQuantity::H,
         BlQuantity::Hk,
-        BlQuantity::Hs,
+        BlQuantity::Hstar,
         BlQuantity::Ue,
         BlQuantity::Cf,
-        BlQuantity::Cdis,
-        BlQuantity::Ctau,
-        BlQuantity::Ctq,
-        BlQuantity::Uslp,
+        BlQuantity::Cdiss,
+        BlQuantity::Sqrtctau,
+        BlQuantity::Sqrtctaueq,
+        BlQuantity::Us,
         BlQuantity::Cp,
-        BlQuantity::Mass,
+        BlQuantity::MassDefect,
     ];
 
     /// CLI / JSON name
@@ -189,15 +189,15 @@ impl BlQuantity {
             BlQuantity::Delta => "delta",
             BlQuantity::H => "h",
             BlQuantity::Hk => "hk",
-            BlQuantity::Hs => "hs",
+            BlQuantity::Hstar => "hstar",
             BlQuantity::Ue => "ue",
             BlQuantity::Cf => "cf",
-            BlQuantity::Cdis => "cdis",
-            BlQuantity::Ctau => "ctau",
-            BlQuantity::Ctq => "ctq",
-            BlQuantity::Uslp => "uslp",
+            BlQuantity::Cdiss => "cdiss",
+            BlQuantity::Sqrtctau => "sqrtctau",
+            BlQuantity::Sqrtctaueq => "sqrtctaueq",
+            BlQuantity::Us => "us",
             BlQuantity::Cp => "cp",
-            BlQuantity::Mass => "mass",
+            BlQuantity::MassDefect => "mass_defect",
         }
     }
 
@@ -209,15 +209,15 @@ impl BlQuantity {
             BlQuantity::Delta => "δ",
             BlQuantity::H => "H",
             BlQuantity::Hk => "Hk",
-            BlQuantity::Hs => "H*",
+            BlQuantity::Hstar => "H*",
             BlQuantity::Ue => "Ue/V∞",
             BlQuantity::Cf => "Cf",
-            BlQuantity::Cdis => "CD",
-            BlQuantity::Ctau => "√Cτ / N",
-            BlQuantity::Ctq => "√Cτ_eq",
-            BlQuantity::Uslp => "1.6/(1+Us)",
+            BlQuantity::Cdiss => "CD",
+            BlQuantity::Sqrtctau => "√Cτ / N",
+            BlQuantity::Sqrtctaueq => "√Cτ_eq",
+            BlQuantity::Us => "1.6/(1+Us)",
             BlQuantity::Cp => "Cp",
-            BlQuantity::Mass => "m",
+            BlQuantity::MassDefect => "m",
         }
     }
 
@@ -255,21 +255,21 @@ impl FromStr for BlQuantity {
 /// primaries (see the module docs). These are what XFOIL's DUMP `Cf`, `H*`, `K`, `tau`, `Di` columns
 /// and its VPLO `CF`/`CD`/`DELT` plots show.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct StoredClosures {
+pub struct LaggedClosures {
     /// TAU = ½·ρ·Ue²·Cf
     pub tau: Vec<f64>,
     /// DIS = ½·ρ·Ue³·Di·H*
-    pub dis: Vec<f64>,
+    pub dissipation: Vec<f64>,
     /// CTQ
-    pub ctq: Vec<f64>,
+    pub sqrtctaueq: Vec<f64>,
     /// DELT
-    pub delt: Vec<f64>,
+    pub delta: Vec<f64>,
     /// USLP
-    pub uslp: Vec<f64>,
+    pub us_plot_scale: Vec<f64>,
     /// TSTR = H*·θ from the march
-    pub tstr: Vec<f64>,
+    pub thetastar: Vec<f64>,
     /// DUMP's `H*` = TSTR/THET (1.0 where THET == 0, as XFOIL)
-    pub hs_dump: Vec<f64>,
+    pub hstar_dump: Vec<f64>,
     /// DUMP's `Cf` = TAU/(½QINF²)
     pub cf_dump: Vec<f64>,
 }
@@ -277,86 +277,86 @@ pub struct StoredClosures {
 /// One side's stations (upper, lower or wake) as a struct of arrays; every vector has one entry
 /// per station, in marching order.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct BlSideOutput {
+pub struct SideStations {
     /// IBL (1-based station index on this side, as XFOIL)
-    pub ibl: Vec<usize>,
+    pub i_station: Vec<usize>,
     /// IPAN (1-based panel/wake node index, as XFOIL)
-    pub node: Vec<usize>,
+    pub i_node: Vec<usize>,
     pub x: Vec<f64>,
     pub y: Vec<f64>,
     /// BL arc length from the stagnation point (XSSI)
-    pub xssi: Vec<f64>,
+    pub xi: Vec<f64>,
 
     // ---- converged primaries (post-UPDATE) ----
     /// UEDG: incompressible edge velocity
-    pub uedg: Vec<f64>,
+    pub ue: Vec<f64>,
     /// THET
-    pub thet: Vec<f64>,
+    pub theta: Vec<f64>,
     /// DSTR (in the wake: total, including the wake gap WGAP)
-    pub dstr: Vec<f64>,
+    pub dstar: Vec<f64>,
     /// CTAU (√Cτ turbulent, amplification N laminar)
-    pub ctau: Vec<f64>,
+    pub sqrtctau: Vec<f64>,
     /// MASS
-    pub mass: Vec<f64>,
+    pub mass_defect: Vec<f64>,
 
     // ---- live closure values on the primaries above (BLPRV → BLKIN → BLVAR) ----
     /// Ue/Vinf after the Karman–Tsien transformation (unsigned; DUMP signs it by GAM)
-    pub ue: Vec<f64>,
+    pub ue_compressible: Vec<f64>,
     /// H = δ*/θ (wake: without the wake gap, as BLKIN)
     pub h: Vec<f64>,
     /// Hk from HKIN (unclamped)
     pub hk: Vec<f64>,
     /// H* from BLVAR
-    pub hs: Vec<f64>,
+    pub hstar: Vec<f64>,
     /// Cf = ρ·Ue²·cf/QINF² (BLVAR's cf scaled as SETBL forms TAU, then DUMP's normalisation)
     pub cf: Vec<f64>,
     /// CD = DIS/QINF³ with DIS as SETBL forms it
-    pub cdis: Vec<f64>,
+    pub cdiss: Vec<f64>,
     /// δ from BLVAR (DE)
     pub delta: Vec<f64>,
     /// √Cτ_eq from BLVAR (CQ)
-    pub ctq: Vec<f64>,
+    pub sqrtctaueq: Vec<f64>,
     /// 1.6/(1+Us) from BLVAR
-    pub uslp: Vec<f64>,
+    pub us: Vec<f64>,
     /// Rθ from BLKIN
-    pub rt: Vec<f64>,
+    pub retheta: Vec<f64>,
     /// Edge Mach² from BLKIN
-    pub msq: Vec<f64>,
+    pub machsqd_edge: Vec<f64>,
     /// CPV at the node
     pub cp: Vec<f64>,
 
     /// XFOIL's stored (lagged) closure arrays
-    pub stored: StoredClosures,
+    pub lagged_closures: LaggedClosures,
 }
 
-impl BlSideOutput {
+impl SideStations {
     /// Number of stations
     pub fn len(&self) -> usize {
-        self.ibl.len()
+        self.i_station.len()
     }
 
     /// True when the side has no stations
     pub fn is_empty(&self) -> bool {
-        self.ibl.is_empty()
+        self.i_station.is_empty()
     }
 
     /// The column for a quantity
     pub fn column(&self, q: BlQuantity) -> &[f64] {
         match q {
-            BlQuantity::Dstar => &self.dstr,
-            BlQuantity::Theta => &self.thet,
+            BlQuantity::Dstar => &self.dstar,
+            BlQuantity::Theta => &self.theta,
             BlQuantity::Delta => &self.delta,
             BlQuantity::H => &self.h,
             BlQuantity::Hk => &self.hk,
-            BlQuantity::Hs => &self.hs,
-            BlQuantity::Ue => &self.ue,
+            BlQuantity::Hstar => &self.hstar,
+            BlQuantity::Ue => &self.ue_compressible,
             BlQuantity::Cf => &self.cf,
-            BlQuantity::Cdis => &self.cdis,
-            BlQuantity::Ctau => &self.ctau,
-            BlQuantity::Ctq => &self.ctq,
-            BlQuantity::Uslp => &self.uslp,
+            BlQuantity::Cdiss => &self.cdiss,
+            BlQuantity::Sqrtctau => &self.sqrtctau,
+            BlQuantity::Sqrtctaueq => &self.sqrtctaueq,
+            BlQuantity::Us => &self.us,
             BlQuantity::Cp => &self.cp,
-            BlQuantity::Mass => &self.mass,
+            BlQuantity::MassDefect => &self.mass_defect,
         }
     }
 
@@ -364,35 +364,35 @@ impl BlSideOutput {
     pub fn check_lengths(&self) -> Result<(), String> {
         let n = self.len();
         let cols: [(&str, usize); 30] = [
-            ("node", self.node.len()),
+            ("node", self.i_node.len()),
             ("x", self.x.len()),
             ("y", self.y.len()),
-            ("xssi", self.xssi.len()),
-            ("uedg", self.uedg.len()),
-            ("thet", self.thet.len()),
-            ("dstr", self.dstr.len()),
-            ("ctau", self.ctau.len()),
-            ("mass", self.mass.len()),
-            ("ue", self.ue.len()),
+            ("xssi", self.xi.len()),
+            ("uedg", self.ue.len()),
+            ("thet", self.theta.len()),
+            ("dstr", self.dstar.len()),
+            ("ctau", self.sqrtctau.len()),
+            ("mass", self.mass_defect.len()),
+            ("ue", self.ue_compressible.len()),
             ("h", self.h.len()),
             ("hk", self.hk.len()),
-            ("hs", self.hs.len()),
+            ("hs", self.hstar.len()),
             ("cf", self.cf.len()),
-            ("cdis", self.cdis.len()),
+            ("cdis", self.cdiss.len()),
             ("delta", self.delta.len()),
-            ("ctq", self.ctq.len()),
-            ("uslp", self.uslp.len()),
-            ("rt", self.rt.len()),
-            ("msq", self.msq.len()),
+            ("ctq", self.sqrtctaueq.len()),
+            ("uslp", self.us.len()),
+            ("rt", self.retheta.len()),
+            ("msq", self.machsqd_edge.len()),
             ("cp", self.cp.len()),
-            ("stored.tau", self.stored.tau.len()),
-            ("stored.dis", self.stored.dis.len()),
-            ("stored.ctq", self.stored.ctq.len()),
-            ("stored.delt", self.stored.delt.len()),
-            ("stored.uslp", self.stored.uslp.len()),
-            ("stored.tstr", self.stored.tstr.len()),
-            ("stored.hs_dump", self.stored.hs_dump.len()),
-            ("stored.cf_dump", self.stored.cf_dump.len()),
+            ("stored.tau", self.lagged_closures.tau.len()),
+            ("stored.dis", self.lagged_closures.dissipation.len()),
+            ("stored.ctq", self.lagged_closures.sqrtctaueq.len()),
+            ("stored.delt", self.lagged_closures.delta.len()),
+            ("stored.uslp", self.lagged_closures.us_plot_scale.len()),
+            ("stored.tstr", self.lagged_closures.thetastar.len()),
+            ("stored.hs_dump", self.lagged_closures.hstar_dump.len()),
+            ("stored.cf_dump", self.lagged_closures.cf_dump.len()),
             ("ibl", n),
         ];
         for (name, len) in cols {
@@ -412,9 +412,9 @@ impl BlSideOutput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StagnationMarker {
     /// IST: the node ahead of the stagnation point
-    pub ist: usize,
+    pub i_stagnation_node: usize,
     /// SST: spline arc length of the stagnation point
-    pub sst: f64,
+    pub s_stagnation: f64,
     pub x: f64,
     pub y: f64,
 }
@@ -423,14 +423,14 @@ pub struct StagnationMarker {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TransitionMarker {
     /// ITRAN: first turbulent station
-    pub station: usize,
+    pub i_station: usize,
     /// TFORCE: transition was forced (XSTRIP)
     pub forced: bool,
     /// XOCTR, YOCTR: chord-projected position
-    pub x_c: f64,
-    pub y_c: f64,
+    pub x_transition: f64,
+    pub y_transition: f64,
     /// Spline arc length (SST ∓ XSSITR) and position on the surface
-    pub s: f64,
+    pub s_transition: f64,
     pub x: f64,
     pub y: f64,
 }
@@ -463,19 +463,19 @@ pub struct SeparationMarker {
 /// The boundary layer of one operating point: both sides, the wake, and the markers
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BoundaryLayerOutput {
-    pub upper: BlSideOutput,
-    pub lower: BlSideOutput,
-    pub wake: BlSideOutput,
+    pub upper: SideStations,
+    pub lower: SideStations,
+    pub wake: SideStations,
     /// IBLTE(1..2): last airfoil station on each side
-    pub iblte: [usize; 2],
+    pub i_te_station: [usize; 2],
     /// ITRAN(1..2)
-    pub itran: [usize; 2],
+    pub i_transition_station: [usize; 2],
     /// NW
-    pub nw: usize,
+    pub n_wake_nodes: usize,
     /// QINF
     pub qinf: f64,
     /// ANTE (TECALC)
-    pub ante: f64,
+    pub te_thickness_normal: f64,
     pub stagnation: StagnationMarker,
     /// Upper, lower
     pub transition: [TransitionMarker; 2],
@@ -571,45 +571,45 @@ fn side_output(
     params: &FlowParameters,
     is: usize,
     stations: impl Iterator<Item = usize>,
-) -> BlSideOutput {
-    let mut out = BlSideOutput::default();
+) -> SideStations {
+    let mut out = SideStations::default();
     let qinf = st.qinf;
     for ibl in stations {
         let i = st.i_node[is][ibl];
         let live = live_closures(st, params, is, ibl);
         let thet = st.theta[is][ibl];
-        out.ibl.push(ibl);
-        out.node.push(i);
+        out.i_station.push(ibl);
+        out.i_node.push(i);
         out.x.push(st.x[i]);
         out.y.push(st.y[i]);
-        out.xssi.push(st.xi[is][ibl]);
-        out.uedg.push(st.ue[is][ibl]);
-        out.thet.push(thet);
-        out.dstr.push(st.dstar[is][ibl]);
-        out.ctau.push(st.sqrtctau[is][ibl]);
-        out.mass.push(st.mass_defect[is][ibl]);
-        out.ue.push(live.ue);
+        out.xi.push(st.xi[is][ibl]);
+        out.ue.push(st.ue[is][ibl]);
+        out.theta.push(thet);
+        out.dstar.push(st.dstar[is][ibl]);
+        out.sqrtctau.push(st.sqrtctau[is][ibl]);
+        out.mass_defect.push(st.mass_defect[is][ibl]);
+        out.ue_compressible.push(live.ue);
         out.h.push(live.h);
         out.hk.push(live.hk);
-        out.hs.push(live.hs);
+        out.hstar.push(live.hs);
         out.cf.push(live.cf);
-        out.cdis.push(live.cdis);
+        out.cdiss.push(live.cdis);
         out.delta.push(live.delta);
-        out.ctq.push(live.ctq);
-        out.uslp.push(live.uslp);
-        out.rt.push(live.rt);
-        out.msq.push(live.msq);
+        out.sqrtctaueq.push(live.ctq);
+        out.us.push(live.uslp);
+        out.retheta.push(live.rt);
+        out.machsqd_edge.push(live.msq);
         out.cp.push(st.cp_viscous[i]);
-        let stored = &mut out.stored;
+        let stored = &mut out.lagged_closures;
         stored.tau.push(st.tau[is][ibl]);
-        stored.dis.push(st.dissipation[is][ibl]);
-        stored.ctq.push(st.sqrtctaueq[is][ibl]);
-        stored.delt.push(st.delta[is][ibl]);
-        stored.uslp.push(st.us_plot_scale[is][ibl]);
-        stored.tstr.push(st.thetastar[is][ibl]);
+        stored.dissipation.push(st.dissipation[is][ibl]);
+        stored.sqrtctaueq.push(st.sqrtctaueq[is][ibl]);
+        stored.delta.push(st.delta[is][ibl]);
+        stored.us_plot_scale.push(st.us_plot_scale[is][ibl]);
+        stored.thetastar.push(st.thetastar[is][ibl]);
         // BLDUMP: IF(TH.EQ.0.0) HS = 1.0 ELSE HS = TS/TH
         stored
-            .hs_dump
+            .hstar_dump
             .push(if thet == 0.0 { 1.0 } else { st.thetastar[is][ibl] / thet });
         stored.cf_dump.push(st.tau[is][ibl] / (0.5 * qinf * qinf));
     }
@@ -625,7 +625,7 @@ fn spline_point(st: &SolverState, s: f64) -> (f64, f64) {
 }
 
 /// Sign changes of the live `cf` along one side's surface stations, from the pair (2, 3) on
-fn separation_markers(st: &SolverState, side: &BlSideOutput, is: usize) -> Vec<SeparationMarker> {
+fn separation_markers(st: &SolverState, side: &SideStations, is: usize) -> Vec<SeparationMarker> {
     let mut out = Vec::new();
     for k in 1..side.len() {
         let (prev, cur) = (side.cf[k - 1], side.cf[k]);
@@ -636,14 +636,14 @@ fn separation_markers(st: &SolverState, side: &BlSideOutput, is: usize) -> Vec<S
         } else {
             continue;
         };
-        let (s0, s1) = (st.s[side.node[k - 1]], st.s[side.node[k]]);
+        let (s0, s1) = (st.s[side.i_node[k - 1]], st.s[side.i_node[k]]);
         let frac = if cur == prev { 0.0 } else { prev / (prev - cur) };
         let s = s0 + frac * (s1 - s0);
         let (x, y) = spline_point(st, s);
         out.push(SeparationMarker {
             side: is,
             kind,
-            station_before: side.ibl[k - 1],
+            station_before: side.i_station[k - 1],
             s,
             x,
             y,
@@ -663,8 +663,8 @@ impl BoundaryLayerOutput {
 
         let (sx, sy) = spline_point(st, st.s_stagnation);
         let stagnation = StagnationMarker {
-            ist: st.i_stagnation_node,
-            sst: st.s_stagnation,
+            i_stagnation_node: st.i_stagnation_node,
+            s_stagnation: st.s_stagnation,
             x: sx,
             y: sy,
         };
@@ -676,11 +676,11 @@ impl BoundaryLayerOutput {
             };
             let (x, y) = spline_point(st, s);
             TransitionMarker {
-                station: st.i_transition_station[is],
+                i_station: st.i_transition_station[is],
                 forced: st.transition_forced[is],
-                x_c: st.x_transition[is],
-                y_c: st.y_transition[is],
-                s,
+                x_transition: st.x_transition[is],
+                y_transition: st.y_transition[is],
+                s_transition: s,
                 x,
                 y,
             }
@@ -705,11 +705,11 @@ impl BoundaryLayerOutput {
             upper,
             lower,
             wake,
-            iblte: [st.i_te_station[1], st.i_te_station[2]],
-            itran: [st.i_transition_station[1], st.i_transition_station[2]],
-            nw: st.n_wake_nodes,
+            i_te_station: [st.i_te_station[1], st.i_te_station[2]],
+            i_transition_station: [st.i_transition_station[1], st.i_transition_station[2]],
+            n_wake_nodes: st.n_wake_nodes,
             qinf: st.qinf,
-            ante: st.te_thickness_normal,
+            te_thickness_normal: st.te_thickness_normal,
             stagnation,
             transition,
             derived_separation,
@@ -748,11 +748,11 @@ mod tests {
         use crate::geometry::{naca_4digit, panel_foil};
         let geom = naca_4digit("2412", 100).unwrap();
         let airfoil = panel_foil(&geom);
-        let g = FoilGeometryOutput::from_paneled(&airfoil);
+        let g = FoilNodes::from_panelled(&airfoil);
         assert_eq!(g.n(), 100);
         assert!(g.wake.is_none());
         assert_eq!(g.x, airfoil.x);
-        assert_eq!(g.nx, airfoil.nx);
+        assert_eq!(g.normal_x, airfoil.normal_x);
         assert_eq!(g.sharp_te, airfoil.sharp_te);
         assert!(g.same_panels(&g.clone()));
         let mut h = g.clone();

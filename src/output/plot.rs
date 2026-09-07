@@ -789,9 +789,9 @@ pub struct PolarData {
 impl PolarData {
     /// Create from PolarOutput
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
-        let alpha: Vec<f64> = polar.points.iter().map(|p| p.alpha_deg).collect();
-        let cl: Vec<f64> = polar.points.iter().map(|p| p.cl).collect();
-        let cd: Vec<f64> = polar.points.iter().map(|p| p.cd).collect();
+        let alpha: Vec<f64> = polar.results.iter().map(|p| p.alpha_deg).collect();
+        let cl: Vec<f64> = polar.results.iter().map(|p| p.cl).collect();
+        let cd: Vec<f64> = polar.results.iter().map(|p| p.cd).collect();
         Self { alpha, cl, cd }
     }
 
@@ -1758,10 +1758,10 @@ impl PolarDataWithCm {
     /// Create from PolarOutput
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
         Self {
-            alpha: polar.points.iter().map(|p| p.alpha_deg).collect(),
-            cl: polar.points.iter().map(|p| p.cl).collect(),
-            cd: polar.points.iter().map(|p| p.cd).collect(),
-            cm: polar.points.iter().map(|p| p.cm).collect(),
+            alpha: polar.results.iter().map(|p| p.alpha_deg).collect(),
+            cl: polar.results.iter().map(|p| p.cl).collect(),
+            cd: polar.results.iter().map(|p| p.cd).collect(),
+            cm: polar.results.iter().map(|p| p.cm).collect(),
         }
     }
 
@@ -2950,9 +2950,9 @@ impl PolarSeries {
     ///
     /// The label is the polar's `label` if set, otherwise its `airfoil` name.
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
-        let pts: Vec<_> = polar.points.iter().filter(|p| p.converged).collect();
+        let pts: Vec<_> = polar.results.iter().filter(|p| p.converged).collect();
         Self {
-            label: polar.label.clone().unwrap_or_else(|| polar.airfoil.clone()),
+            label: polar.label.clone().unwrap_or_else(|| polar.foil.clone()),
             alpha: pts.iter().map(|p| p.alpha_deg).collect(),
             cl: pts.iter().map(|p| p.cl).collect(),
             cd: pts.iter().map(|p| p.cd).collect(),

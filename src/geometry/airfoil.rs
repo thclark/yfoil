@@ -26,7 +26,7 @@ pub struct Geometry {
 /// This struct contains all geometric quantities needed by the panel method
 /// and boundary layer solver.
 #[derive(Debug, Clone)]
-pub struct PaneledAirfoil {
+pub struct PanelledFoil {
     /// Panel node x-coordinates (TE -> upper -> LE -> lower -> TE)
     pub x: Vec<f64>,
     /// Panel node y-coordinates
@@ -34,27 +34,27 @@ pub struct PaneledAirfoil {
     /// Arc length parameter (spline parameter)
     pub s: Vec<f64>,
     /// Spline derivatives dx/ds
-    pub xp: Vec<f64>,
+    pub dxds: Vec<f64>,
     /// Spline derivatives dy/ds
-    pub yp: Vec<f64>,
+    pub dyds: Vec<f64>,
     /// Normal vector x-components (pointing outward)
-    pub nx: Vec<f64>,
+    pub normal_x: Vec<f64>,
     /// Normal vector y-components (pointing outward)
-    pub ny: Vec<f64>,
+    pub normal_y: Vec<f64>,
     /// Panel angles (angle of panel tangent from horizontal)
-    pub apanel: Vec<f64>,
+    pub panel_angle: Vec<f64>,
     /// Number of panel nodes
-    pub n: usize,
+    pub n_foil_nodes: usize,
     /// Leading edge arc length parameter
-    pub sle: f64,
+    pub s_le: f64,
     /// Leading edge node index
-    pub le_index: usize,
+    pub i_le_node: usize,
     /// Chord length
     pub chord: f64,
     /// Whether trailing edge is sharp (zero thickness)
     pub sharp_te: bool,
     /// Reference point for moment calculation
-    pub reference: [f64; 2],
+    pub cm_ref: [f64; 2],
 }
 
 #[derive(thiserror::Error, Debug)]

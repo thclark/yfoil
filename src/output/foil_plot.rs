@@ -14,13 +14,13 @@
 
 use std::path::Path;
 
-use crate::geometry::PaneledAirfoil;
+use crate::geometry::PanelledFoil;
 use crate::output::plot::PlotError;
 use crate::output::svg::{
     write_png, write_svg, Canvas, LegendAnchor, LegendEntry, LegendKey, LineStyle, Margins, MarkerShape,
 };
 use crate::output::{
-    AnalysisOutput, BlQuantity, BlSideOutput, BoundaryLayerOutput, FoilGeometryOutput, PolarOutput, SeparationKind,
+    AnalysisOutput, BlQuantity, BoundaryLayerOutput, FoilNodes, PolarOutput, SeparationKind, SideStations,
 };
 
 /// How panel nodes are shown
@@ -168,17 +168,17 @@ impl Default for FoilPlotConfig {
 #[derive(Debug, Clone)]
 pub struct DesignPoint {
     pub label: String,
-    pub geometry: FoilGeometryOutput,
+    pub geometry: FoilNodes,
     pub boundary_layer: Option<BoundaryLayerOutput>,
     pub converged: bool,
 }
 
 impl DesignPoint {
     /// Panels only
-    pub fn from_geometry(label: impl Into<String>, airfoil: &PaneledAirfoil) -> Self {
+    pub fn from_geometry(label: impl Into<String>, airfoil: &PanelledFoil) -> Self {
         Self {
             label: label.into(),
-            geometry: FoilGeometryOutput::from_paneled(airfoil),
+            geometry: FoilNodes::from_panelled(airfoil),
             boundary_layer: None,
             converged: true,
         }
@@ -188,7 +188,7 @@ impl DesignPoint {
     pub fn from_analysis(label: impl Into<String>, output: AnalysisOutput) -> Self {
         Self {
             label: label.into(),
-            converged: output.result.converged,
+            converged: output.results.converged,
             geometry: output.geometry,
             boundary_layer: output.boundary_layer,
         }
@@ -202,7 +202,7 @@ impl DesignPoint {
                 "{stem}: the polar carries no distributions (run `yfoil polar --distributions`)"
             )));
         }
-        let available: Vec<f64> = polar.distributions.iter().map(|d| d.result.alpha_deg).collect();
+        let available: Vec<f64> = polar.distributions.iter().map(|d| d.results.alpha_deg).collect();
         let selected: Vec<&AnalysisOutput> = match alphas {
             None => polar.distributions.iter().collect(),
             Some(wanted) => {
@@ -211,7 +211,7 @@ impl DesignPoint {
                     let found = polar
                         .distributions
                         .iter()
-                        .find(|d| (d.result.alpha_deg - a).abs() < 1e-6);
+                        .find(|d| (d.results.alpha_deg - a).abs() < 1e-6);
                     match found {
                         Some(d) => out.push(d),
                         None => {
@@ -228,7 +228,7 @@ impl DesignPoint {
         };
         Ok(selected
             .into_iter()
-            .map(|d| Self::from_analysis(format!("α={}°", fmt_alpha(d.result.alpha_deg)), d.clone()))
+            .map(|d| Self::from_analysis(format!("α={}°", fmt_alpha(d.results.alpha_deg)), d.clone()))
             .collect())
     }
 
@@ -355,13 +355,16 @@ pub fn scale_factors(points: &[DesignPoint], quantities: &[BlQuantity], scale: O
 }
 
 /// Surface stations of one side offset along the node normals: `X + N*k*q` (CPDISP)
-pub fn surface_offset(geom: &FoilGeometryOutput, side: &BlSideOutput, col: &[f64], k: f64) -> Vec<(f64, f64)> {
-    side.node
+pub fn surface_offset(geom: &FoilNodes, side: &SideStations, col: &[f64], k: f64) -> Vec<(f64, f64)> {
+    side.i_node
         .iter()
         .zip(col)
         .map(|(&node, &q)| {
             let i = node - 1;
-            (geom.x[i] + geom.nx[i] * k * q, geom.y[i] + geom.ny[i] * k * q)
+            (
+                geom.x[i] + geom.normal_x[i] * k * q,
+                geom.y[i] + geom.normal_y[i] * k * q,
+            )
         })
         .collect()
 }
@@ -369,8 +372,8 @@ pub fn surface_offset(geom: &FoilGeometryOutput, side: &BlSideOutput, col: &[f64
 /// The two edges of the wake band, each starting at the matching TE surface-offset point:
 /// upper `X - N*k*q*f1`, lower `X + N*k*q*f2` (CPDISP; the wake normal points to the lower side)
 pub fn wake_band(
-    geom: &FoilGeometryOutput,
-    wake: &BlSideOutput,
+    geom: &FoilNodes,
+    wake: &SideStations,
     col: &[f64],
     k: f64,
     split: [f64; 2],
@@ -381,15 +384,15 @@ pub fn wake_band(
     let mut upper = vec![te_upper];
     let mut lower = vec![te_lower];
     if let Some(w) = &geom.wake {
-        for (&node, &q) in wake.node.iter().zip(col) {
+        for (&node, &q) in wake.i_node.iter().zip(col) {
             let iw = node - n - 1;
             upper.push((
-                w.x[iw] - w.nx[iw] * k * q * split[0],
-                w.y[iw] - w.ny[iw] * k * q * split[0],
+                w.x[iw] - w.normal_x[iw] * k * q * split[0],
+                w.y[iw] - w.normal_y[iw] * k * q * split[0],
             ));
             lower.push((
-                w.x[iw] + w.nx[iw] * k * q * split[1],
-                w.y[iw] + w.ny[iw] * k * q * split[1],
+                w.x[iw] + w.normal_x[iw] * k * q * split[1],
+                w.y[iw] + w.normal_y[iw] * k * q * split[1],
             ));
         }
     }
@@ -554,7 +557,12 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
         match config.panels {
             PanelStyle::Notches => {
                 let segs: Vec<Seg> = (0..g.n())
-                    .map(|i| ((g.x[i], g.y[i]), (g.x[i] + notch * g.nx[i], g.y[i] + notch * g.ny[i])))
+                    .map(|i| {
+                        (
+                            (g.x[i], g.y[i]),
+                            (g.x[i] + notch * g.normal_x[i], g.y[i] + notch * g.normal_y[i]),
+                        )
+                    })
                     .collect();
                 lay.notches.push(segs);
             }
@@ -588,8 +596,14 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
                         let segs: Vec<Seg> = (0..w.x.len())
                             .map(|i| {
                                 (
-                                    (w.x[i] - 0.5 * notch * w.nx[i], w.y[i] - 0.5 * notch * w.ny[i]),
-                                    (w.x[i] + 0.5 * notch * w.nx[i], w.y[i] + 0.5 * notch * w.ny[i]),
+                                    (
+                                        w.x[i] - 0.5 * notch * w.normal_x[i],
+                                        w.y[i] - 0.5 * notch * w.normal_y[i],
+                                    ),
+                                    (
+                                        w.x[i] + 0.5 * notch * w.normal_x[i],
+                                        w.y[i] + 0.5 * notch * w.normal_y[i],
+                                    ),
                                 )
                             })
                             .collect();
@@ -627,8 +641,8 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
                 } else {
                     [0.5, 0.5]
                 };
-                let te_u = *upper.last().unwrap_or(&(g.xte, g.yte));
-                let te_l = *lower.last().unwrap_or(&(g.xte, g.yte));
+                let te_u = *upper.last().unwrap_or(&(g.x_te, g.y_te));
+                let te_l = *lower.last().unwrap_or(&(g.x_te, g.y_te));
                 let (wu, wl) = wake_band(g, &bl.wake, bl.wake.column(q), k, split, te_u, te_l);
                 lay.curves.push(Curve {
                     pts: wu,
@@ -857,24 +871,24 @@ pub fn plot_foil_png<P: AsRef<Path>>(
 mod tests {
     use super::*;
     use crate::geometry::{naca_4digit, panel_foil};
-    use crate::output::{BlSideOutput, WakeGeometryOutput};
+    use crate::output::{SideStations, WakeNodes};
 
-    fn geometry(n: usize) -> FoilGeometryOutput {
+    fn geometry(n: usize) -> FoilNodes {
         let geom = naca_4digit("0012", n).unwrap();
-        FoilGeometryOutput::from_paneled(&panel_foil(&geom))
+        FoilNodes::from_panelled(&panel_foil(&geom))
     }
 
     /// A synthetic boundary layer on a geometry: every side's column is `value` at every node
-    fn synthetic_bl(g: &mut FoilGeometryOutput, value: f64) -> BoundaryLayerOutput {
+    fn synthetic_bl(g: &mut FoilNodes, value: f64) -> BoundaryLayerOutput {
         let n = g.n();
         let nw = 5;
         // a straight wake behind the TE, normal pointing down (as XYWAKE's does)
-        g.wake = Some(WakeGeometryOutput {
-            x: (1..=nw).map(|i| g.xte + 0.2 * i as f64).collect(),
-            y: vec![g.yte; nw],
+        g.wake = Some(WakeNodes {
+            x: (1..=nw).map(|i| g.x_te + 0.2 * i as f64).collect(),
+            y: vec![g.y_te; nw],
             s: (1..=nw).map(|i| g.s[n - 1] + 0.2 * i as f64).collect(),
-            nx: vec![0.0; nw],
-            ny: vec![-1.0; nw],
+            normal_x: vec![0.0; nw],
+            normal_y: vec![-1.0; nw],
         });
         let le = n / 2;
         let (xw, yw) = {
@@ -882,10 +896,10 @@ mod tests {
             (w.x.clone(), w.y.clone())
         };
         let side = |nodes: Vec<usize>| {
-            let mut s = BlSideOutput::default();
+            let mut s = SideStations::default();
             for (k, node) in nodes.iter().enumerate() {
-                s.ibl.push(k + 2);
-                s.node.push(*node);
+                s.i_station.push(k + 2);
+                s.i_node.push(*node);
                 if *node <= n {
                     s.x.push(g.x[node - 1]);
                     s.y.push(g.y[node - 1]);
@@ -893,37 +907,37 @@ mod tests {
                     s.x.push(xw[node - n - 1]);
                     s.y.push(yw[node - n - 1]);
                 }
-                s.xssi.push(k as f64);
+                s.xi.push(k as f64);
                 for col in [
-                    &mut s.uedg,
-                    &mut s.thet,
-                    &mut s.dstr,
-                    &mut s.ctau,
-                    &mut s.mass,
                     &mut s.ue,
+                    &mut s.theta,
+                    &mut s.dstar,
+                    &mut s.sqrtctau,
+                    &mut s.mass_defect,
+                    &mut s.ue_compressible,
                     &mut s.h,
                     &mut s.hk,
-                    &mut s.hs,
+                    &mut s.hstar,
                     &mut s.cf,
-                    &mut s.cdis,
+                    &mut s.cdiss,
                     &mut s.delta,
-                    &mut s.ctq,
-                    &mut s.uslp,
-                    &mut s.rt,
-                    &mut s.msq,
+                    &mut s.sqrtctaueq,
+                    &mut s.us,
+                    &mut s.retheta,
+                    &mut s.machsqd_edge,
                     &mut s.cp,
                 ] {
                     col.push(value);
                 }
                 for col in [
-                    &mut s.stored.tau,
-                    &mut s.stored.dis,
-                    &mut s.stored.ctq,
-                    &mut s.stored.delt,
-                    &mut s.stored.uslp,
-                    &mut s.stored.tstr,
-                    &mut s.stored.hs_dump,
-                    &mut s.stored.cf_dump,
+                    &mut s.lagged_closures.tau,
+                    &mut s.lagged_closures.dissipation,
+                    &mut s.lagged_closures.sqrtctaueq,
+                    &mut s.lagged_closures.delta,
+                    &mut s.lagged_closures.us_plot_scale,
+                    &mut s.lagged_closures.thetastar,
+                    &mut s.lagged_closures.hstar_dump,
+                    &mut s.lagged_closures.cf_dump,
                 ] {
                     col.push(value);
                 }
@@ -935,33 +949,33 @@ mod tests {
         let lower = side((le + 1..=n).collect());
         let wake = side((n + 1..=n + nw).collect());
         BoundaryLayerOutput {
-            iblte: [upper.len() + 1, lower.len() + 1],
-            itran: [3, 3],
-            nw,
+            i_te_station: [upper.len() + 1, lower.len() + 1],
+            i_transition_station: [3, 3],
+            n_wake_nodes: nw,
             qinf: 1.0,
-            ante: 0.0,
+            te_thickness_normal: 0.0,
             stagnation: crate::output::StagnationMarker {
-                ist: le,
-                sst: g.sle,
-                x: g.xle,
-                y: g.yle,
+                i_stagnation_node: le,
+                s_stagnation: g.s_le,
+                x: g.x_le,
+                y: g.y_le,
             },
             transition: [
                 crate::output::TransitionMarker {
-                    station: 3,
+                    i_station: 3,
                     forced: false,
-                    x_c: 0.3,
-                    y_c: 0.05,
-                    s: g.sle - 0.3,
+                    x_transition: 0.3,
+                    y_transition: 0.05,
+                    s_transition: g.s_le - 0.3,
                     x: 0.3,
                     y: 0.05,
                 },
                 crate::output::TransitionMarker {
-                    station: 3,
+                    i_station: 3,
                     forced: true,
-                    x_c: 0.6,
-                    y_c: -0.04,
-                    s: g.sle + 0.6,
+                    x_transition: 0.6,
+                    y_transition: -0.04,
+                    s_transition: g.s_le + 0.6,
                     x: 0.6,
                     y: -0.04,
                 },
@@ -1037,10 +1051,10 @@ mod tests {
         let k = 3.0;
         let up = surface_offset(&p.geometry, &bl.upper, bl.upper.column(BlQuantity::Dstar), k);
         assert_eq!(up.len(), bl.upper.len());
-        for (pt, &node) in up.iter().zip(&bl.upper.node) {
+        for (pt, &node) in up.iter().zip(&bl.upper.i_node) {
             let i = node - 1;
-            assert!((pt.0 - (p.geometry.x[i] + p.geometry.nx[i] * k * 0.02)).abs() < 1e-15);
-            assert!((pt.1 - (p.geometry.y[i] + p.geometry.ny[i] * k * 0.02)).abs() < 1e-15);
+            assert!((pt.0 - (p.geometry.x[i] + p.geometry.normal_x[i] * k * 0.02)).abs() < 1e-15);
+            assert!((pt.1 - (p.geometry.y[i] + p.geometry.normal_y[i] * k * 0.02)).abs() < 1e-15);
         }
     }
 

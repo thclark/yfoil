@@ -45,12 +45,12 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     // geometry: airfoil nodes and the wake, as the solver holds them
     assert_eq!(out.geometry.n(), st.n_foil_nodes);
     assert_eq!(out.geometry.x, st.x[1..=st.n_foil_nodes]);
-    assert_eq!(out.geometry.nx, st.normal_x[1..=st.n_foil_nodes]);
+    assert_eq!(out.geometry.normal_x, st.normal_x[1..=st.n_foil_nodes]);
     let wake = out.geometry.wake.as_ref().expect("viscous point has a wake");
     assert_eq!(wake.x.len(), st.n_wake_nodes);
     assert_eq!(wake.x, st.x[st.n_foil_nodes + 1..=st.n_foil_nodes + st.n_wake_nodes]);
     assert_eq!(
-        wake.nx,
+        wake.normal_x,
         st.normal_x[st.n_foil_nodes + 1..=st.n_foil_nodes + st.n_wake_nodes]
     );
 
@@ -59,48 +59,58 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         side.check_lengths().unwrap();
     }
-    assert_eq!(bl.iblte, [st.i_te_station[1], st.i_te_station[2]]);
+    assert_eq!(bl.i_te_station, [st.i_te_station[1], st.i_te_station[2]]);
     assert_eq!(bl.upper.len(), st.i_te_station[1] - 1);
     assert_eq!(bl.lower.len(), st.i_te_station[2] - 1);
     assert_eq!(bl.wake.len(), st.n_wake_nodes);
-    assert_eq!(bl.nw, st.n_wake_nodes);
-    assert_eq!(bl.itran, [st.i_transition_station[1], st.i_transition_station[2]]);
-    assert_eq!(bl.upper.ibl[0], 2);
-    assert_eq!(*bl.wake.ibl.first().unwrap(), st.i_te_station[2] + 1);
+    assert_eq!(bl.n_wake_nodes, st.n_wake_nodes);
+    assert_eq!(
+        bl.i_transition_station,
+        [st.i_transition_station[1], st.i_transition_station[2]]
+    );
+    assert_eq!(bl.upper.i_station[0], 2);
+    assert_eq!(*bl.wake.i_station.first().unwrap(), st.i_te_station[2] + 1);
 
     // node pointers map onto the geometry bit-exactly (wake nodes onto the wake)
     for side in [&bl.upper, &bl.lower] {
-        for (k, &node) in side.node.iter().enumerate() {
+        for (k, &node) in side.i_node.iter().enumerate() {
             assert!(node >= 1 && node <= st.n_foil_nodes);
             assert_eq!(side.x[k].to_bits(), out.geometry.x[node - 1].to_bits());
             assert_eq!(side.y[k].to_bits(), out.geometry.y[node - 1].to_bits());
         }
     }
-    for (k, &node) in bl.wake.node.iter().enumerate() {
+    for (k, &node) in bl.wake.i_node.iter().enumerate() {
         assert!(node > st.n_foil_nodes);
         assert_eq!(bl.wake.x[k].to_bits(), wake.x[node - st.n_foil_nodes - 1].to_bits());
     }
 
     // primaries are the state's arrays verbatim
-    for (k, &ibl) in bl.upper.ibl.iter().enumerate() {
-        assert_eq!(bl.upper.thet[k].to_bits(), st.theta[1][ibl].to_bits());
-        assert_eq!(bl.upper.dstr[k].to_bits(), st.dstar[1][ibl].to_bits());
-        assert_eq!(bl.upper.uedg[k].to_bits(), st.ue[1][ibl].to_bits());
-        assert_eq!(bl.upper.stored.tau[k].to_bits(), st.tau[1][ibl].to_bits());
-        assert_eq!(bl.upper.stored.tstr[k].to_bits(), st.thetastar[1][ibl].to_bits());
+    for (k, &ibl) in bl.upper.i_station.iter().enumerate() {
+        assert_eq!(bl.upper.theta[k].to_bits(), st.theta[1][ibl].to_bits());
+        assert_eq!(bl.upper.dstar[k].to_bits(), st.dstar[1][ibl].to_bits());
+        assert_eq!(bl.upper.ue[k].to_bits(), st.ue[1][ibl].to_bits());
+        assert_eq!(bl.upper.lagged_closures.tau[k].to_bits(), st.tau[1][ibl].to_bits());
+        assert_eq!(
+            bl.upper.lagged_closures.thetastar[k].to_bits(),
+            st.thetastar[1][ibl].to_bits()
+        );
     }
 
     // M = 0: the Karman–Tsien transformation is the identity and Hk = H, bit for bit
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         for k in 0..side.len() {
-            assert_eq!(side.ue[k].to_bits(), (side.uedg[k] / bl.qinf).to_bits(), "ue at M=0");
+            assert_eq!(
+                side.ue_compressible[k].to_bits(),
+                (side.ue[k] / bl.qinf).to_bits(),
+                "ue at M=0"
+            );
             assert_eq!(side.hk[k].to_bits(), side.h[k].to_bits(), "hk = h at M=0");
-            assert_eq!(side.msq[k], 0.0);
+            assert_eq!(side.machsqd_edge[k], 0.0);
         }
     }
     // the wake has no wall shear
     assert!(bl.wake.cf.iter().all(|&c| c == 0.0));
-    assert!(bl.wake.stored.cf_dump.iter().all(|&c| c == 0.0));
+    assert!(bl.wake.lagged_closures.cf_dump.iter().all(|&c| c == 0.0));
 
     // every plottable column is finite and sized
     for q in BlQuantity::ALL {
@@ -129,10 +139,10 @@ fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         for k in 0..side.len() {
             let rel = |a: f64, b: f64| (a - b).abs() / a.abs().max(b.abs()).max(1e-3);
-            largest = largest.max(rel(side.hs[k], side.stored.hs_dump[k]));
-            largest = largest.max(rel(side.cf[k], side.stored.cf_dump[k]));
-            largest = largest.max(rel(side.delta[k], side.stored.delt[k]));
-            largest = largest.max(rel(side.ctq[k], side.stored.ctq[k]));
+            largest = largest.max(rel(side.hstar[k], side.lagged_closures.hstar_dump[k]));
+            largest = largest.max(rel(side.cf[k], side.lagged_closures.cf_dump[k]));
+            largest = largest.max(rel(side.delta[k], side.lagged_closures.delta[k]));
+            largest = largest.max(rel(side.sqrtctaueq[k], side.lagged_closures.sqrtctaueq[k]));
         }
     }
     assert!(
@@ -154,28 +164,34 @@ fn markers_and_wake_split_follow_xfoil() {
     let st = &session.state;
 
     // transition: XOCTR is what the operating point reports; the point lies on the surface
-    assert_eq!(bl.transition[0].x_c.to_bits(), out.result.xtr_upper.to_bits());
-    assert_eq!(bl.transition[1].x_c.to_bits(), out.result.xtr_lower.to_bits());
-    assert_eq!(bl.transition[0].station, st.i_transition_station[1]);
+    assert_eq!(
+        bl.transition[0].x_transition.to_bits(),
+        out.results.transition_upper.to_bits()
+    );
+    assert_eq!(
+        bl.transition[1].x_transition.to_bits(),
+        out.results.transition_lower.to_bits()
+    );
+    assert_eq!(bl.transition[0].i_station, st.i_transition_station[1]);
     assert!(!bl.transition[0].forced);
-    assert_eq!(bl.transition[0].s, st.s_stagnation - st.xi_transition[1]);
-    assert_eq!(bl.transition[1].s, st.s_stagnation + st.xi_transition[2]);
+    assert_eq!(bl.transition[0].s_transition, st.s_stagnation - st.xi_transition[1]);
+    assert_eq!(bl.transition[1].s_transition, st.s_stagnation + st.xi_transition[2]);
     for t in &bl.transition {
         assert!(
-            (t.x - t.x_c).abs() < 1e-3,
+            (t.x - t.x_transition).abs() < 1e-3,
             "transition x on the surface ≈ x/c for a unit chord"
         );
     }
 
     // stagnation near the LE, on the spline
-    assert_eq!(bl.stagnation.ist, st.i_stagnation_node);
-    assert_eq!(bl.stagnation.sst, st.s_stagnation);
+    assert_eq!(bl.stagnation.i_stagnation_node, st.i_stagnation_node);
+    assert_eq!(bl.stagnation.s_stagnation, st.s_stagnation);
     assert!(bl.stagnation.x.abs() < 0.01);
 
     // CPDISP's split recomputes from the emitted columns; TESYS closes it at convergence
-    let dstrte = bl.wake.dstr[0];
-    let f1 = (bl.upper.dstr[bl.upper.len() - 1] + 0.5 * bl.ante) / dstrte;
-    let f2 = (bl.lower.dstr[bl.lower.len() - 1] + 0.5 * bl.ante) / dstrte;
+    let dstrte = bl.wake.dstar[0];
+    let f1 = (bl.upper.dstar[bl.upper.len() - 1] + 0.5 * bl.te_thickness_normal) / dstrte;
+    let f2 = (bl.lower.dstar[bl.lower.len() - 1] + 0.5 * bl.te_thickness_normal) / dstrte;
     assert_eq!(bl.wake_split[0].to_bits(), f1.to_bits());
     assert_eq!(bl.wake_split[1].to_bits(), f2.to_bits());
     // TESYS's DSTR(wake 1) = DSTR1 + DSTR2 + ANTE is a Newton equation, satisfied to the final
@@ -190,12 +206,12 @@ fn markers_and_wake_split_follow_xfoil() {
     // derived separation: consistent with the cf sign pattern it was read from
     for m in &bl.derived_separation {
         let side = if m.side == 1 { &bl.upper } else { &bl.lower };
-        let k = side.ibl.iter().position(|&i| i == m.station_before).unwrap();
+        let k = side.i_station.iter().position(|&i| i == m.station_before).unwrap();
         match m.kind {
             SeparationKind::Separation => assert!(side.cf[k] >= 0.0 && side.cf[k + 1] < 0.0),
             SeparationKind::Reattachment => assert!(side.cf[k] < 0.0 && side.cf[k + 1] >= 0.0),
         }
-        assert!(m.s > st.s[side.node[k]].min(st.s[side.node[k + 1]]));
+        assert!(m.s > st.s[side.i_node[k]].min(st.s[side.i_node[k + 1]]));
     }
 }
 
@@ -217,7 +233,7 @@ fn json_round_trips_and_inviscid_has_no_boundary_layer() {
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &inviscid, true);
     assert!(out.boundary_layer.is_none());
     assert!(out.geometry.wake.is_none());
-    assert_eq!(out.geometry.n(), airfoil.n);
+    assert_eq!(out.geometry.n(), airfoil.n_foil_nodes);
 }
 
 #[test]
@@ -248,7 +264,7 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
     assert_eq!(visited, vec![0.0, 1.0, 2.0, -1.0, -2.0]);
     assert_eq!(records.len(), result.results.len() + result.failed_alphas.len());
 
-    records.sort_by(|a, b| a.result.alpha_deg.partial_cmp(&b.result.alpha_deg).unwrap());
+    records.sort_by(|a, b| a.results.alpha_deg.partial_cmp(&b.results.alpha_deg).unwrap());
     let mut polar = PolarOutput::from_polar(&result, "naca0012");
     polar.distributions = records;
     let json = polar.to_json().unwrap();
@@ -256,11 +272,11 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
     assert_eq!(back.distributions.len(), 5);
     for d in &back.distributions {
         let pt = back
-            .points
+            .results
             .iter()
-            .find(|q| q.alpha_deg == d.result.alpha_deg)
+            .find(|q| q.alpha_deg == d.results.alpha_deg)
             .expect("every converged point has its distribution");
-        assert_eq!(pt.cl.to_bits(), d.result.cl.to_bits());
+        assert_eq!(pt.cl.to_bits(), d.results.cl.to_bits());
         assert!(d.boundary_layer.is_some());
     }
     // a polar without distributions serialises without the field

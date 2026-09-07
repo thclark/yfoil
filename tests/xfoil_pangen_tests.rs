@@ -124,7 +124,7 @@ fn check(case: &str, spec: &str, npan: usize) {
         }
     }
     assert_within(
-        af.sle,
+        af.s_le,
         d.header["SLE"].parse().unwrap(),
         TOL_PURE,
         1.0,

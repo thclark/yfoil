@@ -400,7 +400,7 @@ fn main() {
 
                 // Write JSON output if requested
                 if let Some(ref path) = output {
-                    let n = airfoil.n;
+                    let n = airfoil.n_foil_nodes;
                     let velocity: Vec<f64> = session.state.q_inviscid[1..=n].to_vec();
                     let cp: Vec<f64> = session.state.cp_inviscid[1..=n].to_vec();
                     let result = InviscidAnalysisOutput::new(
@@ -498,7 +498,7 @@ fn main() {
             } else {
                 compute_polar(&airfoil, &config)
             };
-            records.sort_by(|a, b| a.result.alpha_deg.partial_cmp(&b.result.alpha_deg).unwrap());
+            records.sort_by(|a, b| a.results.alpha_deg.partial_cmp(&b.results.alpha_deg).unwrap());
 
             // Create output struct
             let mut polar_output = PolarOutput::from_polar(&result, airfoil_name);
@@ -529,7 +529,7 @@ fn main() {
                 );
                 println!("{}", "-".repeat(98));
 
-                for point in &polar_output.points {
+                for point in &polar_output.results {
                     let conv_marker = if point.converged { "Y" } else { "N" };
                     println!(
                         "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e} {:>5}",
@@ -537,9 +537,9 @@ fn main() {
                         point.cl,
                         point.cd,
                         point.cm,
-                        point.ld,
-                        point.xtr_upper,
-                        point.xtr_lower,
+                        point.ldratio,
+                        point.transition_upper,
+                        point.transition_lower,
                         point.iterations,
                         point.residual,
                         conv_marker
@@ -552,14 +552,14 @@ fn main() {
                     println!(
                         "  CL_max = {:.4} at alpha = {:.2}°",
                         cl_max,
-                        polar_output.summary.alpha_cl_max.unwrap_or(0.0)
+                        polar_output.summary.alpha_at_cl_max.unwrap_or(0.0)
                     );
                 }
-                if let Some(ld_max) = polar_output.summary.ld_max {
+                if let Some(ld_max) = polar_output.summary.ldratio_max {
                     println!(
                         "  L/D_max = {:.2} at CL = {:.4}",
                         ld_max,
-                        polar_output.summary.cl_at_ld_max.unwrap_or(0.0)
+                        polar_output.summary.cl_at_ldratio_max.unwrap_or(0.0)
                     );
                 }
                 if let Some(cd0) = polar_output.summary.cd0 {
@@ -567,8 +567,8 @@ fn main() {
                 }
                 println!(
                     "  Converged: {}/{} points",
-                    polar_output.summary.num_converged,
-                    polar_output.summary.num_converged + polar_output.summary.num_failed
+                    polar_output.summary.n_converged,
+                    polar_output.summary.n_converged + polar_output.summary.n_failed
                 );
 
                 if !result.completed {
@@ -1040,7 +1040,7 @@ fn handle_geom(action: GeomAction) {
         GeomAction::Info { input, output } => {
             let geometry = read_geometry_auto(&input);
             let airfoil = panel_foil(&geometry);
-            let info = yfoil::output::GeometryInfo::from_paneled(&airfoil);
+            let info = yfoil::output::GeometryInfo::from_panelled(&airfoil);
 
             if let Some(ref path) = output {
                 // Write full JSON to file
@@ -1093,20 +1093,20 @@ fn read_geometry_auto(path: &PathBuf) -> Geometry {
 
 fn print_geometry_info(summary: &yfoil::output::GeometrySummary) {
     println!("Geometry Information:");
-    println!("  Number of points: {}", summary.n_points);
+    println!("  Number of points: {}", summary.n_foil_nodes);
     println!("  Chord: {:.6}", summary.chord);
     println!("  X range: {:.6} to {:.6}", summary.x_range[0], summary.x_range[1]);
     println!("  Y range: {:.6} to {:.6}", summary.y_range[0], summary.y_range[1]);
-    println!("  Max thickness: {:.4}", summary.max_thickness);
+    println!("  Max thickness: {:.4}", summary.y_extent);
     println!("  TE gap: {:.6}", summary.te_gap);
     println!("  Sharp TE: {}", if summary.sharp_te { "yes" } else { "no" });
     println!(
         "  Reference point: ({:.4}, {:.4})",
-        summary.reference[0], summary.reference[1]
+        summary.cm_ref[0], summary.cm_ref[1]
     );
-    println!("  LE index: {}", summary.le_index);
-    println!("  LE arc length: {:.6}", summary.sle);
-    println!("  Total arc length: {:.6}", summary.total_arc_length);
+    println!("  LE index: {}", summary.i_le_node);
+    println!("  LE arc length: {:.6}", summary.s_le);
+    println!("  Total arc length: {:.6}", summary.s_total);
     println!("  Max curvature: {:.4}", summary.max_curvature);
     println!(
         "  First point: ({:.6}, {:.6})",

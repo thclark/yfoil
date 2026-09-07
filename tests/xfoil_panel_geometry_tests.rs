@@ -48,9 +48,9 @@ fn test_naca_0012_te_coordinates() {
 
     // Check panel count
     assert_eq!(
-        airfoil.n, fixture.n_panels,
+        airfoil.n_foil_nodes, fixture.n_panels,
         "Panel count mismatch: YFoil={}, XFOIL={}",
-        airfoil.n, fixture.n_panels
+        airfoil.n_foil_nodes, fixture.n_panels
     );
 
     // Check TE coordinates (first and last nodes)
@@ -65,8 +65,8 @@ fn test_naca_0012_te_coordinates() {
     println!("  XFOIL: x={:.10}, y={:.10}", xfoil_te_lower.x, xfoil_te_lower.y);
     println!(
         "  YFoil: x={:.10}, y={:.10}",
-        airfoil.x[airfoil.n - 1],
-        airfoil.y[airfoil.n - 1]
+        airfoil.x[airfoil.n_foil_nodes - 1],
+        airfoil.y[airfoil.n_foil_nodes - 1]
     );
 
     // TE x-coordinate should be exactly 1.0
@@ -76,13 +76,13 @@ fn test_naca_0012_te_coordinates() {
         airfoil.x[0]
     );
     assert!(
-        (airfoil.x[airfoil.n - 1] - 1.0).abs() < 0.001,
+        (airfoil.x[airfoil.n_foil_nodes - 1] - 1.0).abs() < 0.001,
         "Lower TE x not at 1.0: {}",
-        airfoil.x[airfoil.n - 1]
+        airfoil.x[airfoil.n_foil_nodes - 1]
     );
 
     // TE y-coordinate should match XFOIL (blunt TE gap = 0.00252)
-    let te_gap_yfoil = airfoil.y[0] - airfoil.y[airfoil.n - 1];
+    let te_gap_yfoil = airfoil.y[0] - airfoil.y[airfoil.n_foil_nodes - 1];
     let te_gap_xfoil = fixture.te_gap;
     println!("TE gap: YFoil={:.6}, XFOIL={:.6}", te_gap_yfoil, te_gap_xfoil);
 
@@ -152,7 +152,7 @@ fn test_naca_0012_panel_spacing() {
 
     // For now, just check that both have the same number of panels
     // and document the spacing difference.
-    assert_eq!(airfoil.n, fixture.n_panels);
+    assert_eq!(airfoil.n_foil_nodes, fixture.n_panels);
 
     // Note: We allow up to 15% RMS error in x-coordinates due to different
     // panel distribution algorithms. Exact match requires implementing XFOIL's PANE.
@@ -186,14 +186,21 @@ fn test_naca_0012_pane_algorithm() {
     let mut pane_sum_sq = 0.0;
     let mut cosine_sum_sq = 0.0;
 
-    for i in 0..fixture.n_panels.min(paned_airfoil.n).min(cosine_airfoil.n) {
+    for i in 0..fixture
+        .n_panels
+        .min(paned_airfoil.n_foil_nodes)
+        .min(cosine_airfoil.n_foil_nodes)
+    {
         let dx_pane = paned_airfoil.x[i] - fixture.coordinates[i].x;
         let dx_cosine = cosine_airfoil.x[i] - fixture.coordinates[i].x;
         pane_sum_sq += dx_pane * dx_pane;
         cosine_sum_sq += dx_cosine * dx_cosine;
     }
 
-    let n_compare = fixture.n_panels.min(paned_airfoil.n).min(cosine_airfoil.n) as f64;
+    let n_compare = fixture
+        .n_panels
+        .min(paned_airfoil.n_foil_nodes)
+        .min(cosine_airfoil.n_foil_nodes) as f64;
     let pane_rms = (pane_sum_sq / n_compare).sqrt();
     let cosine_rms = (cosine_sum_sq / n_compare).sqrt();
 
@@ -207,8 +214,16 @@ fn test_naca_0012_pane_algorithm() {
     println!("{:>4} {:>12} {:>12} {:>12}", "Idx", "XFOIL_x", "PANE_x", "Cosine_x");
     for i in 0..10.min(fixture.n_panels) {
         let xfoil_x = fixture.coordinates[i].x;
-        let pane_x = if i < paned_airfoil.n { paned_airfoil.x[i] } else { 0.0 };
-        let cosine_x = if i < cosine_airfoil.n { cosine_airfoil.x[i] } else { 0.0 };
+        let pane_x = if i < paned_airfoil.n_foil_nodes {
+            paned_airfoil.x[i]
+        } else {
+            0.0
+        };
+        let cosine_x = if i < cosine_airfoil.n_foil_nodes {
+            cosine_airfoil.x[i]
+        } else {
+            0.0
+        };
         println!("{:>4} {:>12.8} {:>12.8} {:>12.8}", i, xfoil_x, pane_x, cosine_x);
     }
 
@@ -217,8 +232,16 @@ fn test_naca_0012_pane_algorithm() {
     println!("\n=== Near LE (idx {}-{}) ===", le_idx - 2, le_idx + 2);
     for i in (le_idx - 2).max(0)..(le_idx + 3).min(fixture.n_panels) {
         let xfoil_x = fixture.coordinates[i].x;
-        let pane_x = if i < paned_airfoil.n { paned_airfoil.x[i] } else { 0.0 };
-        let cosine_x = if i < cosine_airfoil.n { cosine_airfoil.x[i] } else { 0.0 };
+        let pane_x = if i < paned_airfoil.n_foil_nodes {
+            paned_airfoil.x[i]
+        } else {
+            0.0
+        };
+        let cosine_x = if i < cosine_airfoil.n_foil_nodes {
+            cosine_airfoil.x[i]
+        } else {
+            0.0
+        };
         println!("{:>4} {:>12.8} {:>12.8} {:>12.8}", i, xfoil_x, pane_x, cosine_x);
     }
 
@@ -265,7 +288,7 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     let mut max_dx = 0.0_f64;
     let mut max_dy = 0.0_f64;
 
-    let n_compare = fixture.n_panels.min(paned_airfoil.n);
+    let n_compare = fixture.n_panels.min(paned_airfoil.n_foil_nodes);
     for i in 0..n_compare {
         let dx = paned_airfoil.x[i] - fixture.coordinates[i].x;
         let dy = paned_airfoil.y[i] - fixture.coordinates[i].y;
@@ -356,7 +379,7 @@ fn test_pane_method_produces_valid_paneled_airfoil() {
     let paneled = panel_foil(&paned);
 
     // Verify panel count
-    assert_eq!(paneled.n, 160, "Panel count should match requested");
+    assert_eq!(paneled.n_foil_nodes, 160, "Panel count should match requested");
 
     // Verify chord is approximately 1.0
     assert_relative_eq!(paneled.chord, 1.0, epsilon = 0.05);
@@ -371,17 +394,17 @@ fn test_pane_method_produces_valid_paneled_airfoil() {
     }
 
     // Verify normal vectors have unit length
-    for i in 0..paneled.n {
-        let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+    for i in 0..paneled.n_foil_nodes {
+        let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
         assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
     }
 
     // Verify LE index is sensible (approximately in the middle)
     assert!(
-        paneled.le_index > paneled.n / 4 && paneled.le_index < 3 * paneled.n / 4,
+        paneled.i_le_node > paneled.n_foil_nodes / 4 && paneled.i_le_node < 3 * paneled.n_foil_nodes / 4,
         "LE index {} should be near middle of {}",
-        paneled.le_index,
-        paneled.n
+        paneled.i_le_node,
+        paneled.n_foil_nodes
     );
 }
 
@@ -394,9 +417,9 @@ fn test_cosine_method_produces_valid_paneled_airfoil() {
 
     // Verify panel count is approximately correct (may vary slightly)
     assert!(
-        paneled.n > 155 && paneled.n < 165,
+        paneled.n_foil_nodes > 155 && paneled.n_foil_nodes < 165,
         "Panel count {} should be near 160",
-        paneled.n
+        paneled.n_foil_nodes
     );
 
     // Verify chord is approximately 1.0
@@ -412,8 +435,8 @@ fn test_cosine_method_produces_valid_paneled_airfoil() {
     }
 
     // Verify normal vectors have unit length
-    for i in 0..paneled.n {
-        let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+    for i in 0..paneled.n_foil_nodes {
+        let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
         assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
     }
 }

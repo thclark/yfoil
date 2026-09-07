@@ -4,7 +4,7 @@ use yfoil::geometry::{naca_4digit, repanel_by_curvature, panel_foil, PaneConfig}
 use yfoil::panel::solve_inviscid;
 
 /// Find stagnation point (copy of the logic from viscal.rs)
-fn find_stagnation_point(airfoil: &yfoil::geometry::PaneledAirfoil, velocity: &[f64]) -> usize {
+fn find_stagnation_point(airfoil: &yfoil::geometry::PanelledFoil, velocity: &[f64]) -> usize {
     let le_idx = airfoil.le_index;
     let search_range = (airfoil.n / 4).max(5);
 

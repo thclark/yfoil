@@ -10,7 +10,7 @@ mod utilities;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
-use yfoil::geometry::{panel_foil, read_geometry_from_file, PaneledAirfoil};
+use yfoil::geometry::{panel_foil, read_geometry_from_file, PanelledFoil};
 use yfoil::solver::analysis::{FlowConditions, PointResult, Session};
 use yfoil::solver::specal::cl_command;
 
@@ -43,7 +43,7 @@ fn iters_call_1(path: &PathBuf) -> Vec<Vec<f64>> {
         .collect()
 }
 
-fn airfoil(case: &str) -> PaneledAirfoil {
+fn airfoil(case: &str) -> PanelledFoil {
     let g = read_geometry_from_file(case_path(case, "panels.json").to_str().unwrap()).expect("panels.json");
     panel_foil(&g)
 }

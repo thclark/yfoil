@@ -215,7 +215,7 @@
 //! # Data Structures
 //!
 //! - [`Geometry`]: Raw airfoil coordinates from input files
-//! - [`PaneledAirfoil`]: Fully processed geometry ready for aerodynamic analysis,
+//! - [`PanelledFoil`]: Fully processed geometry ready for aerodynamic analysis,
 //!   including arc length parameterization, spline derivatives, normal vectors,
 //!   and panel angles
 //!
@@ -233,7 +233,7 @@ mod naca;
 mod panel;
 mod spline;
 
-pub use airfoil::{Geometry, InvalidGeometryError, PaneledAirfoil};
+pub use airfoil::{Geometry, InvalidGeometryError, PanelledFoil};
 pub use io::{
     read_dat_file, read_geometry_auto, read_geometry_from_file, write_dat_file, write_geometry_to_json,
     GeometryReadError,
