@@ -297,7 +297,8 @@ fn test_panel_method_cambered_lift() {
 // Boundary Layer Validation Tests
 // ============================================================================
 
-use yfoil::bl::{cf_lam, dampl, hkin, hs_lam, FlowConditions, FlowRegime};
+use yfoil::bl::system::dampl;
+use yfoil::bl::{cf_lam, hkin, hs_lam};
 
 /// Test Blasius flat plate solution for laminar boundary layer
 ///
@@ -368,7 +369,7 @@ fn test_laminar_amplification_off_below_critical() {
     let theta = 0.001; // Small momentum thickness
 
     // At low Re_θ (below ~200 for Blasius)
-    let (ax, _, _, _) = dampl(hk_blasius, theta, 100.0);
+    let ax = dampl(hk_blasius, theta, 100.0).ax;
     assert_eq!(ax, 0.0, "Amplification should be 0 below critical Re_θ");
 }
 
@@ -379,31 +380,8 @@ fn test_laminar_amplification_on_above_critical() {
     let theta = 0.001;
 
     // At high Re_θ (well above critical)
-    let (ax, _, _, _) = dampl(hk_blasius, theta, 5000.0);
+    let ax = dampl(hk_blasius, theta, 5000.0).ax;
     assert!(ax > 0.0, "Amplification should be positive above critical Re_θ");
-}
-
-#[test]
-fn test_flow_conditions_construction() {
-    let cond = FlowConditions::new(1_000_000.0, 0.3, 9.0, 1.0);
-
-    assert_eq!(cond.reynolds, 1_000_000.0);
-    assert_eq!(cond.mach, 0.3);
-    assert_relative_eq!(cond.msq, 0.09, epsilon = 1e-10);
-    assert_eq!(cond.ncrit, 9.0);
-    // ν = chord / Re = 1.0 / 1e6 = 1e-6
-    assert_relative_eq!(cond.nu, 1e-6, epsilon = 1e-12);
-}
-
-#[test]
-fn test_flow_regime_enum() {
-    let laminar = FlowRegime::Laminar;
-    let turbulent = FlowRegime::Turbulent;
-    let wake = FlowRegime::Wake;
-
-    assert_eq!(laminar, FlowRegime::Laminar);
-    assert_ne!(laminar, turbulent);
-    assert_ne!(turbulent, wake);
 }
 
 // ============================================================================

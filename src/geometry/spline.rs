@@ -5,6 +5,8 @@
 //!
 //! Based on the spline routines from XFOIL (spline.f).
 
+use crate::geometry::panel::trisol;
+
 /// Compute cubic spline coefficients for data points
 ///
 /// Given data points (s[i], x[i]), computes the spline derivative coefficients
@@ -62,36 +64,9 @@ pub fn spline(x: &[f64], s: &[f64]) -> Vec<f64> {
     b[n - 1] = 1.0;
     d[n - 1] = 2.0 * (x[n - 1] - x[n - 2]) / dsn1;
 
-    // Solve tridiagonal system
-    trisol(&a, &b, &c, &d)
-}
-
-/// Solve tridiagonal system using Thomas algorithm
-///
-/// Solves: a[i]*x[i-1] + b[i]*x[i] + c[i]*x[i+1] = d[i]
-fn trisol(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
-    let n = b.len();
-    let mut cp = vec![0.0; n];
-    let mut dp = vec![0.0; n];
-    let mut x = vec![0.0; n];
-
-    // Forward elimination
-    cp[0] = c[0] / b[0];
-    dp[0] = d[0] / b[0];
-
-    for i in 1..n {
-        let m = b[i] - a[i] * cp[i - 1];
-        cp[i] = c[i] / m;
-        dp[i] = (d[i] - a[i] * dp[i - 1]) / m;
-    }
-
-    // Back substitution
-    x[n - 1] = dp[n - 1];
-    for i in (0..n - 1).rev() {
-        x[i] = dp[i] - cp[i] * x[i + 1];
-    }
-
-    x
+    // Solve tridiagonal system (XFOIL's TRISOL: main diagonal first, then lower, upper, rhs)
+    trisol(&mut b, &a, &mut c, &mut d);
+    d
 }
 
 /// Evaluate spline at parameter value

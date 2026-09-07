@@ -558,7 +558,7 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     let n = geometry.x_c.len();
 
     // Calculate arc length along the surface
-    let s = calculate_arc_length(&geometry.x_c, &geometry.y_c);
+    let s = scalc(&geometry.x_c, &geometry.y_c);
 
     // Create splines for x and y
     let xp = spline(&geometry.x_c, &s);
@@ -630,20 +630,6 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     }
 }
 
-/// Calculate arc length along the surface
-fn calculate_arc_length(x: &[f64], y: &[f64]) -> Vec<f64> {
-    let n = x.len();
-    let mut s = vec![0.0; n];
-
-    for i in 1..n {
-        let dx = x[i] - x[i - 1];
-        let dy = y[i] - y[i - 1];
-        s[i] = s[i - 1] + (dx * dx + dy * dy).sqrt();
-    }
-
-    s
-}
-
 /// Create a PaneledAirfoil from raw geometry
 ///
 /// Computes all derived quantities needed for aerodynamic analysis:
@@ -658,7 +644,7 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
     let y = geometry.y_c.clone();
 
     // SCALC / SEGSPL
-    let s = calculate_arc_length(&x, &y);
+    let s = scalc(&x, &y);
     let xp = spline(&x, &s);
     let yp = spline(&y, &s);
 
@@ -667,7 +653,11 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
 
     // LEFIND / GEOPAR: leading edge on the spline; chord is the LE–TE distance (XFOIL's
     // definition — for a NACA section whose nodes straddle the LE this is slightly under 1)
-    let (sle, le_index) = find_leading_edge(&x, &y, &s, &xp, &yp);
+    let sle = lefind(&x, &xp, &y, &yp, &s);
+    // YFoil convenience only (XFOIL works with SLE): the node nearest the spline LE
+    let le_index = (0..n)
+        .min_by(|&i, &j| (s[i] - sle).abs().partial_cmp(&(s[j] - sle).abs()).unwrap())
+        .unwrap_or(0);
     let xle = seval(sle, &x, &xp, &s);
     let yle = seval(sle, &y, &yp, &s);
     let xte = 0.5 * (x[0] + x[n - 1]);
@@ -769,16 +759,6 @@ fn apcalc(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64>
     apanel
 }
 
-/// LEFIND plus the index of the first node past the LE (kept for callers that want it).
-fn find_leading_edge(x: &[f64], y: &[f64], s: &[f64], xp: &[f64], yp: &[f64]) -> (f64, usize) {
-    let sle = lefind(x, xp, y, yp, s);
-    // YFoil convenience only (XFOIL works with SLE): the node nearest the spline LE
-    let i_le = (0..x.len())
-        .min_by(|&i, &j| (s[i] - sle).abs().partial_cmp(&(s[j] - sle).abs()).unwrap())
-        .unwrap_or(0);
-    (sle, i_le)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,7 +769,7 @@ mod tests {
         // Simple square path
         let x = vec![0.0, 1.0, 1.0, 0.0, 0.0];
         let y = vec![0.0, 0.0, 1.0, 1.0, 0.0];
-        let s = calculate_arc_length(&x, &y);
+        let s = scalc(&x, &y);
 
         assert_eq!(s[0], 0.0);
         assert!((s[1] - 1.0).abs() < 1e-10);
@@ -810,7 +790,7 @@ mod tests {
             .map(|i| radius * (2.0 * std::f64::consts::PI * i as f64 / n as f64).sin())
             .collect();
 
-        let s = calculate_arc_length(&x, &y);
+        let s = scalc(&x, &y);
 
         // Total arc length should be approximately 2*pi*r
         let total_arc = s[n];

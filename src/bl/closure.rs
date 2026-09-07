@@ -52,13 +52,6 @@ pub fn hkin(h: f64, msq: f64) -> (f64, f64, f64) {
     (hk, hk_h, hk_msq)
 }
 
-/// Calculate H from kinematic shape factor Hk and Mach number
-///
-/// Inverse of hkin
-pub fn h_from_hk(hk: f64, msq: f64) -> f64 {
-    hk * (1.0 + 0.113 * msq) + 0.29 * msq
-}
-
 // ============================================================================
 // Laminar Closure Relations
 // ============================================================================
@@ -249,123 +242,12 @@ pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
     }
 }
 
-/// Turbulent dissipation function 2*CD/H*
-///
-/// # Arguments
-/// * `hs` - Energy shape factor H*
-/// * `us` - Edge velocity ratio Ue/Uinf (normalized)
-/// * `cf` - Skin friction coefficient
-/// * `st` - Shear stress ratio (typically derived from Cf)
-pub fn di_turb(hs: f64, us: f64, cf: f64, st: f64) -> (f64, f64, f64, f64, f64) {
-    let di = (0.5 * cf * us + st.powi(2) * (1.0 - us)) * 2.0 / hs;
-    let di_hs = -(0.5 * cf * us + st.powi(2) * (1.0 - us)) * 2.0 / hs.powi(2);
-    let di_us = (0.5 * cf - st.powi(2)) * 2.0 / hs;
-    let di_cf = (0.5 * us) * 2.0 / hs;
-    let di_st = (2.0 * st * (1.0 - us)) * 2.0 / hs;
-    (di, di_hs, di_us, di_cf, di_st)
-}
-
 /// Density shape parameter (from Whitfield)
 pub fn hc_turb(hk: f64, msq: f64) -> (f64, f64, f64) {
     let hc = msq * (0.064 / (hk - 0.8) + 0.251);
     let hc_hk = msq * (-0.064 / (hk - 0.8).powi(2));
     let hc_msq = 0.064 / (hk - 0.8) + 0.251;
     (hc, hc_hk, hc_msq)
-}
-
-// ============================================================================
-// Transition Prediction (eN Method)
-// ============================================================================
-
-/// Amplification rate for envelope eN method (XFOIL DAMPL2 formulation)
-///
-/// Returns the spatial amplification rate dN/dx that is integrated
-/// along the surface to obtain N(x). Transition occurs when N >= Ncrit.
-///
-/// This uses the DAMPL2 formulation from XFOIL (Nov 1996) which includes
-/// improved correlation for high Hk (near-separation) profiles with an
-/// additional exponential term in the m(H) correlation.
-///
-/// # Arguments
-/// * `hk` - Kinematic shape factor
-/// * `th` - Momentum thickness θ
-/// * `rt` - Momentum thickness Reynolds number Rθ
-///
-/// # Returns
-/// (ax, ax_hk, ax_th, ax_rt) - Amplification rate and sensitivities
-///
-/// # Reference
-/// Drela, M., Giles, M., "Viscous/Inviscid Analysis of Transonic and
-/// Low Reynolds Number Airfoils", AIAA Journal, Oct. 1987.
-pub fn dampl(hk: f64, th: f64, rt: f64) -> (f64, f64, f64, f64) {
-    const DGR: f64 = 0.08;
-
-    let hmi = 1.0 / (hk - 1.0);
-    let hmi_hk = -hmi.powi(2);
-
-    // Critical Rtheta correlation for Falkner-Skan profiles
-    let aa = 2.492 * hmi.powf(0.43);
-    let aa_hk = (aa / hmi) * 0.43 * hmi_hk;
-
-    let bb = (14.0 * hmi - 9.24).tanh();
-    let bb_hk = (1.0 - bb.powi(2)) * 14.0 * hmi_hk;
-
-    let grcrit = aa + 0.7 * (bb + 1.0);
-    let grc_hk = aa_hk + 0.7 * bb_hk;
-
-    let gr = rt.log10();
-    let gr_rt = 1.0 / (2.3025851 * rt);
-
-    if gr < grcrit - DGR {
-        // No amplification for Rtheta < Rcrit
-        (0.0, 0.0, 0.0, 0.0)
-    } else {
-        // Smooth ramp to turn on amplification
-        let rnorm = (gr - (grcrit - DGR)) / (2.0 * DGR);
-        let rn_hk = -grc_hk / (2.0 * DGR);
-        let rn_rt = gr_rt / (2.0 * DGR);
-
-        let (rfac, rfac_hk, rfac_rt) = if rnorm >= 1.0 {
-            (1.0, 0.0, 0.0)
-        } else {
-            let rfac = 3.0 * rnorm.powi(2) - 2.0 * rnorm.powi(3);
-            let rfac_rn = 6.0 * rnorm - 6.0 * rnorm.powi(2);
-            (rfac, rfac_rn * rn_hk, rfac_rn * rn_rt)
-        };
-
-        // Amplification envelope slope correlation (d(N)/d(Rtheta))
-        let arg = 3.87 * hmi - 2.52;
-        let arg_hk = 3.87 * hmi_hk;
-
-        let ex = (-arg.powi(2)).exp();
-        let ex_hk = ex * (-2.0 * arg * arg_hk);
-
-        let dadr = 0.028 * (hk - 1.0) - 0.0345 * ex;
-        let dadr_hk = 0.028 - 0.0345 * ex_hk;
-
-        // m(H) correlation - DAMPL version (March 1991)
-        // Note: DAMPL2 has an additional +0.1*exp(-20*HMI) term, but XFOIL defaults to DAMPL
-        let af = -0.05 + 2.7 * hmi - 5.5 * hmi.powi(2) + 3.0 * hmi.powi(3);
-        let af_hmi = 2.7 - 11.0 * hmi + 9.0 * hmi.powi(2);
-        let af_hk = af_hmi * hmi_hk;
-
-        let ax = (af * dadr / th) * rfac;
-        let ax_hk = (af_hk * dadr / th + af * dadr_hk / th) * rfac + (af * dadr / th) * rfac_hk;
-        let ax_th = -ax / th;
-        let ax_rt = (af * dadr / th) * rfac_rt;
-
-        (ax, ax_hk, ax_th, ax_rt)
-    }
-}
-
-/// Critical Reynolds number based on shape factor
-///
-/// Returns log10(Rtheta_crit) for transition onset
-pub fn rtheta_crit(hk: f64) -> f64 {
-    let hmi = 1.0 / (hk - 1.0);
-    let aa = 2.492 * hmi.powf(0.43);
-    let bb = (14.0 * hmi - 9.24).tanh();
-    aa + 0.7 * (bb + 1.0)
 }
 
 /// DILW (xblsys.f): laminar wake dissipation function 2*CD/H* and its Hk, Rt sensitivities.
@@ -411,15 +293,6 @@ mod tests {
         let (hk, _, _) = hkin(2.5, 0.25);
         assert!(hk < 2.5);
         assert!(hk > 2.0);
-    }
-
-    #[test]
-    fn test_h_hk_roundtrip() {
-        let h_orig = 2.7;
-        let msq = 0.16;
-        let (hk, _, _) = hkin(h_orig, msq);
-        let h_back = h_from_hk(hk, msq);
-        assert_relative_eq!(h_orig, h_back, epsilon = 1e-10);
     }
 
     // ========================================================================
@@ -485,41 +358,5 @@ mod tests {
         let result = hs_turb(1.4, 10000.0, 0.0);
         assert!(result.val >= 1.5);
         assert!(result.val < 3.0);
-    }
-
-    // ========================================================================
-    // Transition Tests
-    // ========================================================================
-
-    #[test]
-    fn test_dampl_below_critical() {
-        // Below critical Reynolds number, amplification should be zero
-        let (ax, _, _, _) = dampl(2.5, 0.001, 100.0); // Low Rt
-        assert_eq!(ax, 0.0);
-    }
-
-    #[test]
-    fn test_dampl_above_critical() {
-        // Above critical Reynolds number, should have positive amplification
-        let (ax, _, _, _) = dampl(2.5, 0.001, 10000.0); // High Rt
-        assert!(ax > 0.0);
-    }
-
-    #[test]
-    fn test_rtheta_crit_blasius() {
-        // For Blasius (Hk ≈ 2.59), critical Rθ is around 200-500
-        let log_rt_crit = rtheta_crit(2.59);
-        let rt_crit = 10.0_f64.powf(log_rt_crit);
-        assert!(rt_crit > 100.0);
-        assert!(rt_crit < 1000.0);
-    }
-
-    #[test]
-    fn test_rtheta_crit_adverse_pressure_effect() {
-        // Higher Hk (more adverse pressure gradient) destabilizes the BL,
-        // leading to LOWER critical Rtheta (earlier transition)
-        let log_rt_crit_favorable = rtheta_crit(2.3); // More favorable (lower Hk)
-        let log_rt_crit_adverse = rtheta_crit(3.0); // More adverse (higher Hk)
-        assert!(log_rt_crit_adverse < log_rt_crit_favorable);
     }
 }
