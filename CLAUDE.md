@@ -314,6 +314,8 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
 - Integer powers written as explicit multiplications where bit-exactness matters (`x*x*x`, not `powi(3)`) to match
   gfortran's inline expansion.
 - Temporary files go in `.tmp/`, never `/tmp`.
+- Naming: `docs/conventions/naming.md` (the rules) and `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` (the
+  XFOIL → YFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
 
 ## Polar sweep procedure
 
