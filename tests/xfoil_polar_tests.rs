@@ -65,17 +65,21 @@ fn check_point(k: usize, p: &OperatingPoint, x: &HashMap<String, String>, entry_
     let all = parse_iters_all(&fixture_path("viscal_iters_all.dat"));
     let xi = &all[&k];
     for (y, xv) in p.trace.iter().zip(xi) {
-        let ictx = format!("{ctx} iteration {}", y.iter);
+        let ictx = format!("{ctx} iteration {}", y.iteration);
         println!(
             "  {ictx}: yfoil rms {:.6e} rlx {:.4} CL {:.10} IST {} | xfoil rms {:.6e} rlx {:.4} CL {:.10} ISTB {} IST {}",
-            y.rmsbl, y.rlx, y.cl, y.ist, xv[1], xv[2], xv[3], xv[6] as usize, xv[7] as usize
+            y.residual, y.relaxation, y.cl, y.i_stagnation_node, xv[1], xv[2], xv[3], xv[6] as usize, xv[7] as usize
         );
-        assert_within(y.rmsbl, xv[1], TOL_TRANSIENT, 1.0, &format!("{ictx}: RMSBL"));
-        assert_within(y.rlx, xv[2], TOL_TRANSIENT, 1.0, &format!("{ictx}: RLX"));
+        assert_within(y.residual, xv[1], TOL_TRANSIENT, 1.0, &format!("{ictx}: RMSBL"));
+        assert_within(y.relaxation, xv[2], TOL_TRANSIENT, 1.0, &format!("{ictx}: RLX"));
         assert_within(y.cl, xv[3], TOL_TRANSIENT, 1.0, &format!("{ictx}: CL"));
         assert_within(y.cd, xv[4], TOL_TRANSIENT, 1.0, &format!("{ictx}: CD"));
-        assert_eq!(y.ist, xv[7] as usize, "{ictx}: IST after STMOVE");
-        assert_eq!(y.itran[1..], [xv[8] as usize, xv[9] as usize], "{ictx}: ITRAN");
+        assert_eq!(y.i_stagnation_node, xv[7] as usize, "{ictx}: IST after STMOVE");
+        assert_eq!(
+            y.i_transition_station[1..],
+            [xv[8] as usize, xv[9] as usize],
+            "{ictx}: ITRAN"
+        );
     }
     assert_eq!(
         niter1,

@@ -187,27 +187,27 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
 
     let mut worst_ratio = 0.0_f64;
     for (y, r) in p.trace.iter().zip(its) {
-        let ictx = format!("{ctx} iteration {}", y.iter);
-        let fi = cf.and_then(|c| c.iterations.get(y.iter - 1));
+        let ictx = format!("{ctx} iteration {}", y.iteration);
+        let fi = cf.and_then(|c| c.iterations.get(y.iteration - 1));
         let floor_rmsbl = fl(fi, "RMSBL");
         println!(
             "    iteration {:2}: RMSBL yfoil {:.6e} xfoil {:.6e} |diff| {:.2e} (1-ULP floor {:.2e}) | RLX diff {:.2e} (floor {:.2e}) | CL diff {:.2e} (floor {:.2e}) | IST {}",
-            y.iter,
-            y.rmsbl,
+            y.iteration,
+            y.residual,
             r[1],
-            (y.rmsbl - r[1]).abs(),
+            (y.residual - r[1]).abs(),
             floor_rmsbl,
-            (y.rlx - r[2]).abs(),
+            (y.relaxation - r[2]).abs(),
             fl(fi, "RLX"),
             (y.cl - r[3]).abs(),
             fl(fi, "CL"),
-            y.ist
+            y.i_stagnation_node
         );
 
         // UPDATE's reported limiter (call 1 only): the variable and station of the largest change
         let mut limiter_flip: Option<String> = None;
         if k == 1 {
-            if let Some(b) = rec.iter1.get(y.iter - 1) {
+            if let Some(b) = rec.iter1.get(y.iteration - 1) {
                 let (xv, xi, xs) = (
                     &b["VMXBL"],
                     b["IMXBL"].parse::<usize>().unwrap(),
@@ -216,21 +216,30 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
                 let xr: f64 = b["RMXBL"].parse().unwrap();
                 println!(
                     "        RLX limiter: yfoil {}@({},{}) RMXBL {:+.6e} | xfoil {}@({},{}) RMXBL {:+.6e}",
-                    y.vmxbl, y.imxbl, y.ismxbl, y.rmxbl, xv, xi, xs, xr
+                    y.residual_max_variable,
+                    y.i_residual_max_station,
+                    y.residual_max_side,
+                    y.residual_max,
+                    xv,
+                    xi,
+                    xs,
+                    xr
                 );
-                if &y.vmxbl.to_string() != xv || (y.imxbl, y.ismxbl) != (xi, xs) {
+                if &y.residual_max_variable.to_string() != xv
+                    || (y.i_residual_max_station, y.residual_max_side) != (xi, xs)
+                {
                     // a tie: the twin itself reports a different limiter here, or the two
                     // reported largest changes agree within the reference's own RMXBL spread
                     let twin_flipped = fl(fi, "LIMITER_FLIP") > 0.5;
                     let tie = twin_flipped
-                        || (y.rmxbl.abs() - xr.abs()).abs()
-                            <= allowed(y.rmxbl.abs(), xr.abs(), transient_tol, 1.0, fl(fi, "RMXBL"));
+                        || (y.residual_max.abs() - xr.abs()).abs()
+                            <= allowed(y.residual_max.abs(), xr.abs(), transient_tol, 1.0, fl(fi, "RMXBL"));
                     let msg = format!(
                         "reported RLX limiter yfoil {}@({},{}) |RMXBL| {:.6e} vs xfoil {}@({},{}) |RMXBL| {:.6e}",
-                        y.vmxbl,
-                        y.imxbl,
-                        y.ismxbl,
-                        y.rmxbl.abs(),
+                        y.residual_max_variable,
+                        y.i_residual_max_station,
+                        y.residual_max_side,
+                        y.residual_max.abs(),
                         xv,
                         xi,
                         xs,
@@ -248,28 +257,28 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
             }
         }
 
-        let rmsbl_ok = (y.rmsbl - r[1]).abs() <= allowed(y.rmsbl, r[1], transient_tol, 1.0, floor_rmsbl);
+        let rmsbl_ok = (y.residual - r[1]).abs() <= allowed(y.residual, r[1], transient_tol, 1.0, floor_rmsbl);
         if (!rmsbl_ok || limiter_flip.is_some()) && floor_rmsbl > STRADDLE_FLOOR {
             let why = format!(
                 "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {STRADDLE_FLOOR:.0e}) under 1 ULP and the runs part ({})",
-                y.iter,
-                limiter_flip.clone().unwrap_or_else(|| format!("RMSBL yfoil {:.6e} vs xfoil {:.6e}", y.rmsbl, r[1]))
+                y.iteration,
+                limiter_flip.clone().unwrap_or_else(|| format!("RMSBL yfoil {:.6e} vs xfoil {:.6e}", y.residual, r[1]))
             );
             println!("{ictx}: THRESHOLD-STRADDLING — {why}. Values from here on are not gated; the one-step replay from XFOIL's state is the evidence that the step itself is faithful.");
             return Outcome::Straddling {
-                at_iteration: y.iter,
+                at_iteration: y.iteration,
                 why,
             };
         }
         for (name, ours, theirs, scale) in [
-            ("RMSBL", y.rmsbl, r[1], 1.0),
-            ("RLX", y.rlx, r[2], 1.0),
+            ("RMSBL", y.residual, r[1], 1.0),
+            ("RLX", y.relaxation, r[2], 1.0),
             ("CL", y.cl, r[3], 1.0),
             ("CD", y.cd, r[4], 1.0),
             ("CM", y.cm, r[5], 1.0),
-            ("ALFA", y.alfa, r[10], 1.0),
-            ("MINF", y.minf, r[11], 1.0),
-            ("REINF", y.reinf, r[12], r[12]),
+            ("ALFA", y.alpha, r[10], 1.0),
+            ("MINF", y.mach, r[11], 1.0),
+            ("REINF", y.re, r[12], r[12]),
         ] {
             let floor = fl(fi, name);
             assert_value(ours, theirs, transient_tol, scale, floor, &format!("{ictx}: {name}"));
@@ -277,8 +286,12 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
                 worst_ratio = worst_ratio.max((ours - theirs).abs() / floor);
             }
         }
-        assert_eq!(y.ist, r[7] as usize, "{ictx}: IST");
-        assert_eq!(y.itran[1..], [r[8] as usize, r[9] as usize], "{ictx}: ITRAN");
+        assert_eq!(y.i_stagnation_node, r[7] as usize, "{ictx}: IST");
+        assert_eq!(
+            y.i_transition_station[1..],
+            [r[8] as usize, r[9] as usize],
+            "{ictx}: ITRAN"
+        );
         if let Some(flip) = limiter_flip {
             panic!("{ictx}: {flip} (RLX values agree but the largest changes are not tied; floor {floor_rmsbl:.2e})");
         }

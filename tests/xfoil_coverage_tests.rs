@@ -119,13 +119,13 @@ fn test_forced_transition_matches_xfoil() {
 fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     use fixtures::mrchdu_fixtures::parse_bl_dump;
     use utilities::tolerances::{assert_within, TOL_SOLVER};
-    use yfoil::bl::blsolv::blsolv;
+    use yfoil::bl::blsolv::solve_newton_system;
     use yfoil::solver::clcalc::comset;
     use yfoil::solver::pointers::{iblpan, iblsys, xicalc};
-    use yfoil::solver::setbl::setbl;
-    use yfoil::solver::update::update;
+    use yfoil::solver::setbl::assemble_newton_system;
+    use yfoil::solver::update::apply_newton_update;
     use yfoil::solver::velocity::uicalc;
-    use yfoil::solver::viscal::viscal;
+    use yfoil::solver::viscal::solve_viscous;
 
     let dir = case_dir(case);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).unwrap();
@@ -136,7 +136,7 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     // prologue only (wake, QINVU/QINV, pointers, UINV, DIJ) — then XFOIL's state at call k
     let mut session = Session::new(&airfoil, FlowSpec::default());
     yfoil::solver::specal::alfa_command(&mut session.st, &mut session.sys, alpha_deg.to_radians());
-    viscal(&mut session.st, session.sys.as_mut(), 0, 1.0, None);
+    solve_viscous(&mut session.st, session.sys.as_mut(), 0, 1.0, None);
     let st = &mut session.st;
     st.lblini = true;
     st.ist = d.int("IST");
@@ -176,9 +176,9 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     }
 
     // one iteration
-    let r = setbl(st);
-    let sol = blsolv(r.sys);
-    let u = update(st, &sol.vdel, st.minf_cl);
+    let r = assemble_newton_system(st);
+    let sol = solve_newton_system(r.newton);
+    let u = apply_newton_update(st, &sol.deltas, st.minf_cl);
 
     // the reference's own 1-ULP spread of this iteration's values bounds what one step can be
     // expected to reproduce (the replay's only foreign input is YFoil's DIJ, ~5e-11)
@@ -192,7 +192,12 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
             .copied()
             .unwrap_or(0.0)
     };
-    for (name, ours) in [("RLX", u.rlx), ("RMSBL", u.rmsbl), ("CL", st.cl), ("RMXBL", u.rmxbl)] {
+    for (name, ours) in [
+        ("RLX", u.relaxation),
+        ("RMSBL", u.residual),
+        ("CL", st.cl),
+        ("RMXBL", u.residual_max),
+    ] {
         let (a, b) = (ours, o.real(name));
         let lim = utilities::records::allowed(a, b, TOL_SOLVER, 1.0, fl(name));
         assert!(
@@ -202,10 +207,14 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
         );
     }
     // DAC has no recorded floor; its effect is gated through CL (CL += RLX*DAC) and RLX above
-    let _ = u.dac;
-    assert_eq!(u.vmxbl.to_string(), o.header["VMXBL"], "{case} replay call {k}: VMXBL");
+    let _ = u.free_variable_change;
     assert_eq!(
-        (u.imxbl, u.ismxbl),
+        u.residual_max_variable.to_string(),
+        o.header["VMXBL"],
+        "{case} replay call {k}: VMXBL"
+    );
+    assert_eq!(
+        (u.i_residual_max_station, u.residual_max_side),
         (o.int("IMXBL"), o.int("ISMXBL")),
         "{case} replay call {k}: IMXBL/ISMXBL"
     );
@@ -249,7 +258,7 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     }
     println!(
         "{case} replay of iteration {k} from XFOIL's state: RLX {:.6} RMSBL {:.6e} {}@({},{}) CL {:.8} — every array within max({TOL_SOLVER:.0e}·scale, 4× its own 1-ULP floor) (worst rel {:.2e} {} at ({},{}))",
-        u.rlx, u.rmsbl, u.vmxbl, u.imxbl, u.ismxbl, st.cl, worst.0, worst.1, worst.3, worst.2
+        u.relaxation, u.residual, u.residual_max_variable, u.i_residual_max_station, u.residual_max_side, st.cl, worst.0, worst.1, worst.3, worst.2
     );
 }
 

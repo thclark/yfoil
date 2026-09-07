@@ -7,7 +7,7 @@
 use mrchdu_fixtures::{parse_bl_dump, BlDump};
 use mrchue_fixtures::parse_bl_state;
 use pointers_fixtures::{parse_dij, parse_pointers, parse_uinv};
-use yfoil::bl::mrchue::mrchue;
+use yfoil::bl::mrchue::march_direct;
 use yfoil::bl::system::FlowParameters;
 use yfoil::solver::blstate::BlState;
 
@@ -430,7 +430,7 @@ pub fn state_before_setbl_march(k: usize) -> (BlState, FlowParameters, BlDump) {
     assert_eq!(params.gamma_gas_m1.to_bits(), d.real("GM1BL").to_bits(), "GM1BL");
     if k == 1 {
         let (mut pre, p2, a2) = state_before_mrchue();
-        mrchue(&mut pre, &p2, a2, None);
+        march_direct(&mut pre, &p2, a2, None);
         st.com1 = pre.com1;
         st.com2 = pre.com2;
         st.trloc = pre.trloc.clone();

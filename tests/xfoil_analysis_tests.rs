@@ -75,8 +75,8 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
     }
     for (y, x) in p.trace.iter().zip(&blocks) {
         for (name, ours) in [
-            ("RMSBL", y.rmsbl),
-            ("RLX", y.rlx),
+            ("RMSBL", y.residual),
+            ("RLX", y.relaxation),
             ("CL", y.cl),
             ("CD", y.cd),
             ("CM", y.cm),
@@ -86,10 +86,15 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
                 x[name].parse().unwrap(),
                 TOL_SOLVER,
                 1.0,
-                &format!("end-to-end iteration {}: {name}", y.iter),
+                &format!("end-to-end iteration {}: {name}", y.iteration),
             );
         }
-        assert_eq!(y.ist, x["IST"].parse::<usize>().unwrap(), "iteration {}: IST", y.iter);
+        assert_eq!(
+            y.i_stagnation_node,
+            x["IST"].parse::<usize>().unwrap(),
+            "iteration {}: IST",
+            y.iteration
+        );
     }
 
     // node arrays

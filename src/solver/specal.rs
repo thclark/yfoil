@@ -6,7 +6,7 @@ use crate::solver::blstate::BlState;
 use crate::solver::clcalc::{clcalc, comset, cpcalc};
 use crate::solver::ggcalc::{ggcalc, InviscidSystem};
 use crate::solver::pointers::tecalc;
-use crate::solver::setbl::mrcl;
+use crate::solver::setbl::set_mach_re_from_cl;
 use crate::solver::velocity::qiset;
 
 /// OPER's `ALFA` command: sets LALFA, ALFA (radians) and QINF = 1, runs SPECAL, then
@@ -70,7 +70,7 @@ pub fn specal(st: &mut BlState, sys: &mut Option<InviscidSystem>) {
     let mut clm = 1.0;
 
     // set corresponding  M(CLM), Re(CLM)
-    let (mut minf_clm, _reinf_clm) = mrcl(st, clm);
+    let (mut minf_clm, _reinf_clm) = set_mach_re_from_cl(st, clm);
     comset(st);
 
     // set corresponding CL(M)
@@ -89,7 +89,7 @@ pub fn specal(st: &mut BlState, sys: &mut Option<InviscidSystem>) {
             clm = clm1 + rlx * dclm;
 
             // set new freestream Mach M(CLM)
-            let (m, _) = mrcl(st, clm);
+            let (m, _) = set_mach_re_from_cl(st, clm);
             minf_clm = m;
 
             // if Mach is OK, go do next Newton iteration
@@ -110,7 +110,7 @@ pub fn specal(st: &mut BlState, sys: &mut Option<InviscidSystem>) {
     // 'SPECAL:  Minf convergence failed' if the loop ran out
 
     // set final Mach, CL, Cp distributions, and hinge moment
-    let (m_cl, re_cl) = mrcl(st, st.cl);
+    let (m_cl, re_cl) = set_mach_re_from_cl(st, st.cl);
     st.minf_cl = m_cl;
     st.reinf_cl = re_cl;
     comset(st);
@@ -134,7 +134,7 @@ pub fn speccl(st: &mut BlState, sys: &mut Option<InviscidSystem>) {
     }
 
     // set freestream Mach from specified CL -- Mach will be held fixed
-    let (m_cl, re_cl) = mrcl(st, st.clspec);
+    let (m_cl, re_cl) = set_mach_re_from_cl(st, st.clspec);
     st.minf_cl = m_cl;
     st.reinf_cl = re_cl;
     comset(st);

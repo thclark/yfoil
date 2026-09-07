@@ -61,29 +61,33 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::BlState) {
     assert_eq!(p.converged, pt["LVCONV"] == "T", "{case}: LVCONV");
     assert_eq!(p.iterations, its.len(), "{case}: per-iteration record length");
     for (y, x) in p.trace.iter().zip(&its) {
-        let ctx = format!("{case} iteration {}", y.iter);
+        let ctx = format!("{case} iteration {}", y.iteration);
         for (name, ours, theirs, scale) in [
-            ("RMSBL", y.rmsbl, x[2], 1.0),
-            ("RLX", y.rlx, x[3], 1.0),
+            ("RMSBL", y.residual, x[2], 1.0),
+            ("RLX", y.relaxation, x[3], 1.0),
             ("CL", y.cl, x[4], 1.0),
             ("CD", y.cd, x[5], 1.0),
             ("CM", y.cm, x[6], 1.0),
-            ("ALFA", y.alfa, x[11], 1.0),
-            ("MINF", y.minf, x[12], 1.0),
-            ("REINF", y.reinf, x[13], x[13]),
+            ("ALFA", y.alpha, x[11], 1.0),
+            ("MINF", y.mach, x[12], 1.0),
+            ("REINF", y.re, x[13], x[13]),
         ] {
             assert_within(ours, theirs, TOL_SOLVER, scale, &format!("{ctx}: {name}"));
         }
-        assert_eq!(y.ist, x[8] as usize, "{ctx}: IST");
-        assert_eq!(y.itran[1..], [x[9] as usize, x[10] as usize], "{ctx}: ITRAN");
+        assert_eq!(y.i_stagnation_node, x[8] as usize, "{ctx}: IST");
+        assert_eq!(
+            y.i_transition_station[1..],
+            [x[9] as usize, x[10] as usize],
+            "{ctx}: ITRAN"
+        );
         println!(
             "  {ctx}: rms {:.4e} rlx {:.4} alpha {:.8}° CL {:.8} CD {:.8} Re {:.1} — match",
-            y.rmsbl,
-            y.rlx,
-            y.alfa.to_degrees(),
+            y.residual,
+            y.relaxation,
+            y.alpha.to_degrees(),
             y.cl,
             y.cd,
-            y.reinf
+            y.re
         );
     }
     for (name, ours, scale) in [

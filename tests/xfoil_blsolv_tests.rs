@@ -13,9 +13,9 @@
 
 mod fixtures;
 
-use fixtures::blsolv_fixtures::{parse_blsolv_input, parse_blsolv_output, BlsolvInput as XfoilBlsolvInput};
+use fixtures::blsolv_fixtures::{parse_blsolv_input, parse_blsolv_output, XfoilNewtonSystem};
 use std::path::PathBuf;
-use yfoil::bl::blsolv::{blsolv, blsolv_traced, BlsolvInput, BlsolvSolution, BlsolvTrace};
+use yfoil::bl::blsolv::{solve_newton_system, solve_newton_system_traced, BlsolvTrace, NewtonDeltas, NewtonSystem};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -23,37 +23,37 @@ fn fixture_path(name: &str) -> PathBuf {
 
 /// Build the YFoil input exactly as XFOIL's BLSOLV sees it: VZ block enabled, IVTE1/IVZ from
 /// IBLSYS, and — critically — `S(N)-S(1)` taken from the fixture, never estimated.
-fn yfoil_input(xi: &XfoilBlsolvInput) -> BlsolvInput {
-    BlsolvInput {
-        nsys: xi.nsys,
-        va: xi.va.clone(),
-        vb: xi.vb.clone(),
-        vdel: xi.vdel_in.clone(),
-        vm: xi.vm.clone(),
-        vz: xi.vz,
-        ivte1: Some(xi.ivte1_0based()),
-        ivz: Some(xi.ivz_0based()),
-        vaccel: xi.vaccel,
-        arc_length: Some(xi.arc_length.expect("fixture must carry ARC_LENGTH = S(N)-S(1)")),
+fn yfoil_input(xi: &XfoilNewtonSystem) -> NewtonSystem {
+    NewtonSystem {
+        n_rows: xi.n_rows,
+        diagonal: xi.diagonal.clone(),
+        subdiagonal: xi.subdiagonal.clone(),
+        rhs: xi.vdel_in.clone(),
+        mass_influence: xi.mass_influence.clone(),
+        te_block: xi.te_block,
+        i_te_row_upper: Some(xi.ivte1_0based()),
+        i_wake_row: Some(xi.ivz_0based()),
+        elimination_threshold: xi.elimination_threshold,
+        s_total: Some(xi.s_total.expect("fixture must carry ARC_LENGTH = S(N)-S(1)")),
     }
 }
 
 fn solve_call(
     call: usize,
 ) -> (
-    XfoilBlsolvInput,
+    XfoilNewtonSystem,
     fixtures::blsolv_fixtures::BlsolvOutput,
-    BlsolvSolution,
+    NewtonDeltas,
     BlsolvTrace,
 ) {
     let xi = parse_blsolv_input(&fixture_path("blsolv_input.dat"), call).expect("parse BLSOLV input");
     let xo = parse_blsolv_output(&fixture_path("blsolv_output.dat"), call).expect("parse BLSOLV output");
     assert_eq!(
-        xi.nsys, xo.nsys,
+        xi.n_rows, xo.nsys,
         "call {call}: NSYS mismatch between input and output fixture"
     );
     let mut trace = BlsolvTrace::default();
-    let sol = blsolv_traced(yfoil_input(&xi), Some(&mut trace));
+    let sol = solve_newton_system_traced(yfoil_input(&xi), Some(&mut trace));
     (xi, xo, sol, trace)
 }
 
@@ -77,10 +77,10 @@ fn test_blsolv_bit_identical_to_xfoil_calls_1_to_3() {
         let (xi, xo, sol, _) = solve_call(call);
         let sc = scales(&xo);
         let mut mismatches = Vec::new();
-        for iv in 0..xi.nsys {
+        for iv in 0..xi.n_rows {
             for k in 0..3 {
                 for c in 0..2 {
-                    let (a, b) = (sol.vdel[iv][k][c], xo.vdel_out[iv][k][c]);
+                    let (a, b) = (sol.deltas[iv][k][c], xo.vdel_out[iv][k][c]);
                     if a.to_bits() != b.to_bits() {
                         let scaled = (a - b).abs() / sc[k][c].max(f64::MIN_POSITIVE);
                         mismatches.push((iv, k, c, a, b, scaled));
@@ -92,7 +92,7 @@ fn test_blsolv_bit_identical_to_xfoil_calls_1_to_3() {
             mismatches.is_empty(),
             "call {call}: {} of {} VDEL values differ from XFOIL; worst scaled error {:.3e} at (iv={}, k={}, col={}): yfoil={:.17e} xfoil={:.17e}",
             mismatches.len(),
-            xi.nsys * 6,
+            xi.n_rows * 6,
             mismatches.iter().map(|m| m.5).fold(0.0, f64::max),
             mismatches[0].0,
             mismatches[0].1,
@@ -100,7 +100,7 @@ fn test_blsolv_bit_identical_to_xfoil_calls_1_to_3() {
             mismatches[0].3,
             mismatches[0].4
         );
-        println!("call {call}: {}/{} values bit-identical", xi.nsys * 6, xi.nsys * 6);
+        println!("call {call}: {}/{} values bit-identical", xi.n_rows * 6, xi.n_rows * 6);
     }
 }
 
@@ -117,7 +117,7 @@ fn test_blsolv_no_threshold_straddling() {
             "call {call}: {} comparisons, {} eliminations taken, tightest margin {margin:+.3e} at (iv={iv}, kv={kv}, k={k}), nsys={}",
             trace.skips.len(),
             taken,
-            xi.nsys
+            xi.n_rows
         );
         assert!(
             margin.abs() > 1e-9,
@@ -147,10 +147,10 @@ fn test_blsolv_forward_sweep_matches_xfoil_trace_call_1() {
             let (idx, val) = rest.split_once(",3,1)=").expect("trace line shape");
             let iv: usize = idx.trim().parse().unwrap();
             let xfoil: f64 = val.trim().parse().unwrap();
-            if iv == 0 || iv > trace.vdel_after_forward.len() {
+            if iv == 0 || iv > trace.rhs_after_forward.len() {
                 continue; // stations beyond NSYS are logged as zeros by the fixed-window dump
             }
-            let yfoil = trace.vdel_after_forward[iv - 1][2][0];
+            let yfoil = trace.rhs_after_forward[iv - 1][2][0];
             assert_eq!(
                 yfoil.to_bits(),
                 xfoil.to_bits(),
@@ -168,19 +168,19 @@ fn test_blsolv_forward_sweep_matches_xfoil_trace_call_1() {
 fn test_blsolv_small_subset_is_finite() {
     let xi = parse_blsolv_input(&fixture_path("blsolv_input.dat"), 1).expect("parse");
     let small = xi.small_subset(10);
-    let sol = blsolv(BlsolvInput {
-        nsys: small.nsys,
-        va: small.va.clone(),
-        vb: small.vb.clone(),
-        vdel: small.vdel_in.clone(),
-        vm: small.vm.clone(),
-        vz: [[0.0; 2]; 3],
-        ivte1: None,
-        ivz: None,
-        vaccel: small.vaccel,
-        arc_length: small.arc_length,
+    let sol = solve_newton_system(NewtonSystem {
+        n_rows: small.n_rows,
+        diagonal: small.diagonal.clone(),
+        subdiagonal: small.subdiagonal.clone(),
+        rhs: small.vdel_in.clone(),
+        mass_influence: small.mass_influence.clone(),
+        te_block: [[0.0; 2]; 3],
+        i_te_row_upper: None,
+        i_wake_row: None,
+        elimination_threshold: small.elimination_threshold,
+        s_total: small.s_total,
     });
-    for (iv, row) in sol.vdel.iter().enumerate() {
+    for (iv, row) in sol.deltas.iter().enumerate() {
         for (k, r) in row.iter().enumerate() {
             assert!(r[0].is_finite() && r[1].is_finite(), "NaN/Inf at station {iv} row {k}");
         }

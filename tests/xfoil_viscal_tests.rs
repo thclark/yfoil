@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
 use yfoil::solver::blstate::BlState;
 use yfoil::solver::clcalc::comset;
-use yfoil::solver::viscal::{viscal, ViscalIter};
+use yfoil::solver::viscal::{solve_viscous, IterationRecord};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -94,8 +94,8 @@ fn test_viscal_replay_matches_xfoil_iteration_by_iteration() {
     let xf = parse_iter_blocks(&fixture_path("viscal_iter.dat"));
     let fin = parse_bl_dump(&fixture_path("viscal_final.dat"));
 
-    let mut tr: Vec<ViscalIter> = Vec::new();
-    let converged = viscal(&mut st, None, 20, 1.0, Some(&mut tr));
+    let mut tr: Vec<IterationRecord> = Vec::new();
+    let converged = solve_viscous(&mut st, None, 20, 1.0, Some(&mut tr));
 
     // identical iteration count and convergence outcome
     assert_eq!(tr.len(), xf.len(), "VISCAL iteration count");
@@ -104,38 +104,50 @@ fn test_viscal_replay_matches_xfoil_iteration_by_iteration() {
 
     for (y, x) in tr.iter().zip(&xf) {
         let it = int(x, "ITER");
-        assert_eq!(y.iter, it);
+        assert_eq!(y.iteration, it);
         let ctx = format!("iteration {it}");
         for (name, ours) in [
-            ("RMSBL", y.rmsbl),
-            ("RMXBL", y.rmxbl),
-            ("RLX", y.rlx),
-            ("ALFA", y.alfa),
-            ("MINF", y.minf),
-            ("REINF", y.reinf),
+            ("RMSBL", y.residual),
+            ("RMXBL", y.residual_max),
+            ("RLX", y.relaxation),
+            ("ALFA", y.alpha),
+            ("MINF", y.mach),
+            ("REINF", y.re),
             ("CL", y.cl),
             ("CM", y.cm),
             ("CD", y.cd),
-            ("CDF", y.cdf),
-            ("CDP", y.cdp),
-            ("CL_ALF", y.cl_alf),
-            ("CL_MSQ", y.cl_msq),
-            ("SST", y.sst),
-            ("XOCTR1", y.xoctr[1]),
-            ("XOCTR2", y.xoctr[2]),
+            ("CDF", y.cd_friction),
+            ("CDP", y.cd_pressure),
+            ("CL_ALF", y.cl_d_alpha),
+            ("CL_MSQ", y.cl_d_machsqd),
+            ("SST", y.s_stagnation),
+            ("XOCTR1", y.x_transition[1]),
+            ("XOCTR2", y.x_transition[2]),
         ] {
             let scale = if name == "REINF" { real(x, name) } else { 1.0 };
             assert_within(ours, real(x, name), TOL_SOLVER, scale, &format!("{ctx}: {name}"));
         }
-        assert_eq!(y.vmxbl.to_string(), x["VMXBL"], "{ctx}: VMXBL");
-        assert_eq!(y.imxbl, int(x, "IMXBL"), "{ctx}: IMXBL");
-        assert_eq!(y.ismxbl, int(x, "ISMXBL"), "{ctx}: ISMXBL");
-        assert_eq!(y.ist, int(x, "IST"), "{ctx}: IST");
-        assert_eq!(y.itran[1..], [int(x, "ITRAN1"), int(x, "ITRAN2")], "{ctx}: ITRAN");
+        assert_eq!(y.residual_max_variable.to_string(), x["VMXBL"], "{ctx}: VMXBL");
+        assert_eq!(y.i_residual_max_station, int(x, "IMXBL"), "{ctx}: IMXBL");
+        assert_eq!(y.residual_max_side, int(x, "ISMXBL"), "{ctx}: ISMXBL");
+        assert_eq!(y.i_stagnation_node, int(x, "IST"), "{ctx}: IST");
+        assert_eq!(
+            y.i_transition_station[1..],
+            [int(x, "ITRAN1"), int(x, "ITRAN2")],
+            "{ctx}: ITRAN"
+        );
         assert_eq!(y.converged, x["LVCONV"] == "T", "{ctx}: LVCONV");
         println!(
             "viscal iter {it}: rms {:.4e} max {:+.4e} {} at {:3}{:2}  CL {:.6} CD {:.6}  (RLX {:.3}, IST {})",
-            y.rmsbl, y.rmxbl, y.vmxbl, y.imxbl, y.ismxbl, y.cl, y.cd, y.rlx, y.ist
+            y.residual,
+            y.residual_max,
+            y.residual_max_variable,
+            y.i_residual_max_station,
+            y.residual_max_side,
+            y.cl,
+            y.cd,
+            y.relaxation,
+            y.i_stagnation_node
         );
     }
 

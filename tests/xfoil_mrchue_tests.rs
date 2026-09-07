@@ -11,7 +11,7 @@ mod utilities;
 use fixtures::mrchue_fixtures::{parse_bl_state, parse_newton_trace};
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
-use yfoil::bl::mrchue::{mrchue, MrchueTrace};
+use yfoil::bl::mrchue::{march_direct, MrchueTrace};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -25,7 +25,7 @@ use fixtures::state_before_mrchue;
 fn test_mrchue_reproduces_xfoil_state_after_first_march() {
     let (mut st, params, acrit) = state_before_mrchue();
     let d = parse_bl_state(&fixture_path("mrchdu_input_1.dat"));
-    mrchue(&mut st, &params, acrit, None);
+    march_direct(&mut st, &params, acrit, None);
     assert_eq!(st.itran[1..], d.itran[1..], "ITRAN");
     let names = ["XSSI", "UEDG", "THET", "DSTR", "CTAU", "MASS"];
     let mut worst = (0.0_f64, "", 0, 0);
@@ -85,7 +85,7 @@ fn chk(mism: &mut Vec<String>, ctx: &str, a: &[f64], b: &[f64], what: &str, floo
 fn test_mrchue_newton_trace_matches_xfoil_iteration_by_iteration() {
     let (mut st, params, acrit) = state_before_mrchue();
     let mut trace = MrchueTrace::default();
-    mrchue(&mut st, &params, acrit, Some(&mut trace));
+    march_direct(&mut st, &params, acrit, Some(&mut trace));
     let xf = parse_newton_trace(&fixture_path("xfoil_newton_trace.dat"));
     assert!(!xf.is_empty());
     let mut mism: Vec<String> = Vec::new();

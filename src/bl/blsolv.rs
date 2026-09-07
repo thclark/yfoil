@@ -25,43 +25,43 @@
 
 /// Input matrices for BLSOLV
 #[derive(Debug, Clone)]
-pub struct BlsolvInput {
+pub struct NewtonSystem {
     /// Number of BL stations
-    pub nsys: usize,
+    pub n_rows: usize,
     /// Diagonal blocks VA[iv][k][l] - 3 equations, 2 columns
-    pub va: Vec<[[f64; 2]; 3]>,
+    pub diagonal: Vec<[[f64; 2]; 3]>,
     /// Sub-diagonal blocks VB[iv][k][l]
-    pub vb: Vec<[[f64; 2]; 3]>,
+    pub subdiagonal: Vec<[[f64; 2]; 3]>,
     /// RHS/solution VDEL[iv][k][l] - column 0 is residual, column 1 is Re sensitivity
-    pub vdel: Vec<[[f64; 2]; 3]>,
+    pub rhs: Vec<[[f64; 2]; 3]>,
     /// Mass defect coupling VM[iv][j][k] - coupling from station j to station iv, equation k
-    pub vm: Vec<Vec<[f64; 3]>>,
+    pub mass_influence: Vec<Vec<[f64; 3]>>,
     /// TE coupling block VZ[k][l] (optional, only used at trailing edge)
-    pub vz: [[f64; 2]; 3],
+    pub te_block: [[f64; 2]; 3],
     /// Index where upper surface ends at TE (0-based)
-    pub ivte1: Option<usize>,
+    pub i_te_row_upper: Option<usize>,
     /// System index for start of wake (lower surface TE + 1)
-    pub ivz: Option<usize>,
+    pub i_wake_row: Option<usize>,
     /// Acceleration parameter for sparse elimination
-    pub vaccel: f64,
+    pub elimination_threshold: f64,
     /// Total arc length S(N) - S(1) for VACC scaling (optional)
     /// If provided, VACC2 and VACC3 are scaled by 2.0 / arc_length
-    pub arc_length: Option<f64>,
+    pub s_total: Option<f64>,
 }
 
-impl Default for BlsolvInput {
+impl Default for NewtonSystem {
     fn default() -> Self {
         Self {
-            nsys: 0,
-            va: Vec::new(),
-            vb: Vec::new(),
-            vdel: Vec::new(),
-            vm: Vec::new(),
-            vz: [[0.0; 2]; 3],
-            ivte1: None,
-            ivz: None,
-            vaccel: 0.01,
-            arc_length: None,
+            n_rows: 0,
+            diagonal: Vec::new(),
+            subdiagonal: Vec::new(),
+            rhs: Vec::new(),
+            mass_influence: Vec::new(),
+            te_block: [[0.0; 2]; 3],
+            i_te_row_upper: None,
+            i_wake_row: None,
+            elimination_threshold: 0.01,
+            s_total: None,
         }
     }
 }
@@ -74,7 +74,7 @@ pub struct BlsolvTrace {
     /// Every sparse-elimination comparison `|VTMP| > VACC`: (iv, kv, k, |vtmp|, vacc, taken).
     pub skips: Vec<(usize, usize, usize, f64, f64, bool)>,
     /// Full VDEL after the forward sweep, before back-substitution.
-    pub vdel_after_forward: Vec<[[f64; 2]; 3]>,
+    pub rhs_after_forward: Vec<[[f64; 2]; 3]>,
 }
 
 impl BlsolvTrace {
@@ -91,13 +91,13 @@ impl BlsolvTrace {
 ///
 /// This is a separate type on purpose: XFOIL's UPDATE aliases `UNEW` onto `VA` and `QNEW`
 /// onto `VB` via EQUIVALENCE (xbl.f), so after BLSOLV the factored VA/VB/VM blocks are dead.
-/// Consuming the [`BlsolvInput`] makes it impossible to read them by accident.
+/// Consuming the [`NewtonSystem`] makes it impossible to read them by accident.
 #[derive(Debug, Clone)]
-pub struct BlsolvSolution {
+pub struct NewtonDeltas {
     /// Number of system rows
-    pub nsys: usize,
+    pub n_rows: usize,
     /// VDEL[iv][k][l]: column 0 is the Newton delta, column 1 the Re/alpha sensitivity
-    pub vdel: Vec<[[f64; 2]; 3]>,
+    pub deltas: Vec<[[f64; 2]; 3]>,
 }
 
 /// Solve the coupled BL Newton system using XFOIL's BLSOLV algorithm
@@ -106,26 +106,32 @@ pub struct BlsolvSolution {
 /// performs block Gaussian elimination with special handling for the dense mass defect
 /// coupling (VM matrix). Verified bit-identical to XFOIL on the tracked reference fixture
 /// (all three calls, both columns) — see tests/xfoil_blsolv_tests.rs.
-pub fn blsolv(input: BlsolvInput) -> BlsolvSolution {
-    blsolv_traced(input, None)
+pub fn solve_newton_system(input: NewtonSystem) -> NewtonDeltas {
+    solve_newton_system_traced(input, None)
 }
 
 /// `blsolv` with an optional [`BlsolvTrace`] collector.
-pub fn blsolv_traced(input: BlsolvInput, mut trace: Option<&mut BlsolvTrace>) -> BlsolvSolution {
+pub fn solve_newton_system_traced(input: NewtonSystem, mut trace: Option<&mut BlsolvTrace>) -> NewtonDeltas {
     let mut input = input;
-    let nsys = input.nsys;
+    let nsys = input.n_rows;
     if nsys == 0 {
-        return BlsolvSolution { nsys, vdel: input.vdel };
+        return NewtonDeltas {
+            n_rows: nsys,
+            deltas: input.rhs,
+        };
     }
 
     // Compute acceleration thresholds
     // XFOIL: VACC1 = VACCEL, VACC2 = VACC3 = VACCEL * 2.0 / (S(N) - S(1))
     // Association must match the Fortran exactly — (VACCEL*2.0)/(S(N)-S(1)) — because these
     // thresholds gate branches; a 1-ULP difference in VACC2 can flip a skip decision.
-    let vacc1 = input.vaccel;
-    let (vacc2, vacc3) = match input.arc_length {
-        Some(arc_len) if arc_len > 0.0 => (input.vaccel * 2.0 / arc_len, input.vaccel * 2.0 / arc_len),
-        _ => (input.vaccel, input.vaccel),
+    let vacc1 = input.elimination_threshold;
+    let (vacc2, vacc3) = match input.s_total {
+        Some(arc_len) if arc_len > 0.0 => (
+            input.elimination_threshold * 2.0 / arc_len,
+            input.elimination_threshold * 2.0 / arc_len,
+        ),
+        _ => (input.elimination_threshold, input.elimination_threshold),
     };
 
     // Forward sweep: IV = 0 to NSYS-1
@@ -135,68 +141,68 @@ pub fn blsolv_traced(input: BlsolvInput, mut trace: Option<&mut BlsolvTrace>) ->
         // ====== Invert VA(IV) block ======
 
         // Normalize first row by VA(1,1)
-        let pivot = 1.0 / input.va[iv][0][0];
-        input.va[iv][0][1] *= pivot;
+        let pivot = 1.0 / input.diagonal[iv][0][0];
+        input.diagonal[iv][0][1] *= pivot;
         for l in iv..nsys {
-            input.vm[iv][l][0] *= pivot;
+            input.mass_influence[iv][l][0] *= pivot;
         }
-        input.vdel[iv][0][0] *= pivot;
-        input.vdel[iv][0][1] *= pivot;
+        input.rhs[iv][0][0] *= pivot;
+        input.rhs[iv][0][1] *= pivot;
 
         // Eliminate lower first column in VA block (rows 2,3)
         for k in 1..3 {
-            let vtmp = input.va[iv][k][0];
-            input.va[iv][k][1] -= vtmp * input.va[iv][0][1];
+            let vtmp = input.diagonal[iv][k][0];
+            input.diagonal[iv][k][1] -= vtmp * input.diagonal[iv][0][1];
             for l in iv..nsys {
-                input.vm[iv][l][k] -= vtmp * input.vm[iv][l][0];
+                input.mass_influence[iv][l][k] -= vtmp * input.mass_influence[iv][l][0];
             }
-            input.vdel[iv][k][0] -= vtmp * input.vdel[iv][0][0];
-            input.vdel[iv][k][1] -= vtmp * input.vdel[iv][0][1];
+            input.rhs[iv][k][0] -= vtmp * input.rhs[iv][0][0];
+            input.rhs[iv][k][1] -= vtmp * input.rhs[iv][0][1];
         }
 
         // Normalize second row by VA(2,2)
-        let pivot = 1.0 / input.va[iv][1][1];
+        let pivot = 1.0 / input.diagonal[iv][1][1];
         for l in iv..nsys {
-            input.vm[iv][l][1] *= pivot;
+            input.mass_influence[iv][l][1] *= pivot;
         }
-        input.vdel[iv][1][0] *= pivot;
-        input.vdel[iv][1][1] *= pivot;
+        input.rhs[iv][1][0] *= pivot;
+        input.rhs[iv][1][1] *= pivot;
 
         // Eliminate lower second column in VA block (row 3)
-        let vtmp = input.va[iv][2][1];
+        let vtmp = input.diagonal[iv][2][1];
         for l in iv..nsys {
-            input.vm[iv][l][2] -= vtmp * input.vm[iv][l][1];
+            input.mass_influence[iv][l][2] -= vtmp * input.mass_influence[iv][l][1];
         }
-        input.vdel[iv][2][0] -= vtmp * input.vdel[iv][1][0];
-        input.vdel[iv][2][1] -= vtmp * input.vdel[iv][1][1];
+        input.rhs[iv][2][0] -= vtmp * input.rhs[iv][1][0];
+        input.rhs[iv][2][1] -= vtmp * input.rhs[iv][1][1];
 
         // Normalize third row by VM(3,IV,IV) - the diagonal mass coupling
-        let pivot = 1.0 / input.vm[iv][iv][2];
+        let pivot = 1.0 / input.mass_influence[iv][iv][2];
         for l in ivp..nsys {
-            input.vm[iv][l][2] *= pivot;
+            input.mass_influence[iv][l][2] *= pivot;
         }
-        input.vdel[iv][2][0] *= pivot;
-        input.vdel[iv][2][1] *= pivot;
+        input.rhs[iv][2][0] *= pivot;
+        input.rhs[iv][2][1] *= pivot;
 
         // Eliminate upper third column in VA block (rows 1,2)
-        let vtmp1 = input.vm[iv][iv][0];
-        let vtmp2 = input.vm[iv][iv][1];
+        let vtmp1 = input.mass_influence[iv][iv][0];
+        let vtmp2 = input.mass_influence[iv][iv][1];
         for l in ivp..nsys {
-            input.vm[iv][l][0] -= vtmp1 * input.vm[iv][l][2];
-            input.vm[iv][l][1] -= vtmp2 * input.vm[iv][l][2];
+            input.mass_influence[iv][l][0] -= vtmp1 * input.mass_influence[iv][l][2];
+            input.mass_influence[iv][l][1] -= vtmp2 * input.mass_influence[iv][l][2];
         }
-        input.vdel[iv][0][0] -= vtmp1 * input.vdel[iv][2][0];
-        input.vdel[iv][1][0] -= vtmp2 * input.vdel[iv][2][0];
-        input.vdel[iv][0][1] -= vtmp1 * input.vdel[iv][2][1];
-        input.vdel[iv][1][1] -= vtmp2 * input.vdel[iv][2][1];
+        input.rhs[iv][0][0] -= vtmp1 * input.rhs[iv][2][0];
+        input.rhs[iv][1][0] -= vtmp2 * input.rhs[iv][2][0];
+        input.rhs[iv][0][1] -= vtmp1 * input.rhs[iv][2][1];
+        input.rhs[iv][1][1] -= vtmp2 * input.rhs[iv][2][1];
 
         // Eliminate upper second column in VA block (row 1)
-        let vtmp = input.va[iv][0][1];
+        let vtmp = input.diagonal[iv][0][1];
         for l in ivp..nsys {
-            input.vm[iv][l][0] -= vtmp * input.vm[iv][l][1];
+            input.mass_influence[iv][l][0] -= vtmp * input.mass_influence[iv][l][1];
         }
-        input.vdel[iv][0][0] -= vtmp * input.vdel[iv][1][0];
-        input.vdel[iv][0][1] -= vtmp * input.vdel[iv][1][1];
+        input.rhs[iv][0][0] -= vtmp * input.rhs[iv][1][0];
+        input.rhs[iv][0][1] -= vtmp * input.rhs[iv][1][1];
 
         if iv == nsys - 1 {
             continue;
@@ -204,30 +210,32 @@ pub fn blsolv_traced(input: BlsolvInput, mut trace: Option<&mut BlsolvTrace>) ->
 
         // ====== Eliminate VB(IV+1) block, rows 1 -> 3 ======
         for k in 0..3 {
-            let vtmp1 = input.vb[ivp][k][0];
-            let vtmp2 = input.vb[ivp][k][1];
-            let vtmp3 = input.vm[ivp][iv][k];
+            let vtmp1 = input.subdiagonal[ivp][k][0];
+            let vtmp2 = input.subdiagonal[ivp][k][1];
+            let vtmp3 = input.mass_influence[ivp][iv][k];
             for l in ivp..nsys {
-                input.vm[ivp][l][k] -=
-                    vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1] + vtmp3 * input.vm[iv][l][2];
+                input.mass_influence[ivp][l][k] -= vtmp1 * input.mass_influence[iv][l][0]
+                    + vtmp2 * input.mass_influence[iv][l][1]
+                    + vtmp3 * input.mass_influence[iv][l][2];
             }
-            input.vdel[ivp][k][0] -=
-                vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0] + vtmp3 * input.vdel[iv][2][0];
-            input.vdel[ivp][k][1] -=
-                vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1] + vtmp3 * input.vdel[iv][2][1];
+            input.rhs[ivp][k][0] -=
+                vtmp1 * input.rhs[iv][0][0] + vtmp2 * input.rhs[iv][1][0] + vtmp3 * input.rhs[iv][2][0];
+            input.rhs[ivp][k][1] -=
+                vtmp1 * input.rhs[iv][0][1] + vtmp2 * input.rhs[iv][1][1] + vtmp3 * input.rhs[iv][2][1];
         }
 
         // Handle VZ block at trailing edge (coupling from upper to lower surface)
-        if let (Some(ivte1), Some(ivz)) = (input.ivte1, input.ivz) {
+        if let (Some(ivte1), Some(ivz)) = (input.i_te_row_upper, input.i_wake_row) {
             if iv == ivte1 {
                 for k in 0..3 {
-                    let vtmp1 = input.vz[k][0];
-                    let vtmp2 = input.vz[k][1];
+                    let vtmp1 = input.te_block[k][0];
+                    let vtmp2 = input.te_block[k][1];
                     for l in ivp..nsys {
-                        input.vm[ivz][l][k] -= vtmp1 * input.vm[iv][l][0] + vtmp2 * input.vm[iv][l][1];
+                        input.mass_influence[ivz][l][k] -=
+                            vtmp1 * input.mass_influence[iv][l][0] + vtmp2 * input.mass_influence[iv][l][1];
                     }
-                    input.vdel[ivz][k][0] -= vtmp1 * input.vdel[iv][0][0] + vtmp2 * input.vdel[iv][1][0];
-                    input.vdel[ivz][k][1] -= vtmp1 * input.vdel[iv][0][1] + vtmp2 * input.vdel[iv][1][1];
+                    input.rhs[ivz][k][0] -= vtmp1 * input.rhs[iv][0][0] + vtmp2 * input.rhs[iv][1][0];
+                    input.rhs[ivz][k][1] -= vtmp1 * input.rhs[iv][0][1] + vtmp2 * input.rhs[iv][1][1];
                 }
             }
         }
@@ -238,9 +246,9 @@ pub fn blsolv_traced(input: BlsolvInput, mut trace: Option<&mut BlsolvTrace>) ->
 
         // ====== Eliminate lower VM column (sparse elimination) ======
         for kv in (iv + 2)..nsys {
-            let vtmp1 = input.vm[kv][iv][0];
-            let vtmp2 = input.vm[kv][iv][1];
-            let vtmp3 = input.vm[kv][iv][2];
+            let vtmp1 = input.mass_influence[kv][iv][0];
+            let vtmp2 = input.mass_influence[kv][iv][1];
+            let vtmp3 = input.mass_influence[kv][iv][2];
             if let Some(t) = trace.as_mut() {
                 t.skips.push((iv, kv, 0, vtmp1.abs(), vacc1, vtmp1.abs() > vacc1));
                 t.skips.push((iv, kv, 1, vtmp2.abs(), vacc2, vtmp2.abs() > vacc2));
@@ -249,53 +257,56 @@ pub fn blsolv_traced(input: BlsolvInput, mut trace: Option<&mut BlsolvTrace>) ->
 
             if vtmp1.abs() > vacc1 {
                 for l in ivp..nsys {
-                    input.vm[kv][l][0] -= vtmp1 * input.vm[iv][l][2];
+                    input.mass_influence[kv][l][0] -= vtmp1 * input.mass_influence[iv][l][2];
                 }
-                input.vdel[kv][0][0] -= vtmp1 * input.vdel[iv][2][0];
-                input.vdel[kv][0][1] -= vtmp1 * input.vdel[iv][2][1];
+                input.rhs[kv][0][0] -= vtmp1 * input.rhs[iv][2][0];
+                input.rhs[kv][0][1] -= vtmp1 * input.rhs[iv][2][1];
             }
 
             if vtmp2.abs() > vacc2 {
                 for l in ivp..nsys {
-                    input.vm[kv][l][1] -= vtmp2 * input.vm[iv][l][2];
+                    input.mass_influence[kv][l][1] -= vtmp2 * input.mass_influence[iv][l][2];
                 }
-                input.vdel[kv][1][0] -= vtmp2 * input.vdel[iv][2][0];
-                input.vdel[kv][1][1] -= vtmp2 * input.vdel[iv][2][1];
+                input.rhs[kv][1][0] -= vtmp2 * input.rhs[iv][2][0];
+                input.rhs[kv][1][1] -= vtmp2 * input.rhs[iv][2][1];
             }
 
             if vtmp3.abs() > vacc3 {
                 for l in ivp..nsys {
-                    input.vm[kv][l][2] -= vtmp3 * input.vm[iv][l][2];
+                    input.mass_influence[kv][l][2] -= vtmp3 * input.mass_influence[iv][l][2];
                 }
-                input.vdel[kv][2][0] -= vtmp3 * input.vdel[iv][2][0];
-                input.vdel[kv][2][1] -= vtmp3 * input.vdel[iv][2][1];
+                input.rhs[kv][2][0] -= vtmp3 * input.rhs[iv][2][0];
+                input.rhs[kv][2][1] -= vtmp3 * input.rhs[iv][2][1];
             }
         }
     }
 
     if let Some(t) = trace.as_mut() {
-        t.vdel_after_forward = input.vdel.clone();
+        t.rhs_after_forward = input.rhs.clone();
     }
 
     // Backward sweep: IV = NSYS-1 down to 1
     for iv in (1..nsys).rev() {
         // Eliminate upper VM columns
-        let vtmp = input.vdel[iv][2][0];
+        let vtmp = input.rhs[iv][2][0];
         for kv in (0..iv).rev() {
-            input.vdel[kv][0][0] -= input.vm[kv][iv][0] * vtmp;
-            input.vdel[kv][1][0] -= input.vm[kv][iv][1] * vtmp;
-            input.vdel[kv][2][0] -= input.vm[kv][iv][2] * vtmp;
+            input.rhs[kv][0][0] -= input.mass_influence[kv][iv][0] * vtmp;
+            input.rhs[kv][1][0] -= input.mass_influence[kv][iv][1] * vtmp;
+            input.rhs[kv][2][0] -= input.mass_influence[kv][iv][2] * vtmp;
         }
 
-        let vtmp = input.vdel[iv][2][1];
+        let vtmp = input.rhs[iv][2][1];
         for kv in (0..iv).rev() {
-            input.vdel[kv][0][1] -= input.vm[kv][iv][0] * vtmp;
-            input.vdel[kv][1][1] -= input.vm[kv][iv][1] * vtmp;
-            input.vdel[kv][2][1] -= input.vm[kv][iv][2] * vtmp;
+            input.rhs[kv][0][1] -= input.mass_influence[kv][iv][0] * vtmp;
+            input.rhs[kv][1][1] -= input.mass_influence[kv][iv][1] * vtmp;
+            input.rhs[kv][2][1] -= input.mass_influence[kv][iv][2] * vtmp;
         }
     }
 
-    BlsolvSolution { nsys, vdel: input.vdel }
+    NewtonDeltas {
+        n_rows: nsys,
+        deltas: input.rhs,
+    }
 }
 
 #[cfg(test)]
@@ -307,45 +318,45 @@ mod tests {
         // Test with a decoupled diagonal system where each station is independent
         // This tests the basic elimination without inter-station coupling
         let nsys = 3;
-        let mut input = BlsolvInput {
-            nsys,
-            va: vec![[[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]; nsys],
-            vb: vec![[[0.0; 2]; 3]; nsys],
-            vdel: vec![[[1.0, 0.0], [2.0, 0.0], [3.0, 0.0]]; nsys],
-            vm: vec![vec![[0.0, 0.0, 0.0]; nsys]; nsys],
-            vz: [[0.0; 2]; 3],
-            ivte1: None,
-            ivz: None,
-            vaccel: 0.01,
-            arc_length: None,
+        let mut input = NewtonSystem {
+            n_rows: nsys,
+            diagonal: vec![[[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]; nsys],
+            subdiagonal: vec![[[0.0; 2]; 3]; nsys],
+            rhs: vec![[[1.0, 0.0], [2.0, 0.0], [3.0, 0.0]]; nsys],
+            mass_influence: vec![vec![[0.0, 0.0, 0.0]; nsys]; nsys],
+            te_block: [[0.0; 2]; 3],
+            i_te_row_upper: None,
+            i_wake_row: None,
+            elimination_threshold: 0.01,
+            s_total: None,
         };
 
         // Set diagonal VM entries for the third equation
         for iv in 0..nsys {
-            input.vm[iv][iv][2] = 1.0;
+            input.mass_influence[iv][iv][2] = 1.0;
         }
 
-        let input = blsolv(input);
+        let input = solve_newton_system(input);
 
         // Solution should be [1, 2, 3] at each station
         for iv in 0..nsys {
             assert!(
-                (input.vdel[iv][0][0] - 1.0).abs() < 1e-10,
+                (input.deltas[iv][0][0] - 1.0).abs() < 1e-10,
                 "Station {} row 0: expected 1.0, got {}",
                 iv,
-                input.vdel[iv][0][0]
+                input.deltas[iv][0][0]
             );
             assert!(
-                (input.vdel[iv][1][0] - 2.0).abs() < 1e-10,
+                (input.deltas[iv][1][0] - 2.0).abs() < 1e-10,
                 "Station {} row 1: expected 2.0, got {}",
                 iv,
-                input.vdel[iv][1][0]
+                input.deltas[iv][1][0]
             );
             assert!(
-                (input.vdel[iv][2][0] - 3.0).abs() < 1e-10,
+                (input.deltas[iv][2][0] - 3.0).abs() < 1e-10,
                 "Station {} row 2: expected 3.0, got {}",
                 iv,
-                input.vdel[iv][2][0]
+                input.deltas[iv][2][0]
             );
         }
     }
@@ -354,34 +365,34 @@ mod tests {
     fn test_blsolv_with_coupling() {
         // Test with a system that has off-diagonal VM coupling
         let nsys = 2;
-        let mut input = BlsolvInput {
-            nsys,
-            va: vec![[[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]; nsys],
-            vb: vec![[[0.0; 2]; 3]; nsys],
-            vdel: vec![[[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]; nsys],
-            vm: vec![vec![[0.0, 0.0, 0.0]; nsys]; nsys],
-            vz: [[0.0; 2]; 3],
-            ivte1: None,
-            ivz: None,
-            vaccel: 0.01,
-            arc_length: None,
+        let mut input = NewtonSystem {
+            n_rows: nsys,
+            diagonal: vec![[[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]; nsys],
+            subdiagonal: vec![[[0.0; 2]; 3]; nsys],
+            rhs: vec![[[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]; nsys],
+            mass_influence: vec![vec![[0.0, 0.0, 0.0]; nsys]; nsys],
+            te_block: [[0.0; 2]; 3],
+            i_te_row_upper: None,
+            i_wake_row: None,
+            elimination_threshold: 0.01,
+            s_total: None,
         };
 
         // Set diagonal VM entries (required for the third equation)
-        input.vm[0][0][2] = 1.0;
-        input.vm[1][1][2] = 1.0;
+        input.mass_influence[0][0][2] = 1.0;
+        input.mass_influence[1][1][2] = 1.0;
         // Add some coupling from station 0 to station 1
-        input.vm[1][0] = [0.1, 0.1, 0.1];
+        input.mass_influence[1][0] = [0.1, 0.1, 0.1];
 
-        let input = blsolv(input);
+        let input = solve_newton_system(input);
 
         // Solution should satisfy the system equations
         // This is a basic sanity check - actual values depend on the coupling
-        assert!(input.vdel[0][0][0].is_finite(), "Station 0 row 0 is NaN");
-        assert!(input.vdel[0][1][0].is_finite(), "Station 0 row 1 is NaN");
-        assert!(input.vdel[0][2][0].is_finite(), "Station 0 row 2 is NaN");
-        assert!(input.vdel[1][0][0].is_finite(), "Station 1 row 0 is NaN");
-        assert!(input.vdel[1][1][0].is_finite(), "Station 1 row 1 is NaN");
-        assert!(input.vdel[1][2][0].is_finite(), "Station 1 row 2 is NaN");
+        assert!(input.deltas[0][0][0].is_finite(), "Station 0 row 0 is NaN");
+        assert!(input.deltas[0][1][0].is_finite(), "Station 0 row 1 is NaN");
+        assert!(input.deltas[0][2][0].is_finite(), "Station 0 row 2 is NaN");
+        assert!(input.deltas[1][0][0].is_finite(), "Station 1 row 0 is NaN");
+        assert!(input.deltas[1][1][0].is_finite(), "Station 1 row 1 is NaN");
+        assert!(input.deltas[1][2][0].is_finite(), "Station 1 row 2 is NaN");
     }
 }

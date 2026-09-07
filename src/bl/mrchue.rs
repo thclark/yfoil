@@ -10,7 +10,7 @@ use crate::solver::pointers::xifset;
 
 /// One Newton iteration of one station, as the reference trace records it.
 #[derive(Debug, Clone, Default)]
-pub struct StationIter {
+pub struct MrchueIter {
     pub is: usize,
     pub ibl: usize,
     pub itbl: usize,
@@ -41,12 +41,12 @@ pub struct StationIter {
 
 #[derive(Debug, Clone, Default)]
 pub struct MrchueTrace {
-    pub iters: Vec<StationIter>,
+    pub iters: Vec<MrchueIter>,
 }
 
 /// MRCHUE. Requires the pointer layer (XSSI, IPAN, IBLTE, NBL, WGAP), UEDG initialised
 /// (UINV on the first call), ANTE, XSTRIP and the transition thresholds.
-pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut trace: Option<&mut MrchueTrace>) {
+pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut trace: Option<&mut MrchueTrace>) {
     // shape parameters for separation criteria
     let hlmax = 3.8;
     let htmax = 2.5;
@@ -182,7 +182,7 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                     sys.residual[3] = htarg - s2.hk;
                 }
 
-                let mut rec = StationIter {
+                let mut rec = MrchueIter {
                     is,
                     ibl,
                     itbl,

@@ -10,11 +10,11 @@ use std::path::Path;
 
 /// Input data for one BLSOLV call
 #[derive(Debug, Clone)]
-pub struct BlsolvInput {
+pub struct XfoilNewtonSystem {
     /// Call number (1, 2, 3, ...)
     pub call_number: usize,
     /// Total number of BL stations (both sides + wake - overlaps)
-    pub nsys: usize,
+    pub n_rows: usize,
     /// Index where upper surface ends at TE (1-based)
     pub iblte1: usize,
     /// Index where lower surface ends at TE (1-based)
@@ -24,13 +24,13 @@ pub struct BlsolvInput {
     /// Number of BL stations on lower surface
     pub nbl2: usize,
     /// Acceleration parameter for tridiagonal solve
-    pub vaccel: f64,
+    pub elimination_threshold: f64,
     /// VA matrix: diagonal blocks, [nsys][3][2]
     /// VA[iv][k][l] is the coefficient for equation k, column l at station iv
-    pub va: Vec<[[f64; 2]; 3]>,
+    pub diagonal: Vec<[[f64; 2]; 3]>,
     /// VB matrix: sub-diagonal blocks, [nsys][3][2]
     /// VB[iv][k][l] is the coupling from station iv-1 to station iv, equation k, column l
-    pub vb: Vec<[[f64; 2]; 3]>,
+    pub subdiagonal: Vec<[[f64; 2]; 3]>,
     /// VDEL before solve: residuals and Reynolds sensitivities, [nsys][3][2]
     /// VDEL[iv][k][0] = residual for equation k at station iv
     /// VDEL[iv][k][1] = Reynolds sensitivity for equation k at station iv
@@ -38,12 +38,12 @@ pub struct BlsolvInput {
     /// VM matrix: mass defect coupling, [nsys][nsys][3]
     /// VM[iv][j][k] = coupling from station j's mass to station iv's equation k
     /// Note: XFOIL format has VM(3, NSYS, NSYS), so VM(k, j, iv) in Fortran
-    pub vm: Vec<Vec<[f64; 3]>>,
+    pub mass_influence: Vec<Vec<[f64; 3]>>,
     /// VZ matrix: trailing edge coupling block [3][2]
     /// Couples upper surface TE to lower surface/wake
-    pub vz: [[f64; 2]; 3],
+    pub te_block: [[f64; 2]; 3],
     /// Total arc length S(N) - S(1) for VACC scaling
-    pub arc_length: Option<f64>,
+    pub s_total: Option<f64>,
 }
 
 /// Output data for one BLSOLV call
@@ -59,24 +59,24 @@ pub struct BlsolvOutput {
     pub vdel_out: Vec<[[f64; 2]; 3]>,
 }
 
-impl BlsolvInput {
+impl XfoilNewtonSystem {
     /// Get a small subset for testing (first n_small stations)
-    pub fn small_subset(&self, n_small: usize) -> BlsolvInput {
-        let n = n_small.min(self.nsys);
-        BlsolvInput {
+    pub fn small_subset(&self, n_small: usize) -> XfoilNewtonSystem {
+        let n = n_small.min(self.n_rows);
+        XfoilNewtonSystem {
             call_number: self.call_number,
-            nsys: n,
+            n_rows: n,
             iblte1: self.iblte1.min(n),
             iblte2: self.iblte2.min(n),
             nbl1: self.nbl1.min(n),
             nbl2: self.nbl2.min(n),
-            vaccel: self.vaccel,
-            va: self.va[..n].to_vec(),
-            vb: self.vb[..n].to_vec(),
+            elimination_threshold: self.elimination_threshold,
+            diagonal: self.diagonal[..n].to_vec(),
+            subdiagonal: self.subdiagonal[..n].to_vec(),
             vdel_in: self.vdel_in[..n].to_vec(),
-            vm: self.vm[..n].iter().map(|row| row[..n].to_vec()).collect(),
-            vz: self.vz,
-            arc_length: self.arc_length,
+            mass_influence: self.mass_influence[..n].iter().map(|row| row[..n].to_vec()).collect(),
+            te_block: self.te_block,
+            s_total: self.s_total,
         }
     }
 
@@ -114,7 +114,7 @@ impl BlsolvInput {
 }
 
 /// Parse BLSOLV input fixture file
-pub fn parse_blsolv_input(path: &Path, call_number: usize) -> Option<BlsolvInput> {
+pub fn parse_blsolv_input(path: &Path, call_number: usize) -> Option<XfoilNewtonSystem> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
     let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
@@ -253,20 +253,20 @@ pub fn parse_blsolv_input(path: &Path, call_number: usize) -> Option<BlsolvInput
         [vz_vals[4], vz_vals[5]],
     ];
 
-    Some(BlsolvInput {
+    Some(XfoilNewtonSystem {
         call_number,
-        nsys,
+        n_rows: nsys,
         iblte1,
         iblte2,
         nbl1,
         nbl2,
-        vaccel,
-        va,
-        vb,
+        elimination_threshold: vaccel,
+        diagonal: va,
+        subdiagonal: vb,
         vdel_in,
-        vm,
-        vz,
-        arc_length,
+        mass_influence: vm,
+        te_block: vz,
+        s_total: arc_length,
     })
 }
 

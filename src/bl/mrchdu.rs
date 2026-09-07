@@ -55,7 +55,12 @@ pub struct MrchduTrace {
 /// MRCHDU. Requires the pointer layer (XSSI, IBLTE, NBL, WGAP), the current
 /// UEDG/THET/DSTR/CTAU, ITRAN from the previous march, ANTE, XSTRIP and the transition
 /// thresholds. Updates THET/DSTR/CTAU/UEDG/MASS/TAU/DIS/CTQ/DELT/TSTR, ITRAN, XSSITR and TFORCE.
-pub fn mrchdu(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut trace: Option<&mut MrchduTrace>) {
+pub fn march_prescribed_dstar(
+    st: &mut BlState,
+    params: &FlowParameters,
+    acrit: [f64; 3],
+    mut trace: Option<&mut MrchduTrace>,
+) {
     const DEPS: f64 = 5.0e-6;
 
     // constant controlling how far Hk is allowed to deviate from the specified value

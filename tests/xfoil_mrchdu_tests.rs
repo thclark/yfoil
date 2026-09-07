@@ -12,7 +12,7 @@ use fixtures::mrchdu_fixtures::{parse_bl_dump, parse_mrchdu_trace};
 
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
-use yfoil::bl::mrchdu::{mrchdu, MrchduTrace};
+use yfoil::bl::mrchdu::{march_prescribed_dstar, MrchduTrace};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -22,7 +22,7 @@ fn check_state_after(k: usize) {
     let (mut st, params, _) = fixtures::state_before_setbl_march(k);
     let acrit = st.acrit;
     let o = parse_bl_dump(&fixture_path(&format!("mrchdu_output_{k}.dat")));
-    mrchdu(&mut st, &params, acrit, None);
+    march_prescribed_dstar(&mut st, &params, acrit, None);
     assert_eq!(st.itran[1..], [o.int("ITRAN1"), o.int("ITRAN2")], "call {k}: ITRAN");
     assert_eq!(
         st.tforce[1..],
@@ -121,7 +121,7 @@ fn test_mrchdu_newton_trace_matches_xfoil_iteration_by_iteration() {
     let acrit = st.acrit;
     let xf = parse_mrchdu_trace(&fixture_path("xfoil_mrchdu_trace.dat"));
     let mut tr = MrchduTrace::default();
-    mrchdu(&mut st, &params, acrit, Some(&mut tr));
+    march_prescribed_dstar(&mut st, &params, acrit, Some(&mut tr));
 
     let mut mism = Vec::new();
     let n = xf.iters.len().min(tr.iters.len());

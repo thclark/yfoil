@@ -5,10 +5,10 @@
 //! Also MRCL (xfoil.f) — the Mach/Re dependence on CL selected by MATYP/RETYP — which SETBL
 //! calls first. `IDAMPV = IDAMP` is pinned at 0 (the envelope e^N `DAMPL` model).
 
-use crate::bl::blsolv::BlsolvInput;
+use crate::bl::blsolv::NewtonSystem;
 use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
-use crate::bl::mrchdu::mrchdu;
-use crate::bl::mrchue::mrchue;
+use crate::bl::mrchdu::march_prescribed_dstar;
+use crate::bl::mrchue::march_direct;
 use crate::bl::system::{check_transition, FlowParameters, FlowRegime, IntervalSystem, TransitionCheck};
 use crate::geometry::seval;
 use crate::solver::blstate::BlState;
@@ -17,23 +17,23 @@ use crate::solver::velocity::ueset;
 
 /// Everything SETBL produces besides the arrays it writes into `BlState`.
 #[derive(Debug, Clone)]
-pub struct SetblResult {
+pub struct AssembledSystem {
     /// The global BL Newton system as BLSOLV sees it (VA, VB, VDEL, VM, VZ, NSYS, IVTE1, IVZ).
-    pub sys: BlsolvInput,
+    pub newton: NewtonSystem,
     /// The BL parameters SETBL derived (REYBL, HSTINV, ...): the marches and UPDATE share them.
-    pub params: FlowParameters,
+    pub flow: FlowParameters,
     /// RE_CLMR, MSQ_CLMR: d(Re)/d(CL) and d(M²)/d(CL) for the fixed-CL sensitivity column.
-    pub re_clmr: f64,
-    pub msq_clmr: f64,
+    pub re_d_cl: f64,
+    pub machsqd_d_cl: f64,
     /// MA_CLMR: d(M)/d(CL) (MRCL's M_CLS); VISCAL's MINF_CL is the same quantity
-    pub ma_clmr: f64,
+    pub mach_d_cl: f64,
     /// DULE1, DULE2: the LE Ue mismatch between UEDG and USAV = UINV + DIJ·MASS, per side.
-    pub dule: [f64; 3],
+    pub ue_le_mismatch: [f64; 3],
 }
 
 /// MRCL: sets the actual Mach and Reynolds numbers from the unit-CL values and the specified
 /// CLS according to MATYP/RETYP. Returns (M_CLS, R_CLS).
-pub fn mrcl(st: &mut BlState, cls: f64) -> (f64, f64) {
+pub fn set_mach_re_from_cl(st: &mut BlState, cls: f64) -> (f64, f64) {
     let cla = cls.max(0.000001);
     if st.retyp < 1 || st.retyp > 3 {
         // 'MRCL:  Illegal Re(CL) dependence trigger. Setting fixed Re.'
@@ -95,12 +95,12 @@ pub fn mrcl(st: &mut BlState, cls: f64) -> (f64, f64) {
 /// and the control fields (`lalfa`, `cl`/`clspec`, `matyp`/`retyp`, `minf1`/`reinf1`, `acrit`,
 /// `vaccel`). Writes TAU/DIS/CTQ/DELT/USLP, ITRAN/XSSITR/TFORCE, XOCTR/YOCTR/TINDEX and leaves
 /// UEDG holding the *marched* Ue (USAV = UINV + DIJ·MASS is the mismatch reference).
-pub fn setbl(st: &mut BlState) -> SetblResult {
+pub fn assemble_newton_system(st: &mut BlState) -> AssembledSystem {
     // set the CL used to define Mach, Reynolds numbers
     let clmr = if st.lalfa { st.cl } else { st.clspec };
 
     // set current MINF(CL)
-    let (ma_clmr, re_clmr) = mrcl(st, clmr);
+    let (ma_clmr, re_clmr) = set_mach_re_from_cl(st, clmr);
     let msq_clmr = 2.0 * st.minf * ma_clmr;
 
     // set compressibility parameter TKLAM and derivative TK_MSQ (COMSET), gas constant, the
@@ -116,13 +116,13 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
     if !st.lblini {
         // initialize BL by marching with Ue (fudge at separation)
         let acrit = st.acrit;
-        mrchue(st, &params, acrit, None);
+        march_direct(st, &params, acrit, None);
         st.lblini = true;
     }
 
     // march BL with current Ue and Ds to establish transition
     let acrit = st.acrit;
-    mrchdu(st, &params, acrit, None);
+    march_prescribed_dstar(st, &params, acrit, None);
 
     let mut usav: [Vec<f64>; 3] = [Vec::new(), st.uedg[1].clone(), st.uedg[2].clone()];
     ueset(st);
@@ -437,24 +437,24 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
     st.com2 = s2;
     st.trloc = trloc;
 
-    let sys = BlsolvInput {
-        nsys,
-        va,
-        vb,
-        vdel,
-        vm,
-        vz,
-        ivte1: Some(st.isys[1][st.iblte[1]] - 1),
-        ivz: Some(st.isys[2][st.iblte[2] + 1] - 1),
-        vaccel: st.vaccel,
-        arc_length: Some(st.s[st.n] - st.s[1]),
+    let sys = NewtonSystem {
+        n_rows: nsys,
+        diagonal: va,
+        subdiagonal: vb,
+        rhs: vdel,
+        mass_influence: vm,
+        te_block: vz,
+        i_te_row_upper: Some(st.isys[1][st.iblte[1]] - 1),
+        i_wake_row: Some(st.isys[2][st.iblte[2] + 1] - 1),
+        elimination_threshold: st.vaccel,
+        s_total: Some(st.s[st.n] - st.s[1]),
     };
-    SetblResult {
-        sys,
-        params,
-        re_clmr,
-        msq_clmr,
-        ma_clmr,
-        dule: [0.0, dule1, dule2],
+    AssembledSystem {
+        newton: sys,
+        flow: params,
+        re_d_cl: re_clmr,
+        machsqd_d_cl: msq_clmr,
+        mach_d_cl: ma_clmr,
+        ue_le_mismatch: [0.0, dule1, dule2],
     }
 }

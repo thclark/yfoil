@@ -12,26 +12,26 @@ use crate::solver::blstate::BlState;
 
 /// What UPDATE reports besides the arrays it writes into `BlState`.
 #[derive(Debug, Clone, Default)]
-pub struct UpdateResult {
-    pub rlx: f64,
-    pub rmsbl: f64,
+pub struct UpdateSummary {
+    pub relaxation: f64,
+    pub residual: f64,
     /// Largest normalised change (signed; for Ue XFOIL stores the raw DUEDG)
-    pub rmxbl: f64,
+    pub residual_max: f64,
     /// 'n' (amplification), 'C' (Ctau), 'T' (theta), 'D' (delta*) or 'U' (Ue)
-    pub vmxbl: char,
-    pub imxbl: usize,
-    pub ismxbl: usize,
+    pub residual_max_variable: char,
+    pub i_residual_max_station: usize,
+    pub residual_max_side: usize,
     /// Change in the global variable AC (CL or alpha) before under-relaxation
-    pub dac: f64,
-    pub clnew: f64,
-    pub cl_a: f64,
-    pub cl_ms: f64,
-    pub cl_ac: f64,
+    pub free_variable_change: f64,
+    pub cl_new: f64,
+    pub cl_d_alpha: f64,
+    pub cl_d_machsqd: f64,
+    pub cl_d_free: f64,
 }
 
 /// UPDATE. `vdel[iv-1][k][0..2]` is BLSOLV's solution (residual and AC-sensitivity columns);
 /// `minf_cl` is MINF_CL, d(MINF)/d(CL) from the last MRCL (0 for MATYP = 1).
-pub fn update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateResult {
+pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateSummary {
     let pi = 4.0 * (1.0_f64).atan();
     let dtor = pi / 180.0;
     let gamm1 = st.gamma - 1.0;
@@ -331,17 +331,17 @@ pub fn update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateR
         st.tstr[1][i1] = st.tstr[2][i2];
     }
 
-    UpdateResult {
-        rlx,
-        rmsbl,
-        rmxbl,
-        vmxbl,
-        imxbl,
-        ismxbl,
-        dac,
-        clnew,
-        cl_a,
-        cl_ms,
-        cl_ac,
+    UpdateSummary {
+        relaxation: rlx,
+        residual: rmsbl,
+        residual_max: rmxbl,
+        residual_max_variable: vmxbl,
+        i_residual_max_station: imxbl,
+        residual_max_side: ismxbl,
+        free_variable_change: dac,
+        cl_new: clnew,
+        cl_d_alpha: cl_a,
+        cl_d_machsqd: cl_ms,
+        cl_d_free: cl_ac,
     }
 }

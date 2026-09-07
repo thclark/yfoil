@@ -7,7 +7,7 @@ use crate::geometry::PaneledAirfoil;
 use crate::solver::blstate::BlState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::specal::{alfa_command, aseq_point, cl_command};
-use crate::solver::viscal::{viscal, ViscalIter};
+use crate::solver::viscal::{solve_viscous, IterationRecord};
 
 /// Flow specification (the OPER settings that must be pinned explicitly).
 #[derive(Debug, Clone)]
@@ -72,7 +72,7 @@ pub struct OperatingPoint {
     /// RMSBL of the last iteration (0 for an inviscid point)
     pub rmsbl: f64,
     /// Per-iteration record
-    pub trace: Vec<ViscalIter>,
+    pub trace: Vec<IterationRecord>,
 }
 
 /// A persistent analysis session: the geometry, inviscid system and BL state that XFOIL keeps
@@ -138,7 +138,7 @@ impl Session {
     fn run_viscal(&mut self, niter: usize) -> OperatingPoint {
         let mut trace = Vec::new();
         let converged = if self.st.lvisc {
-            viscal(
+            solve_viscous(
                 &mut self.st,
                 self.sys.as_mut(),
                 niter,
@@ -162,7 +162,7 @@ impl Session {
             itran: st.itran,
             converged,
             iterations: trace.len(),
-            rmsbl: trace.last().map(|t| t.rmsbl).unwrap_or(0.0),
+            rmsbl: trace.last().map(|t| t.residual).unwrap_or(0.0),
             trace,
         }
     }
