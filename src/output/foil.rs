@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-use crate::bl::system::{BLStationState, FlowParameters, FlowRegime};
+use crate::bl::system::{FlowParameters, FlowRegime, StationState};
 use crate::geometry::{seval, PaneledAirfoil};
 use crate::solver::blstate::BlState;
 
@@ -531,10 +531,10 @@ fn live_closures(st: &BlState, params: &FlowParameters, is: usize, ibl: usize) -
     let dsi = st.mass[is][ibl] / uei;
     let dswaki = if wake { st.wgap[ibl - st.iblte[is]] } else { 0.0 };
 
-    let mut s = BLStationState::default();
-    s.blprv(st.xssi[is][ibl], ami, cti, thi, dsi, dswaki, uei, params);
-    s.blkin(params);
-    let (h, hk, rt, msq) = (s.h, s.hk, s.rt, s.msq);
+    let mut s = StationState::default();
+    s.set_primary_variables(st.xssi[is][ibl], ami, cti, thi, dsi, dswaki, uei, params);
+    s.set_kinematic_variables(params);
+    let (h, hk, rt, msq) = (s.h, s.hk, s.retheta, s.machsqd_edge);
     let flow = if wake {
         FlowRegime::Wake
     } else if turb {
@@ -542,20 +542,20 @@ fn live_closures(st: &BlState, params: &FlowParameters, is: usize, ibl: usize) -
     } else {
         FlowRegime::Laminar
     };
-    s.blvar(flow, params);
+    s.set_closure_variables(flow, params);
 
     let qinf = st.qinf;
     Live {
-        ue: s.u / qinf,
+        ue: s.ue / qinf,
         h,
         hk,
-        hs: s.hs,
+        hs: s.hstar,
         // TAU = ½·R2·U2²·CF2 (SETBL), Cf = TAU/(½·QINF²) (DUMP)
-        cf: s.r * s.u * s.u * s.cf / (qinf * qinf),
+        cf: s.rho * s.ue * s.ue * s.cf / (qinf * qinf),
         // DIS = R2·U2³·DI2·HS2·½ (SETBL), CDIS = DIS/QINF³ (DUMP)
-        cdis: s.r * s.u * s.u * s.u * s.di * s.hs * 0.5 / (qinf * qinf * qinf),
-        delta: s.de,
-        ctq: s.cq,
+        cdis: s.rho * s.ue * s.ue * s.ue * s.cdiss * s.hstar * 0.5 / (qinf * qinf * qinf),
+        delta: s.delta,
+        ctq: s.sqrtctaueq,
         uslp: 1.60 / (1.0 + s.us),
         rt,
         msq,

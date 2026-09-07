@@ -2,7 +2,7 @@
 //! laminar amplification rates DAMPL / DAMPL2 and the interval average AXSET (xblsys.f).
 
 use super::params::*;
-use super::station::BLStationState;
+use super::station::StationState;
 
 // ============================================================================
 // Transition Location and Derivatives
@@ -74,25 +74,25 @@ pub enum TransitionResult {
 /// may exceed Ncrit) — exactly what XFOIL leaves in `AMPL2`.
 #[allow(unused_assignments)] // loop-carried locals mirror the Fortran; the loop always runs
 pub fn trchek(
-    s1: &BLStationState,
-    s2: &BLStationState,
+    s1: &StationState,
+    s2: &StationState,
     ampl1: f64,
     acrit: f64,
     xiforc: f64,
     params: &FlowParameters,
 ) -> TransitionResult {
     const DAEPS: f64 = 5.0e-5;
-    let (x1, x2) = (s1.x, s2.x);
+    let (x1, x2) = (s1.xi, s2.xi);
 
     // calculate average amplification rate AX over X1..X2 interval, with the current AMPL2
     let r0 = axset(
         s1.hk,
         s1.theta,
-        s1.rt,
+        s1.retheta,
         ampl1,
         s2.hk,
         s2.theta,
-        s2.rt,
+        s2.retheta,
         s2.ampl,
         acrit,
         params.idampv,
@@ -158,29 +158,29 @@ pub fn trchek(
         xt = x1 * wf1 + x2 * wf2;
         tt = s1.theta * wf1 + s2.theta * wf2;
         dt = s1.dstar * wf1 + s2.dstar * wf2;
-        ut = s1.u * wf1 + s2.u * wf2;
+        ut = s1.ue * wf1 + s2.ue * wf2;
         xt_a2 = x1 * wf1_a2 + x2 * wf2_a2;
         tt_a2 = s1.theta * wf1_a2 + s2.theta * wf2_a2;
         dt_a2 = s1.dstar * wf1_a2 + s2.dstar * wf2_a2;
-        ut_a2 = s1.u * wf1_a2 + s2.u * wf2_a2;
+        ut_a2 = s1.ue * wf1_a2 + s2.ue * wf2_a2;
 
         // temporarily set "2" variables from "T" for BLKIN (U2_UEI, U2_MS, DW2 stay station 2's)
         st = s2.clone();
-        st.x = xt;
+        st.xi = xt;
         st.theta = tt;
         st.dstar = dt;
-        st.u = ut;
-        st.blkin(params);
+        st.ue = ut;
+        st.set_kinematic_variables(params);
 
         // calculate amplification rate AX over current X1-XT interval
         r = axset(
             s1.hk,
             s1.theta,
-            s1.rt,
+            s1.retheta,
             ampl1,
             st.hk,
             tt,
-            st.rt,
+            st.retheta,
             amplt,
             acrit,
             params.idampv,
@@ -192,9 +192,9 @@ pub fn trchek(
         }
 
         // set sensitivity of AX(A2)
-        let ax_a2 = (r.ax_hk2 * st.hk_t + r.ax_t2 + r.ax_rt2 * st.rt_t) * tt_a2
-            + (r.ax_hk2 * st.hk_d) * dt_a2
-            + (r.ax_hk2 * st.hk_u + r.ax_rt2 * st.rt_u) * ut_a2
+        let ax_a2 = (r.ax_hk2 * st.hk_d_theta + r.ax_t2 + r.ax_rt2 * st.retheta_d_theta) * tt_a2
+            + (r.ax_hk2 * st.hk_d_dstar) * dt_a2
+            + (r.ax_hk2 * st.hk_d_ue + r.ax_rt2 * st.retheta_d_ue) * ut_a2
             + r.ax_a2 * amplt_a2;
 
         // residual for implicit AMPL2 definition (amplification equation)
@@ -273,30 +273,37 @@ pub fn trchek(
     let xt_a1 = x1 * wf1_a1 + x2 * wf2_a1;
     let tt_a1 = s1.theta * wf1_a1 + s2.theta * wf2_a1;
     let dt_a1 = s1.dstar * wf1_a1 + s2.dstar * wf2_a1;
-    let ut_a1 = s1.u * wf1_a1 + s2.u * wf2_a1;
+    let ut_a1 = s1.ue * wf1_a1 + s2.ue * wf2_a1;
 
     xt_x1 = x1 * wf1_x1 + x2 * wf2_x1 + xt_x1;
     let tt_x1 = s1.theta * wf1_x1 + s2.theta * wf2_x1;
     let dt_x1 = s1.dstar * wf1_x1 + s2.dstar * wf2_x1;
-    let ut_x1 = s1.u * wf1_x1 + s2.u * wf2_x1;
+    let ut_x1 = s1.ue * wf1_x1 + s2.ue * wf2_x1;
 
     xt_x2 = x1 * wf1_x2 + x2 * wf2_x2 + xt_x2;
     let tt_x2 = s1.theta * wf1_x2 + s2.theta * wf2_x2;
     let dt_x2 = s1.dstar * wf1_x2 + s2.dstar * wf2_x2;
-    let ut_x2 = s1.u * wf1_x2 + s2.u * wf2_x2;
+    let ut_x2 = s1.ue * wf1_x2 + s2.ue * wf2_x2;
 
     let _xt_xf = x1 * wf1_xf + x2 * wf2_xf;
     let tt_xf = s1.theta * wf1_xf + s2.theta * wf2_xf;
     let dt_xf = s1.dstar * wf1_xf + s2.dstar * wf2_xf;
-    let ut_xf = s1.u * wf1_xf + s2.u * wf2_xf;
+    let ut_xf = s1.ue * wf1_xf + s2.ue * wf2_xf;
 
     // at this point, AX = AX( HK1, T1, RT1, A1, HKT, TT, RTT, AT ) from the last loop pass
-    let (hkt_tt, hkt_dt, hkt_ut, hkt_ms) = (st.hk_t, st.hk_d, st.hk_u, st.hk_ms);
-    let (rtt_tt, rtt_ut, rtt_ms, rtt_re) = (st.rt_t, st.rt_u, st.rt_ms, st.rt_re);
-    let ax_t1 =
-        r.ax_hk1 * s1.hk_t + r.ax_t1 + r.ax_rt1 * s1.rt_t + (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_t1;
-    let ax_d1 = r.ax_hk1 * s1.hk_d + (r.ax_hk2 * hkt_dt) * dt_d1;
-    let ax_u1 = r.ax_hk1 * s1.hk_u + r.ax_rt1 * s1.rt_u + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_u1;
+    let (hkt_tt, hkt_dt, hkt_ut, hkt_ms) = (st.hk_d_theta, st.hk_d_dstar, st.hk_d_ue, st.hk_d_machsqd);
+    let (rtt_tt, rtt_ut, rtt_ms, rtt_re) = (
+        st.retheta_d_theta,
+        st.retheta_d_ue,
+        st.retheta_d_machsqd,
+        st.retheta_d_re,
+    );
+    let ax_t1 = r.ax_hk1 * s1.hk_d_theta
+        + r.ax_t1
+        + r.ax_rt1 * s1.retheta_d_theta
+        + (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_t1;
+    let ax_d1 = r.ax_hk1 * s1.hk_d_dstar + (r.ax_hk2 * hkt_dt) * dt_d1;
+    let ax_u1 = r.ax_hk1 * s1.hk_d_ue + r.ax_rt1 * s1.retheta_d_ue + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_u1;
     let ax_a1 = r.ax_a1
         + (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_a1
         + (r.ax_hk2 * hkt_dt) * dt_a1
@@ -317,8 +324,8 @@ pub fn trchek(
     let ax_xf = (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_xf
         + (r.ax_hk2 * hkt_dt) * dt_xf
         + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_xf;
-    let ax_ms = r.ax_hk2 * hkt_ms + r.ax_rt2 * rtt_ms + r.ax_hk1 * s1.hk_ms + r.ax_rt1 * s1.rt_ms;
-    let ax_re = r.ax_rt2 * rtt_re + r.ax_rt1 * s1.rt_re;
+    let ax_ms = r.ax_hk2 * hkt_ms + r.ax_rt2 * rtt_ms + r.ax_hk1 * s1.hk_d_machsqd + r.ax_rt1 * s1.retheta_d_machsqd;
+    let ax_re = r.ax_rt2 * rtt_re + r.ax_rt1 * s1.retheta_d_re;
 
     // set sensitivities of residual RES
     let z_ax = -(x2 - x1);
@@ -897,24 +904,24 @@ mod tests {
 
         // Create stations with low Rtheta (below critical for HK ~2.5)
         // Critical log10(RT) for HK=2.5 is about 2.86, so RT ~720 is below critical
-        let mut s1 = BLStationState::default();
-        s1.x = 0.02;
-        s1.u = 1.15;
+        let mut s1 = StationState::default();
+        s1.xi = 0.02;
+        s1.ue = 1.15;
         s1.theta = 0.0002;
         s1.dstar = 0.0005;
         s1.ampl = 0.0;
-        s1.blprv(s1.x, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.u, &params);
-        s1.blkin(&params);
+        s1.set_primary_variables(s1.xi, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.ue, &params);
+        s1.set_kinematic_variables(&params);
         // s1.rt should be around 200 (below critical)
 
-        let mut s2 = BLStationState::default();
-        s2.x = 0.04;
-        s2.u = 1.12;
+        let mut s2 = StationState::default();
+        s2.xi = 0.04;
+        s2.ue = 1.12;
         s2.theta = 0.0004;
         s2.dstar = 0.0010;
         s2.ampl = 0.0;
-        s2.blprv(s2.x, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.u, &params);
-        s2.blkin(&params);
+        s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
+        s2.set_kinematic_variables(&params);
 
         let result = trchek(&s1, &s2, 0.0, 9.0, 1e6, &params);
 
@@ -935,23 +942,23 @@ mod tests {
         let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations with moderate Rtheta (above critical, amplification active)
-        let mut s1 = BLStationState::default();
-        s1.x = 0.08;
-        s1.u = 1.10;
+        let mut s1 = StationState::default();
+        s1.xi = 0.08;
+        s1.ue = 1.10;
         s1.theta = 0.001;
         s1.dstar = 0.0025;
         s1.ampl = 2.0; // Starting amplification
-        s1.blprv(s1.x, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.u, &params);
-        s1.blkin(&params);
+        s1.set_primary_variables(s1.xi, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.ue, &params);
+        s1.set_kinematic_variables(&params);
 
-        let mut s2 = BLStationState::default();
-        s2.x = 0.10;
-        s2.u = 1.08;
+        let mut s2 = StationState::default();
+        s2.xi = 0.10;
+        s2.ue = 1.08;
         s2.theta = 0.0012;
         s2.dstar = 0.003;
         s2.ampl = 2.5;
-        s2.blprv(s2.x, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.u, &params);
-        s2.blkin(&params);
+        s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
+        s2.set_kinematic_variables(&params);
 
         let result = trchek(&s1, &s2, 2.0, 9.0, 1e6, &params);
 
@@ -973,23 +980,23 @@ mod tests {
         let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations with high Rtheta and amplification close to Ncrit
-        let mut s1 = BLStationState::default();
-        s1.x = 0.15;
-        s1.u = 1.05;
+        let mut s1 = StationState::default();
+        s1.xi = 0.15;
+        s1.ue = 1.05;
         s1.theta = 0.002;
         s1.dstar = 0.005;
         s1.ampl = 8.0; // Close to Ncrit=9
-        s1.blprv(s1.x, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.u, &params);
-        s1.blkin(&params);
+        s1.set_primary_variables(s1.xi, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.ue, &params);
+        s1.set_kinematic_variables(&params);
 
-        let mut s2 = BLStationState::default();
-        s2.x = 0.25;
-        s2.u = 1.02;
+        let mut s2 = StationState::default();
+        s2.xi = 0.25;
+        s2.ue = 1.02;
         s2.theta = 0.003;
         s2.dstar = 0.0075;
         s2.ampl = 12.0; // Well above Ncrit
-        s2.blprv(s2.x, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.u, &params);
-        s2.blkin(&params);
+        s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
+        s2.set_kinematic_variables(&params);
 
         let result = trchek(&s1, &s2, 8.0, 9.0, 1e6, &params);
 
@@ -998,7 +1005,7 @@ mod tests {
             TransitionResult::FreeTransition { location, ampl2 } => {
                 // Transition should occur between X1 and X2
                 assert!(
-                    location.xt >= s1.x && location.xt <= s2.x,
+                    location.xt >= s1.xi && location.xt <= s2.xi,
                     "Transition location should be within interval"
                 );
                 // ampl2 should equal Ncrit
@@ -1025,23 +1032,23 @@ mod tests {
         let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations where natural transition wouldn't occur
-        let mut s1 = BLStationState::default();
-        s1.x = 0.10;
-        s1.u = 1.10;
+        let mut s1 = StationState::default();
+        s1.xi = 0.10;
+        s1.ue = 1.10;
         s1.theta = 0.001;
         s1.dstar = 0.0025;
         s1.ampl = 2.0;
-        s1.blprv(s1.x, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.u, &params);
-        s1.blkin(&params);
+        s1.set_primary_variables(s1.xi, s1.ampl, 0.0, s1.theta, s1.dstar, 0.0, s1.ue, &params);
+        s1.set_kinematic_variables(&params);
 
-        let mut s2 = BLStationState::default();
-        s2.x = 0.20;
-        s2.u = 1.05;
+        let mut s2 = StationState::default();
+        s2.xi = 0.20;
+        s2.ue = 1.05;
         s2.theta = 0.0015;
         s2.dstar = 0.0038;
         s2.ampl = 3.0;
-        s2.blprv(s2.x, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.u, &params);
-        s2.blkin(&params);
+        s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
+        s2.set_kinematic_variables(&params);
 
         // Force transition at x = 0.15
         let xiforc = 0.15;

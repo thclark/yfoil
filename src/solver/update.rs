@@ -7,7 +7,7 @@
 //! are plain locals — BLSOLV's input was consumed by `blsolv`, so nothing can read VA/VB after
 //! the solve by construction.
 
-use crate::bl::system::dslim;
+use crate::bl::system::limit_dstar;
 use crate::solver::blstate::BlState;
 
 /// What UPDATE reports besides the arrays it writes into `BlState`.
@@ -301,7 +301,7 @@ pub fn update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateR
             let ue = st.uedg[is][ibl];
             let msq = ue * ue * hstinv / (gamm1 * (1.0 - 0.5 * ue * ue * hstinv));
             let mut dsw = st.dstr[is][ibl] - dswaki;
-            dslim(&mut dsw, st.thet[is][ibl], ue, msq, hklim);
+            limit_dstar(&mut dsw, st.thet[is][ibl], ue, msq, hklim);
             st.dstr[is][ibl] = dsw + dswaki;
 
             // set new mass defect (nonlinear update)

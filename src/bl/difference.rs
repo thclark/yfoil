@@ -2,7 +2,7 @@
 //! TRDIF (xblsys.f).
 
 use super::params::*;
-use super::station::{BLStationState, MidpointCf};
+use super::station::{MidpointCf, StationState};
 use super::transition::{axset, TransitionLocation};
 
 // ============================================================================
@@ -12,7 +12,7 @@ use super::transition::{axset, TransitionLocation};
 /// Upwinding parameter calculation
 ///
 /// Returns (upw, upw_u1, upw_t1, upw_d1, upw_u2, upw_t2, upw_d2, upw_ms)
-fn compute_upwinding(s1: &BLStationState, s2: &BLStationState, is_wake: bool) -> UpwindParams {
+fn compute_upwinding(s1: &StationState, s2: &StationState, is_wake: bool) -> UpwindParams {
     let hk1 = s1.hk;
     let hk2 = s2.hk;
 
@@ -44,13 +44,13 @@ fn compute_upwinding(s1: &BLStationState, s2: &BLStationState, is_wake: bool) ->
 
     UpwindParams {
         upw,
-        upw_u1: upw_hk1 * s1.hk_u,
-        upw_t1: upw_hk1 * s1.hk_t,
-        upw_d1: upw_hk1 * s1.hk_d,
-        upw_u2: upw_hk2 * s2.hk_u,
-        upw_t2: upw_hk2 * s2.hk_t,
-        upw_d2: upw_hk2 * s2.hk_d,
-        upw_ms: upw_hk1 * s1.hk_ms + upw_hk2 * s2.hk_ms,
+        upw_u1: upw_hk1 * s1.hk_d_ue,
+        upw_t1: upw_hk1 * s1.hk_d_theta,
+        upw_d1: upw_hk1 * s1.hk_d_dstar,
+        upw_u2: upw_hk2 * s2.hk_d_ue,
+        upw_t2: upw_hk2 * s2.hk_d_theta,
+        upw_d2: upw_hk2 * s2.hk_d_dstar,
+        upw_ms: upw_hk1 * s1.hk_d_machsqd + upw_hk2 * s2.hk_d_machsqd,
     }
 }
 
@@ -110,8 +110,8 @@ impl BLLocalSystem {
     /// * `is_similarity` - True if station 2 is a similarity station (LE)
     pub fn bldif(
         &mut self,
-        s1: &BLStationState,
-        s2: &BLStationState,
+        s1: &StationState,
+        s2: &StationState,
         cfm: &MidpointCf,
         flow_type: FlowRegime,
         is_similarity: bool,
@@ -136,10 +136,10 @@ impl BLLocalSystem {
             (1.0, BULE, 0.5 * (1.0 - BULE), 0.0, 0.0)
         } else {
             // Normal station: compute from values
-            let xlog = (s2.x / s1.x).ln();
-            let ulog = (s2.u / s1.u).ln();
+            let xlog = (s2.xi / s1.xi).ln();
+            let ulog = (s2.ue / s1.ue).ln();
             let tlog = (s2.theta / s1.theta).ln();
-            let hlog = (s2.hs / s1.hs).ln();
+            let hlog = (s2.hstar / s1.hstar).ln();
             (xlog, ulog, tlog, hlog, 1.0)
         };
 
@@ -159,25 +159,28 @@ impl BLLocalSystem {
                 // laminar part --> set amplification equation (BLDIF ITYP=1), verbatim:
                 // set average amplification AX over interval X1..X2
                 let r = axset(
-                    s1.hk, s1.theta, s1.rt, s1.ampl, s2.hk, s2.theta, s2.rt, s2.ampl, acrit, idampv,
+                    s1.hk, s1.theta, s1.retheta, s1.ampl, s2.hk, s2.theta, s2.retheta, s2.ampl, acrit, idampv,
                 );
                 let ax = r.ax;
-                let rezc = s2.ampl - s1.ampl - ax * (s2.x - s1.x);
-                let z_ax = -(s2.x - s1.x);
+                let rezc = s2.ampl - s1.ampl - ax * (s2.xi - s1.xi);
+                let z_ax = -(s2.xi - s1.xi);
 
                 self.vs1[0][0] = z_ax * r.ax_a1 - 1.0;
-                self.vs1[0][1] = z_ax * (r.ax_hk1 * s1.hk_t + r.ax_t1 + r.ax_rt1 * s1.rt_t);
-                self.vs1[0][2] = z_ax * (r.ax_hk1 * s1.hk_d);
-                self.vs1[0][3] = z_ax * (r.ax_hk1 * s1.hk_u + r.ax_rt1 * s1.rt_u);
+                self.vs1[0][1] = z_ax * (r.ax_hk1 * s1.hk_d_theta + r.ax_t1 + r.ax_rt1 * s1.retheta_d_theta);
+                self.vs1[0][2] = z_ax * (r.ax_hk1 * s1.hk_d_dstar);
+                self.vs1[0][3] = z_ax * (r.ax_hk1 * s1.hk_d_ue + r.ax_rt1 * s1.retheta_d_ue);
                 self.vs1[0][4] = ax;
                 self.vs2[0][0] = z_ax * r.ax_a2 + 1.0;
-                self.vs2[0][1] = z_ax * (r.ax_hk2 * s2.hk_t + r.ax_t2 + r.ax_rt2 * s2.rt_t);
-                self.vs2[0][2] = z_ax * (r.ax_hk2 * s2.hk_d);
-                self.vs2[0][3] = z_ax * (r.ax_hk2 * s2.hk_u + r.ax_rt2 * s2.rt_u);
+                self.vs2[0][1] = z_ax * (r.ax_hk2 * s2.hk_d_theta + r.ax_t2 + r.ax_rt2 * s2.retheta_d_theta);
+                self.vs2[0][2] = z_ax * (r.ax_hk2 * s2.hk_d_dstar);
+                self.vs2[0][3] = z_ax * (r.ax_hk2 * s2.hk_d_ue + r.ax_rt2 * s2.retheta_d_ue);
                 self.vs2[0][4] = -ax;
-                self.vsm[0] =
-                    z_ax * (r.ax_hk1 * s1.hk_ms + r.ax_rt1 * s1.rt_ms + r.ax_hk2 * s2.hk_ms + r.ax_rt2 * s2.rt_ms);
-                self.vsr[0] = z_ax * (r.ax_rt1 * s1.rt_re + r.ax_rt2 * s2.rt_re);
+                self.vsm[0] = z_ax
+                    * (r.ax_hk1 * s1.hk_d_machsqd
+                        + r.ax_rt1 * s1.retheta_d_machsqd
+                        + r.ax_hk2 * s2.hk_d_machsqd
+                        + r.ax_rt2 * s2.retheta_d_machsqd);
+                self.vsr[0] = z_ax * (r.ax_rt1 * s1.retheta_d_re + r.ax_rt2 * s2.retheta_d_re);
                 self.vsx[0] = 0.0;
                 self.vsrez[0] = -rezc;
             }
@@ -197,19 +200,19 @@ impl BLLocalSystem {
     /// BLDIF (xblsys.f) "turbulent part --> set shear lag equation" (row 1), line for line.
     fn setup_shear_lag_equation(
         &mut self,
-        s1: &BLStationState,
-        s2: &BLStationState,
+        s1: &StationState,
+        s2: &StationState,
         upw: &UpwindParams,
         flow_type: FlowRegime,
     ) {
         let u = upw.upw;
-        let sa = (1.0 - u) * s1.ctau + u * s2.ctau;
-        let cqa = (1.0 - u) * s1.cq + u * s2.cq;
+        let sa = (1.0 - u) * s1.sqrtctau + u * s2.sqrtctau;
+        let cqa = (1.0 - u) * s1.sqrtctaueq + u * s2.sqrtctaueq;
         let cfa = (1.0 - u) * s1.cf + u * s2.cf;
         let hka = (1.0 - u) * s1.hk + u * s2.hk;
         let usa = 0.5 * (s1.us + s2.us);
-        let rta = 0.5 * (s1.rt + s2.rt);
-        let dea = 0.5 * (s1.de + s2.de);
+        let rta = 0.5 * (s1.retheta + s2.retheta);
+        let dea = 0.5 * (s1.delta + s2.delta);
         let da = 0.5 * (s1.dstar + s2.dstar);
         // increased dissipation length in wake (decrease its reciprocal)
         let ald = if flow_type == FlowRegime::Wake {
@@ -248,9 +251,9 @@ impl BLLocalSystem {
         let scc_us2 = scc_usa * 0.5;
         let _ = (scc_us1, scc_us2);
 
-        let slog = (s2.ctau / s1.ctau).ln();
-        let dxi = s2.x - s1.x;
-        let ulog = (s2.u / s1.u).ln();
+        let slog = (s2.sqrtctau / s1.sqrtctau).ln();
+        let dxi = s2.xi - s1.xi;
+        let ulog = (s2.ue / s1.ue).ln();
 
         let rezc = scc * (cqa - sa * ald) * dxi - dea * 2.0 * slog
             + dea * 2.0 * (uq * dxi - ulog) * LAG_PRESSURE_GRADIENT_WEIGHT;
@@ -265,8 +268,10 @@ impl BLLocalSystem {
         let z_cqa = scc * dxi;
         let z_sa = -scc * dxi * ald;
         let z_dea = 2.0 * ((uq * dxi - ulog) * LAG_PRESSURE_GRADIENT_WEIGHT - slog);
-        let z_upw =
-            z_cqa * (s2.cq - s1.cq) + z_sa * (s2.ctau - s1.ctau) + z_cfa * (s2.cf - s1.cf) + z_hka * (s2.hk - s1.hk);
+        let z_upw = z_cqa * (s2.sqrtctaueq - s1.sqrtctaueq)
+            + z_sa * (s2.sqrtctau - s1.sqrtctau)
+            + z_cfa * (s2.cf - s1.cf)
+            + z_hka * (s2.hk - s1.hk);
 
         let z_de1 = 0.5 * z_dea;
         let z_de2 = 0.5 * z_dea;
@@ -274,12 +279,12 @@ impl BLLocalSystem {
         let z_us2 = 0.5 * z_usa;
         let z_d1 = 0.5 * z_da;
         let z_d2 = 0.5 * z_da;
-        let z_u1 = -z_ul / s1.u;
-        let z_u2 = z_ul / s2.u;
+        let z_u1 = -z_ul / s1.ue;
+        let z_u2 = z_ul / s2.ue;
         let z_x1 = -z_dxi;
         let z_x2 = z_dxi;
-        let z_s1 = (1.0 - u) * z_sa - z_sl / s1.ctau;
-        let z_s2 = u * z_sa + z_sl / s2.ctau;
+        let z_s1 = (1.0 - u) * z_sa - z_sl / s1.sqrtctau;
+        let z_s2 = u * z_sa + z_sl / s2.sqrtctau;
         let z_cq1 = (1.0 - u) * z_cqa;
         let z_cq2 = u * z_cqa;
         let z_cf1 = (1.0 - u) * z_cfa;
@@ -288,31 +293,35 @@ impl BLLocalSystem {
         let z_hk2 = u * z_hka;
 
         self.vs1[0][0] = z_s1;
-        self.vs1[0][1] = z_upw * upw.upw_t1 + z_de1 * s1.de_t + z_us1 * s1.us_t;
-        self.vs1[0][2] = z_d1 + z_upw * upw.upw_d1 + z_de1 * s1.de_d + z_us1 * s1.us_d;
-        self.vs1[0][3] = z_u1 + z_upw * upw.upw_u1 + z_de1 * s1.de_u + z_us1 * s1.us_u;
+        self.vs1[0][1] = z_upw * upw.upw_t1 + z_de1 * s1.delta_d_theta + z_us1 * s1.us_d_theta;
+        self.vs1[0][2] = z_d1 + z_upw * upw.upw_d1 + z_de1 * s1.delta_d_dstar + z_us1 * s1.us_d_dstar;
+        self.vs1[0][3] = z_u1 + z_upw * upw.upw_u1 + z_de1 * s1.delta_d_ue + z_us1 * s1.us_d_ue;
         self.vs1[0][4] = z_x1;
         self.vs2[0][0] = z_s2;
-        self.vs2[0][1] = z_upw * upw.upw_t2 + z_de2 * s2.de_t + z_us2 * s2.us_t;
-        self.vs2[0][2] = z_d2 + z_upw * upw.upw_d2 + z_de2 * s2.de_d + z_us2 * s2.us_d;
-        self.vs2[0][3] = z_u2 + z_upw * upw.upw_u2 + z_de2 * s2.de_u + z_us2 * s2.us_u;
+        self.vs2[0][1] = z_upw * upw.upw_t2 + z_de2 * s2.delta_d_theta + z_us2 * s2.us_d_theta;
+        self.vs2[0][2] = z_d2 + z_upw * upw.upw_d2 + z_de2 * s2.delta_d_dstar + z_us2 * s2.us_d_dstar;
+        self.vs2[0][3] = z_u2 + z_upw * upw.upw_u2 + z_de2 * s2.delta_d_ue + z_us2 * s2.us_d_ue;
         self.vs2[0][4] = z_x2;
-        self.vsm[0] = z_upw * upw.upw_ms + z_de1 * s1.de_ms + z_us1 * s1.us_ms + z_de2 * s2.de_ms + z_us2 * s2.us_ms;
+        self.vsm[0] = z_upw * upw.upw_ms
+            + z_de1 * s1.delta_d_machsqd
+            + z_us1 * s1.us_d_machsqd
+            + z_de2 * s2.delta_d_machsqd
+            + z_us2 * s2.us_d_machsqd;
 
-        self.vs1[0][1] = self.vs1[0][1] + z_cq1 * s1.cq_t + z_cf1 * s1.cf_t + z_hk1 * s1.hk_t;
-        self.vs1[0][2] = self.vs1[0][2] + z_cq1 * s1.cq_d + z_cf1 * s1.cf_d + z_hk1 * s1.hk_d;
-        self.vs1[0][3] = self.vs1[0][3] + z_cq1 * s1.cq_u + z_cf1 * s1.cf_u + z_hk1 * s1.hk_u;
-        self.vs2[0][1] = self.vs2[0][1] + z_cq2 * s2.cq_t + z_cf2 * s2.cf_t + z_hk2 * s2.hk_t;
-        self.vs2[0][2] = self.vs2[0][2] + z_cq2 * s2.cq_d + z_cf2 * s2.cf_d + z_hk2 * s2.hk_d;
-        self.vs2[0][3] = self.vs2[0][3] + z_cq2 * s2.cq_u + z_cf2 * s2.cf_u + z_hk2 * s2.hk_u;
+        self.vs1[0][1] = self.vs1[0][1] + z_cq1 * s1.sqrtctaueq_d_theta + z_cf1 * s1.cf_d_theta + z_hk1 * s1.hk_d_theta;
+        self.vs1[0][2] = self.vs1[0][2] + z_cq1 * s1.sqrtctaueq_d_dstar + z_cf1 * s1.cf_d_dstar + z_hk1 * s1.hk_d_dstar;
+        self.vs1[0][3] = self.vs1[0][3] + z_cq1 * s1.sqrtctaueq_d_ue + z_cf1 * s1.cf_d_ue + z_hk1 * s1.hk_d_ue;
+        self.vs2[0][1] = self.vs2[0][1] + z_cq2 * s2.sqrtctaueq_d_theta + z_cf2 * s2.cf_d_theta + z_hk2 * s2.hk_d_theta;
+        self.vs2[0][2] = self.vs2[0][2] + z_cq2 * s2.sqrtctaueq_d_dstar + z_cf2 * s2.cf_d_dstar + z_hk2 * s2.hk_d_dstar;
+        self.vs2[0][3] = self.vs2[0][3] + z_cq2 * s2.sqrtctaueq_d_ue + z_cf2 * s2.cf_d_ue + z_hk2 * s2.hk_d_ue;
         self.vsm[0] = self.vsm[0]
-            + z_cq1 * s1.cq_ms
-            + z_cf1 * s1.cf_ms
-            + z_hk1 * s1.hk_ms
-            + z_cq2 * s2.cq_ms
-            + z_cf2 * s2.cf_ms
-            + z_hk2 * s2.hk_ms;
-        self.vsr[0] = z_cq1 * s1.cq_re + z_cf1 * s1.cf_re + z_cq2 * s2.cq_re + z_cf2 * s2.cf_re;
+            + z_cq1 * s1.sqrtctaueq_d_machsqd
+            + z_cf1 * s1.cf_d_machsqd
+            + z_hk1 * s1.hk_d_machsqd
+            + z_cq2 * s2.sqrtctaueq_d_machsqd
+            + z_cf2 * s2.cf_d_machsqd
+            + z_hk2 * s2.hk_d_machsqd;
+        self.vsr[0] = z_cq1 * s1.sqrtctaueq_d_re + z_cf1 * s1.cf_d_re + z_cq2 * s2.sqrtctaueq_d_re + z_cf2 * s2.cf_d_re;
         self.vsx[0] = 0.0;
         self.vsrez[0] = -rezc;
     }
@@ -320,8 +329,8 @@ impl BLLocalSystem {
     /// Set up the momentum integral equation (row 2)
     fn setup_momentum_equation(
         &mut self,
-        s1: &BLStationState,
-        s2: &BLStationState,
+        s1: &StationState,
+        s2: &StationState,
         cfm: &MidpointCf,
         xlog: f64,
         ulog: f64,
@@ -330,21 +339,21 @@ impl BLLocalSystem {
     ) {
         // Averaged values
         let ha = 0.5 * (s1.h + s2.h);
-        let ma = 0.5 * (s1.msq + s2.msq);
-        let xa = 0.5 * (s1.x + s2.x);
+        let ma = 0.5 * (s1.machsqd_edge + s2.machsqd_edge);
+        let xa = 0.5 * (s1.xi + s2.xi);
         let ta = 0.5 * (s1.theta + s2.theta);
-        let hwa = 0.5 * (s1.dw / s1.theta + s2.dw / s2.theta);
+        let hwa = 0.5 * (s1.wake_gap / s1.theta + s2.wake_gap / s2.theta);
 
         // Cf term using central CFM for accuracy
-        let cfx = 0.5 * cfm.cfm * xa / ta + 0.25 * (s1.cf * s1.x / s1.theta + s2.cf * s2.x / s2.theta);
-        let cfx_xa = 0.5 * cfm.cfm / ta;
-        let cfx_ta = -0.5 * cfm.cfm * xa / (ta * ta);
+        let cfx = 0.5 * cfm.cf * xa / ta + 0.25 * (s1.cf * s1.xi / s1.theta + s2.cf * s2.xi / s2.theta);
+        let cfx_xa = 0.5 * cfm.cf / ta;
+        let cfx_ta = -0.5 * cfm.cf * xa / (ta * ta);
         let cfx_x1 = 0.25 * s1.cf / s1.theta + cfx_xa * 0.5;
         let cfx_x2 = 0.25 * s2.cf / s2.theta + cfx_xa * 0.5;
-        let cfx_t1 = -0.25 * s1.cf * s1.x / (s1.theta * s1.theta) + cfx_ta * 0.5;
-        let cfx_t2 = -0.25 * s2.cf * s2.x / (s2.theta * s2.theta) + cfx_ta * 0.5;
-        let cfx_cf1 = 0.25 * s1.x / s1.theta;
-        let cfx_cf2 = 0.25 * s2.x / s2.theta;
+        let cfx_t1 = -0.25 * s1.cf * s1.xi / (s1.theta * s1.theta) + cfx_ta * 0.5;
+        let cfx_t2 = -0.25 * s2.cf * s2.xi / (s2.theta * s2.theta) + cfx_ta * 0.5;
+        let cfx_cf1 = 0.25 * s1.xi / s1.theta;
+        let cfx_cf2 = 0.25 * s2.xi / s2.theta;
         let cfx_cfm = 0.5 * xa / ta;
 
         let btmp = ha + 2.0 - ma + hwa;
@@ -365,27 +374,30 @@ impl BLLocalSystem {
         let z_cf1 = z_cfx * cfx_cf1;
         let z_cf2 = z_cfx * cfx_cf2;
 
-        let z_t1 = -z_tl / s1.theta + z_cfx * cfx_t1 + z_hwa * 0.5 * (-s1.dw / (s1.theta * s1.theta));
-        let z_t2 = z_tl / s2.theta + z_cfx * cfx_t2 + z_hwa * 0.5 * (-s2.dw / (s2.theta * s2.theta));
-        let z_x1 = -z_xl / s1.x + z_cfx * cfx_x1;
-        let z_x2 = z_xl / s2.x + z_cfx * cfx_x2;
-        let z_u1 = -z_ul / s1.u;
-        let z_u2 = z_ul / s2.u;
+        let z_t1 = -z_tl / s1.theta + z_cfx * cfx_t1 + z_hwa * 0.5 * (-s1.wake_gap / (s1.theta * s1.theta));
+        let z_t2 = z_tl / s2.theta + z_cfx * cfx_t2 + z_hwa * 0.5 * (-s2.wake_gap / (s2.theta * s2.theta));
+        let z_x1 = -z_xl / s1.xi + z_cfx * cfx_x1;
+        let z_x2 = z_xl / s2.xi + z_cfx * cfx_x2;
+        let z_u1 = -z_ul / s1.ue;
+        let z_u2 = z_ul / s2.ue;
 
         // Jacobian entries for row 2
-        self.vs1[1][1] = 0.5 * z_ha * s1.h_t + z_cfm * cfm.cfm_t1 + z_cf1 * s1.cf_t + z_t1;
-        self.vs1[1][2] = 0.5 * z_ha * s1.h_d + z_cfm * cfm.cfm_d1 + z_cf1 * s1.cf_d;
-        self.vs1[1][3] = 0.5 * z_ma * s1.msq_u + z_cfm * cfm.cfm_u1 + z_cf1 * s1.cf_u + z_u1;
+        self.vs1[1][1] = 0.5 * z_ha * s1.h_d_theta + z_cfm * cfm.cf_d_theta_station1 + z_cf1 * s1.cf_d_theta + z_t1;
+        self.vs1[1][2] = 0.5 * z_ha * s1.h_d_dstar + z_cfm * cfm.cf_d_dstar_station1 + z_cf1 * s1.cf_d_dstar;
+        self.vs1[1][3] = 0.5 * z_ma * s1.machsqd_edge_d_ue + z_cfm * cfm.cf_d_ue_station1 + z_cf1 * s1.cf_d_ue + z_u1;
         self.vs1[1][4] = z_x1;
 
-        self.vs2[1][1] = 0.5 * z_ha * s2.h_t + z_cfm * cfm.cfm_t2 + z_cf2 * s2.cf_t + z_t2;
-        self.vs2[1][2] = 0.5 * z_ha * s2.h_d + z_cfm * cfm.cfm_d2 + z_cf2 * s2.cf_d;
-        self.vs2[1][3] = 0.5 * z_ma * s2.msq_u + z_cfm * cfm.cfm_u2 + z_cf2 * s2.cf_u + z_u2;
+        self.vs2[1][1] = 0.5 * z_ha * s2.h_d_theta + z_cfm * cfm.cf_d_theta_station2 + z_cf2 * s2.cf_d_theta + z_t2;
+        self.vs2[1][2] = 0.5 * z_ha * s2.h_d_dstar + z_cfm * cfm.cf_d_dstar_station2 + z_cf2 * s2.cf_d_dstar;
+        self.vs2[1][3] = 0.5 * z_ma * s2.machsqd_edge_d_ue + z_cfm * cfm.cf_d_ue_station2 + z_cf2 * s2.cf_d_ue + z_u2;
         self.vs2[1][4] = z_x2;
 
-        self.vsm[1] =
-            0.5 * z_ma * s1.msq_ms + z_cfm * cfm.cfm_ms + z_cf1 * s1.cf_ms + 0.5 * z_ma * s2.msq_ms + z_cf2 * s2.cf_ms;
-        self.vsr[1] = z_cfm * cfm.cfm_re + z_cf1 * s1.cf_re + z_cf2 * s2.cf_re;
+        self.vsm[1] = 0.5 * z_ma * s1.machsqd_edge_d_machsqd
+            + z_cfm * cfm.cf_d_machsqd
+            + z_cf1 * s1.cf_d_machsqd
+            + 0.5 * z_ma * s2.machsqd_edge_d_machsqd
+            + z_cf2 * s2.cf_d_machsqd;
+        self.vsr[1] = z_cfm * cfm.cf_d_re + z_cf1 * s1.cf_d_re + z_cf2 * s2.cf_d_re;
 
         self.vsrez[1] = -rezt;
     }
@@ -393,8 +405,8 @@ impl BLLocalSystem {
     /// Set up the shape parameter equation (row 3)
     fn setup_shape_equation(
         &mut self,
-        s1: &BLStationState,
-        s2: &BLStationState,
+        s1: &StationState,
+        s2: &StationState,
         upw: &UpwindParams,
         xlog: f64,
         ulog: f64,
@@ -402,19 +414,19 @@ impl BLLocalSystem {
         ddlog: f64,
     ) {
         let u = upw.upw;
-        let xot1 = s1.x / s1.theta;
-        let xot2 = s2.x / s2.theta;
+        let xot1 = s1.xi / s1.theta;
+        let xot2 = s2.xi / s2.theta;
 
         // Averaged values
         let ha = 0.5 * (s1.h + s2.h);
-        let hsa = 0.5 * (s1.hs + s2.hs);
-        let hca = 0.5 * (s1.hc + s2.hc);
-        let hwa = 0.5 * (s1.dw / s1.theta + s2.dw / s2.theta);
+        let hsa = 0.5 * (s1.hstar + s2.hstar);
+        let hca = 0.5 * (s1.hstarstar + s2.hstarstar);
+        let hwa = 0.5 * (s1.wake_gap / s1.theta + s2.wake_gap / s2.theta);
 
         // Upwind-weighted DI and CF
-        let dix = (1.0 - u) * s1.di * xot1 + u * s2.di * xot2;
+        let dix = (1.0 - u) * s1.cdiss * xot1 + u * s2.cdiss * xot2;
         let cfx = (1.0 - u) * s1.cf * xot1 + u * s2.cf * xot2;
-        let dix_upw = s2.di * xot2 - s1.di * xot1;
+        let dix_upw = s2.cdiss * xot2 - s1.cdiss * xot1;
         let cfx_upw = s2.cf * xot2 - s1.cf * xot1;
 
         let btmp = 2.0 * hca / hsa + 1.0 - ha - hwa;
@@ -434,70 +446,78 @@ impl BLLocalSystem {
 
         let z_upw = z_cfx * cfx_upw + z_dix * dix_upw;
 
-        let z_hs1 = -hca * ulog / (hsa * hsa) - z_hl / s1.hs;
-        let z_hs2 = -hca * ulog / (hsa * hsa) + z_hl / s2.hs;
+        let z_hs1 = -hca * ulog / (hsa * hsa) - z_hl / s1.hstar;
+        let z_hs2 = -hca * ulog / (hsa * hsa) + z_hl / s2.hstar;
 
         let z_cf1 = (1.0 - u) * z_cfx * xot1;
         let z_cf2 = u * z_cfx * xot2;
         let z_di1 = (1.0 - u) * z_dix * xot1;
         let z_di2 = u * z_dix * xot2;
 
-        let z_t1 = (1.0 - u) * (z_cfx * s1.cf + z_dix * s1.di) * (-xot1 / s1.theta)
-            + z_hwa * 0.5 * (-s1.dw / (s1.theta * s1.theta));
-        let z_t2 =
-            u * (z_cfx * s2.cf + z_dix * s2.di) * (-xot2 / s2.theta) + z_hwa * 0.5 * (-s2.dw / (s2.theta * s2.theta));
-        let z_x1 = (1.0 - u) * (z_cfx * s1.cf + z_dix * s1.di) / s1.theta - z_xl / s1.x;
-        let z_x2 = u * (z_cfx * s2.cf + z_dix * s2.di) / s2.theta + z_xl / s2.x;
-        let z_u1 = -z_ul / s1.u;
-        let z_u2 = z_ul / s2.u;
+        let z_t1 = (1.0 - u) * (z_cfx * s1.cf + z_dix * s1.cdiss) * (-xot1 / s1.theta)
+            + z_hwa * 0.5 * (-s1.wake_gap / (s1.theta * s1.theta));
+        let z_t2 = u * (z_cfx * s2.cf + z_dix * s2.cdiss) * (-xot2 / s2.theta)
+            + z_hwa * 0.5 * (-s2.wake_gap / (s2.theta * s2.theta));
+        let z_x1 = (1.0 - u) * (z_cfx * s1.cf + z_dix * s1.cdiss) / s1.theta - z_xl / s1.xi;
+        let z_x2 = u * (z_cfx * s2.cf + z_dix * s2.cdiss) / s2.theta + z_xl / s2.xi;
+        let z_u1 = -z_ul / s1.ue;
+        let z_u2 = z_ul / s2.ue;
 
         // Jacobian entries for row 3
-        self.vs1[2][0] = z_di1 * s1.di_s;
-        self.vs1[2][1] = z_hs1 * s1.hs_t
-            + z_cf1 * s1.cf_t
-            + z_di1 * s1.di_t
+        self.vs1[2][0] = z_di1 * s1.cdiss_d_sqrtctau;
+        self.vs1[2][1] = z_hs1 * s1.hstar_d_theta
+            + z_cf1 * s1.cf_d_theta
+            + z_di1 * s1.cdiss_d_theta
             + z_t1
-            + 0.5 * (z_hca * s1.hc_t + z_ha * s1.h_t)
+            + 0.5 * (z_hca * s1.hstarstar_d_theta + z_ha * s1.h_d_theta)
             + z_upw * upw.upw_t1;
-        self.vs1[2][2] = z_hs1 * s1.hs_d
-            + z_cf1 * s1.cf_d
-            + z_di1 * s1.di_d
-            + 0.5 * (z_hca * s1.hc_d + z_ha * s1.h_d)
+        self.vs1[2][2] = z_hs1 * s1.hstar_d_dstar
+            + z_cf1 * s1.cf_d_dstar
+            + z_di1 * s1.cdiss_d_dstar
+            + 0.5 * (z_hca * s1.hstarstar_d_dstar + z_ha * s1.h_d_dstar)
             + z_upw * upw.upw_d1;
-        self.vs1[2][3] =
-            z_hs1 * s1.hs_u + z_cf1 * s1.cf_u + z_di1 * s1.di_u + z_u1 + 0.5 * z_hca * s1.hc_u + z_upw * upw.upw_u1;
+        self.vs1[2][3] = z_hs1 * s1.hstar_d_ue
+            + z_cf1 * s1.cf_d_ue
+            + z_di1 * s1.cdiss_d_ue
+            + z_u1
+            + 0.5 * z_hca * s1.hstarstar_d_ue
+            + z_upw * upw.upw_u1;
         self.vs1[2][4] = z_x1;
 
-        self.vs2[2][0] = z_di2 * s2.di_s;
-        self.vs2[2][1] = z_hs2 * s2.hs_t
-            + z_cf2 * s2.cf_t
-            + z_di2 * s2.di_t
+        self.vs2[2][0] = z_di2 * s2.cdiss_d_sqrtctau;
+        self.vs2[2][1] = z_hs2 * s2.hstar_d_theta
+            + z_cf2 * s2.cf_d_theta
+            + z_di2 * s2.cdiss_d_theta
             + z_t2
-            + 0.5 * (z_hca * s2.hc_t + z_ha * s2.h_t)
+            + 0.5 * (z_hca * s2.hstarstar_d_theta + z_ha * s2.h_d_theta)
             + z_upw * upw.upw_t2;
-        self.vs2[2][2] = z_hs2 * s2.hs_d
-            + z_cf2 * s2.cf_d
-            + z_di2 * s2.di_d
-            + 0.5 * (z_hca * s2.hc_d + z_ha * s2.h_d)
+        self.vs2[2][2] = z_hs2 * s2.hstar_d_dstar
+            + z_cf2 * s2.cf_d_dstar
+            + z_di2 * s2.cdiss_d_dstar
+            + 0.5 * (z_hca * s2.hstarstar_d_dstar + z_ha * s2.h_d_dstar)
             + z_upw * upw.upw_d2;
-        self.vs2[2][3] =
-            z_hs2 * s2.hs_u + z_cf2 * s2.cf_u + z_di2 * s2.di_u + z_u2 + 0.5 * z_hca * s2.hc_u + z_upw * upw.upw_u2;
+        self.vs2[2][3] = z_hs2 * s2.hstar_d_ue
+            + z_cf2 * s2.cf_d_ue
+            + z_di2 * s2.cdiss_d_ue
+            + z_u2
+            + 0.5 * z_hca * s2.hstarstar_d_ue
+            + z_upw * upw.upw_u2;
         self.vs2[2][4] = z_x2;
 
-        self.vsm[2] = z_hs1 * s1.hs_ms
-            + z_cf1 * s1.cf_ms
-            + z_di1 * s1.di_ms
-            + z_hs2 * s2.hs_ms
-            + z_cf2 * s2.cf_ms
-            + z_di2 * s2.di_ms
-            + 0.5 * (z_hca * s1.hc_ms + z_hca * s2.hc_ms)
+        self.vsm[2] = z_hs1 * s1.hstar_d_machsqd
+            + z_cf1 * s1.cf_d_machsqd
+            + z_di1 * s1.cdiss_d_machsqd
+            + z_hs2 * s2.hstar_d_machsqd
+            + z_cf2 * s2.cf_d_machsqd
+            + z_di2 * s2.cdiss_d_machsqd
+            + 0.5 * (z_hca * s1.hstarstar_d_machsqd + z_hca * s2.hstarstar_d_machsqd)
             + z_upw * upw.upw_ms;
-        self.vsr[2] = z_hs1 * s1.hs_re
-            + z_cf1 * s1.cf_re
-            + z_di1 * s1.di_re
-            + z_hs2 * s2.hs_re
-            + z_cf2 * s2.cf_re
-            + z_di2 * s2.di_re;
+        self.vsr[2] = z_hs1 * s1.hstar_d_re
+            + z_cf1 * s1.cf_d_re
+            + z_di1 * s1.cdiss_d_re
+            + z_hs2 * s2.hstar_d_re
+            + z_cf2 * s2.cf_d_re
+            + z_di2 * s2.cdiss_d_re;
 
         self.vsrez[2] = -rezh;
     }
@@ -518,21 +538,21 @@ impl BLLocalSystem {
     #[allow(clippy::too_many_lines)]
     pub fn trdif(
         &mut self,
-        s1: &BLStationState,
-        s2: &BLStationState,
+        s1: &StationState,
+        s2: &StationState,
         trans: &TransitionLocation,
         acrit: f64,
         params: &FlowParameters,
     ) {
         // Weighting factors for linear interpolation to transition point
-        let wf2 = (trans.xt - s1.x) / (s2.x - s1.x);
-        let wf2_xt = 1.0 / (s2.x - s1.x);
+        let wf2 = (trans.xt - s1.xi) / (s2.xi - s1.xi);
+        let wf2_xt = 1.0 / (s2.xi - s1.xi);
         let wf1 = 1.0 - wf2;
 
         // Derivatives of weighting factors w.r.t. station variables
         let wf2_a1 = wf2_xt * trans.xt_a1;
-        let wf2_x1 = wf2_xt * trans.xt_x1 + (wf2 - 1.0) / (s2.x - s1.x);
-        let wf2_x2 = wf2_xt * trans.xt_x2 - wf2 / (s2.x - s1.x);
+        let wf2_x1 = wf2_xt * trans.xt_x1 + (wf2 - 1.0) / (s2.xi - s1.xi);
+        let wf2_x2 = wf2_xt * trans.xt_x2 - wf2 / (s2.xi - s1.xi);
         let wf2_t1 = wf2_xt * trans.xt_t1;
         let wf2_t2 = wf2_xt * trans.xt_t2;
         let wf2_d1 = wf2_xt * trans.xt_d1;
@@ -587,33 +607,33 @@ impl BLLocalSystem {
         let dt_re = s1.dstar * wf1_re + s2.dstar * wf2_re;
         let dt_xf = s1.dstar * wf1_xf + s2.dstar * wf2_xf;
 
-        let ut = s1.u * wf1 + s2.u * wf2;
-        let ut_a1 = s1.u * wf1_a1 + s2.u * wf2_a1;
-        let ut_x1 = s1.u * wf1_x1 + s2.u * wf2_x1;
-        let ut_x2 = s1.u * wf1_x2 + s2.u * wf2_x2;
-        let ut_t1 = s1.u * wf1_t1 + s2.u * wf2_t1;
-        let ut_t2 = s1.u * wf1_t2 + s2.u * wf2_t2;
-        let ut_d1 = s1.u * wf1_d1 + s2.u * wf2_d1;
-        let ut_d2 = s1.u * wf1_d2 + s2.u * wf2_d2;
-        let ut_u1 = s1.u * wf1_u1 + s2.u * wf2_u1 + wf1;
-        let ut_u2 = s1.u * wf1_u2 + s2.u * wf2_u2 + wf2;
-        let ut_ms = s1.u * wf1_ms + s2.u * wf2_ms;
-        let ut_re = s1.u * wf1_re + s2.u * wf2_re;
-        let ut_xf = s1.u * wf1_xf + s2.u * wf2_xf;
+        let ut = s1.ue * wf1 + s2.ue * wf2;
+        let ut_a1 = s1.ue * wf1_a1 + s2.ue * wf2_a1;
+        let ut_x1 = s1.ue * wf1_x1 + s2.ue * wf2_x1;
+        let ut_x2 = s1.ue * wf1_x2 + s2.ue * wf2_x2;
+        let ut_t1 = s1.ue * wf1_t1 + s2.ue * wf2_t1;
+        let ut_t2 = s1.ue * wf1_t2 + s2.ue * wf2_t2;
+        let ut_d1 = s1.ue * wf1_d1 + s2.ue * wf2_d1;
+        let ut_d2 = s1.ue * wf1_d2 + s2.ue * wf2_d2;
+        let ut_u1 = s1.ue * wf1_u1 + s2.ue * wf2_u1 + wf1;
+        let ut_u2 = s1.ue * wf1_u2 + s2.ue * wf2_u2 + wf2;
+        let ut_ms = s1.ue * wf1_ms + s2.ue * wf2_ms;
+        let ut_re = s1.ue * wf1_re + s2.ue * wf2_re;
+        let ut_xf = s1.ue * wf1_xf + s2.ue * wf2_xf;
 
         // Create transition-point state for laminar part
         // set primary "T" variables at XT (really placed into "2" variables): XFOIL overwrites
         // X2/T2/D2/U2/AMPL2/S2 on the saved station-2 COMMON, so U2_UEI, U2_MS and DW2 are
         // those of station 2 — no BLPRV here.
         let mut st = s2.clone();
-        st.x = trans.xt;
+        st.xi = trans.xt;
         st.theta = tt;
         st.dstar = dt;
-        st.u = ut;
+        st.ue = ut;
         st.ampl = acrit;
-        st.ctau = 0.0;
-        st.blkin(params);
-        st.blvar(FlowRegime::Laminar, params);
+        st.sqrtctau = 0.0;
+        st.set_kinematic_variables(params);
+        st.set_closure_variables(FlowRegime::Laminar, params);
 
         // Calculate midpoint Cf for X1-XT
         let cfm_lam = MidpointCf::compute(s1, &st, FlowRegime::Laminar, false);
@@ -698,7 +718,7 @@ impl BLLocalSystem {
         // *** PART 2: Turbulent from XT to X2 ***
 
         // Calculate equilibrium shear coefficient CQT at transition
-        st.blvar(FlowRegime::Turbulent, params);
+        st.set_closure_variables(FlowRegime::Turbulent, params);
 
         // Set initial shear stress: ST = CTR * CQ
         // where CTR = CTRCON * exp(-CTRCEX/(HK-1))
@@ -706,12 +726,12 @@ impl BLLocalSystem {
         let ctr = TRANSITION_SQRTCTAU_FACTOR * (-TRANSITION_SQRTCTAU_EXPONENT / hk_minus_one).exp();
         let ctr_hk = ctr * TRANSITION_SQRTCTAU_EXPONENT / (hk_minus_one * hk_minus_one);
 
-        let s_t = ctr * st.cq;
-        let st_tt = ctr * st.cq_t + st.cq * ctr_hk * st.hk_t;
-        let st_dt = ctr * st.cq_d + st.cq * ctr_hk * st.hk_d;
-        let st_ut = ctr * st.cq_u + st.cq * ctr_hk * st.hk_u;
-        let st_ms = ctr * st.cq_ms + st.cq * ctr_hk * st.hk_ms;
-        let st_re = ctr * st.cq_re;
+        let s_t = ctr * st.sqrtctaueq;
+        let st_tt = ctr * st.sqrtctaueq_d_theta + st.sqrtctaueq * ctr_hk * st.hk_d_theta;
+        let st_dt = ctr * st.sqrtctaueq_d_dstar + st.sqrtctaueq * ctr_hk * st.hk_d_dstar;
+        let st_ut = ctr * st.sqrtctaueq_d_ue + st.sqrtctaueq * ctr_hk * st.hk_d_ue;
+        let st_ms = ctr * st.sqrtctaueq_d_machsqd + st.sqrtctaueq * ctr_hk * st.hk_d_machsqd;
+        let st_re = ctr * st.sqrtctaueq_d_re;
 
         // ST sensitivities w.r.t. actual "1" and "2" variables
         let st_a1 = st_tt * tt_a1 + st_dt * dt_a1 + st_ut * ut_a1;
@@ -728,10 +748,10 @@ impl BLLocalSystem {
         let st_xf = st_tt * tt_xf + st_dt * dt_xf + st_ut * ut_xf;
 
         // Update transition station with turbulent initial condition
-        st.ctau = s_t;
+        st.sqrtctau = s_t;
 
         // Recalculate turbulent secondary variables with proper CTI
-        st.blvar(FlowRegime::Turbulent, params);
+        st.set_closure_variables(FlowRegime::Turbulent, params);
 
         // Calculate midpoint Cf for XT-X2
         let cfm_turb = MidpointCf::compute(&st, s2, FlowRegime::Turbulent, false);
@@ -862,145 +882,145 @@ mod tests {
         // Typical turbulent BL stations
 
         // Station 1
-        let mut s1 = BLStationState::default();
-        s1.x = 0.10;
-        s1.u = 1.15;
+        let mut s1 = StationState::default();
+        s1.xi = 0.10;
+        s1.ue = 1.15;
         s1.theta = 0.0018;
         s1.dstar = 0.0045;
-        s1.dw = 0.0;
+        s1.wake_gap = 0.0;
         s1.h = s1.dstar / s1.theta;
-        s1.msq = 0.0;
-        s1.hs = 1.75;
+        s1.machsqd_edge = 0.0;
+        s1.hstar = 1.75;
         s1.cf = 0.0025;
         s1.hk = 1.40;
-        s1.rt = 2070.0;
-        s1.de = 0.012;
-        s1.ctau = 0.015;
-        s1.cq = 0.04;
+        s1.retheta = 2070.0;
+        s1.delta = 0.012;
+        s1.sqrtctau = 0.015;
+        s1.sqrtctaueq = 0.04;
         s1.us = 0.5;
-        s1.di = 0.0008;
+        s1.cdiss = 0.0008;
 
         // Station 1 derivatives
-        s1.h_t = -s1.h / s1.theta;
-        s1.h_d = 1.0 / s1.theta;
-        s1.msq_u = 0.0;
-        s1.msq_ms = 0.0;
-        s1.cf_t = 0.0;
-        s1.cf_d = 0.0;
-        s1.cf_u = 0.0;
-        s1.cf_ms = 0.0;
-        s1.cf_re = -s1.cf / 1e6;
-        s1.hk_t = 0.0;
-        s1.hk_d = 0.0;
-        s1.hk_u = 0.0;
-        s1.hk_ms = 0.0;
-        s1.hs_t = 0.0;
-        s1.hs_d = 0.0;
-        s1.hs_u = 0.0;
-        s1.hs_ms = 0.0;
-        s1.hs_re = 0.0;
-        s1.de_t = 0.0;
-        s1.de_d = 0.0;
-        s1.de_u = 0.0;
-        s1.de_ms = 0.0;
-        s1.us_t = 0.0;
-        s1.us_d = 0.0;
-        s1.us_u = 0.0;
-        s1.us_ms = 0.0;
-        s1.us_re = 0.0;
-        s1.cq_t = 0.0;
-        s1.cq_d = 0.0;
-        s1.cq_u = 0.0;
-        s1.cq_ms = 0.0;
-        s1.cq_re = 0.0;
-        s1.di_t = 0.0;
-        s1.di_d = 0.0;
-        s1.di_u = 0.0;
-        s1.di_s = 0.0;
-        s1.di_ms = 0.0;
-        s1.di_re = 0.0;
-        s1.hc = 0.0;
-        s1.hc_t = 0.0;
-        s1.hc_d = 0.0;
-        s1.hc_u = 0.0;
-        s1.hc_ms = 0.0;
-        s1.rt_t = 0.0;
-        s1.rt_u = 0.0;
-        s1.rt_ms = 0.0;
-        s1.rt_re = 0.0;
+        s1.h_d_theta = -s1.h / s1.theta;
+        s1.h_d_dstar = 1.0 / s1.theta;
+        s1.machsqd_edge_d_ue = 0.0;
+        s1.machsqd_edge_d_machsqd = 0.0;
+        s1.cf_d_theta = 0.0;
+        s1.cf_d_dstar = 0.0;
+        s1.cf_d_ue = 0.0;
+        s1.cf_d_machsqd = 0.0;
+        s1.cf_d_re = -s1.cf / 1e6;
+        s1.hk_d_theta = 0.0;
+        s1.hk_d_dstar = 0.0;
+        s1.hk_d_ue = 0.0;
+        s1.hk_d_machsqd = 0.0;
+        s1.hstar_d_theta = 0.0;
+        s1.hstar_d_dstar = 0.0;
+        s1.hstar_d_ue = 0.0;
+        s1.hstar_d_machsqd = 0.0;
+        s1.hstar_d_re = 0.0;
+        s1.delta_d_theta = 0.0;
+        s1.delta_d_dstar = 0.0;
+        s1.delta_d_ue = 0.0;
+        s1.delta_d_machsqd = 0.0;
+        s1.us_d_theta = 0.0;
+        s1.us_d_dstar = 0.0;
+        s1.us_d_ue = 0.0;
+        s1.us_d_machsqd = 0.0;
+        s1.us_d_re = 0.0;
+        s1.sqrtctaueq_d_theta = 0.0;
+        s1.sqrtctaueq_d_dstar = 0.0;
+        s1.sqrtctaueq_d_ue = 0.0;
+        s1.sqrtctaueq_d_machsqd = 0.0;
+        s1.sqrtctaueq_d_re = 0.0;
+        s1.cdiss_d_theta = 0.0;
+        s1.cdiss_d_dstar = 0.0;
+        s1.cdiss_d_ue = 0.0;
+        s1.cdiss_d_sqrtctau = 0.0;
+        s1.cdiss_d_machsqd = 0.0;
+        s1.cdiss_d_re = 0.0;
+        s1.hstarstar = 0.0;
+        s1.hstarstar_d_theta = 0.0;
+        s1.hstarstar_d_dstar = 0.0;
+        s1.hstarstar_d_ue = 0.0;
+        s1.hstarstar_d_machsqd = 0.0;
+        s1.retheta_d_theta = 0.0;
+        s1.retheta_d_ue = 0.0;
+        s1.retheta_d_machsqd = 0.0;
+        s1.retheta_d_re = 0.0;
 
         // Station 2
-        let mut s2 = BLStationState::default();
-        s2.x = 0.12;
-        s2.u = 1.12;
+        let mut s2 = StationState::default();
+        s2.xi = 0.12;
+        s2.ue = 1.12;
         s2.theta = 0.0022;
         s2.dstar = 0.0052;
-        s2.dw = 0.0;
+        s2.wake_gap = 0.0;
         s2.h = s2.dstar / s2.theta;
-        s2.msq = 0.0;
-        s2.hs = 1.76;
+        s2.machsqd_edge = 0.0;
+        s2.hstar = 1.76;
         s2.cf = 0.0024;
         s2.hk = 1.38;
-        s2.rt = 2460.0;
-        s2.de = 0.015;
-        s2.ctau = 0.014;
-        s2.cq = 0.038;
+        s2.retheta = 2460.0;
+        s2.delta = 0.015;
+        s2.sqrtctau = 0.014;
+        s2.sqrtctaueq = 0.038;
         s2.us = 0.52;
-        s2.di = 0.00075;
+        s2.cdiss = 0.00075;
 
         // Station 2 derivatives
-        s2.h_t = -s2.h / s2.theta;
-        s2.h_d = 1.0 / s2.theta;
-        s2.msq_u = 0.0;
-        s2.msq_ms = 0.0;
-        s2.cf_t = 0.0;
-        s2.cf_d = 0.0;
-        s2.cf_u = 0.0;
-        s2.cf_ms = 0.0;
-        s2.cf_re = -s2.cf / 1e6;
-        s2.hk_t = 0.0;
-        s2.hk_d = 0.0;
-        s2.hk_u = 0.0;
-        s2.hk_ms = 0.0;
-        s2.hs_t = 0.0;
-        s2.hs_d = 0.0;
-        s2.hs_u = 0.0;
-        s2.hs_ms = 0.0;
-        s2.hs_re = 0.0;
-        s2.de_t = 0.0;
-        s2.de_d = 0.0;
-        s2.de_u = 0.0;
-        s2.de_ms = 0.0;
-        s2.us_t = 0.0;
-        s2.us_d = 0.0;
-        s2.us_u = 0.0;
-        s2.us_ms = 0.0;
-        s2.us_re = 0.0;
-        s2.cq_t = 0.0;
-        s2.cq_d = 0.0;
-        s2.cq_u = 0.0;
-        s2.cq_ms = 0.0;
-        s2.cq_re = 0.0;
-        s2.di_t = 0.0;
-        s2.di_d = 0.0;
-        s2.di_u = 0.0;
-        s2.di_s = 0.0;
-        s2.di_ms = 0.0;
-        s2.di_re = 0.0;
-        s2.hc = 0.0;
-        s2.hc_t = 0.0;
-        s2.hc_d = 0.0;
-        s2.hc_u = 0.0;
-        s2.hc_ms = 0.0;
-        s2.rt_t = 0.0;
-        s2.rt_u = 0.0;
-        s2.rt_ms = 0.0;
-        s2.rt_re = 0.0;
+        s2.h_d_theta = -s2.h / s2.theta;
+        s2.h_d_dstar = 1.0 / s2.theta;
+        s2.machsqd_edge_d_ue = 0.0;
+        s2.machsqd_edge_d_machsqd = 0.0;
+        s2.cf_d_theta = 0.0;
+        s2.cf_d_dstar = 0.0;
+        s2.cf_d_ue = 0.0;
+        s2.cf_d_machsqd = 0.0;
+        s2.cf_d_re = -s2.cf / 1e6;
+        s2.hk_d_theta = 0.0;
+        s2.hk_d_dstar = 0.0;
+        s2.hk_d_ue = 0.0;
+        s2.hk_d_machsqd = 0.0;
+        s2.hstar_d_theta = 0.0;
+        s2.hstar_d_dstar = 0.0;
+        s2.hstar_d_ue = 0.0;
+        s2.hstar_d_machsqd = 0.0;
+        s2.hstar_d_re = 0.0;
+        s2.delta_d_theta = 0.0;
+        s2.delta_d_dstar = 0.0;
+        s2.delta_d_ue = 0.0;
+        s2.delta_d_machsqd = 0.0;
+        s2.us_d_theta = 0.0;
+        s2.us_d_dstar = 0.0;
+        s2.us_d_ue = 0.0;
+        s2.us_d_machsqd = 0.0;
+        s2.us_d_re = 0.0;
+        s2.sqrtctaueq_d_theta = 0.0;
+        s2.sqrtctaueq_d_dstar = 0.0;
+        s2.sqrtctaueq_d_ue = 0.0;
+        s2.sqrtctaueq_d_machsqd = 0.0;
+        s2.sqrtctaueq_d_re = 0.0;
+        s2.cdiss_d_theta = 0.0;
+        s2.cdiss_d_dstar = 0.0;
+        s2.cdiss_d_ue = 0.0;
+        s2.cdiss_d_sqrtctau = 0.0;
+        s2.cdiss_d_machsqd = 0.0;
+        s2.cdiss_d_re = 0.0;
+        s2.hstarstar = 0.0;
+        s2.hstarstar_d_theta = 0.0;
+        s2.hstarstar_d_dstar = 0.0;
+        s2.hstarstar_d_ue = 0.0;
+        s2.hstarstar_d_machsqd = 0.0;
+        s2.retheta_d_theta = 0.0;
+        s2.retheta_d_ue = 0.0;
+        s2.retheta_d_machsqd = 0.0;
+        s2.retheta_d_re = 0.0;
 
         // Create CFM (simplified average)
         let mut cfm = MidpointCf::default();
-        cfm.cfm = 0.5 * (s1.cf + s2.cf);
-        cfm.cfm_re = 0.5 * (s1.cf_re + s2.cf_re);
+        cfm.cf = 0.5 * (s1.cf + s2.cf);
+        cfm.cf_d_re = 0.5 * (s1.cf_d_re + s2.cf_d_re);
 
         // Run BLDIF
         let mut sys = BLLocalSystem::default();

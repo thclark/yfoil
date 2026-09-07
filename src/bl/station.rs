@@ -12,135 +12,135 @@ use super::params::*;
 /// The naming follows XFOIL conventions where derivatives are denoted by
 /// suffixes like _u (w.r.t. U), _t (w.r.t. θ), _d (w.r.t. δ*), etc.
 #[derive(Debug, Clone, Default)]
-pub struct BLStationState {
+pub struct StationState {
     // ========================================================================
     // Primary variables (set by blprv)
     // ========================================================================
     /// Arc length position (X2 in XFOIL)
-    pub x: f64,
+    pub xi: f64,
     /// Edge velocity (compressible) (U2 in XFOIL)
-    pub u: f64,
+    pub ue: f64,
     /// Momentum thickness θ (T2 in XFOIL)
     pub theta: f64,
     /// Displacement thickness δ* without wake gap (D2 in XFOIL)
     pub dstar: f64,
     /// Shear stress coefficient Ctau (turbulent) (S2 in XFOIL)
-    pub ctau: f64,
+    pub sqrtctau: f64,
     /// Amplification factor (laminar) (AMPL2 in XFOIL)
     pub ampl: f64,
     /// Wake gap contribution to δ* (DW2 in XFOIL)
-    pub dw: f64,
+    pub wake_gap: f64,
 
     // Velocity transformation (compressible to incompressible)
     /// ∂U/∂Uei (compressible w.r.t. incompressible)
-    pub u_uei: f64,
+    pub ue_d_uei: f64,
     /// ∂U/∂M²
-    pub u_ms: f64,
+    pub ue_d_machsqd: f64,
 
     // ========================================================================
     // Kinematic secondary variables (set by blkin)
     // ========================================================================
     /// Shape factor H = δ*/θ
     pub h: f64,
-    pub h_t: f64, // ∂H/∂θ
-    pub h_d: f64, // ∂H/∂δ*
+    pub h_d_theta: f64, // ∂H/∂θ
+    pub h_d_dstar: f64, // ∂H/∂δ*
 
     /// Edge Mach number squared M²
-    pub msq: f64,
-    pub msq_u: f64,  // ∂M²/∂U
-    pub msq_ms: f64, // ∂M²/∂(M∞²)
+    pub machsqd_edge: f64,
+    pub machsqd_edge_d_ue: f64,      // ∂M²/∂U
+    pub machsqd_edge_d_machsqd: f64, // ∂M²/∂(M∞²)
 
     /// Density ratio ρ/ρ∞ (static to freestream)
-    pub r: f64,
-    pub r_u: f64,
-    pub r_ms: f64,
+    pub rho: f64,
+    pub rho_d_ue: f64,
+    pub rho_d_machsqd: f64,
 
     /// Kinematic viscosity ν ratio
-    pub v: f64,
-    pub v_u: f64,
-    pub v_ms: f64,
-    pub v_re: f64,
+    pub nu: f64,
+    pub nu_d_ue: f64,
+    pub nu_d_machsqd: f64,
+    pub nu_d_re: f64,
 
     /// Kinematic shape factor Hk
     pub hk: f64,
-    pub hk_u: f64,  // ∂Hk/∂U
-    pub hk_t: f64,  // ∂Hk/∂θ
-    pub hk_d: f64,  // ∂Hk/∂δ*
-    pub hk_ms: f64, // ∂Hk/∂M²
+    pub hk_d_ue: f64,      // ∂Hk/∂U
+    pub hk_d_theta: f64,   // ∂Hk/∂θ
+    pub hk_d_dstar: f64,   // ∂Hk/∂δ*
+    pub hk_d_machsqd: f64, // ∂Hk/∂M²
 
     /// Momentum Reynolds number Rθ = ρ·Ue·θ/μ
-    pub rt: f64,
-    pub rt_u: f64,
-    pub rt_t: f64,
-    pub rt_ms: f64,
-    pub rt_re: f64,
+    pub retheta: f64,
+    pub retheta_d_ue: f64,
+    pub retheta_d_theta: f64,
+    pub retheta_d_machsqd: f64,
+    pub retheta_d_re: f64,
 
     // ========================================================================
     // Turbulence-dependent secondary variables (set by blvar)
     // ========================================================================
     /// Density thickness shape factor H**
-    pub hc: f64,
-    pub hc_u: f64,
-    pub hc_t: f64,
-    pub hc_d: f64,
-    pub hc_ms: f64,
+    pub hstarstar: f64,
+    pub hstarstar_d_ue: f64,
+    pub hstarstar_d_theta: f64,
+    pub hstarstar_d_dstar: f64,
+    pub hstarstar_d_machsqd: f64,
 
     /// Energy shape factor H*
-    pub hs: f64,
-    pub hs_u: f64,
-    pub hs_t: f64,
-    pub hs_d: f64,
-    pub hs_ms: f64,
-    pub hs_re: f64,
+    pub hstar: f64,
+    pub hstar_d_ue: f64,
+    pub hstar_d_theta: f64,
+    pub hstar_d_dstar: f64,
+    pub hstar_d_machsqd: f64,
+    pub hstar_d_re: f64,
 
     /// Normalized slip velocity Us
     pub us: f64,
-    pub us_u: f64,
-    pub us_t: f64,
-    pub us_d: f64,
-    pub us_ms: f64,
-    pub us_re: f64,
+    pub us_d_ue: f64,
+    pub us_d_theta: f64,
+    pub us_d_dstar: f64,
+    pub us_d_machsqd: f64,
+    pub us_d_re: f64,
 
     /// Equilibrium shear stress coefficient CQ (Ctau^(1/2)_eq)
-    pub cq: f64,
-    pub cq_u: f64,
-    pub cq_t: f64,
-    pub cq_d: f64,
-    pub cq_ms: f64,
-    pub cq_re: f64,
+    pub sqrtctaueq: f64,
+    pub sqrtctaueq_d_ue: f64,
+    pub sqrtctaueq_d_theta: f64,
+    pub sqrtctaueq_d_dstar: f64,
+    pub sqrtctaueq_d_machsqd: f64,
+    pub sqrtctaueq_d_re: f64,
 
     /// Skin friction coefficient Cf
     pub cf: f64,
-    pub cf_u: f64,
-    pub cf_t: f64,
-    pub cf_d: f64,
-    pub cf_ms: f64,
-    pub cf_re: f64,
+    pub cf_d_ue: f64,
+    pub cf_d_theta: f64,
+    pub cf_d_dstar: f64,
+    pub cf_d_machsqd: f64,
+    pub cf_d_re: f64,
 
     /// Dissipation coefficient 2*CD/H*
-    pub di: f64,
-    pub di_u: f64,
-    pub di_t: f64,
-    pub di_d: f64,
-    pub di_s: f64, // ∂Di/∂Ctau
-    pub di_ms: f64,
-    pub di_re: f64,
+    pub cdiss: f64,
+    pub cdiss_d_ue: f64,
+    pub cdiss_d_theta: f64,
+    pub cdiss_d_dstar: f64,
+    pub cdiss_d_sqrtctau: f64, // ∂Di/∂Ctau
+    pub cdiss_d_machsqd: f64,
+    pub cdiss_d_re: f64,
 
     /// BL thickness δ (from Green's correlation)
-    pub de: f64,
-    pub de_u: f64,
-    pub de_t: f64,
-    pub de_d: f64,
-    pub de_ms: f64,
+    pub delta: f64,
+    pub delta_d_ue: f64,
+    pub delta_d_theta: f64,
+    pub delta_d_dstar: f64,
+    pub delta_d_machsqd: f64,
 
     // ========================================================================
     // For convenience
     // ========================================================================
     /// Mass defect M = Ue·δ* (stored, not computed with derivatives here)
-    pub mass: f64,
+    pub mass_defect: f64,
 }
 
-impl BLStationState {
+impl StationState {
     /// Set primary BL variables from input parameters (BLPRV equivalent)
     ///
     /// This converts incompressible edge velocity Uei to compressible U
@@ -155,7 +155,7 @@ impl BLStationState {
     /// * `dswaki` - Wake gap contribution
     /// * `uei` - Edge velocity (incompressible)
     /// * `params` - Global BL parameters
-    pub fn blprv(
+    pub fn set_primary_variables(
         &mut self,
         xsi: f64,
         ami: f64,
@@ -166,12 +166,12 @@ impl BLStationState {
         uei: f64,
         params: &FlowParameters,
     ) {
-        self.x = xsi;
+        self.xi = xsi;
         self.ampl = ami;
-        self.ctau = cti;
+        self.sqrtctau = cti;
         self.theta = thi;
         self.dstar = dsi - dswaki; // D2 is delta* without wake gap
-        self.dw = dswaki;
+        self.wake_gap = dswaki;
 
         // Karman-Tsien velocity transformation: Ue_compressible from Ue_incompressible
         // U2 = UEI*(1-TKBL) / (1 - TKBL*(UEI/QINFBL)^2)
@@ -181,15 +181,15 @@ impl BLStationState {
         let uei_q2 = uei_q * uei_q;
         let denom = 1.0 - tk * uei_q2;
 
-        self.u = uei * (1.0 - tk) / denom;
+        self.ue = uei * (1.0 - tk) / denom;
 
         // Derivative: ∂U/∂Uei
         // U2_UEI = (1 + TKBL*(2*U2*UEI/QINFBL^2 - 1)) / (1 - TKBL*(UEI/QINFBL)^2)
-        self.u_uei = (1.0 + tk * (2.0 * self.u * uei / (qinf * qinf) - 1.0)) / denom;
+        self.ue_d_uei = (1.0 + tk * (2.0 * self.ue * uei / (qinf * qinf) - 1.0)) / denom;
 
         // Derivative: ∂U/∂M² (through TK)
         // U2_MS = (U2*(UEI/QINFBL)^2 - UEI) * TKBL_MS / denom
-        self.u_ms = (self.u * uei_q2 - uei) * params.karman_tsien_d_machsqd / denom;
+        self.ue_d_machsqd = (self.ue * uei_q2 - uei) * params.karman_tsien_d_machsqd / denom;
     }
 
     /// Calculate turbulence-independent secondary variables (BLKIN equivalent)
@@ -200,8 +200,8 @@ impl BLStationState {
     ///
     /// # Arguments
     /// * `params` - Global BL parameters
-    pub fn blkin(&mut self, params: &FlowParameters) {
-        let u = self.u;
+    pub fn set_kinematic_variables(&mut self, params: &FlowParameters) {
+        let u = self.ue;
         let t = self.theta;
         let d = self.dstar;
         let gm1 = params.gamma_gas_m1;
@@ -218,22 +218,22 @@ impl BLStationState {
         // M² = U²·HSTINV / (γ-1)·(1 - 0.5·U²·HSTINV))
         let u2_hstinv = u * u * hstinv;
         let denom = gm1 * (1.0 - 0.5 * u2_hstinv);
-        self.msq = u2_hstinv / denom;
+        self.machsqd_edge = u2_hstinv / denom;
 
-        let tr = 1.0 + 0.5 * gm1 * self.msq;
-        self.msq_u = 2.0 * self.msq * tr / u;
-        self.msq_ms = u * u * tr / denom * hstinv_ms;
+        let tr = 1.0 + 0.5 * gm1 * self.machsqd_edge;
+        self.machsqd_edge_d_ue = 2.0 * self.machsqd_edge * tr / u;
+        self.machsqd_edge_d_machsqd = u * u * tr / denom * hstinv_ms;
 
         // Edge static density (isentropic)
         // R = RST * TR^(-1/(γ-1))
-        self.r = rst * tr.powf(-1.0 / gm1);
-        self.r_u = -self.r / tr * 0.5 * self.msq_u;
-        self.r_ms = -self.r / tr * 0.5 * self.msq_ms + rst_ms * tr.powf(-1.0 / gm1);
+        self.rho = rst * tr.powf(-1.0 / gm1);
+        self.rho_d_ue = -self.rho / tr * 0.5 * self.machsqd_edge_d_ue;
+        self.rho_d_machsqd = -self.rho / tr * 0.5 * self.machsqd_edge_d_machsqd + rst_ms * tr.powf(-1.0 / gm1);
 
         // Shape factor H = δ*/θ
         self.h = d / t;
-        self.h_d = 1.0 / t;
-        self.h_t = -self.h / t;
+        self.h_d_dstar = 1.0 / t;
+        self.h_d_theta = -self.h / t;
 
         // Edge static/stagnation enthalpy ratio
         let herat = 1.0 - 0.5 * u * u * hstinv;
@@ -243,34 +243,34 @@ impl BLStationState {
         // Molecular viscosity ratio (Sutherland-type)
         // V = sqrt(HERAT^3) * (1+HVRAT)/(HERAT+HVRAT) / REYBL
         let herat_32 = (herat * herat * herat).sqrt(); // SQRT(HERAT**3): cube first, as the Fortran does
-        self.v = herat_32 * (1.0 + hvrat) / (herat + hvrat) / reybl;
-        let v_he = self.v * (1.5 / herat - 1.0 / (herat + hvrat));
+        self.nu = herat_32 * (1.0 + hvrat) / (herat + hvrat) / reybl;
+        let v_he = self.nu * (1.5 / herat - 1.0 / (herat + hvrat));
 
-        self.v_u = v_he * he_u;
-        self.v_ms = -self.v / reybl * reybl_ms + v_he * he_ms;
-        self.v_re = -self.v / reybl * reybl_re;
+        self.nu_d_ue = v_he * he_u;
+        self.nu_d_machsqd = -self.nu / reybl * reybl_ms + v_he * he_ms;
+        self.nu_d_re = -self.nu / reybl * reybl_re;
 
         // Kinematic shape factor Hk (compressibility correction)
-        let (hk, hk_h, hk_msq) = hkin(self.h, self.msq);
+        let (hk, hk_h, hk_msq) = hkin(self.h, self.machsqd_edge);
         self.hk = hk;
 
-        self.hk_u = hk_msq * self.msq_u;
-        self.hk_t = hk_h * self.h_t;
-        self.hk_d = hk_h * self.h_d;
-        self.hk_ms = hk_msq * self.msq_ms;
+        self.hk_d_ue = hk_msq * self.machsqd_edge_d_ue;
+        self.hk_d_theta = hk_h * self.h_d_theta;
+        self.hk_d_dstar = hk_h * self.h_d_dstar;
+        self.hk_d_machsqd = hk_msq * self.machsqd_edge_d_machsqd;
 
         // Momentum thickness Reynolds number Rθ = ρ·U·θ/μ = R·U·T/V
-        self.rt = self.r * u * t / self.v;
-        self.rt_u = self.rt * (1.0 / u + self.r_u / self.r - self.v_u / self.v);
-        self.rt_t = self.rt / t;
-        self.rt_ms = self.rt * (self.r_ms / self.r - self.v_ms / self.v);
-        self.rt_re = self.rt * (-self.v_re / self.v);
+        self.retheta = self.rho * u * t / self.nu;
+        self.retheta_d_ue = self.retheta * (1.0 / u + self.rho_d_ue / self.rho - self.nu_d_ue / self.nu);
+        self.retheta_d_theta = self.retheta / t;
+        self.retheta_d_machsqd = self.retheta * (self.rho_d_machsqd / self.rho - self.nu_d_machsqd / self.nu);
+        self.retheta_d_re = self.retheta * (-self.nu_d_re / self.nu);
     }
 
     /// Copy all values from another station state
     ///
     /// Used for the COM1 = COM2 operation in XFOIL
-    pub fn copy_from(&mut self, other: &BLStationState) {
+    pub fn copy_from(&mut self, other: &StationState) {
         *self = other.clone();
     }
 
@@ -282,14 +282,14 @@ impl BLStationState {
     /// # Arguments
     /// * `flow_type` - Type of BL flow (Laminar, Turbulent, or Wake)
     /// * `params` - Global BL parameters
-    pub fn blvar(&mut self, flow_type: FlowRegime, _params: &FlowParameters) {
+    pub fn set_closure_variables(&mut self, flow_type: FlowRegime, _params: &FlowParameters) {
         let hk = self.hk;
-        let rt = self.rt;
-        let msq = self.msq;
+        let rt = self.retheta;
+        let msq = self.machsqd_edge;
         let h = self.h;
         let t = self.theta;
         let d = self.dstar;
-        let s = self.ctau; // Ctau (or amplification for laminar)
+        let s = self.sqrtctau; // Ctau (or amplification for laminar)
 
         // XFOIL clamps HK2 itself in COMMON (BLVAR: `HK2 = MAX(HK2, ...)`) and leaves the Hk
         // derivatives as BLKIN set them. The clamped value persists: BLMID, the next station's
@@ -305,11 +305,11 @@ impl BLStationState {
         // ====================================================================
         let (hc, hc_hk, hc_msq) = hc_turb(hk, msq);
 
-        self.hc = hc;
-        self.hc_u = hc_hk * self.hk_u + hc_msq * self.msq_u;
-        self.hc_t = hc_hk * self.hk_t;
-        self.hc_d = hc_hk * self.hk_d;
-        self.hc_ms = hc_hk * self.hk_ms + hc_msq * self.msq_ms;
+        self.hstarstar = hc;
+        self.hstarstar_d_ue = hc_hk * self.hk_d_ue + hc_msq * self.machsqd_edge_d_ue;
+        self.hstarstar_d_theta = hc_hk * self.hk_d_theta;
+        self.hstarstar_d_dstar = hc_hk * self.hk_d_dstar;
+        self.hstarstar_d_machsqd = hc_hk * self.hk_d_machsqd + hc_msq * self.machsqd_edge_d_machsqd;
 
         // ====================================================================
         // Energy shape factor H* (from HSL or HST)
@@ -319,39 +319,43 @@ impl BLStationState {
             FlowRegime::Turbulent | FlowRegime::Wake => hs_turb(hk, rt, msq),
         };
 
-        self.hs = hs_result.val;
-        self.hs_u = hs_result.val_hk * self.hk_u + hs_result.val_rt * self.rt_u + hs_result.val_msq * self.msq_u;
-        self.hs_t = hs_result.val_hk * self.hk_t + hs_result.val_rt * self.rt_t;
-        self.hs_d = hs_result.val_hk * self.hk_d;
-        self.hs_ms = hs_result.val_hk * self.hk_ms + hs_result.val_rt * self.rt_ms + hs_result.val_msq * self.msq_ms;
-        self.hs_re = hs_result.val_rt * self.rt_re;
+        self.hstar = hs_result.val;
+        self.hstar_d_ue = hs_result.val_hk * self.hk_d_ue
+            + hs_result.val_rt * self.retheta_d_ue
+            + hs_result.val_msq * self.machsqd_edge_d_ue;
+        self.hstar_d_theta = hs_result.val_hk * self.hk_d_theta + hs_result.val_rt * self.retheta_d_theta;
+        self.hstar_d_dstar = hs_result.val_hk * self.hk_d_dstar;
+        self.hstar_d_machsqd = hs_result.val_hk * self.hk_d_machsqd
+            + hs_result.val_rt * self.retheta_d_machsqd
+            + hs_result.val_msq * self.machsqd_edge_d_machsqd;
+        self.hstar_d_re = hs_result.val_rt * self.retheta_d_re;
 
         // ---- normalized slip velocity  Us
-        let us = 0.5 * self.hs * (1.0 - (hk - 1.0) / (GBETA_LOCUS_B * h));
+        let us = 0.5 * self.hstar * (1.0 - (hk - 1.0) / (GBETA_LOCUS_B * h));
         let us_hs = 0.5 * (1.0 - (hk - 1.0) / (GBETA_LOCUS_B * h));
-        let us_hk = 0.5 * self.hs * (-1.0 / (GBETA_LOCUS_B * h));
-        let us_h = 0.5 * self.hs * (hk - 1.0) / (GBETA_LOCUS_B * (h * h));
+        let us_hk = 0.5 * self.hstar * (-1.0 / (GBETA_LOCUS_B * h));
+        let us_h = 0.5 * self.hstar * (hk - 1.0) / (GBETA_LOCUS_B * (h * h));
         self.us = us;
-        self.us_u = us_hs * self.hs_u + us_hk * self.hk_u;
-        self.us_t = us_hs * self.hs_t + us_hk * self.hk_t + us_h * self.h_t;
-        self.us_d = us_hs * self.hs_d + us_hk * self.hk_d + us_h * self.h_d;
-        self.us_ms = us_hs * self.hs_ms + us_hk * self.hk_ms;
-        self.us_re = us_hs * self.hs_re;
+        self.us_d_ue = us_hs * self.hstar_d_ue + us_hk * self.hk_d_ue;
+        self.us_d_theta = us_hs * self.hstar_d_theta + us_hk * self.hk_d_theta + us_h * self.h_d_theta;
+        self.us_d_dstar = us_hs * self.hstar_d_dstar + us_hk * self.hk_d_dstar + us_h * self.h_d_dstar;
+        self.us_d_machsqd = us_hs * self.hstar_d_machsqd + us_hk * self.hk_d_machsqd;
+        self.us_d_re = us_hs * self.hstar_d_re;
         if flow_type != FlowRegime::Wake && self.us > 0.95 {
             self.us = 0.98;
-            self.us_u = 0.0;
-            self.us_t = 0.0;
-            self.us_d = 0.0;
-            self.us_ms = 0.0;
-            self.us_re = 0.0;
+            self.us_d_ue = 0.0;
+            self.us_d_theta = 0.0;
+            self.us_d_dstar = 0.0;
+            self.us_d_machsqd = 0.0;
+            self.us_d_re = 0.0;
         }
         if flow_type == FlowRegime::Wake && self.us > 0.99995 {
             self.us = 0.99995;
-            self.us_u = 0.0;
-            self.us_t = 0.0;
-            self.us_d = 0.0;
-            self.us_ms = 0.0;
-            self.us_re = 0.0;
+            self.us_d_ue = 0.0;
+            self.us_d_theta = 0.0;
+            self.us_d_dstar = 0.0;
+            self.us_d_machsqd = 0.0;
+            self.us_d_re = 0.0;
         }
         let us = self.us;
 
@@ -372,25 +376,26 @@ impl BLStationState {
         }
         let hkb = hk - 1.0;
         let usb = 1.0 - us;
-        let cq = (SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk))).sqrt();
+        let cq = (SQRTCTAUEQ_COEFFICIENT * self.hstar * hkb * (hkc * hkc) / (usb * h * (hk * hk))).sqrt();
         let cq_hs = SQRTCTAUEQ_COEFFICIENT * hkb * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq;
-        let cq_us = SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / usb * 0.5 / cq;
-        let cq_hk = SQRTCTAUEQ_COEFFICIENT * self.hs * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq
-            - SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * ((hk * hk) * hk)) * 2.0 * 0.5 / cq
-            + SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_hk;
-        let cq_rt = SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_rt;
-        let cq_h = -(SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / h * 0.5 / cq);
-        self.cq = cq;
-        self.cq_u = cq_hs * self.hs_u + cq_us * self.us_u + cq_hk * self.hk_u;
-        self.cq_t = cq_hs * self.hs_t + cq_us * self.us_t + cq_hk * self.hk_t;
-        self.cq_d = cq_hs * self.hs_d + cq_us * self.us_d + cq_hk * self.hk_d;
-        self.cq_ms = cq_hs * self.hs_ms + cq_us * self.us_ms + cq_hk * self.hk_ms;
-        self.cq_re = cq_hs * self.hs_re + cq_us * self.us_re;
-        self.cq_u = self.cq_u + cq_rt * self.rt_u;
-        self.cq_t = self.cq_t + cq_h * self.h_t + cq_rt * self.rt_t;
-        self.cq_d = self.cq_d + cq_h * self.h_d;
-        self.cq_ms = self.cq_ms + cq_rt * self.rt_ms;
-        self.cq_re = self.cq_re + cq_rt * self.rt_re;
+        let cq_us = SQRTCTAUEQ_COEFFICIENT * self.hstar * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / usb * 0.5 / cq;
+        let cq_hk = SQRTCTAUEQ_COEFFICIENT * self.hstar * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq
+            - SQRTCTAUEQ_COEFFICIENT * self.hstar * hkb * (hkc * hkc) / (usb * h * ((hk * hk) * hk)) * 2.0 * 0.5 / cq
+            + SQRTCTAUEQ_COEFFICIENT * self.hstar * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_hk;
+        let cq_rt = SQRTCTAUEQ_COEFFICIENT * self.hstar * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_rt;
+        let cq_h = -(SQRTCTAUEQ_COEFFICIENT * self.hstar * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / h * 0.5 / cq);
+        self.sqrtctaueq = cq;
+        self.sqrtctaueq_d_ue = cq_hs * self.hstar_d_ue + cq_us * self.us_d_ue + cq_hk * self.hk_d_ue;
+        self.sqrtctaueq_d_theta = cq_hs * self.hstar_d_theta + cq_us * self.us_d_theta + cq_hk * self.hk_d_theta;
+        self.sqrtctaueq_d_dstar = cq_hs * self.hstar_d_dstar + cq_us * self.us_d_dstar + cq_hk * self.hk_d_dstar;
+        self.sqrtctaueq_d_machsqd =
+            cq_hs * self.hstar_d_machsqd + cq_us * self.us_d_machsqd + cq_hk * self.hk_d_machsqd;
+        self.sqrtctaueq_d_re = cq_hs * self.hstar_d_re + cq_us * self.us_d_re;
+        self.sqrtctaueq_d_ue = self.sqrtctaueq_d_ue + cq_rt * self.retheta_d_ue;
+        self.sqrtctaueq_d_theta = self.sqrtctaueq_d_theta + cq_h * self.h_d_theta + cq_rt * self.retheta_d_theta;
+        self.sqrtctaueq_d_dstar = self.sqrtctaueq_d_dstar + cq_h * self.h_d_dstar;
+        self.sqrtctaueq_d_machsqd = self.sqrtctaueq_d_machsqd + cq_rt * self.retheta_d_machsqd;
+        self.sqrtctaueq_d_re = self.sqrtctaueq_d_re + cq_rt * self.retheta_d_re;
 
         // ---- set skin friction coefficient
         let (cf, cf_hk, cf_rt, cf_m) = match flow_type {
@@ -415,44 +420,48 @@ impl BLStationState {
             }
         };
         self.cf = cf;
-        self.cf_u = cf_hk * self.hk_u + cf_rt * self.rt_u + cf_m * self.msq_u;
-        self.cf_t = cf_hk * self.hk_t + cf_rt * self.rt_t;
-        self.cf_d = cf_hk * self.hk_d;
-        self.cf_ms = cf_hk * self.hk_ms + cf_rt * self.rt_ms + cf_m * self.msq_ms;
-        self.cf_re = cf_rt * self.rt_re;
+        self.cf_d_ue = cf_hk * self.hk_d_ue + cf_rt * self.retheta_d_ue + cf_m * self.machsqd_edge_d_ue;
+        self.cf_d_theta = cf_hk * self.hk_d_theta + cf_rt * self.retheta_d_theta;
+        self.cf_d_dstar = cf_hk * self.hk_d_dstar;
+        self.cf_d_machsqd =
+            cf_hk * self.hk_d_machsqd + cf_rt * self.retheta_d_machsqd + cf_m * self.machsqd_edge_d_machsqd;
+        self.cf_d_re = cf_rt * self.retheta_d_re;
 
         // ---- dissipation function    2 CD / H*
         match flow_type {
             FlowRegime::Laminar => {
                 // laminar
                 let r = di_lam(hk, rt);
-                self.di = r.val;
-                self.di_u = r.val_hk * self.hk_u + r.val_rt * self.rt_u;
-                self.di_t = r.val_hk * self.hk_t + r.val_rt * self.rt_t;
-                self.di_d = r.val_hk * self.hk_d;
-                self.di_s = 0.0;
-                self.di_ms = r.val_hk * self.hk_ms + r.val_rt * self.rt_ms;
-                self.di_re = r.val_rt * self.rt_re;
+                self.cdiss = r.val;
+                self.cdiss_d_ue = r.val_hk * self.hk_d_ue + r.val_rt * self.retheta_d_ue;
+                self.cdiss_d_theta = r.val_hk * self.hk_d_theta + r.val_rt * self.retheta_d_theta;
+                self.cdiss_d_dstar = r.val_hk * self.hk_d_dstar;
+                self.cdiss_d_sqrtctau = 0.0;
+                self.cdiss_d_machsqd = r.val_hk * self.hk_d_machsqd + r.val_rt * self.retheta_d_machsqd;
+                self.cdiss_d_re = r.val_rt * self.retheta_d_re;
             }
             FlowRegime::Turbulent => {
                 // turbulent wall contribution
                 let c = cf_turb(hk, rt, msq, CF_TURBULENT_FACTOR);
                 let cf2t = c.val;
-                let cf2t_u = c.val_hk * self.hk_u + c.val_rt * self.rt_u + c.val_msq * self.msq_u;
-                let cf2t_t = c.val_hk * self.hk_t + c.val_rt * self.rt_t;
-                let cf2t_d = c.val_hk * self.hk_d;
-                let cf2t_ms = c.val_hk * self.hk_ms + c.val_rt * self.rt_ms + c.val_msq * self.msq_ms;
-                let cf2t_re = c.val_rt * self.rt_re;
-                let mut di = (0.5 * cf2t * us) * 2.0 / self.hs;
-                let di_hs = -((0.5 * cf2t * us) * 2.0 / (self.hs * self.hs));
-                let di_us = (0.5 * cf2t) * 2.0 / self.hs;
-                let di_cf2t = (0.5 * us) * 2.0 / self.hs;
+                let cf2t_u =
+                    c.val_hk * self.hk_d_ue + c.val_rt * self.retheta_d_ue + c.val_msq * self.machsqd_edge_d_ue;
+                let cf2t_t = c.val_hk * self.hk_d_theta + c.val_rt * self.retheta_d_theta;
+                let cf2t_d = c.val_hk * self.hk_d_dstar;
+                let cf2t_ms = c.val_hk * self.hk_d_machsqd
+                    + c.val_rt * self.retheta_d_machsqd
+                    + c.val_msq * self.machsqd_edge_d_machsqd;
+                let cf2t_re = c.val_rt * self.retheta_d_re;
+                let mut di = (0.5 * cf2t * us) * 2.0 / self.hstar;
+                let di_hs = -((0.5 * cf2t * us) * 2.0 / (self.hstar * self.hstar));
+                let di_us = (0.5 * cf2t) * 2.0 / self.hstar;
+                let di_cf2t = (0.5 * us) * 2.0 / self.hstar;
                 let mut di_s = 0.0;
-                let mut di_u = di_hs * self.hs_u + di_us * self.us_u + di_cf2t * cf2t_u;
-                let mut di_t = di_hs * self.hs_t + di_us * self.us_t + di_cf2t * cf2t_t;
-                let mut di_d = di_hs * self.hs_d + di_us * self.us_d + di_cf2t * cf2t_d;
-                let mut di_ms = di_hs * self.hs_ms + di_us * self.us_ms + di_cf2t * cf2t_ms;
-                let mut di_re = di_hs * self.hs_re + di_us * self.us_re + di_cf2t * cf2t_re;
+                let mut di_u = di_hs * self.hstar_d_ue + di_us * self.us_d_ue + di_cf2t * cf2t_u;
+                let mut di_t = di_hs * self.hstar_d_theta + di_us * self.us_d_theta + di_cf2t * cf2t_t;
+                let mut di_d = di_hs * self.hstar_d_dstar + di_us * self.us_d_dstar + di_cf2t * cf2t_d;
+                let mut di_ms = di_hs * self.hstar_d_machsqd + di_us * self.us_d_machsqd + di_cf2t * cf2t_ms;
+                let mut di_re = di_hs * self.hstar_d_re + di_us * self.us_d_re + di_cf2t * cf2t_re;
 
                 // set minimum Hk for wake layer to still exist
                 let grt = rt.ln();
@@ -470,99 +479,107 @@ impl BLStationState {
                 let df_rt = df_fl * fl_rt;
 
                 di_s *= dfac;
-                di_u = di_u * dfac + di * (df_hk * self.hk_u + df_rt * self.rt_u);
-                di_t = di_t * dfac + di * (df_hk * self.hk_t + df_rt * self.rt_t);
-                di_d = di_d * dfac + di * (df_hk * self.hk_d);
-                di_ms = di_ms * dfac + di * (df_hk * self.hk_ms + df_rt * self.rt_ms);
-                di_re = di_re * dfac + di * (df_rt * self.rt_re);
+                di_u = di_u * dfac + di * (df_hk * self.hk_d_ue + df_rt * self.retheta_d_ue);
+                di_t = di_t * dfac + di * (df_hk * self.hk_d_theta + df_rt * self.retheta_d_theta);
+                di_d = di_d * dfac + di * (df_hk * self.hk_d_dstar);
+                di_ms = di_ms * dfac + di * (df_hk * self.hk_d_machsqd + df_rt * self.retheta_d_machsqd);
+                di_re = di_re * dfac + di * (df_rt * self.retheta_d_re);
                 di *= dfac;
 
-                self.di = di;
-                self.di_s = di_s;
-                self.di_u = di_u;
-                self.di_t = di_t;
-                self.di_d = di_d;
-                self.di_ms = di_ms;
-                self.di_re = di_re;
+                self.cdiss = di;
+                self.cdiss_d_sqrtctau = di_s;
+                self.cdiss_d_ue = di_u;
+                self.cdiss_d_theta = di_t;
+                self.cdiss_d_dstar = di_d;
+                self.cdiss_d_machsqd = di_ms;
+                self.cdiss_d_re = di_re;
             }
             FlowRegime::Wake => {
                 // zero wall contribution for wake
-                self.di = 0.0;
-                self.di_s = 0.0;
-                self.di_u = 0.0;
-                self.di_t = 0.0;
-                self.di_d = 0.0;
-                self.di_ms = 0.0;
-                self.di_re = 0.0;
+                self.cdiss = 0.0;
+                self.cdiss_d_sqrtctau = 0.0;
+                self.cdiss_d_ue = 0.0;
+                self.cdiss_d_theta = 0.0;
+                self.cdiss_d_dstar = 0.0;
+                self.cdiss_d_machsqd = 0.0;
+                self.cdiss_d_re = 0.0;
             }
         }
 
         // ---- Add on turbulent outer layer contribution
         if flow_type != FlowRegime::Laminar {
-            let dd = (s * s) * (0.995 - us) * 2.0 / self.hs;
-            let dd_hs = -((s * s) * (0.995 - us) * 2.0 / (self.hs * self.hs));
-            let dd_us = -((s * s) * 2.0 / self.hs);
-            let dd_s = s * 2.0 * (0.995 - us) * 2.0 / self.hs;
-            self.di = self.di + dd;
-            self.di_s = dd_s;
-            self.di_u = self.di_u + dd_hs * self.hs_u + dd_us * self.us_u;
-            self.di_t = self.di_t + dd_hs * self.hs_t + dd_us * self.us_t;
-            self.di_d = self.di_d + dd_hs * self.hs_d + dd_us * self.us_d;
-            self.di_ms = self.di_ms + dd_hs * self.hs_ms + dd_us * self.us_ms;
-            self.di_re = self.di_re + dd_hs * self.hs_re + dd_us * self.us_re;
+            let dd = (s * s) * (0.995 - us) * 2.0 / self.hstar;
+            let dd_hs = -((s * s) * (0.995 - us) * 2.0 / (self.hstar * self.hstar));
+            let dd_us = -((s * s) * 2.0 / self.hstar);
+            let dd_s = s * 2.0 * (0.995 - us) * 2.0 / self.hstar;
+            self.cdiss = self.cdiss + dd;
+            self.cdiss_d_sqrtctau = dd_s;
+            self.cdiss_d_ue = self.cdiss_d_ue + dd_hs * self.hstar_d_ue + dd_us * self.us_d_ue;
+            self.cdiss_d_theta = self.cdiss_d_theta + dd_hs * self.hstar_d_theta + dd_us * self.us_d_theta;
+            self.cdiss_d_dstar = self.cdiss_d_dstar + dd_hs * self.hstar_d_dstar + dd_us * self.us_d_dstar;
+            self.cdiss_d_machsqd = self.cdiss_d_machsqd + dd_hs * self.hstar_d_machsqd + dd_us * self.us_d_machsqd;
+            self.cdiss_d_re = self.cdiss_d_re + dd_hs * self.hstar_d_re + dd_us * self.us_d_re;
 
             // add laminar stress contribution to outer layer CD
-            let dd = 0.15 * ((0.995 - us) * (0.995 - us)) / rt * 2.0 / self.hs;
-            let dd_us = -0.15 * (0.995 - us) * 2.0 / rt * 2.0 / self.hs;
-            let dd_hs = -dd / self.hs;
+            let dd = 0.15 * ((0.995 - us) * (0.995 - us)) / rt * 2.0 / self.hstar;
+            let dd_us = -0.15 * (0.995 - us) * 2.0 / rt * 2.0 / self.hstar;
+            let dd_hs = -dd / self.hstar;
             let dd_rt = -dd / rt;
-            self.di = self.di + dd;
-            self.di_u = self.di_u + dd_hs * self.hs_u + dd_us * self.us_u + dd_rt * self.rt_u;
-            self.di_t = self.di_t + dd_hs * self.hs_t + dd_us * self.us_t + dd_rt * self.rt_t;
-            self.di_d = self.di_d + dd_hs * self.hs_d + dd_us * self.us_d;
-            self.di_ms = self.di_ms + dd_hs * self.hs_ms + dd_us * self.us_ms + dd_rt * self.rt_ms;
-            self.di_re = self.di_re + dd_hs * self.hs_re + dd_us * self.us_re + dd_rt * self.rt_re;
+            self.cdiss = self.cdiss + dd;
+            self.cdiss_d_ue =
+                self.cdiss_d_ue + dd_hs * self.hstar_d_ue + dd_us * self.us_d_ue + dd_rt * self.retheta_d_ue;
+            self.cdiss_d_theta = self.cdiss_d_theta
+                + dd_hs * self.hstar_d_theta
+                + dd_us * self.us_d_theta
+                + dd_rt * self.retheta_d_theta;
+            self.cdiss_d_dstar = self.cdiss_d_dstar + dd_hs * self.hstar_d_dstar + dd_us * self.us_d_dstar;
+            self.cdiss_d_machsqd = self.cdiss_d_machsqd
+                + dd_hs * self.hstar_d_machsqd
+                + dd_us * self.us_d_machsqd
+                + dd_rt * self.retheta_d_machsqd;
+            self.cdiss_d_re =
+                self.cdiss_d_re + dd_hs * self.hstar_d_re + dd_us * self.us_d_re + dd_rt * self.retheta_d_re;
         }
 
         if flow_type == FlowRegime::Turbulent {
             let l = di_lam(hk, rt);
-            if l.val > self.di {
+            if l.val > self.cdiss {
                 // laminar CD is greater than turbulent CD -- use laminar
                 // (this will only occur for unreasonably small Rtheta)
-                self.di = l.val;
-                self.di_s = 0.0;
-                self.di_u = l.val_hk * self.hk_u + l.val_rt * self.rt_u;
-                self.di_t = l.val_hk * self.hk_t + l.val_rt * self.rt_t;
-                self.di_d = l.val_hk * self.hk_d;
-                self.di_ms = l.val_hk * self.hk_ms + l.val_rt * self.rt_ms;
-                self.di_re = l.val_rt * self.rt_re;
+                self.cdiss = l.val;
+                self.cdiss_d_sqrtctau = 0.0;
+                self.cdiss_d_ue = l.val_hk * self.hk_d_ue + l.val_rt * self.retheta_d_ue;
+                self.cdiss_d_theta = l.val_hk * self.hk_d_theta + l.val_rt * self.retheta_d_theta;
+                self.cdiss_d_dstar = l.val_hk * self.hk_d_dstar;
+                self.cdiss_d_machsqd = l.val_hk * self.hk_d_machsqd + l.val_rt * self.retheta_d_machsqd;
+                self.cdiss_d_re = l.val_rt * self.retheta_d_re;
             }
         }
 
         if flow_type == FlowRegime::Wake {
             // laminar wake CD
             let l = dilw(hk, rt);
-            if l.val > self.di {
+            if l.val > self.cdiss {
                 // laminar wake CD is greater than turbulent CD -- use laminar
-                self.di = l.val;
-                self.di_s = 0.0;
-                self.di_u = l.val_hk * self.hk_u + l.val_rt * self.rt_u;
-                self.di_t = l.val_hk * self.hk_t + l.val_rt * self.rt_t;
-                self.di_d = l.val_hk * self.hk_d;
-                self.di_ms = l.val_hk * self.hk_ms + l.val_rt * self.rt_ms;
-                self.di_re = l.val_rt * self.rt_re;
+                self.cdiss = l.val;
+                self.cdiss_d_sqrtctau = 0.0;
+                self.cdiss_d_ue = l.val_hk * self.hk_d_ue + l.val_rt * self.retheta_d_ue;
+                self.cdiss_d_theta = l.val_hk * self.hk_d_theta + l.val_rt * self.retheta_d_theta;
+                self.cdiss_d_dstar = l.val_hk * self.hk_d_dstar;
+                self.cdiss_d_machsqd = l.val_hk * self.hk_d_machsqd + l.val_rt * self.retheta_d_machsqd;
+                self.cdiss_d_re = l.val_rt * self.retheta_d_re;
             }
         }
 
         if flow_type == FlowRegime::Wake {
             // double dissipation for the wake (two wake halves)
-            self.di *= 2.0;
-            self.di_s *= 2.0;
-            self.di_u *= 2.0;
-            self.di_t *= 2.0;
-            self.di_d *= 2.0;
-            self.di_ms *= 2.0;
-            self.di_re *= 2.0;
+            self.cdiss *= 2.0;
+            self.cdiss_d_sqrtctau *= 2.0;
+            self.cdiss_d_ue *= 2.0;
+            self.cdiss_d_theta *= 2.0;
+            self.cdiss_d_dstar *= 2.0;
+            self.cdiss_d_machsqd *= 2.0;
+            self.cdiss_d_re *= 2.0;
         }
 
         // ====================================================================
@@ -572,20 +589,20 @@ impl BLStationState {
         let de = (3.15 + 1.72 / (hk - 1.0)) * t + d;
         let de_hk = -1.72 / ((hk - 1.0) * (hk - 1.0)) * t;
 
-        self.de = de;
-        self.de_u = de_hk * self.hk_u;
-        self.de_t = de_hk * self.hk_t + 3.15 + 1.72 / (hk - 1.0);
-        self.de_d = de_hk * self.hk_d + 1.0;
-        self.de_ms = de_hk * self.hk_ms;
+        self.delta = de;
+        self.delta_d_ue = de_hk * self.hk_d_ue;
+        self.delta_d_theta = de_hk * self.hk_d_theta + 3.15 + 1.72 / (hk - 1.0);
+        self.delta_d_dstar = de_hk * self.hk_d_dstar + 1.0;
+        self.delta_d_machsqd = de_hk * self.hk_d_machsqd;
 
         // Clamp DE to reasonable values
         let hdmax = 12.0;
-        if self.de > hdmax * t {
-            self.de = hdmax * t;
-            self.de_u = 0.0;
-            self.de_t = hdmax;
-            self.de_d = 0.0;
-            self.de_ms = 0.0;
+        if self.delta > hdmax * t {
+            self.delta = hdmax * t;
+            self.delta_d_ue = 0.0;
+            self.delta_d_theta = hdmax;
+            self.delta_d_dstar = 0.0;
+            self.delta_d_machsqd = 0.0;
         }
     }
 }
@@ -601,21 +618,21 @@ impl BLStationState {
 #[derive(Debug, Clone, Default)]
 pub struct MidpointCf {
     /// Midpoint skin friction coefficient
-    pub cfm: f64,
+    pub cf: f64,
 
     /// Derivatives w.r.t. station 1
-    pub cfm_u1: f64,
-    pub cfm_t1: f64,
-    pub cfm_d1: f64,
+    pub cf_d_ue_station1: f64,
+    pub cf_d_theta_station1: f64,
+    pub cf_d_dstar_station1: f64,
 
     /// Derivatives w.r.t. station 2
-    pub cfm_u2: f64,
-    pub cfm_t2: f64,
-    pub cfm_d2: f64,
+    pub cf_d_ue_station2: f64,
+    pub cf_d_theta_station2: f64,
+    pub cf_d_dstar_station2: f64,
 
     /// Derivatives w.r.t. global parameters
-    pub cfm_ms: f64,
-    pub cfm_re: f64,
+    pub cf_d_machsqd: f64,
+    pub cf_d_re: f64,
 }
 
 impl MidpointCf {
@@ -630,38 +647,48 @@ impl MidpointCf {
     /// * `s2` - Station 2 state
     /// * `flow_type` - Type of BL flow
     /// * `is_similarity` - True if this is a similarity station (copy s2→s1)
-    pub fn compute(s1: &BLStationState, s2: &BLStationState, flow_type: FlowRegime, is_similarity: bool) -> Self {
+    pub fn compute(s1: &StationState, s2: &StationState, flow_type: FlowRegime, is_similarity: bool) -> Self {
         let mut result = Self::default();
 
         // For similarity station, station 1 equals station 2
         let (hk1, rt1, m1) = if is_similarity {
-            (s2.hk, s2.rt, s2.msq)
+            (s2.hk, s2.retheta, s2.machsqd_edge)
         } else {
-            (s1.hk, s1.rt, s1.msq)
+            (s1.hk, s1.retheta, s1.machsqd_edge)
         };
 
         let (hk1_u1, hk1_t1, hk1_d1, hk1_ms) = if is_similarity {
-            (s2.hk_u, s2.hk_t, s2.hk_d, s2.hk_ms)
+            (s2.hk_d_ue, s2.hk_d_theta, s2.hk_d_dstar, s2.hk_d_machsqd)
         } else {
-            (s1.hk_u, s1.hk_t, s1.hk_d, s1.hk_ms)
+            (s1.hk_d_ue, s1.hk_d_theta, s1.hk_d_dstar, s1.hk_d_machsqd)
         };
 
         let (rt1_u1, rt1_t1, rt1_ms, rt1_re) = if is_similarity {
-            (s2.rt_u, s2.rt_t, s2.rt_ms, s2.rt_re)
+            (
+                s2.retheta_d_ue,
+                s2.retheta_d_theta,
+                s2.retheta_d_machsqd,
+                s2.retheta_d_re,
+            )
         } else {
-            (s1.rt_u, s1.rt_t, s1.rt_ms, s1.rt_re)
+            (
+                s1.retheta_d_ue,
+                s1.retheta_d_theta,
+                s1.retheta_d_machsqd,
+                s1.retheta_d_re,
+            )
         };
 
         let (m1_u1, m1_ms) = if is_similarity {
-            (s2.msq_u, s2.msq_ms)
+            (s2.machsqd_edge_d_ue, s2.machsqd_edge_d_machsqd)
         } else {
-            (s1.msq_u, s1.msq_ms)
+            (s1.machsqd_edge_d_ue, s1.machsqd_edge_d_machsqd)
         };
 
         // Midpoint averages
         let hka = 0.5 * (hk1 + s2.hk);
-        let rta = 0.5 * (rt1 + s2.rt);
-        let ma = 0.5 * (m1 + s2.msq);
+        let rta = 0.5 * (rt1 + s2.retheta);
+        let ma = 0.5 * (m1 + s2.machsqd_edge);
 
         // Midpoint skin friction coefficient
         let (cfm, cfm_hka, cfm_rta, cfm_ma) = match flow_type {
@@ -693,27 +720,28 @@ impl MidpointCf {
             }
         };
 
-        result.cfm = cfm;
+        result.cf = cfm;
 
         // Derivatives w.r.t. station 1 variables (factor of 0.5 from averaging)
-        result.cfm_u1 = 0.5 * (cfm_hka * hk1_u1 + cfm_ma * m1_u1 + cfm_rta * rt1_u1);
-        result.cfm_t1 = 0.5 * (cfm_hka * hk1_t1 + cfm_rta * rt1_t1);
-        result.cfm_d1 = 0.5 * cfm_hka * hk1_d1;
+        result.cf_d_ue_station1 = 0.5 * (cfm_hka * hk1_u1 + cfm_ma * m1_u1 + cfm_rta * rt1_u1);
+        result.cf_d_theta_station1 = 0.5 * (cfm_hka * hk1_t1 + cfm_rta * rt1_t1);
+        result.cf_d_dstar_station1 = 0.5 * cfm_hka * hk1_d1;
 
         // Derivatives w.r.t. station 2 variables
-        result.cfm_u2 = 0.5 * (cfm_hka * s2.hk_u + cfm_ma * s2.msq_u + cfm_rta * s2.rt_u);
-        result.cfm_t2 = 0.5 * (cfm_hka * s2.hk_t + cfm_rta * s2.rt_t);
-        result.cfm_d2 = 0.5 * cfm_hka * s2.hk_d;
+        result.cf_d_ue_station2 =
+            0.5 * (cfm_hka * s2.hk_d_ue + cfm_ma * s2.machsqd_edge_d_ue + cfm_rta * s2.retheta_d_ue);
+        result.cf_d_theta_station2 = 0.5 * (cfm_hka * s2.hk_d_theta + cfm_rta * s2.retheta_d_theta);
+        result.cf_d_dstar_station2 = 0.5 * cfm_hka * s2.hk_d_dstar;
 
         // Derivatives w.r.t. global parameters
-        result.cfm_ms = 0.5
+        result.cf_d_machsqd = 0.5
             * (cfm_hka * hk1_ms
                 + cfm_ma * m1_ms
                 + cfm_rta * rt1_ms
-                + cfm_hka * s2.hk_ms
-                + cfm_ma * s2.msq_ms
-                + cfm_rta * s2.rt_ms);
-        result.cfm_re = 0.5 * (cfm_rta * rt1_re + cfm_rta * s2.rt_re);
+                + cfm_hka * s2.hk_d_machsqd
+                + cfm_ma * s2.machsqd_edge_d_machsqd
+                + cfm_rta * s2.retheta_d_machsqd);
+        result.cf_d_re = 0.5 * (cfm_rta * rt1_re + cfm_rta * s2.retheta_d_re);
 
         result
     }
@@ -729,7 +757,7 @@ impl MidpointCf {
 /// * `uedg` - Edge velocity
 /// * `msq` - Edge Mach number squared
 /// * `hklim` - Minimum kinematic shape factor
-pub fn dslim(dstr: &mut f64, thet: f64, _uedg: f64, msq: f64, hklim: f64) {
+pub fn limit_dstar(dstr: &mut f64, thet: f64, _uedg: f64, msq: f64, hklim: f64) {
     let h = *dstr / thet;
     let (hk, hk_h, _hk_m) = hkin(h, msq);
 
@@ -745,7 +773,7 @@ mod tests {
 
     #[test]
     fn test_station_state_default() {
-        let state = BLStationState::default();
+        let state = StationState::default();
         assert_eq!(state.theta, 0.0);
         assert_eq!(state.cf, 0.0);
     }
@@ -758,7 +786,7 @@ mod tests {
         // Test case: M=0, Re=1e6
         // XFOIL reference values from Fortran test
         let params = FlowParameters::incompressible(1e6);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
         // Inputs
         let xsi = 0.1;
@@ -769,23 +797,23 @@ mod tests {
         let dswaki = 0.0;
         let uei = 1.2;
 
-        state.blprv(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
+        state.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
 
         // Check primary variables
-        assert_eq!(state.x, 0.1);
+        assert_eq!(state.xi, 0.1);
         assert_eq!(state.ampl, 3.0);
-        assert_eq!(state.ctau, 0.015);
+        assert_eq!(state.sqrtctau, 0.015);
         assert_eq!(state.theta, 0.002);
         assert_eq!(state.dstar, 0.005);
-        assert_eq!(state.dw, 0.0);
+        assert_eq!(state.wake_gap, 0.0);
 
         // At M=0, U2 = Uei (no transformation)
-        assert_relative_eq!(state.u, 1.2, epsilon = 1e-10);
-        assert_relative_eq!(state.u_uei, 1.0, epsilon = 1e-10);
+        assert_relative_eq!(state.ue, 1.2, epsilon = 1e-10);
+        assert_relative_eq!(state.ue_d_uei, 1.0, epsilon = 1e-10);
         // Note: u_ms is the sensitivity d(U2)/d(M²). Even at M=0 this is non-zero because
         // COMSET's TKL_MSQ = 1/(1+BETA)² = 0.25 at M=0 (BETA = 1).
         // U2_MS = (U2*UEI² - UEI) * TKBL_MS = (1.2*1.44 - 1.2) * 0.25 = 0.132
-        assert_relative_eq!(state.u_ms, 0.132, epsilon = 1e-6);
+        assert_relative_eq!(state.ue_d_machsqd, 0.132, epsilon = 1e-6);
     }
 
     #[test]
@@ -794,7 +822,7 @@ mod tests {
         // Test case: M=0.5, Re=1e6
         // XFOIL reference values from Fortran test
         let params = FlowParameters::new(0.5, 1e6, 1.4);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
         // Same inputs
         let xsi = 0.1;
@@ -805,14 +833,14 @@ mod tests {
         let dswaki = 0.0;
         let uei = 1.2;
 
-        state.blprv(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
+        state.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
 
         // XFOIL reference: U2 = 1.305093527
-        assert_relative_eq!(state.u, 1.305093527, epsilon = 1e-5);
+        assert_relative_eq!(state.ue, 1.305093527, epsilon = 1e-5);
         // XFOIL reference: U2_UEI = 1.711017609
-        assert_relative_eq!(state.u_uei, 1.711017609, epsilon = 1e-5);
+        assert_relative_eq!(state.ue_d_uei, 1.711017609, epsilon = 1e-5);
         // XFOIL reference: U2_MS = 0.6728398800
-        assert_relative_eq!(state.u_ms, 0.6728398800, epsilon = 1e-5);
+        assert_relative_eq!(state.ue_d_machsqd, 0.6728398800, epsilon = 1e-5);
     }
 
     // ========================================================================
@@ -823,37 +851,37 @@ mod tests {
     fn test_blkin_incompressible() {
         // Test case: M=0, Re=1e6
         let params = FlowParameters::incompressible(1e6);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
         // Run BLPRV first
-        state.blprv(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
+        state.set_primary_variables(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
 
         // Run BLKIN
-        state.blkin(&params);
+        state.set_kinematic_variables(&params);
 
         // XFOIL reference values (M=0 case)
         // M2 = 0
-        assert_relative_eq!(state.msq, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(state.machsqd_edge, 0.0, epsilon = 1e-10);
 
         // R2 = 1.0
-        assert_relative_eq!(state.r, 1.0, epsilon = 1e-10);
+        assert_relative_eq!(state.rho, 1.0, epsilon = 1e-10);
 
         // H2 = D2/T2 = 0.005/0.002 = 2.5
         assert_relative_eq!(state.h, 2.5, epsilon = 1e-10);
-        assert_relative_eq!(state.h_t, -1250.0, epsilon = 1e-6); // -H/T
-        assert_relative_eq!(state.h_d, 500.0, epsilon = 1e-6); // 1/T
+        assert_relative_eq!(state.h_d_theta, -1250.0, epsilon = 1e-6); // -H/T
+        assert_relative_eq!(state.h_d_dstar, 500.0, epsilon = 1e-6); // 1/T
 
         // HK2 = 2.5 (same as H at M=0)
         assert_relative_eq!(state.hk, 2.5, epsilon = 1e-6);
 
         // RT2 = 2400 (R*U*T/V = 1*1.2*0.002/1e-6)
-        assert_relative_eq!(state.rt, 2400.0, epsilon = 1.0);
+        assert_relative_eq!(state.retheta, 2400.0, epsilon = 1.0);
 
         // RT2_U2 = 2000 (RT/U = 2400/1.2)
-        assert_relative_eq!(state.rt_u, 2000.0, epsilon = 1.0);
+        assert_relative_eq!(state.retheta_d_ue, 2000.0, epsilon = 1.0);
 
         // RT2_T2 = 1200000 (RT/T = 2400/0.002)
-        assert_relative_eq!(state.rt_t, 1200000.0, epsilon = 100.0);
+        assert_relative_eq!(state.retheta_d_theta, 1200000.0, epsilon = 100.0);
     }
 
     #[test]
@@ -861,42 +889,42 @@ mod tests {
     fn test_blkin_compressible() {
         // Test case: M=0.5, Re=1e6
         let params = FlowParameters::new(0.5, 1e6, 1.4);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
         // Run BLPRV first
-        state.blprv(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
+        state.set_primary_variables(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
 
         // Run BLKIN
-        state.blkin(&params);
+        state.set_kinematic_variables(&params);
 
         // XFOIL reference values (M=0.5 case)
         // M2 = 0.4413362443
-        assert_relative_eq!(state.msq, 0.4413362443, epsilon = 1e-5);
+        assert_relative_eq!(state.machsqd_edge, 0.4413362443, epsilon = 1e-5);
 
         // R2 = 0.9143959880
-        assert_relative_eq!(state.r, 0.9143959880, epsilon = 1e-5);
+        assert_relative_eq!(state.rho, 0.9143959880, epsilon = 1e-5);
 
         // HK2 = 2.259336710
         assert_relative_eq!(state.hk, 2.259336710, epsilon = 1e-5);
 
         // RT2 = 2453.646240
-        assert_relative_eq!(state.rt, 2453.646240, epsilon = 1.0);
+        assert_relative_eq!(state.retheta, 2453.646240, epsilon = 1.0);
     }
 
     #[test]
     fn test_blkin_shape_factor_derivatives() {
         // Verify shape factor derivatives are computed correctly
         let params = FlowParameters::incompressible(1e6);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
-        state.blprv(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
-        state.blkin(&params);
+        state.set_primary_variables(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
+        state.set_kinematic_variables(&params);
 
         // H = D/T = 2.5
         // dH/dD = 1/T = 1/0.002 = 500
         // dH/dT = -D/T² = -0.005/0.002² = -1250
-        assert_relative_eq!(state.h_d, 1.0 / 0.002, epsilon = 1e-10);
-        assert_relative_eq!(state.h_t, -0.005 / 0.002_f64.powi(2), epsilon = 1e-10);
+        assert_relative_eq!(state.h_d_dstar, 1.0 / 0.002, epsilon = 1e-10);
+        assert_relative_eq!(state.h_d_theta, -0.005 / 0.002_f64.powi(2), epsilon = 1e-10);
     }
 
     // ========================================================================
@@ -908,56 +936,56 @@ mod tests {
         // Test case: Laminar BL
         // XFOIL reference values from Fortran test
         let params = FlowParameters::incompressible(1e6);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
         // Set up: HK=2.5, RT=2400, M=0, H=2.5, T=0.002, D=0.005, S=3.0
         // We need to set the kinematic variables directly since blprv/blkin
         // uses its own computations
         state.hk = 2.5;
-        state.rt = 2400.0;
-        state.msq = 0.0;
+        state.retheta = 2400.0;
+        state.machsqd_edge = 0.0;
         state.h = 2.5;
         state.theta = 0.002;
         state.dstar = 0.005;
-        state.ctau = 3.0; // Amplification for laminar
+        state.sqrtctau = 3.0; // Amplification for laminar
 
         // Set the derivatives (simplified - zero for test)
-        state.hk_u = 0.0;
-        state.hk_t = -1250.0;
-        state.hk_d = 500.0;
-        state.hk_ms = 0.0;
-        state.rt_u = 2000.0;
-        state.rt_t = 1200000.0;
-        state.rt_ms = 0.0;
-        state.rt_re = 0.0024;
-        state.h_t = -1250.0;
-        state.h_d = 500.0;
-        state.msq_u = 0.0;
-        state.msq_ms = 0.0;
+        state.hk_d_ue = 0.0;
+        state.hk_d_theta = -1250.0;
+        state.hk_d_dstar = 500.0;
+        state.hk_d_machsqd = 0.0;
+        state.retheta_d_ue = 2000.0;
+        state.retheta_d_theta = 1200000.0;
+        state.retheta_d_machsqd = 0.0;
+        state.retheta_d_re = 0.0024;
+        state.h_d_theta = -1250.0;
+        state.h_d_dstar = 500.0;
+        state.machsqd_edge_d_ue = 0.0;
+        state.machsqd_edge_d_machsqd = 0.0;
 
-        state.blvar(FlowRegime::Laminar, &params);
+        state.set_closure_variables(FlowRegime::Laminar, &params);
 
         // XFOIL reference values:
         // HC2 = 0.0 (M=0)
-        assert_relative_eq!(state.hc, 0.0, epsilon = 1e-10);
+        assert_relative_eq!(state.hstarstar, 0.0, epsilon = 1e-10);
 
         // HS2 = 1.584867239
-        assert_relative_eq!(state.hs, 1.584867239, epsilon = 1e-5);
+        assert_relative_eq!(state.hstar, 1.584867239, epsilon = 1e-5);
 
         // US2 = 0.1584867090
         assert_relative_eq!(state.us, 0.1584867090, epsilon = 1e-5);
 
         // CQ2 = 0.07772709429
-        assert_relative_eq!(state.cq, 0.07772709429, epsilon = 1e-4);
+        assert_relative_eq!(state.sqrtctaueq, 0.07772709429, epsilon = 1e-4);
 
         // CF2 = 0.2045119036e-3
         assert_relative_eq!(state.cf, 0.2045119036e-3, epsilon = 1e-7);
 
         // DI2 = 0.9419409616e-4
-        assert_relative_eq!(state.di, 0.9419409616e-4, epsilon = 1e-7);
+        assert_relative_eq!(state.cdiss, 0.9419409616e-4, epsilon = 1e-7);
 
         // DE2 = 0.01359333377
-        assert_relative_eq!(state.de, 0.01359333377, epsilon = 1e-6);
+        assert_relative_eq!(state.delta, 0.01359333377, epsilon = 1e-6);
     }
 
     #[test]
@@ -965,61 +993,61 @@ mod tests {
         // Test case: Turbulent BL
         // XFOIL reference values from Fortran test
         let params = FlowParameters::incompressible(1e6);
-        let mut state = BLStationState::default();
+        let mut state = StationState::default();
 
         // Set up: HK=1.4, RT=10000, M=0, H=1.4, T=0.005, D=0.007, S=0.015
         state.hk = 1.4;
-        state.rt = 10000.0;
-        state.msq = 0.0;
+        state.retheta = 10000.0;
+        state.machsqd_edge = 0.0;
         state.h = 1.4;
         state.theta = 0.005;
         state.dstar = 0.007;
-        state.ctau = 0.015;
+        state.sqrtctau = 0.015;
 
         // Set derivatives (simplified)
-        state.hk_u = 0.0;
-        state.hk_t = -280.0;
-        state.hk_d = 200.0;
-        state.hk_ms = 0.0;
-        state.rt_u = 0.0;
-        state.rt_t = 2000000.0;
-        state.rt_ms = 0.0;
-        state.rt_re = 0.01;
-        state.h_t = -280.0;
-        state.h_d = 200.0;
-        state.msq_u = 0.0;
-        state.msq_ms = 0.0;
-        state.hs_u = 0.0;
-        state.hs_t = 0.0;
-        state.hs_d = 0.0;
-        state.hs_ms = 0.0;
-        state.hs_re = 0.0;
-        state.us_u = 0.0;
-        state.us_t = 0.0;
-        state.us_d = 0.0;
-        state.us_ms = 0.0;
-        state.us_re = 0.0;
+        state.hk_d_ue = 0.0;
+        state.hk_d_theta = -280.0;
+        state.hk_d_dstar = 200.0;
+        state.hk_d_machsqd = 0.0;
+        state.retheta_d_ue = 0.0;
+        state.retheta_d_theta = 2000000.0;
+        state.retheta_d_machsqd = 0.0;
+        state.retheta_d_re = 0.01;
+        state.h_d_theta = -280.0;
+        state.h_d_dstar = 200.0;
+        state.machsqd_edge_d_ue = 0.0;
+        state.machsqd_edge_d_machsqd = 0.0;
+        state.hstar_d_ue = 0.0;
+        state.hstar_d_theta = 0.0;
+        state.hstar_d_dstar = 0.0;
+        state.hstar_d_machsqd = 0.0;
+        state.hstar_d_re = 0.0;
+        state.us_d_ue = 0.0;
+        state.us_d_theta = 0.0;
+        state.us_d_dstar = 0.0;
+        state.us_d_machsqd = 0.0;
+        state.us_d_re = 0.0;
 
-        state.blvar(FlowRegime::Turbulent, &params);
+        state.set_closure_variables(FlowRegime::Turbulent, &params);
 
         // XFOIL reference values:
         // HS2 = 1.755310297
-        assert_relative_eq!(state.hs, 1.755310297, epsilon = 1e-4);
+        assert_relative_eq!(state.hstar, 1.755310297, epsilon = 1e-4);
 
         // US2 = 0.5433103442
         assert_relative_eq!(state.us, 0.5433103442, epsilon = 1e-4);
 
         // CQ2 = 0.03632329032
-        assert_relative_eq!(state.cq, 0.03632329032, epsilon = 1e-4);
+        assert_relative_eq!(state.sqrtctaueq, 0.03632329032, epsilon = 1e-4);
 
         // CF2 = 0.2286923816e-2
         assert_relative_eq!(state.cf, 0.2286923816e-2, epsilon = 1e-5);
 
         // DI2 = 0.8065673755e-3 (turbulent DI is more complex, allow larger tolerance)
-        assert_relative_eq!(state.di, 0.8065673755e-3, epsilon = 1e-4);
+        assert_relative_eq!(state.cdiss, 0.8065673755e-3, epsilon = 1e-4);
 
         // DE2 = 0.04425000027
-        assert_relative_eq!(state.de, 0.04425000027, epsilon = 1e-5);
+        assert_relative_eq!(state.delta, 0.04425000027, epsilon = 1e-5);
     }
 
     // ========================================================================
@@ -1033,49 +1061,49 @@ mod tests {
         // HKA = 2.4, RTA = 2200, MA = 0
 
         // Station 1
-        let mut s1 = BLStationState::default();
+        let mut s1 = StationState::default();
         s1.hk = 2.3;
-        s1.rt = 2000.0;
-        s1.msq = 0.0;
-        s1.hk_u = 0.0;
-        s1.hk_t = -1150.0;
-        s1.hk_d = 500.0;
-        s1.hk_ms = -0.29;
-        s1.rt_u = 1666.67;
-        s1.rt_t = 1000000.0;
-        s1.rt_ms = 0.0;
-        s1.rt_re = 0.002;
-        s1.msq_u = 0.0;
-        s1.msq_ms = 0.0;
+        s1.retheta = 2000.0;
+        s1.machsqd_edge = 0.0;
+        s1.hk_d_ue = 0.0;
+        s1.hk_d_theta = -1150.0;
+        s1.hk_d_dstar = 500.0;
+        s1.hk_d_machsqd = -0.29;
+        s1.retheta_d_ue = 1666.67;
+        s1.retheta_d_theta = 1000000.0;
+        s1.retheta_d_machsqd = 0.0;
+        s1.retheta_d_re = 0.002;
+        s1.machsqd_edge_d_ue = 0.0;
+        s1.machsqd_edge_d_machsqd = 0.0;
 
         // Station 2
-        let mut s2 = BLStationState::default();
+        let mut s2 = StationState::default();
         s2.hk = 2.5;
-        s2.rt = 2400.0;
-        s2.msq = 0.0;
-        s2.hk_u = 0.0;
-        s2.hk_t = -1250.0;
-        s2.hk_d = 500.0;
-        s2.hk_ms = -0.29;
-        s2.rt_u = 2000.0;
-        s2.rt_t = 1200000.0;
-        s2.rt_ms = 0.0;
-        s2.rt_re = 0.0024;
-        s2.msq_u = 0.0;
-        s2.msq_ms = 0.0;
+        s2.retheta = 2400.0;
+        s2.machsqd_edge = 0.0;
+        s2.hk_d_ue = 0.0;
+        s2.hk_d_theta = -1250.0;
+        s2.hk_d_dstar = 500.0;
+        s2.hk_d_machsqd = -0.29;
+        s2.retheta_d_ue = 2000.0;
+        s2.retheta_d_theta = 1200000.0;
+        s2.retheta_d_machsqd = 0.0;
+        s2.retheta_d_re = 0.0024;
+        s2.machsqd_edge_d_ue = 0.0;
+        s2.machsqd_edge_d_machsqd = 0.0;
 
         let result = MidpointCf::compute(&s1, &s2, FlowRegime::Laminar, false);
 
         // XFOIL reference values
-        assert_relative_eq!(result.cfm, 0.2577280102e-3, epsilon = 1e-7);
-        assert_relative_eq!(result.cfm_u1, -0.9762444097e-4, epsilon = 1e-7);
-        assert_relative_eq!(result.cfm_t1, 0.1515112668, epsilon = 1e-3);
-        assert_relative_eq!(result.cfm_d1, -0.9134165943e-1, epsilon = 1e-4);
-        assert_relative_eq!(result.cfm_u2, -0.1171490949e-3, epsilon = 1e-7);
-        assert_relative_eq!(result.cfm_t2, 0.1580646932, epsilon = 1e-3);
-        assert_relative_eq!(result.cfm_d2, -0.9134165943e-1, epsilon = 1e-4);
-        assert_relative_eq!(result.cfm_ms, 0.1059563219e-3, epsilon = 1e-7);
-        assert_relative_eq!(result.cfm_re, -0.2577280056e-9, epsilon = 1e-12);
+        assert_relative_eq!(result.cf, 0.2577280102e-3, epsilon = 1e-7);
+        assert_relative_eq!(result.cf_d_ue_station1, -0.9762444097e-4, epsilon = 1e-7);
+        assert_relative_eq!(result.cf_d_theta_station1, 0.1515112668, epsilon = 1e-3);
+        assert_relative_eq!(result.cf_d_dstar_station1, -0.9134165943e-1, epsilon = 1e-4);
+        assert_relative_eq!(result.cf_d_ue_station2, -0.1171490949e-3, epsilon = 1e-7);
+        assert_relative_eq!(result.cf_d_theta_station2, 0.1580646932, epsilon = 1e-3);
+        assert_relative_eq!(result.cf_d_dstar_station2, -0.9134165943e-1, epsilon = 1e-4);
+        assert_relative_eq!(result.cf_d_machsqd, 0.1059563219e-3, epsilon = 1e-7);
+        assert_relative_eq!(result.cf_d_re, -0.2577280056e-9, epsilon = 1e-12);
     }
 
     #[test]
@@ -1085,60 +1113,60 @@ mod tests {
         // HKA = 1.375, RTA = 9000, MA = 0
 
         // Station 1
-        let mut s1 = BLStationState::default();
+        let mut s1 = StationState::default();
         s1.hk = 1.35;
-        s1.rt = 8000.0;
-        s1.msq = 0.0;
-        s1.hk_u = 0.0;
-        s1.hk_t = -270.0;
-        s1.hk_d = 200.0;
-        s1.hk_ms = -0.29;
-        s1.rt_u = 0.0;
-        s1.rt_t = 1600000.0;
-        s1.rt_ms = 0.0;
-        s1.rt_re = 0.008;
-        s1.msq_u = 0.0;
-        s1.msq_ms = 0.0;
+        s1.retheta = 8000.0;
+        s1.machsqd_edge = 0.0;
+        s1.hk_d_ue = 0.0;
+        s1.hk_d_theta = -270.0;
+        s1.hk_d_dstar = 200.0;
+        s1.hk_d_machsqd = -0.29;
+        s1.retheta_d_ue = 0.0;
+        s1.retheta_d_theta = 1600000.0;
+        s1.retheta_d_machsqd = 0.0;
+        s1.retheta_d_re = 0.008;
+        s1.machsqd_edge_d_ue = 0.0;
+        s1.machsqd_edge_d_machsqd = 0.0;
 
         // Station 2
-        let mut s2 = BLStationState::default();
+        let mut s2 = StationState::default();
         s2.hk = 1.40;
-        s2.rt = 10000.0;
-        s2.msq = 0.0;
-        s2.hk_u = 0.0;
-        s2.hk_t = -280.0;
-        s2.hk_d = 200.0;
-        s2.hk_ms = -0.29;
-        s2.rt_u = 0.0;
-        s2.rt_t = 2000000.0;
-        s2.rt_ms = 0.0;
-        s2.rt_re = 0.01;
-        s2.msq_u = 0.0;
-        s2.msq_ms = 0.0;
+        s2.retheta = 10000.0;
+        s2.machsqd_edge = 0.0;
+        s2.hk_d_ue = 0.0;
+        s2.hk_d_theta = -280.0;
+        s2.hk_d_dstar = 200.0;
+        s2.hk_d_machsqd = -0.29;
+        s2.retheta_d_ue = 0.0;
+        s2.retheta_d_theta = 2000000.0;
+        s2.retheta_d_machsqd = 0.0;
+        s2.retheta_d_re = 0.01;
+        s2.machsqd_edge_d_ue = 0.0;
+        s2.machsqd_edge_d_machsqd = 0.0;
 
         let result = MidpointCf::compute(&s1, &s2, FlowRegime::Turbulent, false);
 
         // XFOIL reference values (turbulent Cf used)
-        assert_relative_eq!(result.cfm, 0.2450317144e-2, epsilon = 1e-5);
-        assert_relative_eq!(result.cfm_t1, 0.5299984217, epsilon = 1e-2);
-        assert_relative_eq!(result.cfm_d1, -0.4310033321, epsilon = 1e-3);
-        assert_relative_eq!(result.cfm_t2, 0.5385844707, epsilon = 1e-2);
-        assert_relative_eq!(result.cfm_d2, -0.4310033321, epsilon = 1e-3);
+        assert_relative_eq!(result.cf, 0.2450317144e-2, epsilon = 1e-5);
+        assert_relative_eq!(result.cf_d_theta_station1, 0.5299984217, epsilon = 1e-2);
+        assert_relative_eq!(result.cf_d_dstar_station1, -0.4310033321, epsilon = 1e-3);
+        assert_relative_eq!(result.cf_d_theta_station2, 0.5385844707, epsilon = 1e-2);
+        assert_relative_eq!(result.cf_d_dstar_station2, -0.4310033321, epsilon = 1e-3);
     }
 
     #[test]
     fn test_blmid_wake() {
         // Test case: Wake (ITYP=3)
         // Wake should have zero skin friction
-        let s1 = BLStationState::default();
-        let s2 = BLStationState::default();
+        let s1 = StationState::default();
+        let s2 = StationState::default();
 
         let result = MidpointCf::compute(&s1, &s2, FlowRegime::Wake, false);
 
-        assert_eq!(result.cfm, 0.0);
-        assert_eq!(result.cfm_u1, 0.0);
-        assert_eq!(result.cfm_t1, 0.0);
-        assert_eq!(result.cfm_d1, 0.0);
+        assert_eq!(result.cf, 0.0);
+        assert_eq!(result.cf_d_ue_station1, 0.0);
+        assert_eq!(result.cf_d_theta_station1, 0.0);
+        assert_eq!(result.cf_d_dstar_station1, 0.0);
     }
     // ========================================================================
     // DSLIM Tests
@@ -1154,7 +1182,7 @@ mod tests {
         let hklim = 1.02;
 
         // H = 2.5, Hk = 2.5 at M=0 (well above 1.02)
-        dslim(&mut dstr, thet, uedg, msq, hklim);
+        limit_dstar(&mut dstr, thet, uedg, msq, hklim);
 
         // Should not change
         assert_relative_eq!(dstr, 0.005, epsilon = 1e-10);
@@ -1170,7 +1198,7 @@ mod tests {
         let hklim = 1.5; // Hk = H at M=0, so we need H >= 1.5
 
         // H = 1.02, Hk = 1.02 at M=0 (below 1.5)
-        dslim(&mut dstr, thet, uedg, msq, hklim);
+        limit_dstar(&mut dstr, thet, uedg, msq, hklim);
 
         // Should increase dstr to raise Hk to at least hklim
         let new_h = dstr / thet;

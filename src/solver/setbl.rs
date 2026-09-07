@@ -246,8 +246,8 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             let due2 = st.uedg[is][ibl] - usav[is][ibl];
             let dds2 = d2_u2 * due2;
 
-            s2.blprv(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
-            s2.blkin(&params);
+            s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
+            s2.set_kinematic_variables(&params);
 
             // check for transition and set TRAN, XT, etc. if found
             if tran {
@@ -255,7 +255,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
                     TransitionResult::NoTransition { ampl2 } => {
                         ami = ampl2;
                         tran = false;
-                        trloc.xt = s2.x;
+                        trloc.xt = s2.xi;
                     }
                     TransitionResult::FreeTransition { location, ampl2 } => {
                         ami = ampl2;
@@ -313,10 +313,10 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             }
 
             // Save wall shear and equil. max shear coefficient for plotting output
-            st.tau[is][ibl] = 0.5 * s2.r * s2.u * s2.u * s2.cf;
-            st.dis[is][ibl] = s2.r * s2.u * s2.u * s2.u * s2.di * s2.hs * 0.5;
-            st.ctq[is][ibl] = s2.cq;
-            st.delt[is][ibl] = s2.de;
+            st.tau[is][ibl] = 0.5 * s2.rho * s2.ue * s2.ue * s2.cf;
+            st.dis[is][ibl] = s2.rho * s2.ue * s2.ue * s2.ue * s2.cdiss * s2.hstar * 0.5;
+            st.ctq[is][ibl] = s2.sqrtctaueq;
+            st.delt[is][ibl] = s2.delta;
             st.uslp[is][ibl] = 1.60 / (1.0 + s2.us);
 
             // set XI sensitivities wrt LE Ue changes
@@ -391,7 +391,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             if ibl == st.iblte[is] {
                 // set "2" variables at TE to wake correlations for next station
                 // (BLVAR(3); BLMID(3) only sets the interval CFM, which the next BLSYS recomputes)
-                s2.blvar(FlowRegime::Wake, &params);
+                s2.set_closure_variables(FlowRegime::Wake, &params);
             }
 
             for js in 1..=2 {
@@ -406,8 +406,8 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             due1 = due2;
             dds1 = dds2;
 
-            if ibl == st.itran[is] && s2.x > s1.x {
-                let frac = (trloc.xt - s1.x) / (s2.x - s1.x);
+            if ibl == st.itran[is] && s2.xi > s1.xi {
+                let frac = (trloc.xt - s1.xi) / (s2.xi - s1.xi);
                 st.tindex[is] = if is == 1 {
                     (st.ist as i64 - st.itran[is] as i64 + 3) as f64 - frac
                 } else {

@@ -2,7 +2,7 @@
 //! from the "1" and "2" station states, exactly as XFOIL sequences BLVAR/BLMID/TRDIF/BLDIF,
 //! the similarity-station folding, and the conversion of the Ue columns to incompressible Uei.
 
-use crate::bl::system::{BLLocalSystem, BLStationState, FlowParameters, FlowRegime, MidpointCf, TransitionLocation};
+use crate::bl::system::{BLLocalSystem, FlowParameters, FlowRegime, MidpointCf, StationState, TransitionLocation};
 
 /// XFOIL's interval flags (XBL.INC): SIMI, TRAN, TURB, WAKE.
 #[derive(Debug, Clone, Copy, Default)]
@@ -17,8 +17,8 @@ pub struct IntervalFlags {
 /// `trans` must be `Some` when `flags.tran`.
 pub fn blsys(
     sys: &mut BLLocalSystem,
-    s1: &mut BLStationState,
-    s2: &mut BLStationState,
+    s1: &mut StationState,
+    s2: &mut StationState,
     flags: IntervalFlags,
     trans: Option<&TransitionLocation>,
     acrit: f64,
@@ -32,7 +32,7 @@ pub fn blsys(
     } else {
         FlowRegime::Laminar
     };
-    s2.blvar(ityp, params);
+    s2.set_closure_variables(ityp, params);
 
     // for the similarity station, "1" and "2" variables are the same
     if flags.simi {
@@ -78,15 +78,15 @@ pub fn blsys(
         let res_u1 = sys.vs1[k][3];
         let res_u2 = sys.vs2[k][3];
         let res_ms = sys.vsm[k];
-        sys.vs1[k][3] = res_u1 * s1.u_uei;
-        sys.vs2[k][3] = res_u2 * s2.u_uei;
-        sys.vsm[k] = res_u1 * s1.u_ms + res_u2 * s2.u_ms + res_ms;
+        sys.vs1[k][3] = res_u1 * s1.ue_d_uei;
+        sys.vs2[k][3] = res_u2 * s2.ue_d_uei;
+        sys.vsm[k] = res_u1 * s1.ue_d_machsqd + res_u2 * s2.ue_d_machsqd + res_ms;
     }
 }
 
 /// TESYS(CTE, TTE, DTE): the "dummy" system between the airfoil TE point and the first wake
 /// point. Calls BLVAR(3) first, as XFOIL does; no Uei conversion is applied.
-pub fn tesys(sys: &mut BLLocalSystem, s2: &mut BLStationState, cte: f64, tte: f64, dte: f64, params: &FlowParameters) {
+pub fn tesys(sys: &mut BLLocalSystem, s2: &mut StationState, cte: f64, tte: f64, dte: f64, params: &FlowParameters) {
     for k in 0..4 {
         sys.vsrez[k] = 0.0;
         sys.vsm[k] = 0.0;
@@ -97,11 +97,11 @@ pub fn tesys(sys: &mut BLLocalSystem, s2: &mut BLStationState, cte: f64, tte: f6
             sys.vs2[k][l] = 0.0;
         }
     }
-    s2.blvar(FlowRegime::Wake, params);
+    s2.set_closure_variables(FlowRegime::Wake, params);
 
     sys.vs1[0][0] = -1.0;
     sys.vs2[0][0] = 1.0;
-    sys.vsrez[0] = cte - s2.ctau;
+    sys.vsrez[0] = cte - s2.sqrtctau;
 
     sys.vs1[1][1] = -1.0;
     sys.vs2[1][1] = 1.0;
@@ -109,5 +109,5 @@ pub fn tesys(sys: &mut BLLocalSystem, s2: &mut BLStationState, cte: f64, tte: f6
 
     sys.vs1[2][2] = -1.0;
     sys.vs2[2][2] = 1.0;
-    sys.vsrez[2] = dte - s2.dstar - s2.dw;
+    sys.vsrez[2] = dte - s2.dstar - s2.wake_gap;
 }

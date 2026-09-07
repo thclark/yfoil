@@ -8,7 +8,7 @@
 //!
 //! Nothing here computes anything; the translated subroutines live beside it.
 
-use crate::bl::system::{BLStationState, TransitionLocation};
+use crate::bl::system::{StationState, TransitionLocation};
 use crate::geometry::PaneledAirfoil;
 
 /// BL and panel state (see module docs for indexing).
@@ -102,8 +102,8 @@ pub struct BlState {
     pub tforce: [bool; 3],
     /// COM1/COM2 (the "1" and "2" station COMMON blocks) and XT persist across MRCHUE/MRCHDU/SETBL
     /// calls in XFOIL; the marches take them from here and put them back.
-    pub com1: BLStationState,
-    pub com2: BLStationState,
+    pub com1: StationState,
+    pub com2: StationState,
     /// XT and its XT_* sensitivities (TRCHEK2's COMMON outputs)
     pub trloc: TransitionLocation,
     /// MINF1/REINF1 (unit-CL values), MATYP/RETYP, and the current MINF/REINF set by MRCL
@@ -233,8 +233,8 @@ impl BlState {
             xstrip: [0.0, 1.0, 1.0],
             xssitr: [0.0; 3],
             tforce: [false; 3],
-            com1: BLStationState::default(),
-            com2: BLStationState::default(),
+            com1: StationState::default(),
+            com2: StationState::default(),
             trloc: TransitionLocation::default(),
             minf1: 0.0,
             reinf1: 0.0,
