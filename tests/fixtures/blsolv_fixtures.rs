@@ -183,7 +183,7 @@ pub fn parse_blsolv_input(path: &Path, call_number: usize) -> Option<XfoilNewton
     for iv in 0..nsys {
         // Skip "--- IV= N" line
         if !lines[idx].contains("IV=") {
-            eprintln!("Expected IV= line at index {}, got: {}", idx, &lines[idx]);
+            eprintln!("Expected IV= line at index {}, got: {}", idx, lines[idx]);
             return None;
         }
         idx += 1;

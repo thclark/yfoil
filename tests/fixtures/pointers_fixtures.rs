@@ -191,8 +191,7 @@ pub fn parse_uinv(path: &Path, call: usize) -> UinvFixture {
         let mut u = vec![0.0];
         let mut ua = vec![0.0];
         // read until the next header or EOF; rows are `IBL UINV UINV_A`
-        loop {
-            let Some(l) = lines.clone().next() else { break };
+        while let Some(l) = lines.clone().next() {
             if l.starts_with("---") || l.starts_with("===") {
                 break;
             }

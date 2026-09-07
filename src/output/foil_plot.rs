@@ -1127,7 +1127,10 @@ mod tests {
             show_wake: true,
             ..Default::default()
         };
-        assert!(matches!(layout(&[g.clone()], &wake_cfg), Err(PlotError::Config(_))));
+        assert!(matches!(
+            layout(std::slice::from_ref(&g), &wake_cfg),
+            Err(PlotError::Config(_))
+        ));
         // geometry-only input renders with no BL, and two panelings get their own colours
         let g2 = DesignPoint::from_geometry(
             "g2",
