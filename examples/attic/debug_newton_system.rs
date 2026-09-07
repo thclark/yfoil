@@ -1,13 +1,13 @@
 //! Debug VISCAL first iteration
 
 use yfoil::bl::{blsolv, FlowConditions};
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::{find_stagnation_point, SetblConfig, SetblState, build_newton_system};
 
 fn main() {
     let geom = naca_4digit("0012", 80).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);
 
     println!("=== Debug VISCAL First Iteration ===\n");

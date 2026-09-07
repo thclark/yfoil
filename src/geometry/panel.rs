@@ -3,7 +3,7 @@
 //! Functions for redistributing panel points on an airfoil surface.
 
 use super::airfoil::{Geometry, PaneledAirfoil};
-use super::spline::{d2val, deval, seval, spline};
+use super::spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};
 
 /// Configuration for XFOIL PANE algorithm
 #[derive(Debug, Clone, Copy)]
@@ -38,9 +38,9 @@ impl Default for PaneConfig {
 /// from the buffer airfoil (`PANE`, and the `NACA` command). `n_panels` is NPAN;
 /// `config` carries CVPAR/CTERAT/CTRRAT/XSREF/XPREF. Includes the sharp-LE (IBLE) and
 /// corner (doubled-point) paths. The returned geometry is the N node coordinates; SCALC,
-/// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `create_paneled_airfoil` exactly as
+/// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `panel_foil` exactly as
 /// PANGEN's tail does.
-pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
+pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
     let nb = geometry.x_c.len();
     if nb < 2 {
         return geometry.clone();
@@ -57,21 +57,21 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     let mut n = n_panels;
 
     // set arc length spline parameter; spline raw airfoil coordinates
-    let sb = scalc(xb, yb);
-    let xbp = segspl(xb, &sb);
-    let ybp = segspl(yb, &sb);
+    let sb = arc_coordinate(xb, yb);
+    let xbp = spline_segmented(xb, &sb);
+    let ybp = spline_segmented(yb, &sb);
 
     // normalizing length (~ chord)
     let sbref = 0.5 * (sb[nb - 1] - sb[0]);
 
     // set up curvature array
     let mut w5: Vec<f64> = (0..nb)
-        .map(|i| curv(sb[i], xb, &xbp, yb, &ybp, &sb).abs() * sbref)
+        .map(|i| curvature(sb[i], xb, &xbp, yb, &ybp, &sb).abs() * sbref)
         .collect();
 
     // locate LE point arc length value and the normalized curvature there
-    let sble = lefind(xb, &xbp, yb, &ybp, &sb);
-    let cvle = curv(sble, xb, &xbp, yb, &ybp, &sb).abs() * sbref;
+    let sble = find_le(xb, &xbp, yb, &ybp, &sb);
+    let cvle = curvature(sble, xb, &xbp, yb, &ybp, &sb).abs() * sbref;
 
     // check for doubled point (sharp corner) at LE; IBLE is 1-based like the Fortran (0 = none)
     let mut ible = 0usize;
@@ -84,8 +84,8 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     }
 
     // set LE, TE points
-    let xble = seval(sble, xb, &xbp, &sb);
-    let yble = seval(sble, yb, &ybp, &sb);
+    let xble = spline_value(sble, xb, &xbp, &sb);
+    let yble = spline_value(sble, yb, &ybp, &sb);
     let xbte = 0.5 * (xb[0] + xb[nb - 1]);
     let ybte = 0.5 * (yb[0] + yb[nb - 1]);
     let chbsq = (xbte - xble) * (xbte - xble) + (ybte - yble) * (ybte - yble);
@@ -96,7 +96,7 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     for k in -nk..=nk {
         let frac = k as f64 / nk as f64;
         let sbk = sble + frac * sbref / cvle.max(20.0);
-        let cvk = curv(sbk, xb, &xbp, yb, &ybp, &sb).abs() * sbref;
+        let cvk = curvature(sbk, xb, &xbp, yb, &ybp, &sb).abs() * sbref;
         cvsum += cvk;
     }
     let mut cvavg = cvsum / (2 * nk + 1) as f64;
@@ -199,11 +199,11 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
 
     // solve for smoothed curvature array W5
     if ible == 0 {
-        trisol(&mut w2, &w1, &mut w3, &mut w5);
+        solve_tridiagonal(&mut w2, &w1, &mut w3, &mut w5);
     } else {
         let i = ible;
-        trisol(&mut w2[..i], &w1[..i], &mut w3[..i], &mut w5[..i]);
-        trisol(&mut w2[i..], &w1[i..], &mut w3[i..], &mut w5[i..]);
+        solve_tridiagonal(&mut w2[..i], &w1[..i], &mut w3[..i], &mut w5[..i]);
+        solve_tridiagonal(&mut w2[i..], &w1[i..], &mut w3[i..], &mut w5[i..]);
     }
 
     // find max curvature; normalize curvature array
@@ -216,7 +216,7 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     }
 
     // spline curvature array
-    let w6 = segspl(&w5, &sb);
+    let w6 = spline_segmented(&w5, &sb);
 
     // Set initial guess for node positions uniform in s. More nodes than specified (by
     // factor of IPFAC) are temporarily used for more reliable convergence.
@@ -258,10 +258,10 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     let mut w4 = vec![0.0; nn];
     for _iter in 1..=20 {
         // set up tri-diagonal system for node position deltas
-        let mut cv2 = seval(snew[1], &w5, &w6, &sb);
-        let mut cvs2 = deval(snew[1], &w5, &w6, &sb);
-        let cv1 = seval(snew[0], &w5, &w6, &sb);
-        let cvs1 = deval(snew[0], &w5, &w6, &sb);
+        let mut cv2 = spline_value(snew[1], &w5, &w6, &sb);
+        let mut cvs2 = spline_slope(snew[1], &w5, &w6, &sb);
+        let cv1 = spline_value(snew[0], &w5, &w6, &sb);
+        let cvs1 = spline_slope(snew[0], &w5, &w6, &sb);
         let mut cavm = (cv1 * cv1 + cv2 * cv2).sqrt();
         let (mut cavm_s1, mut cavm_s2) = if cavm == 0.0 {
             (0.0, 0.0)
@@ -271,8 +271,8 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
         for i in 1..nn - 1 {
             let dsm = snew[i] - snew[i - 1];
             let dsp = snew[i] - snew[i + 1];
-            let cv3 = seval(snew[i + 1], &w5, &w6, &sb);
-            let cvs3 = deval(snew[i + 1], &w5, &w6, &sb);
+            let cv3 = spline_value(snew[i + 1], &w5, &w6, &sb);
+            let cvs3 = spline_slope(snew[i + 1], &w5, &w6, &sb);
             let cavp = (cv3 * cv3 + cv2 * cv2).sqrt();
             let (cavp_s2, cavp_s3) = if cavp == 0.0 {
                 (0.0, 0.0)
@@ -327,7 +327,7 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
         }
 
         // solve for changes W4 in node position arc length values
-        trisol(&mut w2n, &w1n, &mut w3n, &mut w4);
+        solve_tridiagonal(&mut w2n, &w1n, &mut w3n, &mut w4);
 
         // find under-relaxation factor to keep nodes from changing order
         let mut rlx = 1.0;
@@ -363,8 +363,8 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
     for i in 0..n {
         let ind = ipfac * i;
         s.push(snew[ind]);
-        x.push(seval(snew[ind], xb, &xbp, &sb));
-        y.push(seval(snew[ind], yb, &ybp, &sb));
+        x.push(spline_value(snew[ind], xb, &xbp, &sb));
+        y.push(spline_value(snew[ind], yb, &ybp, &sb));
     }
 
     // go over buffer airfoil again, checking for corners (double points)
@@ -391,13 +391,13 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
                 // shift nodes adjacent to corner to keep panel sizes comparable
                 if i >= 2 {
                     s[i - 1] = 0.5 * (s[i] + s[i - 2]);
-                    x[i - 1] = seval(s[i - 1], xb, &xbp, &sb);
-                    y[i - 1] = seval(s[i - 1], yb, &ybp, &sb);
+                    x[i - 1] = spline_value(s[i - 1], xb, &xbp, &sb);
+                    y[i - 1] = spline_value(s[i - 1], yb, &ybp, &sb);
                 }
                 if i + 2 < n {
                     s[i + 1] = 0.5 * (s[i] + s[i + 2]);
-                    x[i + 1] = seval(s[i + 1], xb, &xbp, &sb);
-                    y[i + 1] = seval(s[i + 1], yb, &ybp, &sb);
+                    x[i + 1] = spline_value(s[i + 1], xb, &xbp, &sb);
+                    y[i + 1] = spline_value(s[i + 1], yb, &ybp, &sb);
                 }
                 // go on to next input geometry point to check for corner
                 break;
@@ -413,7 +413,7 @@ pub fn repanel_xfoil(geometry: &Geometry, n_panels: usize, config: &PaneConfig) 
 }
 
 /// SCALC: arc length array of a 2-D point array.
-pub fn scalc(x: &[f64], y: &[f64]) -> Vec<f64> {
+pub fn arc_coordinate(x: &[f64], y: &[f64]) -> Vec<f64> {
     let mut s = vec![0.0; x.len()];
     for i in 1..x.len() {
         let dx = x[i] - x[i - 1];
@@ -425,7 +425,7 @@ pub fn scalc(x: &[f64], y: &[f64]) -> Vec<f64> {
 
 /// SEGSPL: splines X(S) like SPLINE but allows derivative discontinuities at segment joints,
 /// defined by identical successive S values.
-pub fn segspl(x: &[f64], s: &[f64]) -> Vec<f64> {
+pub fn spline_segmented(x: &[f64], s: &[f64]) -> Vec<f64> {
     let n = x.len();
     assert!(s[0] != s[1], "SEGSPL:  First input point duplicated");
     assert!(s[n - 1] != s[n - 2], "SEGSPL:  Last  input point duplicated");
@@ -433,18 +433,18 @@ pub fn segspl(x: &[f64], s: &[f64]) -> Vec<f64> {
     let mut iseg0 = 0;
     for iseg in 1..n - 2 {
         if s[iseg] == s[iseg + 1] {
-            let seg = spline(&x[iseg0..=iseg], &s[iseg0..=iseg]);
+            let seg = spline_derivatives(&x[iseg0..=iseg], &s[iseg0..=iseg]);
             xs[iseg0..=iseg].copy_from_slice(&seg);
             iseg0 = iseg + 1;
         }
     }
-    let seg = spline(&x[iseg0..], &s[iseg0..]);
+    let seg = spline_derivatives(&x[iseg0..], &s[iseg0..]);
     xs[iseg0..].copy_from_slice(&seg);
     xs
 }
 
 /// CURV: curvature of the splined 2-D curve at S = SS, evaluated from the spline's own cubic.
-pub fn curv(ss: f64, x: &[f64], xs: &[f64], y: &[f64], ys: &[f64], s: &[f64]) -> f64 {
+pub fn curvature(ss: f64, x: &[f64], xs: &[f64], y: &[f64], ys: &[f64], s: &[f64]) -> f64 {
     let n = s.len();
     let mut ilow = 0usize;
     let mut i = n - 1;
@@ -473,7 +473,7 @@ pub fn curv(ss: f64, x: &[f64], xs: &[f64], y: &[f64], ys: &[f64], s: &[f64]) ->
 
 /// LEFIND: the leading-edge spline parameter SLE where the surface tangent is normal to the
 /// chord line from the TE point.
-pub fn lefind(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
+pub fn find_le(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
     // convergence tolerance
     let dseps = (s[n - 1] - s[0]) * 1.0e-5;
@@ -500,12 +500,12 @@ pub fn lefind(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
     }
     // Newton iteration to get exact SLE value
     for _iter in 1..=50 {
-        let xle = seval(sle, x, xp, s);
-        let yle = seval(sle, y, yp, s);
-        let dxds = deval(sle, x, xp, s);
-        let dyds = deval(sle, y, yp, s);
-        let dxdd = d2val(sle, x, xp, s);
-        let dydd = d2val(sle, y, yp, s);
+        let xle = spline_value(sle, x, xp, s);
+        let yle = spline_value(sle, y, yp, s);
+        let dxds = spline_slope(sle, x, xp, s);
+        let dyds = spline_slope(sle, y, yp, s);
+        let dxdd = spline_second_derivative(sle, x, xp, s);
+        let dydd = spline_second_derivative(sle, y, yp, s);
         let xchord = xle - xte;
         let ychord = yle - yte;
         let res = xchord * dxds + ychord * dyds;
@@ -524,7 +524,7 @@ pub fn lefind(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
 
 /// TRISOL: solves the tri-diagonal system with main diagonal `a`, lower `b`, upper `c` and
 /// right-hand side `d`; `d` is replaced by the solution, `a` and `c` are destroyed.
-pub fn trisol(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64]) {
+pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64]) {
     let kk = a.len();
     for k in 1..kk {
         let km = k - 1;
@@ -543,7 +543,7 @@ pub fn trisol(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64]) {
 ///
 /// Redistributes points along the airfoil surface with higher density
 /// near the leading edge. This is a simpler alternative to the XFOIL PANE
-/// algorithm (use [`repanel_xfoil`] for exact XFOIL matching).
+/// algorithm (use [`repanel_by_curvature`] for exact XFOIL matching).
 ///
 /// # Arguments
 /// * `geometry` - Input geometry
@@ -558,16 +558,16 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     let n = geometry.x_c.len();
 
     // Calculate arc length along the surface
-    let s = scalc(&geometry.x_c, &geometry.y_c);
+    let s = arc_coordinate(&geometry.x_c, &geometry.y_c);
 
     // Create splines for x and y
-    let xp = spline(&geometry.x_c, &s);
-    let yp = spline(&geometry.y_c, &s);
+    let xp = spline_derivatives(&geometry.x_c, &s);
+    let yp = spline_derivatives(&geometry.y_c, &s);
 
     let s_total = s[n - 1];
 
     // Find LE arc length (approximately midway for a closed airfoil)
-    let sle = lefind(&geometry.x_c, &xp, &geometry.y_c, &yp, &s);
+    let sle = find_le(&geometry.x_c, &xp, &geometry.y_c, &yp, &s);
 
     // Generate new parameter values using modified cosine spacing
     // with different densities at TE vs LE
@@ -620,8 +620,14 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     }
 
     // Evaluate splines at new parameter values
-    let x_c: Vec<f64> = s_new.iter().map(|&si| seval(si, &geometry.x_c, &xp, &s)).collect();
-    let y_c: Vec<f64> = s_new.iter().map(|&si| seval(si, &geometry.y_c, &yp, &s)).collect();
+    let x_c: Vec<f64> = s_new
+        .iter()
+        .map(|&si| spline_value(si, &geometry.x_c, &xp, &s))
+        .collect();
+    let y_c: Vec<f64> = s_new
+        .iter()
+        .map(|&si| spline_value(si, &geometry.y_c, &yp, &s))
+        .collect();
 
     Geometry {
         reference: geometry.reference,
@@ -638,28 +644,28 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
 /// - Normal vectors
 /// - Panel angles
 /// - Leading edge location
-pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
+pub fn panel_foil(geometry: &Geometry) -> PaneledAirfoil {
     let n = geometry.x_c.len();
     let x = geometry.x_c.clone();
     let y = geometry.y_c.clone();
 
     // SCALC / SEGSPL
-    let s = scalc(&x, &y);
-    let xp = spline(&x, &s);
-    let yp = spline(&y, &s);
+    let s = arc_coordinate(&x, &y);
+    let xp = spline_derivatives(&x, &s);
+    let yp = spline_derivatives(&y, &s);
 
     // NCALC: node normals from the spline derivative arrays
-    let (nx, ny) = ncalc(&xp, &yp, &s);
+    let (nx, ny) = node_normals(&xp, &yp, &s);
 
     // LEFIND / GEOPAR: leading edge on the spline; chord is the LE–TE distance (XFOIL's
     // definition — for a NACA section whose nodes straddle the LE this is slightly under 1)
-    let sle = lefind(&x, &xp, &y, &yp, &s);
+    let sle = find_le(&x, &xp, &y, &yp, &s);
     // YFoil convenience only (XFOIL works with SLE): the node nearest the spline LE
     let le_index = (0..n)
         .min_by(|&i, &j| (s[i] - sle).abs().partial_cmp(&(s[j] - sle).abs()).unwrap())
         .unwrap_or(0);
-    let xle = seval(sle, &x, &xp, &s);
-    let yle = seval(sle, &y, &yp, &s);
+    let xle = spline_value(sle, &x, &xp, &s);
+    let yle = spline_value(sle, &y, &yp, &s);
     let xte = 0.5 * (x[0] + x[n - 1]);
     let yte = 0.5 * (y[0] + y[n - 1]);
     let chord = ((xte - xle).powi(2) + (yte - yle).powi(2)).sqrt();
@@ -669,7 +675,7 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
     let sharp_te = dste < 0.0001 * chord;
 
     // APCALC: panel angles (needs SHARP for the TE panel)
-    let apanel = apcalc(&x, &y, &nx, &ny, sharp_te);
+    let apanel = panel_angles(&x, &y, &nx, &ny, sharp_te);
 
     PaneledAirfoil {
         x,
@@ -691,7 +697,7 @@ pub fn create_paneled_airfoil(geometry: &Geometry) -> PaneledAirfoil {
 
 /// NCALC (xpanel.f): unit normal vector components at airfoil panel nodes, from the spline
 /// derivative arrays (SEGSPL output), with corner-point averaging where S(I) == S(I+1).
-fn ncalc(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
+fn node_normals(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
     let n = xp.len();
     let mut xn = vec![0.0; n];
     let mut yn = vec![0.0; n];
@@ -734,7 +740,7 @@ fn ncalc(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
 
 /// APCALC (xpanel.f): angle of each airfoil panel (panel `i` runs from node `i` to `i+1`;
 /// the TE panel `n-1` closes from node `n-1` back to node 0).
-fn apcalc(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64> {
+fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64> {
     let n = x.len();
     let pi = 4.0 * (1.0_f64).atan();
     let mut apanel = vec![0.0; n];
@@ -769,7 +775,7 @@ mod tests {
         // Simple square path
         let x = vec![0.0, 1.0, 1.0, 0.0, 0.0];
         let y = vec![0.0, 0.0, 1.0, 1.0, 0.0];
-        let s = scalc(&x, &y);
+        let s = arc_coordinate(&x, &y);
 
         assert_eq!(s[0], 0.0);
         assert!((s[1] - 1.0).abs() < 1e-10);
@@ -790,7 +796,7 @@ mod tests {
             .map(|i| radius * (2.0 * std::f64::consts::PI * i as f64 / n as f64).sin())
             .collect();
 
-        let s = scalc(&x, &y);
+        let s = arc_coordinate(&x, &y);
 
         // Total arc length should be approximately 2*pi*r
         let total_arc = s[n];
@@ -802,7 +808,7 @@ mod tests {
         use crate::geometry::naca::naca_4digit;
 
         let geom = naca_4digit("0012", 100).unwrap();
-        let paneled = create_paneled_airfoil(&geom);
+        let paneled = panel_foil(&geom);
 
         // Check basic properties - should produce exactly requested panels
         assert_eq!(paneled.n, 100);
@@ -826,7 +832,7 @@ mod tests {
         use crate::geometry::naca::naca_4digit;
 
         let geom = naca_4digit("0012", 100).unwrap();
-        let paneled = create_paneled_airfoil(&geom);
+        let paneled = panel_foil(&geom);
 
         // All normal vectors should have unit length
         for i in 0..paneled.n {
@@ -840,7 +846,7 @@ mod tests {
         use crate::geometry::naca::naca_4digit;
 
         let geom = naca_4digit("0012", 100).unwrap();
-        let paneled = create_paneled_airfoil(&geom);
+        let paneled = panel_foil(&geom);
 
         // For a symmetric airfoil centered on y=0:
         // - Upper surface (y > 0) normals should have ny > 0
@@ -885,7 +891,7 @@ mod tests {
 
         // NACA 0012 with XFOIL-compatible blunt TE should be detected as blunt
         let geom = naca_4digit("0012", 100).unwrap();
-        let paneled = create_paneled_airfoil(&geom);
+        let paneled = panel_foil(&geom);
 
         // The NACA generator uses original coefficients for blunt TE (XFOIL-compatible)
         // Gap = 0.00252 which is > 0.0001 * chord, so not sharp

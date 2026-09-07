@@ -1,9 +1,9 @@
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::panel::solve_inviscid;
 
 fn main() {
     let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     let n = airfoil.x.len();
     println!("TE Geometry Check:");

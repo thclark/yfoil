@@ -1,12 +1,12 @@
 //! Debug BL result cf values
 
 use yfoil::bl::FlowConditions;
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::solver::{solve_viscous, ViscalConfig};
 
 fn main() {
     let geom = naca_4digit("0012", 80).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);
     let config = ViscalConfig::default();

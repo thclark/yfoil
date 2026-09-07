@@ -221,9 +221,9 @@
 //!
 //! # Key Functions
 //!
-//! - [`create_paneled_airfoil`]: Convert raw geometry to analysis-ready form
+//! - [`panel_foil`]: Convert raw geometry to analysis-ready form
 //! - [`naca_4digit`], [`naca_5digit`]: Generate NACA airfoil profiles
-//! - [`repanel_xfoil`]: XFOIL's curvature-based PANE algorithm (default repaneling method)
+//! - [`repanel_by_curvature`]: XFOIL's curvature-based PANE algorithm (default repaneling method)
 //! - [`repanel_cosine`]: Modified cosine spacing repaneling (alternative method)
 //! - [`spline`], [`seval`], [`deval`], [`d2val`]: Cubic spline interpolation
 
@@ -240,6 +240,7 @@ pub use io::{
 };
 pub use naca::{naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, NacaError, XFOIL_NACA_NSIDE};
 pub use panel::{
-    create_paneled_airfoil, curv, lefind, repanel_cosine, repanel_xfoil, scalc, segspl, trisol, PaneConfig,
+    arc_coordinate, curvature, find_le, panel_foil, repanel_by_curvature, repanel_cosine, solve_tridiagonal,
+    spline_segmented, PaneConfig,
 };
-pub use spline::{d2val, deval, seval, spline};
+pub use spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};

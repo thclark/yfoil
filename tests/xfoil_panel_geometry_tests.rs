@@ -9,7 +9,7 @@ use std::io::BufReader;
 use approx::assert_relative_eq;
 use serde::Deserialize;
 
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit, repanel_cosine, repanel_xfoil, PaneConfig};
+use yfoil::geometry::{naca_4digit, panel_foil, repanel_by_curvature, repanel_cosine, PaneConfig};
 
 #[derive(Debug, Deserialize)]
 struct Coordinate {
@@ -44,7 +44,7 @@ fn test_naca_0012_te_coordinates() {
 
     // Generate YFoil geometry
     let geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     // Check panel count
     assert_eq!(
@@ -104,7 +104,7 @@ fn test_naca_0012_panel_spacing() {
 
     // Generate YFoil geometry
     let geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     println!("=== Panel Spacing Comparison (first 10 panels) ===");
     println!(
@@ -175,12 +175,12 @@ fn test_naca_0012_pane_algorithm() {
 
     // Apply PANE algorithm with XFOIL defaults
     let config = PaneConfig::default();
-    let paned_geom = repanel_xfoil(&buffer_geom, fixture.n_panels, &config);
-    let paned_airfoil = create_paneled_airfoil(&paned_geom);
+    let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_panels, &config);
+    let paned_airfoil = panel_foil(&paned_geom);
 
     // Also generate with cosine spacing for comparison
     let cosine_geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
-    let cosine_airfoil = create_paneled_airfoil(&cosine_geom);
+    let cosine_airfoil = panel_foil(&cosine_geom);
 
     // Calculate RMS errors
     let mut pane_sum_sq = 0.0;
@@ -256,8 +256,8 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
         ctrrat: fixture.ctrrat.unwrap_or(0.2),
         ..PaneConfig::default()
     };
-    let paned_geom = repanel_xfoil(&buffer_geom, fixture.n_panels, &config);
-    let paned_airfoil = create_paneled_airfoil(&paned_geom);
+    let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_panels, &config);
+    let paned_airfoil = panel_foil(&paned_geom);
 
     // Calculate RMS errors in x and y coordinates
     let mut sum_sq_x = 0.0;
@@ -352,8 +352,8 @@ fn test_pane_cterat_0_50() {
 fn test_pane_method_produces_valid_paneled_airfoil() {
     let original = naca_4digit("0012", 100).expect("Failed to create airfoil");
     let config = PaneConfig::default();
-    let paned = repanel_xfoil(&original, 160, &config);
-    let paneled = create_paneled_airfoil(&paned);
+    let paned = repanel_by_curvature(&original, 160, &config);
+    let paneled = panel_foil(&paned);
 
     // Verify panel count
     assert_eq!(paneled.n, 160, "Panel count should match requested");
@@ -390,7 +390,7 @@ fn test_pane_method_produces_valid_paneled_airfoil() {
 fn test_cosine_method_produces_valid_paneled_airfoil() {
     let original = naca_4digit("0012", 100).expect("Failed to create airfoil");
     let cosined = repanel_cosine(&original, 160, 0.15);
-    let paneled = create_paneled_airfoil(&cosined);
+    let paneled = panel_foil(&cosined);
 
     // Verify panel count is approximately correct (may vary slightly)
     assert!(
@@ -424,7 +424,7 @@ fn test_pane_and_cosine_methods_differ() {
     let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
     let config = PaneConfig::default();
 
-    let paned = repanel_xfoil(&original, 160, &config);
+    let paned = repanel_by_curvature(&original, 160, &config);
     let cosined = repanel_cosine(&original, 160, 0.15);
 
     // Both should produce geometry with similar extent
@@ -457,7 +457,7 @@ fn test_both_methods_preserve_shape() {
     let original = naca_4digit("4412", 120).expect("Failed to create cambered airfoil");
 
     let config = PaneConfig::default();
-    let paned = repanel_xfoil(&original, 160, &config);
+    let paned = repanel_by_curvature(&original, 160, &config);
     let cosined = repanel_cosine(&original, 160, 0.15);
 
     // Original extents
@@ -496,7 +496,7 @@ fn test_both_methods_preserve_shape() {
 fn test_pane_clusters_at_leading_edge() {
     let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
     let config = PaneConfig::default();
-    let paned = repanel_xfoil(&original, 160, &config);
+    let paned = repanel_by_curvature(&original, 160, &config);
 
     // Calculate average panel spacing in different regions
     let mut le_spacings = Vec::new();
@@ -544,8 +544,8 @@ fn test_pane_config_affects_output() {
         ..Default::default()
     };
 
-    let paned_low = repanel_xfoil(&original, 160, &config_low_te);
-    let paned_high = repanel_xfoil(&original, 160, &config_high_te);
+    let paned_low = repanel_by_curvature(&original, 160, &config_low_te);
+    let paned_high = repanel_by_curvature(&original, 160, &config_high_te);
 
     // Count panels in TE region (x > 0.9)
     let te_count_low = paned_low.x_c.iter().filter(|&&x| x > 0.9).count();

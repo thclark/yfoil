@@ -1,6 +1,6 @@
 //! Check DIJ matrix symmetry properties for symmetric airfoil
 
-use yfoil::geometry::{create_paneled_airfoil, read_dat_file};
+use yfoil::geometry::{panel_foil, read_dat_file};
 use yfoil::panel::solve_inviscid;
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
     let (_, geom) =
         read_dat_file("/tmp/xfoil_naca0012_paneled.dat").expect("Run XFOIL first");
 
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let n = airfoil.n;
     let le = airfoil.le_index;
 

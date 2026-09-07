@@ -10,7 +10,7 @@ mod utilities;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file, PaneledAirfoil};
+use yfoil::geometry::{panel_foil, read_geometry_from_file, PaneledAirfoil};
 use yfoil::solver::analysis::{FlowConditions, PointResult, Session};
 use yfoil::solver::specal::cl_command;
 
@@ -45,7 +45,7 @@ fn iters_call_1(path: &PathBuf) -> Vec<Vec<f64>> {
 
 fn airfoil(case: &str) -> PaneledAirfoil {
     let g = read_geometry_from_file(case_path(case, "panels.json").to_str().unwrap()).expect("panels.json");
-    create_paneled_airfoil(&g)
+    panel_foil(&g)
 }
 
 /// Compare one converged point and its iteration history with the reference records.

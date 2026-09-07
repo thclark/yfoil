@@ -4,8 +4,8 @@
 
 use std::fs::File;
 use std::io::BufReader;
-use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb, ClosureResult, FlowConditions, FlowRegime};
-use yfoil::geometry::{create_paneled_airfoil, Geometry};
+use yfoil::bl::{cf_laminar, cf_turbulent, cdiss_laminar, hkin, hstar_laminar, hstar_turbulent, Closure, FlowConditions, FlowRegime};
+use yfoil::geometry::{panel_foil, Geometry};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::{extract_upper_surface, find_stagnation_point};
 
@@ -47,8 +47,8 @@ fn solve_station_instrumented(
 
     // Initial guess
     let cf1_guess = match regime {
-        FlowRegime::Laminar => cf_lam(hk1, rt1, cond.msq).val,
-        _ => cf_turb(hk1, rt1.max(200.0), cond.msq, 1.0).val,
+        FlowRegime::Laminar => cf_laminar(hk1, rt1, cond.msq).val,
+        _ => cf_turbulent(hk1, rt1.max(200.0), cond.msq, 1.0).val,
     };
     let shape_term = (h1 + 2.0 - cond.msq) * theta1 / ue_avg * due_ds;
     let dtheta_ds_pred = cf1_guess / 2.0 - shape_term;
@@ -66,11 +66,11 @@ fn solve_station_instrumented(
 
     // Upstream closures
     let (hs1, cf1, di1) = match regime {
-        FlowRegime::Laminar => (hs_lam(hk1, rt1, cond.msq), cf_lam(hk1, rt1, cond.msq), di_lam(hk1, rt1)),
+        FlowRegime::Laminar => (hstar_laminar(hk1, rt1, cond.msq), cf_laminar(hk1, rt1, cond.msq), cdiss_laminar(hk1, rt1)),
         _ => {
-            let cf = cf_turb(hk1, rt1.max(200.0), cond.msq, 1.0);
-            let hs = hs_turb(hk1, rt1.max(200.0), cond.msq);
-            let di = ClosureResult {
+            let cf = cf_turbulent(hk1, rt1.max(200.0), cond.msq, 1.0);
+            let hs = hstar_turbulent(hk1, rt1.max(200.0), cond.msq);
+            let di = Closure {
                 val: 0.5 * cf.val * ue1 / hs.val,
                 val_hk: 0.0,
                 val_rt: 0.0,
@@ -98,15 +98,15 @@ fn solve_station_instrumented(
         // Get closure relations
         let (cf_res, hs_res, di_res) = match regime {
             FlowRegime::Laminar => {
-                let cf = cf_lam(hk2, rt2, cond.msq);
-                let hs = hs_lam(hk2, rt2, cond.msq);
-                let di = di_lam(hk2, rt2);
+                let cf = cf_laminar(hk2, rt2, cond.msq);
+                let hs = hstar_laminar(hk2, rt2, cond.msq);
+                let di = cdiss_laminar(hk2, rt2);
                 (cf, hs, di)
             }
             FlowRegime::Turbulent | FlowRegime::Wake => {
-                let cf = cf_turb(hk2, rt2.max(200.0), cond.msq, 1.0);
-                let hs = hs_turb(hk2, rt2.max(200.0), cond.msq);
-                let di = ClosureResult {
+                let cf = cf_turbulent(hk2, rt2.max(200.0), cond.msq, 1.0);
+                let hs = hstar_turbulent(hk2, rt2.max(200.0), cond.msq);
+                let di = Closure {
                     val: 0.5 * cf.val * ue2 / hs.val,
                     val_hk: 0.0,
                     val_rt: 0.0,
@@ -176,8 +176,8 @@ fn solve_station_instrumented(
         let hk_avg = 0.5 * (hk1 + hk2);
         let rt_avg = 0.5 * (rt1 + rt2);
         let cf_mid = match regime {
-            FlowRegime::Laminar => cf_lam(hk_avg, rt_avg, cond.msq),
-            _ => cf_turb(hk_avg, rt_avg.max(200.0), cond.msq, 1.0),
+            FlowRegime::Laminar => cf_laminar(hk_avg, rt_avg, cond.msq),
+            _ => cf_turbulent(hk_avg, rt_avg.max(200.0), cond.msq, 1.0),
         };
 
         let use_log_form = s1 > 1e-6;
@@ -331,8 +331,8 @@ fn solve_station_instrumented(
     let (hk2, _, _) = hkin(h2, cond.msq);
     let rt2 = (ue2 * theta2 / cond.nu).max(1.0);
     let cf2 = match regime {
-        FlowRegime::Laminar => cf_lam(hk2, rt2, cond.msq).val,
-        _ => cf_turb(hk2, rt2.max(200.0), cond.msq, 1.0).val,
+        FlowRegime::Laminar => cf_laminar(hk2, rt2, cond.msq).val,
+        _ => cf_turbulent(hk2, rt2.max(200.0), cond.msq, 1.0).val,
     };
 
     (theta2, dstar2, h2, hk2, cf2, n1, converged)
@@ -341,7 +341,7 @@ fn solve_station_instrumented(
 fn main() {
     // Load same geometry as XFOIL
     let geom = load_geometry(".tmp/naca0012_xfoil_paneled.json");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     // Solve inviscid
     let inviscid = solve_inviscid(&airfoil);

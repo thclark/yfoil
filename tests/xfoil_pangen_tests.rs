@@ -3,7 +3,7 @@
 //! Each case runs XFOIL's `NACA dddd` then `PPAR / N n`; the instrumented PANGEN dumps the
 //! 245-point buffer airfoil (XB/YB/SB), the paneling parameters and the N paneled nodes
 //! (X/Y/S) at ES24.16. YFoil's `naca_*digit_xfoil` must reproduce the buffer and
-//! `repanel_xfoil` the nodes, within `TOL_PURE`; the bitwise-identical counts are reported.
+//! `repanel_by_curvature` the nodes, within `TOL_PURE`; the bitwise-identical counts are reported.
 //! (This is the optional track: the solver equivalence never depends on it, because YFoil
 //! generates the panels and XFOIL LOADs them — CLAUDE.md Rule 4.)
 
@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_PURE};
 use yfoil::geometry::{
-    create_paneled_airfoil, lefind, naca_4digit_xfoil, naca_5digit_xfoil, repanel_xfoil, scalc, segspl, PaneConfig,
-    XFOIL_NACA_NSIDE,
+    arc_coordinate, find_le, naca_4digit_xfoil, naca_5digit_xfoil, panel_foil, repanel_by_curvature, spline_segmented,
+    PaneConfig, XFOIL_NACA_NSIDE,
 };
 
 struct PangenDump {
@@ -77,7 +77,7 @@ fn check(case: &str, spec: &str, npan: usize) {
         naca_5digit_xfoil(spec).unwrap()
     };
     assert_eq!(buffer.x_c.len(), d.buffer.len(), "{case}: buffer point count");
-    let sb = scalc(&buffer.x_c, &buffer.y_c);
+    let sb = arc_coordinate(&buffer.x_c, &buffer.y_c);
     let (mut bits, mut worst) = (0usize, 0.0_f64);
     for (i, b) in d.buffer.iter().enumerate() {
         for (name, ours, theirs) in [
@@ -99,9 +99,9 @@ fn check(case: &str, spec: &str, npan: usize) {
     );
 
     // LEFIND on the buffer (SBLE), then PANGEN
-    let xbp = segspl(&buffer.x_c, &sb);
-    let ybp = segspl(&buffer.y_c, &sb);
-    let sble = lefind(&buffer.x_c, &xbp, &buffer.y_c, &ybp, &sb);
+    let xbp = spline_segmented(&buffer.x_c, &sb);
+    let ybp = spline_segmented(&buffer.y_c, &sb);
+    let sble = find_le(&buffer.x_c, &xbp, &buffer.y_c, &ybp, &sb);
     assert_within(
         sble,
         d.header["SBLE"].parse().unwrap(),
@@ -110,9 +110,9 @@ fn check(case: &str, spec: &str, npan: usize) {
         &format!("{case}: SBLE"),
     );
 
-    let paneled = repanel_xfoil(&buffer, npan, &PaneConfig::default());
+    let paneled = repanel_by_curvature(&buffer, npan, &PaneConfig::default());
     assert_eq!(paneled.x_c.len(), d.panels.len(), "{case}: node count");
-    let af = create_paneled_airfoil(&paneled);
+    let af = panel_foil(&paneled);
     let (mut bits, mut worst) = (0usize, 0.0_f64);
     for (i, p) in d.panels.iter().enumerate() {
         for (name, ours, theirs) in [("X", af.x[i], p[0]), ("Y", af.y[i], p[1]), ("S", af.s[i], p[2])] {

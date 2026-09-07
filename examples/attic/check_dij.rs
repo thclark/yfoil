@@ -1,7 +1,7 @@
 //! Check DIJ matrix against XFOIL
 
 use std::fs;
-use yfoil::geometry::{create_paneled_airfoil, Geometry};
+use yfoil::geometry::{panel_foil, Geometry};
 use yfoil::panel::solve_inviscid;
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
     let json_path = "/tmp/naca0012.json";
     let json_str = fs::read_to_string(json_path).expect("Failed to read JSON file");
     let geom: Geometry = serde_json::from_str(&json_str).expect("Failed to parse JSON");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     println!("=== YFoil DIJ Matrix Check ===\n");
     println!("N = {}", airfoil.n);

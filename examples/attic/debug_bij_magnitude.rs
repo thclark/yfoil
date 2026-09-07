@@ -3,7 +3,7 @@
 //! Compare the magnitudes of the vortex influence matrix (AIJ) and
 //! source influence matrix (BIJ) to understand the 100x scaling issue.
 
-use yfoil::geometry::{create_paneled_airfoil, read_dat_file};
+use yfoil::geometry::{panel_foil, read_dat_file};
 use yfoil::panel::solve_inviscid;
 
 fn main() {
@@ -12,7 +12,7 @@ fn main() {
     let (_, geom) =
         read_dat_file("/tmp/xfoil_naca0012_paneled.dat").expect("Run XFOIL first");
 
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let n = airfoil.n;
 
     println!("Airfoil: {} panels", n);

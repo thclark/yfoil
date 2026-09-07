@@ -12,9 +12,9 @@ mod utilities;
 use fixtures::pointers_fixtures::{parse_inviscid_gam, parse_pointers, parse_uinv};
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_PURE};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::blstate::SolverState;
-use yfoil::solver::xywake::{qwcalc, setexp, xywake};
+use yfoil::solver::xywake::{build_wake, exponential_spacing, set_wake_q_basis};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -37,7 +37,7 @@ fn state_at_first_viscal_call() -> (
         st.panel_angle[i] = f.apanel[i];
     }
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
-    let af = create_paneled_airfoil(&geom);
+    let af = panel_foil(&geom);
     for i in 1..=f.n {
         st.dxds[i] = af.xp[i - 1];
         st.dyds[i] = af.yp[i - 1];
@@ -61,7 +61,7 @@ fn test_setexp_reproduces_wake_spacing() {
     let (st, f, _) = state_at_first_viscal_call();
     let n = f.n;
     let ds1 = 0.5 * (st.s[2] - st.s[1] + st.s[n] - st.s[n - 1]);
-    let snew = setexp(ds1, 1.0 * st.chord, f.nw);
+    let snew = exponential_spacing(ds1, 1.0 * st.chord, f.nw);
     for iw in 1..=f.nw {
         let xfoil = f.s[n + iw] - f.s[n];
         assert_within(snew[iw], xfoil, TOL_PURE, 1.0, &format!("SNEW({})", n + iw));
@@ -71,7 +71,7 @@ fn test_setexp_reproduces_wake_spacing() {
 #[test]
 fn test_xywake_matches_xfoil_wake_nodes() {
     let (mut st, f, _) = state_at_first_viscal_call();
-    xywake(&mut st, 1.0);
+    build_wake(&mut st, 1.0);
     let n = f.n;
     for iw in 1..=f.nw {
         let i = n + iw;
@@ -91,8 +91,8 @@ fn test_xywake_matches_xfoil_wake_nodes() {
 #[test]
 fn test_qwcalc_matches_xfoil_wake_qinvu() {
     let (mut st, f, u) = state_at_first_viscal_call();
-    xywake(&mut st, 1.0);
-    qwcalc(&mut st);
+    build_wake(&mut st, 1.0);
+    set_wake_q_basis(&mut st);
     for i in (f.n + 1)..=(f.n + f.nw) {
         assert_within(
             st.q_inviscid_basis[1][i],

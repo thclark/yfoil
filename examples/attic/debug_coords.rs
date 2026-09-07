@@ -2,7 +2,7 @@
 
 use std::fs::File;
 use std::io::BufReader;
-use yfoil::geometry::{create_paneled_airfoil, Geometry};
+use yfoil::geometry::{panel_foil, Geometry};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::find_stagnation_point;
 
@@ -14,7 +14,7 @@ fn load_geometry(path: &str) -> Geometry {
 
 fn main() {
     let geom = load_geometry(".tmp/naca0012_xfoil_paneled.json");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     println!("Total nodes: {}", airfoil.n);
     println!();

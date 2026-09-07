@@ -1,11 +1,11 @@
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::find_stagnation_point;
 
 fn main() {
     // Use 80 panels to match debug_viscal_loop
     let geom = naca_4digit("0012", 80).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     let inviscid = solve_inviscid(&airfoil);
     let qinv = inviscid.velocity_at_nodes(0.0);

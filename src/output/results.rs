@@ -531,10 +531,10 @@ mod tests {
 
     #[test]
     fn test_geometry_info_from_paneled() {
-        use crate::geometry::{create_paneled_airfoil, naca_4digit};
+        use crate::geometry::{naca_4digit, panel_foil};
 
         let geom = naca_4digit("0012", 160).unwrap();
-        let airfoil = create_paneled_airfoil(&geom);
+        let airfoil = panel_foil(&geom);
         let info = GeometryInfo::from_paneled(&airfoil);
 
         // Check summary fields
@@ -564,10 +564,10 @@ mod tests {
 
     #[test]
     fn test_geometry_info_serialization() {
-        use crate::geometry::{create_paneled_airfoil, naca_4digit};
+        use crate::geometry::{naca_4digit, panel_foil};
 
         let geom = naca_4digit("0012", 120).unwrap();
-        let airfoil = create_paneled_airfoil(&geom);
+        let airfoil = panel_foil(&geom);
         let info = GeometryInfo::from_paneled(&airfoil);
 
         // Serialize to JSON

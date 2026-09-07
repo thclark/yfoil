@@ -2,7 +2,7 @@
 
 use std::fs;
 use yfoil::bl::{blsolv, FlowConditions};
-use yfoil::geometry::{create_paneled_airfoil, Geometry};
+use yfoil::geometry::{panel_foil, Geometry};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::{
     find_stagnation_point, SetblConfig, SetblState, build_newton_system,
@@ -15,7 +15,7 @@ fn main() {
     let json_str = fs::read_to_string(json_path)
         .expect("Failed to read geometry JSON - run: yfoil geometry naca 0012 -n 160 -o /tmp/naca0012.json");
     let geom: Geometry = serde_json::from_str(&json_str).expect("Failed to parse JSON");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);
 
     println!("=== Debug VISCAL Loop (Combined Update) ===\n");

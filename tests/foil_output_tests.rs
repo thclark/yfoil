@@ -10,7 +10,7 @@ mod utilities;
 
 use std::path::PathBuf;
 use utilities::tolerances::TOL_SOLVER;
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::output::{AnalysisOutput, BlQuantity, PolarOutput, SeparationKind};
 use yfoil::solver::analysis::{compute_polar_with, FlowConditions, PolarConfig, Session};
 
@@ -30,7 +30,7 @@ fn spec() -> FlowConditions {
 
 fn ref_case_session() -> Session {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).expect("panels.json");
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     Session::new(&airfoil, spec())
 }
 
@@ -211,7 +211,7 @@ fn json_round_trips_and_inviscid_has_no_boundary_layer() {
 
     let inviscid = FlowConditions { re: 0.0, ..spec() };
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).unwrap();
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let mut session = Session::new(&airfoil, inviscid.clone());
     let p = session.alpha(2.0_f64.to_radians());
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", &inviscid, true);
@@ -223,7 +223,7 @@ fn json_round_trips_and_inviscid_has_no_boundary_layer() {
 #[test]
 fn polar_observer_sees_every_visited_point_in_its_own_state() {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).unwrap();
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let config = PolarConfig {
         alpha_max: 2.0,
         alpha_min: -2.0,

@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 use yfoil::bl::system::amplification_rate;
 use yfoil::bl::system::{FlowParameters, FlowRegime, StationState};
-use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb};
+use yfoil::bl::{cdiss_laminar, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent};
 
 /// Machine epsilon for f64
 #[allow(dead_code)]
@@ -86,7 +86,7 @@ fn test_hkin_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        let (hk, hk_h, hk_msq) = hkin(fixture.input.h, fixture.input.msq);
+        let (hk, hk_h, hk_msq) = hk_from_h(fixture.input.h, fixture.input.msq);
 
         let err_hk = relative_error(fixture.output.hk, hk);
         let err_hk_h = relative_error(fixture.output.hk_h, hk_h);
@@ -180,12 +180,12 @@ fn test_cfl_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        let result = cf_lam(fixture.input.hk, fixture.input.rt, fixture.input.msq);
+        let result = cf_laminar(fixture.input.hk, fixture.input.rt, fixture.input.msq);
 
-        let err_cf = relative_error(fixture.output.cf, result.val);
-        let err_cf_hk = relative_error(fixture.output.cf_hk, result.val_hk);
-        let err_cf_rt = relative_error(fixture.output.cf_rt, result.val_rt);
-        let err_cf_msq = relative_error(fixture.output.cf_msq, result.val_msq);
+        let err_cf = relative_error(fixture.output.cf, result.value);
+        let err_cf_hk = relative_error(fixture.output.cf_hk, result.value_d_hk);
+        let err_cf_rt = relative_error(fixture.output.cf_rt, result.value_d_retheta);
+        let err_cf_msq = relative_error(fixture.output.cf_msq, result.value_d_machsqd);
 
         let max_err = err_cf.max(err_cf_hk).max(err_cf_rt).max(err_cf_msq);
         max_error = max_error.max(max_err);
@@ -268,10 +268,10 @@ fn test_hsl_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        let result = hs_lam(fixture.input.hk, fixture.input.rt, fixture.input.msq);
+        let result = hstar_laminar(fixture.input.hk, fixture.input.rt, fixture.input.msq);
 
-        let err_hs = relative_error(fixture.output.hs, result.val);
-        let err_hs_hk = relative_error(fixture.output.hs_hk, result.val_hk);
+        let err_hs = relative_error(fixture.output.hs, result.value);
+        let err_hs_hk = relative_error(fixture.output.hs_hk, result.value_d_hk);
 
         let max_err = err_hs.max(err_hs_hk);
         max_error = max_error.max(max_err);
@@ -280,8 +280,8 @@ fn test_hsl_all_fixtures() {
             failures.push(format!(
                 "Case {}: HK={:.6}, RT={:.6}\n  HS: expected={:.16e}, got={:.16e}, err={:.2e}\n  HS_HK: expected={:.16e}, got={:.16e}, err={:.2e}",
                 i + 1, fixture.input.hk, fixture.input.rt,
-                fixture.output.hs, result.val, err_hs,
-                fixture.output.hs_hk, result.val_hk, err_hs_hk
+                fixture.output.hs, result.value, err_hs,
+                fixture.output.hs_hk, result.value_d_hk, err_hs_hk
             ));
         }
     }
@@ -349,11 +349,11 @@ fn test_dil_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        let result = di_lam(fixture.input.hk, fixture.input.rt);
+        let result = cdiss_laminar(fixture.input.hk, fixture.input.rt);
 
-        let err_di = relative_error(fixture.output.di, result.val);
-        let err_di_hk = relative_error(fixture.output.di_hk, result.val_hk);
-        let err_di_rt = relative_error(fixture.output.di_rt, result.val_rt);
+        let err_di = relative_error(fixture.output.di, result.value);
+        let err_di_hk = relative_error(fixture.output.di_hk, result.value_d_hk);
+        let err_di_rt = relative_error(fixture.output.di_rt, result.value_d_retheta);
 
         let max_err = err_di.max(err_di_hk).max(err_di_rt);
         max_error = max_error.max(max_err);
@@ -362,7 +362,7 @@ fn test_dil_all_fixtures() {
             failures.push(format!(
                 "Case {}: HK={:.6}, RT={:.6}\n  DI: expected={:.16e}, got={:.16e}, err={:.2e}\n  DI_HK: err={:.2e}\n  DI_RT: err={:.2e}",
                 i + 1, fixture.input.hk, fixture.input.rt,
-                fixture.output.di, result.val, err_di, err_di_hk, err_di_rt
+                fixture.output.di, result.value, err_di, err_di_hk, err_di_rt
             ));
         }
     }
@@ -432,12 +432,12 @@ fn test_hst_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        let result = hs_turb(fixture.input.hk, fixture.input.rt, fixture.input.msq);
+        let result = hstar_turbulent(fixture.input.hk, fixture.input.rt, fixture.input.msq);
 
-        let err_hs = relative_error(fixture.output.hs, result.val);
-        let err_hs_hk = relative_error(fixture.output.hs_hk, result.val_hk);
-        let err_hs_rt = relative_error(fixture.output.hs_rt, result.val_rt);
-        let err_hs_msq = relative_error(fixture.output.hs_msq, result.val_msq);
+        let err_hs = relative_error(fixture.output.hs, result.value);
+        let err_hs_hk = relative_error(fixture.output.hs_hk, result.value_d_hk);
+        let err_hs_rt = relative_error(fixture.output.hs_rt, result.value_d_retheta);
+        let err_hs_msq = relative_error(fixture.output.hs_msq, result.value_d_machsqd);
 
         let max_err = err_hs.max(err_hs_hk).max(err_hs_rt).max(err_hs_msq);
         max_error = max_error.max(max_err);
@@ -450,7 +450,7 @@ fn test_hst_all_fixtures() {
                 fixture.input.rt,
                 fixture.input.msq,
                 fixture.output.hs,
-                result.val,
+                result.value,
                 err_hs
             ));
         }
@@ -521,13 +521,13 @@ fn test_cft_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        // cf_turb takes cffac = 1.0 by default
-        let result = cf_turb(fixture.input.hk, fixture.input.rt, fixture.input.msq, 1.0);
+        // cf_turbulent takes cffac = 1.0 by default
+        let result = cf_turbulent(fixture.input.hk, fixture.input.rt, fixture.input.msq, 1.0);
 
-        let err_cf = relative_error(fixture.output.cf, result.val);
-        let err_cf_hk = relative_error(fixture.output.cf_hk, result.val_hk);
-        let err_cf_rt = relative_error(fixture.output.cf_rt, result.val_rt);
-        let err_cf_msq = relative_error(fixture.output.cf_msq, result.val_msq);
+        let err_cf = relative_error(fixture.output.cf, result.value);
+        let err_cf_hk = relative_error(fixture.output.cf_hk, result.value_d_hk);
+        let err_cf_rt = relative_error(fixture.output.cf_rt, result.value_d_retheta);
+        let err_cf_msq = relative_error(fixture.output.cf_msq, result.value_d_machsqd);
 
         let max_err = err_cf.max(err_cf_hk).max(err_cf_rt).max(err_cf_msq);
         max_error = max_error.max(max_err);
@@ -540,7 +540,7 @@ fn test_cft_all_fixtures() {
                 fixture.input.rt,
                 fixture.input.msq,
                 fixture.output.cf,
-                result.val,
+                result.value,
                 err_cf
             ));
         }

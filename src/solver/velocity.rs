@@ -4,7 +4,7 @@
 use crate::solver::blstate::SolverState;
 
 /// QISET: inviscid panel tangential velocity for the current alpha from the alpha=0,90 solutions.
-pub fn qiset(st: &mut SolverState, alfa: f64) {
+pub fn set_q_inviscid(st: &mut SolverState, alfa: f64) {
     let cosa = alfa.cos();
     let sina = alfa.sin();
     for i in 1..=(st.n_foil_nodes + st.n_wake_nodes) {
@@ -14,7 +14,7 @@ pub fn qiset(st: &mut SolverState, alfa: f64) {
 }
 
 /// UICALC: inviscid Ue from panel inviscid tangential velocity.
-pub fn uicalc(st: &mut SolverState) {
+pub fn set_ue_inviscid(st: &mut SolverState) {
     for is in 1..=2 {
         st.ue_inviscid[is][1] = 0.0;
         st.ue_inviscid_d_alpha[is][1] = 0.0;
@@ -27,7 +27,7 @@ pub fn uicalc(st: &mut SolverState) {
 }
 
 /// UECALC: viscous Ue from panel viscous tangential velocity.
-pub fn uecalc(st: &mut SolverState) {
+pub fn set_ue_from_q_viscous(st: &mut SolverState) {
     for is in 1..=2 {
         st.ue[is][1] = 0.0;
         for ibl in 2..=st.n_stations[is] {
@@ -38,7 +38,7 @@ pub fn uecalc(st: &mut SolverState) {
 }
 
 /// QVFUE: panel viscous tangential velocity from viscous Ue.
-pub fn qvfue(st: &mut SolverState) {
+pub fn set_q_viscous_from_ue(st: &mut SolverState) {
     for is in 1..=2 {
         for ibl in 2..=st.n_stations[is] {
             let i = st.i_node[is][ibl];
@@ -48,7 +48,7 @@ pub fn qvfue(st: &mut SolverState) {
 }
 
 /// GAMQV: GAM from QVIS (airfoil nodes only), GAM_A from QINV_A.
-pub fn gamqv(st: &mut SolverState) {
+pub fn set_gamma_from_q_viscous(st: &mut SolverState) {
     for i in 1..=st.n_foil_nodes {
         st.gamma[i] = st.q_viscous[i];
         st.gamma_d_alpha[i] = st.q_inviscid_d_alpha[i];
@@ -56,7 +56,7 @@ pub fn gamqv(st: &mut SolverState) {
 }
 
 /// UESET: Ue from inviscid Ue plus all source (mass defect) influence through `st.dij`.
-pub fn ueset(st: &mut SolverState) {
+pub fn set_ue_with_sources(st: &mut SolverState) {
     for is in 1..=2 {
         for ibl in 2..=st.n_stations[is] {
             let i = st.i_node[is][ibl];
@@ -74,7 +74,7 @@ pub fn ueset(st: &mut SolverState) {
 }
 
 /// DSSET: displacement thickness from mass defect and Ue.
-pub fn dsset(st: &mut SolverState) {
+pub fn set_dstar_from_mass(st: &mut SolverState) {
     for is in 1..=2 {
         for ibl in 2..=st.n_stations[is] {
             st.dstar[is][ibl] = st.mass_defect[is][ibl] / st.ue[is][ibl];
@@ -85,14 +85,14 @@ pub fn dsset(st: &mut SolverState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::solver::pointers::{iblpan, iblsys};
+    use crate::solver::pointers::{map_stations_to_nodes, map_stations_to_rows};
 
     fn small_state() -> SolverState {
         let (n, nw) = (12, 4);
         let mut st = SolverState::empty(n, nw);
         st.i_stagnation_node = 6;
-        iblpan(&mut st);
-        iblsys(&mut st);
+        map_stations_to_nodes(&mut st);
+        map_stations_to_rows(&mut st);
         st
     }
 
@@ -106,9 +106,9 @@ mod tests {
             }
         }
         let before = st.ue.clone();
-        qvfue(&mut st);
-        gamqv(&mut st);
-        uecalc(&mut st);
+        set_q_viscous_from_ue(&mut st);
+        set_gamma_from_q_viscous(&mut st);
+        set_ue_from_q_viscous(&mut st);
         for is in 1..=2 {
             for ibl in 2..=st.n_stations[is] {
                 assert_eq!(st.ue[is][ibl].to_bits(), before[is][ibl].to_bits());
@@ -132,8 +132,8 @@ mod tests {
                 st.mass_defect[is][ibl] = 0.5 * ibl as f64;
             }
         }
-        ueset(&mut st);
-        dsset(&mut st);
+        set_ue_with_sources(&mut st);
+        set_dstar_from_mass(&mut st);
         for is in 1..=2 {
             for ibl in 2..=st.n_stations[is] {
                 assert_eq!(st.ue[is][ibl].to_bits(), st.ue_inviscid[is][ibl].to_bits());

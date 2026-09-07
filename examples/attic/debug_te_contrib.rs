@@ -1,7 +1,7 @@
 //! Debug TE panel contribution to AIJ
 
 use std::f64::consts::PI;
-use yfoil::geometry::{create_paneled_airfoil, read_dat_file};
+use yfoil::geometry::{panel_foil, read_dat_file};
 
 const HOPI: f64 = 0.5 / PI;
 
@@ -11,7 +11,7 @@ fn main() {
     let (_, geom) =
         read_dat_file("/tmp/xfoil_naca0012_paneled.dat").expect("Run XFOIL first");
 
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let n = airfoil.n;
 
     // TE gap

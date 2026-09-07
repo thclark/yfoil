@@ -1,7 +1,9 @@
 //! The BL station state of XBL.INC's /V_VAR1/ and /V_VAR2/ blocks (COM1/COM2) with BLPRV,
 //! BLKIN and BLVAR (xblsys.f), the midpoint skin friction BLMID, and DSLIM (xbl.f).
 
-use super::closure::{cf_lam, cf_turb, di_lam, dilw, hc_turb, hkin, hs_lam, hs_turb};
+use super::closure::{
+    cdiss_laminar, cdiss_wake, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent, hstarstar,
+};
 use super::params::*;
 
 /// BL station state variables (from XFOIL's V_VAR1/V_VAR2)
@@ -251,7 +253,7 @@ impl StationState {
         self.nu_d_re = -self.nu / reybl * reybl_re;
 
         // Kinematic shape factor Hk (compressibility correction)
-        let (hk, hk_h, hk_msq) = hkin(self.h, self.machsqd_edge);
+        let (hk, hk_h, hk_msq) = hk_from_h(self.h, self.machsqd_edge);
         self.hk = hk;
 
         self.hk_d_ue = hk_msq * self.machsqd_edge_d_ue;
@@ -303,7 +305,7 @@ impl StationState {
         // ====================================================================
         // Density thickness shape parameter H** (from HCT)
         // ====================================================================
-        let (hc, hc_hk, hc_msq) = hc_turb(hk, msq);
+        let (hc, hc_hk, hc_msq) = hstarstar(hk, msq);
 
         self.hstarstar = hc;
         self.hstarstar_d_ue = hc_hk * self.hk_d_ue + hc_msq * self.machsqd_edge_d_ue;
@@ -315,20 +317,20 @@ impl StationState {
         // Energy shape factor H* (from HSL or HST)
         // ====================================================================
         let hs_result = match flow_type {
-            FlowRegime::Laminar => hs_lam(hk, rt, msq),
-            FlowRegime::Turbulent | FlowRegime::Wake => hs_turb(hk, rt, msq),
+            FlowRegime::Laminar => hstar_laminar(hk, rt, msq),
+            FlowRegime::Turbulent | FlowRegime::Wake => hstar_turbulent(hk, rt, msq),
         };
 
-        self.hstar = hs_result.val;
-        self.hstar_d_ue = hs_result.val_hk * self.hk_d_ue
-            + hs_result.val_rt * self.retheta_d_ue
-            + hs_result.val_msq * self.machsqd_edge_d_ue;
-        self.hstar_d_theta = hs_result.val_hk * self.hk_d_theta + hs_result.val_rt * self.retheta_d_theta;
-        self.hstar_d_dstar = hs_result.val_hk * self.hk_d_dstar;
-        self.hstar_d_machsqd = hs_result.val_hk * self.hk_d_machsqd
-            + hs_result.val_rt * self.retheta_d_machsqd
-            + hs_result.val_msq * self.machsqd_edge_d_machsqd;
-        self.hstar_d_re = hs_result.val_rt * self.retheta_d_re;
+        self.hstar = hs_result.value;
+        self.hstar_d_ue = hs_result.value_d_hk * self.hk_d_ue
+            + hs_result.value_d_retheta * self.retheta_d_ue
+            + hs_result.value_d_machsqd * self.machsqd_edge_d_ue;
+        self.hstar_d_theta = hs_result.value_d_hk * self.hk_d_theta + hs_result.value_d_retheta * self.retheta_d_theta;
+        self.hstar_d_dstar = hs_result.value_d_hk * self.hk_d_dstar;
+        self.hstar_d_machsqd = hs_result.value_d_hk * self.hk_d_machsqd
+            + hs_result.value_d_retheta * self.retheta_d_machsqd
+            + hs_result.value_d_machsqd * self.machsqd_edge_d_machsqd;
+        self.hstar_d_re = hs_result.value_d_retheta * self.retheta_d_re;
 
         // ---- normalized slip velocity  Us
         let us = 0.5 * self.hstar * (1.0 - (hk - 1.0) / (GBETA_LOCUS_B * h));
@@ -403,19 +405,19 @@ impl StationState {
             FlowRegime::Wake => (0.0, 0.0, 0.0, 0.0),
             // laminar
             FlowRegime::Laminar => {
-                let r = cf_lam(hk, rt, msq);
-                (r.val, r.val_hk, r.val_rt, r.val_msq)
+                let r = cf_laminar(hk, rt, msq);
+                (r.value, r.value_d_hk, r.value_d_retheta, r.value_d_machsqd)
             }
             // turbulent
             FlowRegime::Turbulent => {
-                let r = cf_turb(hk, rt, msq, CF_TURBULENT_FACTOR);
-                let l = cf_lam(hk, rt, msq);
-                if l.val > r.val {
+                let r = cf_turbulent(hk, rt, msq, CF_TURBULENT_FACTOR);
+                let l = cf_laminar(hk, rt, msq);
+                if l.value > r.value {
                     // laminar Cf is greater than turbulent Cf -- use laminar
                     // (this will only occur for unreasonably small Rtheta)
-                    (l.val, l.val_hk, l.val_rt, l.val_msq)
+                    (l.value, l.value_d_hk, l.value_d_retheta, l.value_d_machsqd)
                 } else {
-                    (r.val, r.val_hk, r.val_rt, r.val_msq)
+                    (r.value, r.value_d_hk, r.value_d_retheta, r.value_d_machsqd)
                 }
             }
         };
@@ -431,27 +433,28 @@ impl StationState {
         match flow_type {
             FlowRegime::Laminar => {
                 // laminar
-                let r = di_lam(hk, rt);
-                self.cdiss = r.val;
-                self.cdiss_d_ue = r.val_hk * self.hk_d_ue + r.val_rt * self.retheta_d_ue;
-                self.cdiss_d_theta = r.val_hk * self.hk_d_theta + r.val_rt * self.retheta_d_theta;
-                self.cdiss_d_dstar = r.val_hk * self.hk_d_dstar;
+                let r = cdiss_laminar(hk, rt);
+                self.cdiss = r.value;
+                self.cdiss_d_ue = r.value_d_hk * self.hk_d_ue + r.value_d_retheta * self.retheta_d_ue;
+                self.cdiss_d_theta = r.value_d_hk * self.hk_d_theta + r.value_d_retheta * self.retheta_d_theta;
+                self.cdiss_d_dstar = r.value_d_hk * self.hk_d_dstar;
                 self.cdiss_d_sqrtctau = 0.0;
-                self.cdiss_d_machsqd = r.val_hk * self.hk_d_machsqd + r.val_rt * self.retheta_d_machsqd;
-                self.cdiss_d_re = r.val_rt * self.retheta_d_re;
+                self.cdiss_d_machsqd = r.value_d_hk * self.hk_d_machsqd + r.value_d_retheta * self.retheta_d_machsqd;
+                self.cdiss_d_re = r.value_d_retheta * self.retheta_d_re;
             }
             FlowRegime::Turbulent => {
                 // turbulent wall contribution
-                let c = cf_turb(hk, rt, msq, CF_TURBULENT_FACTOR);
-                let cf2t = c.val;
-                let cf2t_u =
-                    c.val_hk * self.hk_d_ue + c.val_rt * self.retheta_d_ue + c.val_msq * self.machsqd_edge_d_ue;
-                let cf2t_t = c.val_hk * self.hk_d_theta + c.val_rt * self.retheta_d_theta;
-                let cf2t_d = c.val_hk * self.hk_d_dstar;
-                let cf2t_ms = c.val_hk * self.hk_d_machsqd
-                    + c.val_rt * self.retheta_d_machsqd
-                    + c.val_msq * self.machsqd_edge_d_machsqd;
-                let cf2t_re = c.val_rt * self.retheta_d_re;
+                let c = cf_turbulent(hk, rt, msq, CF_TURBULENT_FACTOR);
+                let cf2t = c.value;
+                let cf2t_u = c.value_d_hk * self.hk_d_ue
+                    + c.value_d_retheta * self.retheta_d_ue
+                    + c.value_d_machsqd * self.machsqd_edge_d_ue;
+                let cf2t_t = c.value_d_hk * self.hk_d_theta + c.value_d_retheta * self.retheta_d_theta;
+                let cf2t_d = c.value_d_hk * self.hk_d_dstar;
+                let cf2t_ms = c.value_d_hk * self.hk_d_machsqd
+                    + c.value_d_retheta * self.retheta_d_machsqd
+                    + c.value_d_machsqd * self.machsqd_edge_d_machsqd;
+                let cf2t_re = c.value_d_retheta * self.retheta_d_re;
                 let mut di = (0.5 * cf2t * us) * 2.0 / self.hstar;
                 let di_hs = -((0.5 * cf2t * us) * 2.0 / (self.hstar * self.hstar));
                 let di_us = (0.5 * cf2t) * 2.0 / self.hstar;
@@ -542,32 +545,32 @@ impl StationState {
         }
 
         if flow_type == FlowRegime::Turbulent {
-            let l = di_lam(hk, rt);
-            if l.val > self.cdiss {
+            let l = cdiss_laminar(hk, rt);
+            if l.value > self.cdiss {
                 // laminar CD is greater than turbulent CD -- use laminar
                 // (this will only occur for unreasonably small Rtheta)
-                self.cdiss = l.val;
+                self.cdiss = l.value;
                 self.cdiss_d_sqrtctau = 0.0;
-                self.cdiss_d_ue = l.val_hk * self.hk_d_ue + l.val_rt * self.retheta_d_ue;
-                self.cdiss_d_theta = l.val_hk * self.hk_d_theta + l.val_rt * self.retheta_d_theta;
-                self.cdiss_d_dstar = l.val_hk * self.hk_d_dstar;
-                self.cdiss_d_machsqd = l.val_hk * self.hk_d_machsqd + l.val_rt * self.retheta_d_machsqd;
-                self.cdiss_d_re = l.val_rt * self.retheta_d_re;
+                self.cdiss_d_ue = l.value_d_hk * self.hk_d_ue + l.value_d_retheta * self.retheta_d_ue;
+                self.cdiss_d_theta = l.value_d_hk * self.hk_d_theta + l.value_d_retheta * self.retheta_d_theta;
+                self.cdiss_d_dstar = l.value_d_hk * self.hk_d_dstar;
+                self.cdiss_d_machsqd = l.value_d_hk * self.hk_d_machsqd + l.value_d_retheta * self.retheta_d_machsqd;
+                self.cdiss_d_re = l.value_d_retheta * self.retheta_d_re;
             }
         }
 
         if flow_type == FlowRegime::Wake {
             // laminar wake CD
-            let l = dilw(hk, rt);
-            if l.val > self.cdiss {
+            let l = cdiss_wake(hk, rt);
+            if l.value > self.cdiss {
                 // laminar wake CD is greater than turbulent CD -- use laminar
-                self.cdiss = l.val;
+                self.cdiss = l.value;
                 self.cdiss_d_sqrtctau = 0.0;
-                self.cdiss_d_ue = l.val_hk * self.hk_d_ue + l.val_rt * self.retheta_d_ue;
-                self.cdiss_d_theta = l.val_hk * self.hk_d_theta + l.val_rt * self.retheta_d_theta;
-                self.cdiss_d_dstar = l.val_hk * self.hk_d_dstar;
-                self.cdiss_d_machsqd = l.val_hk * self.hk_d_machsqd + l.val_rt * self.retheta_d_machsqd;
-                self.cdiss_d_re = l.val_rt * self.retheta_d_re;
+                self.cdiss_d_ue = l.value_d_hk * self.hk_d_ue + l.value_d_retheta * self.retheta_d_ue;
+                self.cdiss_d_theta = l.value_d_hk * self.hk_d_theta + l.value_d_retheta * self.retheta_d_theta;
+                self.cdiss_d_dstar = l.value_d_hk * self.hk_d_dstar;
+                self.cdiss_d_machsqd = l.value_d_hk * self.hk_d_machsqd + l.value_d_retheta * self.retheta_d_machsqd;
+                self.cdiss_d_re = l.value_d_retheta * self.retheta_d_re;
             }
         }
 
@@ -698,23 +701,28 @@ impl MidpointCf {
             }
             FlowRegime::Laminar => {
                 // Laminar Cf
-                let cf_result = cf_lam(hka, rta, ma);
-                (cf_result.val, cf_result.val_hk, cf_result.val_rt, 0.0)
+                let cf_result = cf_laminar(hka, rta, ma);
+                (cf_result.value, cf_result.value_d_hk, cf_result.value_d_retheta, 0.0)
             }
             FlowRegime::Turbulent => {
                 // Turbulent Cf
-                let cf_turb_result = cf_turb(hka, rta, ma, CF_TURBULENT_FACTOR);
+                let cf_turb_result = cf_turbulent(hka, rta, ma, CF_TURBULENT_FACTOR);
                 // Check if laminar is higher
-                let cf_lam_result = cf_lam(hka, rta, ma);
+                let cf_lam_result = cf_laminar(hka, rta, ma);
 
-                if cf_lam_result.val > cf_turb_result.val {
-                    (cf_lam_result.val, cf_lam_result.val_hk, cf_lam_result.val_rt, 0.0)
+                if cf_lam_result.value > cf_turb_result.value {
+                    (
+                        cf_lam_result.value,
+                        cf_lam_result.value_d_hk,
+                        cf_lam_result.value_d_retheta,
+                        0.0,
+                    )
                 } else {
                     (
-                        cf_turb_result.val,
-                        cf_turb_result.val_hk,
-                        cf_turb_result.val_rt,
-                        cf_turb_result.val_msq,
+                        cf_turb_result.value,
+                        cf_turb_result.value_d_hk,
+                        cf_turb_result.value_d_retheta,
+                        cf_turb_result.value_d_machsqd,
                     )
                 }
             }
@@ -759,7 +767,7 @@ impl MidpointCf {
 /// * `hklim` - Minimum kinematic shape factor
 pub fn limit_dstar(dstr: &mut f64, thet: f64, _uedg: f64, msq: f64, hklim: f64) {
     let h = *dstr / thet;
-    let (hk, hk_h, _hk_m) = hkin(h, msq);
+    let (hk, hk_h, _hk_m) = hk_from_h(h, msq);
 
     // If Hk is below limit, adjust δ*
     let dh = (hklim - hk).max(0.0) / hk_h;

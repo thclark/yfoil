@@ -357,11 +357,11 @@ pub fn state_before_setbl_march(k: usize) -> (SolverState, FlowParameters, BlDum
     st.y = f.y.clone();
     st.s = f.s.clone();
     // XP/YP are not dumped; they are SEGSPL of the dumped X/Y/S (identical construction to
-    // create_paneled_airfoil / SolverState::from_foil)
+    // panel_foil / SolverState::from_foil)
     {
         let n = f.n;
-        let xp = yfoil::geometry::spline(&f.x[1..=n], &f.s[1..=n]);
-        let yp = yfoil::geometry::spline(&f.y[1..=n], &f.s[1..=n]);
+        let xp = yfoil::geometry::spline_derivatives(&f.x[1..=n], &f.s[1..=n]);
+        let yp = yfoil::geometry::spline_derivatives(&f.y[1..=n], &f.s[1..=n]);
         st.dxds[1..=n].copy_from_slice(&xp);
         st.dyds[1..=n].copy_from_slice(&yp);
     }

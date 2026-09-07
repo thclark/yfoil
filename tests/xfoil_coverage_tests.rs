@@ -25,7 +25,7 @@ mod utilities;
 
 use std::path::PathBuf;
 use utilities::records::{check_call, load, transient_tol, Outcome};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::analysis::{FlowConditions, Session};
 
 fn case_dir(case: &str) -> PathBuf {
@@ -36,7 +36,7 @@ fn case_dir(case: &str) -> PathBuf {
 fn run_case(case: &str, spec: FlowConditions, alphas_deg: &[f64]) -> Vec<Outcome> {
     let dir = case_dir(case);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).expect("panels.json");
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let rec = load(&dir);
     assert_eq!(rec.points.len(), alphas_deg.len(), "{case}: VISCAL call count");
     let mut session = Session::new(&airfoil, spec);
@@ -52,7 +52,7 @@ fn run_case(case: &str, spec: FlowConditions, alphas_deg: &[f64]) -> Vec<Outcome
 fn test_sharp_trailing_edge_matches_xfoil() {
     let dir = case_dir("naca0012_n60_sharp_a2_re1e6");
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).unwrap();
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     assert!(airfoil.sharp_te, "the case must actually take the SHARP path");
     let outcomes = run_case("naca0012_n60_sharp_a2_re1e6", FlowConditions::default(), &[2.0]);
     assert!(outcomes.iter().all(|o| *o == Outcome::Match), "{outcomes:?}");
@@ -120,16 +120,16 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     use fixtures::mrchdu_fixtures::parse_bl_dump;
     use utilities::tolerances::{assert_within, TOL_SOLVER};
     use yfoil::bl::blsolv::solve_newton_system;
-    use yfoil::solver::clcalc::comset;
-    use yfoil::solver::pointers::{iblpan, iblsys, xicalc};
+    use yfoil::solver::clcalc::set_compressibility;
+    use yfoil::solver::pointers::{map_stations_to_nodes, map_stations_to_rows, set_station_xi};
     use yfoil::solver::setbl::assemble_newton_system;
     use yfoil::solver::update::apply_newton_update;
-    use yfoil::solver::velocity::uicalc;
+    use yfoil::solver::velocity::set_ue_inviscid;
     use yfoil::solver::viscal::solve_viscous;
 
     let dir = case_dir(case);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).unwrap();
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let d = parse_bl_dump(&dir.join(format!("mrchdu_input_{k}.dat")));
     let o = parse_bl_dump(&dir.join(format!("update_output_{k}.dat")));
 
@@ -143,10 +143,10 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     st.s_stagnation = d.real("SST");
     st.s_stagnation_d_gamma_node0 = d.real("SST_GO");
     st.s_stagnation_d_gamma_node1 = d.real("SST_GP");
-    iblpan(st);
-    xicalc(st);
-    iblsys(st);
-    uicalc(st);
+    map_stations_to_nodes(st);
+    set_station_xi(st);
+    map_stations_to_rows(st);
+    set_ue_inviscid(st);
     assert_eq!(
         [d.int("NBL1"), d.int("NBL2")],
         [st.n_stations[1], st.n_stations[2]],
@@ -155,7 +155,7 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     st.i_transition_station = [0, d.int("ITRAN1"), d.int("ITRAN2")];
     st.cl = d.real("CLMR");
     st.mach_d_cl = 0.0;
-    comset(st);
+    set_compressibility(st);
     for is in 1..=2 {
         for ibl in 1..=st.n_stations[is] {
             let r = d.bl[is][ibl];
@@ -283,7 +283,7 @@ fn test_cl_after_alpha_matches_xfoil() {
     let case = "naca0012_n60_a2_cl03_re1e6";
     let dir = case_dir(case);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).unwrap();
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let rec = load(&dir);
     assert_eq!(rec.points.len(), 2, "{case}: VISCAL call count");
     let mut session = Session::new(&airfoil, FlowConditions::default());

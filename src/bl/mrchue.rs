@@ -6,7 +6,7 @@ use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFla
 use crate::bl::gauss::gauss_solve_4x4;
 use crate::bl::system::{check_transition, limit_dstar, FlowParameters, IntervalSystem, TransitionCheck};
 use crate::solver::blstate::SolverState;
-use crate::solver::pointers::xifset;
+use crate::solver::pointers::xi_trip;
 
 /// One Newton iteration of one station, as the reference trace records it.
 #[derive(Debug, Clone, Default)]
@@ -66,7 +66,7 @@ pub fn march_direct(
         let amcrit = acrit[is];
 
         // set forced transition arc length position
-        let xiforc = xifset(st, is);
+        let xiforc = xi_trip(st, is);
 
         // initialize similarity station with Thwaites' formula
         let ibl0 = 2;
@@ -245,7 +245,7 @@ pub fn march_direct(
                         let msq = uei * uei * params.h_stagnation_inv
                             / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
                         let htest = (dsi + rlx * r[2]) / (thi + rlx * r[1]);
-                        let (hktest, _, _) = crate::bl::hkin(htest, msq);
+                        let (hktest, _, _) = crate::bl::hk_from_h(htest, msq);
 
                         // decide whether to do direct or inverse problem based on Hk
                         let hmax = if ibl < st.i_transition_station[is] {

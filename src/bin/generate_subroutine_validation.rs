@@ -10,7 +10,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 use yfoil::bl::system::amplification_rate;
-use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb};
+use yfoil::bl::{cdiss_laminar, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent};
 
 const REL_TOL: f64 = 1e-12;
 
@@ -221,7 +221,7 @@ fn validate_hkin(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let (hk, hk_h, hk_msq) = hkin(f.input.h, f.input.msq);
+        let (hk, hk_h, hk_msq) = hk_from_h(f.input.h, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
@@ -280,26 +280,26 @@ fn validate_cfl(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = cf_lam(f.input.hk, f.input.rt, f.input.msq);
+        let r = cf_laminar(f.input.hk, f.input.rt, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
                 name: "CF".to_string(),
                 xfoil: f.output.cf,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.cf, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.cf, r.value),
             },
             OutputComparison {
                 name: "CF_HK".to_string(),
                 xfoil: f.output.cf_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.cf_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.cf_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "CF_RT".to_string(),
                 xfoil: f.output.cf_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.cf_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.cf_rt, r.value_d_retheta),
             },
         ];
 
@@ -338,20 +338,20 @@ fn validate_hsl(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = hs_lam(f.input.hk, f.input.rt, f.input.msq);
+        let r = hstar_laminar(f.input.hk, f.input.rt, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
                 name: "HS".to_string(),
                 xfoil: f.output.hs,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.hs, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.hs, r.value),
             },
             OutputComparison {
                 name: "HS_HK".to_string(),
                 xfoil: f.output.hs_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.hs_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.hs_hk, r.value_d_hk),
             },
         ];
 
@@ -390,26 +390,26 @@ fn validate_dil(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = di_lam(f.input.hk, f.input.rt);
+        let r = cdiss_laminar(f.input.hk, f.input.rt);
 
         let outputs = vec![
             OutputComparison {
                 name: "DI".to_string(),
                 xfoil: f.output.di,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.di, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.di, r.value),
             },
             OutputComparison {
                 name: "DI_HK".to_string(),
                 xfoil: f.output.di_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.di_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.di_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "DI_RT".to_string(),
                 xfoil: f.output.di_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.di_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.di_rt, r.value_d_retheta),
             },
         ];
 
@@ -448,26 +448,26 @@ fn validate_hst(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = hs_turb(f.input.hk, f.input.rt, f.input.msq);
+        let r = hstar_turbulent(f.input.hk, f.input.rt, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
                 name: "HS".to_string(),
                 xfoil: f.output.hs,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.hs, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.hs, r.value),
             },
             OutputComparison {
                 name: "HS_HK".to_string(),
                 xfoil: f.output.hs_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.hs_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.hs_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "HS_RT".to_string(),
                 xfoil: f.output.hs_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.hs_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.hs_rt, r.value_d_retheta),
             },
         ];
 
@@ -506,26 +506,26 @@ fn validate_cft(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = cf_turb(f.input.hk, f.input.rt, f.input.msq, 1.0);
+        let r = cf_turbulent(f.input.hk, f.input.rt, f.input.msq, 1.0);
 
         let outputs = vec![
             OutputComparison {
                 name: "CF".to_string(),
                 xfoil: f.output.cf,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.cf, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.cf, r.value),
             },
             OutputComparison {
                 name: "CF_HK".to_string(),
                 xfoil: f.output.cf_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.cf_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.cf_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "CF_RT".to_string(),
                 xfoil: f.output.cf_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.cf_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.cf_rt, r.value_d_retheta),
             },
         ];
 

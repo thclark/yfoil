@@ -856,12 +856,12 @@ pub fn plot_foil_png<P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::{create_paneled_airfoil, naca_4digit};
+    use crate::geometry::{naca_4digit, panel_foil};
     use crate::output::{BlSideOutput, WakeGeometryOutput};
 
     fn geometry(n: usize) -> FoilGeometryOutput {
         let geom = naca_4digit("0012", n).unwrap();
-        FoilGeometryOutput::from_paneled(&create_paneled_airfoil(&geom))
+        FoilGeometryOutput::from_paneled(&panel_foil(&geom))
     }
 
     /// A synthetic boundary layer on a geometry: every side's column is `value` at every node
@@ -1113,7 +1113,7 @@ mod tests {
 
     #[test]
     fn errors_are_configuration_errors() {
-        let g = DesignPoint::from_geometry("g", &create_paneled_airfoil(&naca_4digit("0012", 60).unwrap()));
+        let g = DesignPoint::from_geometry("g", &panel_foil(&naca_4digit("0012", 60).unwrap()));
         let config = FoilPlotConfig {
             quantities: vec![BlQuantity::Dstar],
             ..Default::default()
@@ -1125,7 +1125,7 @@ mod tests {
         };
         assert!(matches!(layout(&[g.clone()], &wake_cfg), Err(PlotError::Config(_))));
         // geometry-only input renders with no BL, and two panelings get their own colours
-        let g2 = DesignPoint::from_geometry("g2", &create_paneled_airfoil(&naca_4digit("0012", 80).unwrap()));
+        let g2 = DesignPoint::from_geometry("g2", &panel_foil(&naca_4digit("0012", 80).unwrap()));
         let lay = layout(&[g.clone(), g2], &FoilPlotConfig::default()).unwrap();
         assert_eq!(lay.surfaces.len(), 2);
         assert_ne!(lay.surfaces[0].style.rgb, lay.surfaces[1].style.rgb);

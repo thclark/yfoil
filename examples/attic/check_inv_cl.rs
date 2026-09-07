@@ -1,10 +1,10 @@
 use yfoil::bl::FlowConditions;
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::solver::solve_inviscid_only;
 
 fn main() {
     let geom = naca_4digit("0012", 160).expect("Failed");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     let alpha_deg = 2.0f64;
     let cond = FlowConditions::new(1e6, 0.0, 9.0, 1.0);

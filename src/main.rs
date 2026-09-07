@@ -5,9 +5,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use yfoil::geometry::{
-    create_paneled_airfoil, naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, read_dat_file,
-    read_geometry_from_file, repanel_cosine, repanel_xfoil, write_dat_file, write_geometry_to_json, Geometry,
-    PaneConfig,
+    naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, panel_foil, read_dat_file, read_geometry_from_file,
+    repanel_by_curvature, repanel_cosine, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
 use yfoil::output::{AnalysisOutput, InviscidAnalysisOutput, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
@@ -368,7 +367,7 @@ fn main() {
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
-            let airfoil = create_paneled_airfoil(&geometry);
+            let airfoil = panel_foil(&geometry);
             let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
             // Convert angle to radians
@@ -471,7 +470,7 @@ fn main() {
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
-            let airfoil = create_paneled_airfoil(&geometry);
+            let airfoil = panel_foil(&geometry);
             let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
             // Set up polar configuration
@@ -643,9 +642,7 @@ fn handle_plot(action: PlotAction) {
             }
             for (file, input) in files.iter().zip(inputs) {
                 match input {
-                    FoilInput::Geometry(g) => {
-                        points.push(DesignPoint::from_geometry(stem(file), &create_paneled_airfoil(&g)))
-                    }
+                    FoilInput::Geometry(g) => points.push(DesignPoint::from_geometry(stem(file), &panel_foil(&g))),
                     FoilInput::Analysis(a) => points.push(DesignPoint::from_analysis(stem(file), *a)),
                     FoilInput::Polar(p) => match DesignPoint::from_polar(&stem(file), &p, alphas.as_deref()) {
                         Ok(ps) => points.extend(ps),
@@ -939,7 +936,7 @@ fn handle_geom(action: GeomAction) {
                     naca_5digit_xfoil(&spec)
                 };
                 match buffer {
-                    Ok(b) => repanel_xfoil(&b, panels, &PaneConfig::default()),
+                    Ok(b) => repanel_by_curvature(&b, panels, &PaneConfig::default()),
                     Err(e) => {
                         eprintln!("Error generating NACA airfoil: {}", e);
                         std::process::exit(1);
@@ -1007,7 +1004,7 @@ fn handle_geom(action: GeomAction) {
                 "xfoil" | "pane" => {
                     // Use XFOIL's curvature-based PANE algorithm
                     let config = PaneConfig::default();
-                    repanel_xfoil(&geometry, panels, &config)
+                    repanel_by_curvature(&geometry, panels, &config)
                 }
                 "cosine" => {
                     // Use modified cosine spacing
@@ -1042,7 +1039,7 @@ fn handle_geom(action: GeomAction) {
 
         GeomAction::Info { input, output } => {
             let geometry = read_geometry_auto(&input);
-            let airfoil = create_paneled_airfoil(&geometry);
+            let airfoil = panel_foil(&geometry);
             let info = yfoil::output::GeometryInfo::from_paneled(&airfoil);
 
             if let Some(ref path) = output {

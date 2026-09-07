@@ -12,7 +12,7 @@ mod utilities;
 use fixtures::mrchdu_fixtures::parse_bl_dump;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::analysis::{FlowConditions, Session};
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -22,7 +22,7 @@ fn fixture_path(name: &str) -> PathBuf {
 #[test]
 fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).expect("panels.json");
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let spec = FlowConditions {
         re: 1.0e6,
         mach: 0.0,

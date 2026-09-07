@@ -13,12 +13,12 @@ mod utilities;
 use fixtures::pointers_fixtures::{parse_dij, parse_pointers, parse_uinv};
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_LINALG, TOL_PURE, TOL_SOLVER};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::blstate::SolverState;
 use yfoil::solver::ggcalc::{build_inviscid_system, InviscidSystem};
 use yfoil::solver::qdcalc::build_dij;
-use yfoil::solver::velocity::qiset;
-use yfoil::solver::xywake::{qwcalc, xywake};
+use yfoil::solver::velocity::set_q_inviscid;
+use yfoil::solver::xywake::{build_wake, set_wake_q_basis};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -29,11 +29,11 @@ fn prologue_to_specal() -> (SolverState, InviscidSystem, fixtures::pointers_fixt
     let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
     let u = parse_uinv(&fixture_path("xfoil_uinv.dat"), 1);
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
-    let af = create_paneled_airfoil(&geom);
+    let af = panel_foil(&geom);
     let mut st = SolverState::from_foil(&af, f.nw);
     let sys = build_inviscid_system(&mut st);
     st.alpha = u.alfa;
-    qiset(&mut st, u.alfa);
+    set_q_inviscid(&mut st, u.alfa);
     // SPECAL: GAM(I) = COSA*GAMU(I,1) + SINA*GAMU(I,2)  (= QINV on the airfoil)
     for i in 1..=st.n_foil_nodes {
         st.gamma[i] = st.q_inviscid[i];
@@ -132,8 +132,8 @@ fn test_qdcalc_matches_xfoil_dij_given_xfoil_wake() {
 #[test]
 fn test_prologue_dij_from_yfoil_geometry() {
     let (mut st, mut sys, u) = prologue_to_specal();
-    xywake(&mut st, 1.0);
-    qwcalc(&mut st);
+    build_wake(&mut st, 1.0);
+    set_wake_q_basis(&mut st);
     for i in (st.n_foil_nodes + 1)..=(st.n_foil_nodes + st.n_wake_nodes) {
         assert_within(
             st.q_inviscid_basis[1][i],

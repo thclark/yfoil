@@ -363,7 +363,7 @@ pub enum NacaError {
 /// NSIDE = IQX/3 = 123 points per side). Reproduced as XFOIL does it, including the thickness
 /// applied *vertically* (`YB = YC ± YT`) rather than perpendicular to the camber line, which
 /// is CLAUDE.md's documented divergence from the NACA definition. The result is the 245-point
-/// buffer airfoil XFOIL splines and then repanels with PANGEN (`repanel_xfoil`); it takes no
+/// buffer airfoil XFOIL splines and then repanels with PANGEN (`repanel_by_curvature`); it takes no
 /// panel count.
 pub const XFOIL_NACA_NSIDE: usize = 123;
 

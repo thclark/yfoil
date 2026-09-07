@@ -1,11 +1,11 @@
 use yfoil::bl::FlowConditions;
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit, write_dat_file};
+use yfoil::geometry::{panel_foil, naca_4digit, write_dat_file};
 use yfoil::solver::{solve_viscous, calculate_friction_drag, ViscalConfig};
 
 fn main() {
     // Generate geometry
     let geom = naca_4digit("0012", 160).expect("Failed");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     // Save geometry
     write_dat_file(&geom, "NACA 0012 from yfoil", "/tmp/yfoil_test_airfoil.dat").expect("write");

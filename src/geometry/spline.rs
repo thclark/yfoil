@@ -5,7 +5,7 @@
 //!
 //! Based on the spline routines from XFOIL (spline.f).
 
-use crate::geometry::panel::trisol;
+use crate::geometry::panel::solve_tridiagonal;
 
 /// Compute cubic spline coefficients for data points
 ///
@@ -22,7 +22,7 @@ use crate::geometry::panel::trisol;
 ///
 /// # Panics
 /// Panics if `x` and `s` have different lengths or fewer than 2 points
-pub fn spline(x: &[f64], s: &[f64]) -> Vec<f64> {
+pub fn spline_derivatives(x: &[f64], s: &[f64]) -> Vec<f64> {
     let n = x.len();
     assert_eq!(n, s.len(), "x and s must have same length");
     assert!(n >= 2, "Need at least 2 points for spline");
@@ -65,7 +65,7 @@ pub fn spline(x: &[f64], s: &[f64]) -> Vec<f64> {
     d[n - 1] = 2.0 * (x[n - 1] - x[n - 2]) / dsn1;
 
     // Solve tridiagonal system (XFOIL's TRISOL: main diagonal first, then lower, upper, rhs)
-    trisol(&mut b, &a, &mut c, &mut d);
+    solve_tridiagonal(&mut b, &a, &mut c, &mut d);
     d
 }
 
@@ -79,7 +79,7 @@ pub fn spline(x: &[f64], s: &[f64]) -> Vec<f64> {
 ///
 /// # Returns
 /// Interpolated value at `ss`
-pub fn seval(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
+pub fn spline_value(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
 
     // Find interval containing ss using binary search
@@ -105,7 +105,7 @@ pub fn seval(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
 ///
 /// # Returns
 /// dx/ds at `ss`
-pub fn deval(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
+pub fn spline_slope(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
 
     let i = find_interval(ss, s);
@@ -128,7 +128,7 @@ pub fn deval(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
 ///
 /// # Returns
 /// d²x/ds² at `ss`
-pub fn d2val(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
+pub fn spline_second_derivative(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
 
     let i = find_interval(ss, s);
@@ -180,12 +180,12 @@ mod tests {
         // Spline through linear data should reproduce the line
         let s = vec![0.0, 1.0, 2.0, 3.0];
         let x = vec![0.0, 1.0, 2.0, 3.0];
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // Evaluate at midpoints
-        assert_relative_eq!(seval(0.5, &x, &xp, &s), 0.5, epsilon = 1e-10);
-        assert_relative_eq!(seval(1.5, &x, &xp, &s), 1.5, epsilon = 1e-10);
-        assert_relative_eq!(seval(2.5, &x, &xp, &s), 2.5, epsilon = 1e-10);
+        assert_relative_eq!(spline_value(0.5, &x, &xp, &s), 0.5, epsilon = 1e-10);
+        assert_relative_eq!(spline_value(1.5, &x, &xp, &s), 1.5, epsilon = 1e-10);
+        assert_relative_eq!(spline_value(2.5, &x, &xp, &s), 2.5, epsilon = 1e-10);
     }
 
     #[test]
@@ -193,20 +193,20 @@ mod tests {
         // Test with quadratic data x = s^2
         let s = vec![0.0, 1.0, 2.0, 3.0, 4.0];
         let x: Vec<f64> = s.iter().map(|&si| si * si).collect();
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // Derivative should be approximately 2*s
-        assert_relative_eq!(deval(2.0, &x, &xp, &s), 4.0, epsilon = 0.1);
+        assert_relative_eq!(spline_slope(2.0, &x, &xp, &s), 4.0, epsilon = 0.1);
     }
 
     #[test]
     fn test_spline_two_points() {
         let s = vec![0.0, 1.0];
         let x = vec![0.0, 2.0];
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
-        assert_relative_eq!(seval(0.5, &x, &xp, &s), 1.0, epsilon = 1e-10);
-        assert_relative_eq!(deval(0.5, &x, &xp, &s), 2.0, epsilon = 1e-10);
+        assert_relative_eq!(spline_value(0.5, &x, &xp, &s), 1.0, epsilon = 1e-10);
+        assert_relative_eq!(spline_slope(0.5, &x, &xp, &s), 2.0, epsilon = 1e-10);
     }
 
     #[test]
@@ -225,10 +225,10 @@ mod tests {
         // Spline must pass exactly through all data points
         let s = vec![0.0, 0.5, 1.2, 2.0, 3.5, 4.0];
         let x = vec![1.0, 2.5, 1.8, 3.2, 2.1, 4.0];
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         for i in 0..s.len() {
-            assert_relative_eq!(seval(s[i], &x, &xp, &s), x[i], epsilon = 1e-12);
+            assert_relative_eq!(spline_value(s[i], &x, &xp, &s), x[i], epsilon = 1e-12);
         }
     }
 
@@ -237,10 +237,10 @@ mod tests {
         // Derivative at data points should equal xp
         let s = vec![0.0, 1.0, 2.0, 3.0];
         let x = vec![0.0, 1.0, 0.0, 1.0];
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         for i in 0..s.len() {
-            assert_relative_eq!(deval(s[i], &x, &xp, &s), xp[i], epsilon = 1e-10);
+            assert_relative_eq!(spline_slope(s[i], &x, &xp, &s), xp[i], epsilon = 1e-10);
         }
     }
 
@@ -250,16 +250,16 @@ mod tests {
         let n = 20;
         let s: Vec<f64> = (0..=n).map(|i| i as f64 * std::f64::consts::PI / n as f64).collect();
         let x: Vec<f64> = s.iter().map(|&si| si.sin()).collect();
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // Check interpolation at quarter points
         let s_test = std::f64::consts::PI / 4.0;
         let expected = s_test.sin();
-        assert_relative_eq!(seval(s_test, &x, &xp, &s), expected, epsilon = 0.01);
+        assert_relative_eq!(spline_value(s_test, &x, &xp, &s), expected, epsilon = 0.01);
 
         // Check derivative (should be cos(s))
         let expected_deriv = s_test.cos();
-        assert_relative_eq!(deval(s_test, &x, &xp, &s), expected_deriv, epsilon = 0.05);
+        assert_relative_eq!(spline_slope(s_test, &x, &xp, &s), expected_deriv, epsilon = 0.05);
     }
 
     #[test]
@@ -267,13 +267,13 @@ mod tests {
         // First derivative should be continuous at knots (C1 continuity)
         let s = vec![0.0, 1.0, 2.0, 3.0, 4.0];
         let x = vec![0.0, 1.5, 1.0, 2.0, 0.5];
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // Check continuity at interior knots
         for i in 1..s.len() - 1 {
             let eps = 1e-8;
-            let deriv_left = deval(s[i] - eps, &x, &xp, &s);
-            let deriv_right = deval(s[i] + eps, &x, &xp, &s);
+            let deriv_left = spline_slope(s[i] - eps, &x, &xp, &s);
+            let deriv_right = spline_slope(s[i] + eps, &x, &xp, &s);
             assert_relative_eq!(deriv_left, deriv_right, epsilon = 1e-5);
         }
     }
@@ -283,11 +283,11 @@ mod tests {
         // Test d2val for cubic data (should give constant second derivative)
         let s = vec![0.0, 1.0, 2.0, 3.0, 4.0];
         let x: Vec<f64> = s.iter().map(|&si| si * si * si).collect(); // x = s^3
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // For x = s^3, d²x/ds² = 6s
         // Note: cubic spline won't be exact for cubic data, but should be close
-        let d2_mid = d2val(2.0, &x, &xp, &s);
+        let d2_mid = spline_second_derivative(2.0, &x, &xp, &s);
         assert_relative_eq!(d2_mid, 12.0, epsilon = 1.0); // 6 * 2 = 12
     }
 
@@ -296,11 +296,11 @@ mod tests {
         // Extrapolation should use endpoint intervals
         let s = vec![0.0, 1.0, 2.0];
         let x = vec![0.0, 1.0, 0.0];
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // Values outside range should extrapolate using end intervals
-        let val_before = seval(-0.5, &x, &xp, &s);
-        let val_after = seval(2.5, &x, &xp, &s);
+        let val_before = spline_value(-0.5, &x, &xp, &s);
+        let val_after = spline_value(2.5, &x, &xp, &s);
 
         // Should not be NaN or infinite
         assert!(val_before.is_finite());
@@ -316,11 +316,11 @@ mod tests {
             .collect();
         let x: Vec<f64> = s.iter().map(|&si| si * (1.0 - si)).collect(); // Parabola
 
-        let xp = spline(&x, &s);
+        let xp = spline_derivatives(&x, &s);
 
         // Check passes through points
         for i in 0..s.len() {
-            assert_relative_eq!(seval(s[i], &x, &xp, &s), x[i], epsilon = 1e-12);
+            assert_relative_eq!(spline_value(s[i], &x, &xp, &s), x[i], epsilon = 1e-12);
         }
     }
 }

@@ -4,8 +4,8 @@ use approx::assert_relative_eq;
 use tempfile::NamedTempFile;
 
 use yfoil::geometry::{
-    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file, repanel_cosine,
-    write_dat_file, write_geometry_to_json,
+    naca_4digit, naca_5digit, panel_foil, read_dat_file, read_geometry_from_file, repanel_cosine, write_dat_file,
+    write_geometry_to_json,
 };
 
 /// Test NACA 0012 against the standard NACA formula from external reference.
@@ -156,7 +156,7 @@ fn test_full_geometry_pipeline() {
     let repaneled = repanel_cosine(&raw, 160, 0.15);
 
     // Create paneled airfoil with all derived quantities
-    let paneled = create_paneled_airfoil(&repaneled);
+    let paneled = panel_foil(&repaneled);
 
     // Verify paneled airfoil has correct properties
     assert!(paneled.n > 150);
@@ -256,7 +256,7 @@ fn inviscid_cl(airfoil: &yfoil::geometry::PaneledAirfoil, alpha: f64) -> f64 {
 #[test]
 fn test_panel_method_lift_slope() {
     let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     // Calculate CL at two angles
     let alpha1 = 0.0_f64;
     let alpha2 = 5.0_f64.to_radians();
@@ -274,7 +274,7 @@ fn test_panel_method_lift_slope() {
 #[test]
 fn test_panel_method_symmetric_zero_lift() {
     let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let cl = inviscid_cl(&airfoil, 0.0);
     assert!(
         cl.abs() < 1e-12,
@@ -286,7 +286,7 @@ fn test_panel_method_symmetric_zero_lift() {
 #[test]
 fn test_panel_method_cambered_lift() {
     let geom = naca_4digit("4412", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let cl = inviscid_cl(&airfoil, 0.0);
     // NACA 4412 has 4% camber, should produce positive lift at α=0
     // Thin airfoil theory predicts CL ≈ 2π * 2 * (0.04) ≈ 0.5 for 4% camber
@@ -298,7 +298,7 @@ fn test_panel_method_cambered_lift() {
 // ============================================================================
 
 use yfoil::bl::system::amplification_rate;
-use yfoil::bl::{cf_lam, hkin, hs_lam};
+use yfoil::bl::{cf_laminar, hk_from_h, hstar_laminar};
 
 /// Test Blasius flat plate solution for laminar boundary layer
 ///
@@ -313,7 +313,7 @@ use yfoil::bl::{cf_lam, hkin, hs_lam};
 fn test_blasius_shape_factor() {
     // Blasius shape factor H = 2.591
     let h_blasius = 2.591;
-    let (hk, _, _) = hkin(h_blasius, 0.0);
+    let (hk, _, _) = hk_from_h(h_blasius, 0.0);
 
     // At incompressible conditions, Hk = H
     assert_relative_eq!(hk, h_blasius, epsilon = 1e-10);
@@ -331,13 +331,13 @@ fn test_blasius_skin_friction() {
 
     // Test at different Re_θ values
     for rt in [500.0, 1000.0, 2000.0, 5000.0] {
-        let result = cf_lam(hk_blasius, rt, 0.0);
+        let result = cf_laminar(hk_blasius, rt, 0.0);
         // Cf should be positive for attached laminar flow
-        assert!(result.val > 0.0, "Cf should be positive at Re_θ={}", rt);
+        assert!(result.value > 0.0, "Cf should be positive at Re_θ={}", rt);
 
         // Cf * sqrt(Re_θ) should be approximately constant for Blasius
         // The Falkner-Skan correlation gives Cf * Re_θ ≈ constant for given Hk
-        let cf_rt = result.val * rt;
+        let cf_rt = result.value * rt;
         assert!(
             cf_rt > 0.1 && cf_rt < 1.0,
             "Cf*Re_θ = {} should be O(1) at Re_θ={}",
@@ -352,13 +352,13 @@ fn test_blasius_energy_shape_factor() {
     // Test H* correlation at Blasius conditions
     // For Blasius flow, H* ≈ 1.573
     let hk_blasius = 2.591;
-    let result = hs_lam(hk_blasius, 1000.0, 0.0);
+    let result = hstar_laminar(hk_blasius, 1000.0, 0.0);
 
     // H* should be between 1.5 and 1.7 for Blasius-like conditions
     assert!(
-        result.val > 1.5 && result.val < 1.7,
+        result.value > 1.5 && result.value < 1.7,
         "H* = {} should be ~1.57 for Blasius",
-        result.val
+        result.value
     );
 }
 
@@ -395,7 +395,7 @@ fn test_blunt_te_detection() {
 
     // Blunten the geometry
     let blunt_geom = geom.blunten(0.002);
-    let paneled = create_paneled_airfoil(&blunt_geom);
+    let paneled = panel_foil(&blunt_geom);
 
     assert!(!paneled.sharp_te, "Blunted airfoil should have blunt TE");
     assert!(!blunt_geom.is_sharp_te(), "Geometry should detect as blunt TE");
@@ -413,7 +413,7 @@ fn test_blunt_te_detection() {
 fn test_blunt_te_reasonable_results() {
     let geom = naca_4digit("0012", 160).unwrap();
     let blunt_geom = geom.blunten(0.002); // 0.2% gap
-    let airfoil = create_paneled_airfoil(&blunt_geom);
+    let airfoil = panel_foil(&blunt_geom);
 
     assert!(!airfoil.sharp_te, "Should use blunt TE handling");
 
@@ -456,11 +456,11 @@ fn test_blunt_te_reasonable_results() {
 fn test_te_type_lift_slope_comparison() {
     // Sharp TE
     let geom_sharp = naca_4digit("0012", 160).unwrap();
-    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
+    let airfoil_sharp = panel_foil(&geom_sharp);
 
     // Blunt TE
     let geom_blunt = geom_sharp.blunten(0.002);
-    let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
+    let airfoil_blunt = panel_foil(&geom_blunt);
 
     // Calculate lift slope for both
     let alpha1 = 0.0_f64;
@@ -509,7 +509,7 @@ fn test_kutta_condition_both_te_types() {
 
     // Sharp TE
     let geom_sharp = naca_4digit("0012", 160).unwrap().sharpen();
-    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
+    let airfoil_sharp = panel_foil(&geom_sharp);
     assert!(airfoil_sharp.sharp_te);
     let (k0, k90) = kutta(&airfoil_sharp);
     assert!(k0.abs() < 1e-9, "Sharp TE Kutta condition violated for α=0°: {k0}");
@@ -517,7 +517,7 @@ fn test_kutta_condition_both_te_types() {
 
     // Blunt TE
     let geom_blunt = naca_4digit("0012", 160).unwrap();
-    let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
+    let airfoil_blunt = panel_foil(&geom_blunt);
     assert!(!airfoil_blunt.sharp_te);
     let (k0, k90) = kutta(&airfoil_blunt);
     assert!(k0.abs() < 1e-9, "Blunt TE Kutta condition violated for α=0°: {k0}");
@@ -533,7 +533,7 @@ fn test_sharp_te_smooth_gamma() {
     // For the symmetric airfoil at α = 0 the TE vorticity is small and the second differences
     // approaching the TE from both sides agree (the sharp-TE bisector row of GGCALC)
     let geom = naca_4digit("0012", 160).unwrap().sharpen();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let mut st = SolverState::from_foil(&airfoil, airfoil.n / 12 + 10);
     let mut sys = None;
     st.alpha = 0.0;

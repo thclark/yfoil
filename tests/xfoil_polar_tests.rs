@@ -13,7 +13,7 @@ mod utilities;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER, TOL_TRANSIENT};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::analysis::{compute_polar, FlowConditions, PointResult, PolarConfig, Session};
 
 const CASE: &str = "tests/fixtures/xfoil/naca0012_n60_polar_re1e6";
@@ -136,7 +136,7 @@ fn check_point(k: usize, p: &PointResult, x: &HashMap<String, String>, entry_lbl
 #[test]
 fn test_polar_sequence_matches_xfoil_point_by_point() {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).expect("panels.json");
-    let airfoil = create_paneled_airfoil(&geometry);
+    let airfoil = panel_foil(&geometry);
     let xf = parse_points(&fixture_path("viscal_points.dat"));
     assert_eq!(xf.len(), 11, "expected 11 VISCAL calls (0..5, INIT, -1..-5)");
 

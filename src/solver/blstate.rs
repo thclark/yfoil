@@ -291,11 +291,11 @@ impl SolverState {
         }
         st.chord = airfoil.chord;
         st.s_le = airfoil.sle;
-        st.x_le = crate::geometry::seval(airfoil.sle, &airfoil.x, &airfoil.xp, &airfoil.s);
-        st.y_le = crate::geometry::seval(airfoil.sle, &airfoil.y, &airfoil.yp, &airfoil.s);
+        st.x_le = crate::geometry::spline_value(airfoil.sle, &airfoil.x, &airfoil.xp, &airfoil.s);
+        st.y_le = crate::geometry::spline_value(airfoil.sle, &airfoil.y, &airfoil.yp, &airfoil.s);
         st.x_te = 0.5 * (st.x[1] + st.x[n]);
         st.y_te = 0.5 * (st.y[1] + st.y[n]);
-        crate::solver::pointers::tecalc(&mut st);
+        crate::solver::pointers::set_te_thickness(&mut st);
         st
     }
 

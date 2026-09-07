@@ -373,7 +373,7 @@ mod tests {
     fn test_xfoil_paneled_geometry_properties() {
         // Test that XFOIL-paneled coordinates produce correct geometric properties
         // This simulates loading a 160-panel NACA 0012 from XFOIL
-        use crate::geometry::panel::create_paneled_airfoil;
+        use crate::geometry::panel::panel_foil;
 
         // Create a representative subset of XFOIL-paneled NACA 0012
         // (Full 160 panels would be too verbose, using 20 points for test)
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(geom.x_c.len(), 19);
 
         // Create paneled airfoil and verify properties
-        let paneled = create_paneled_airfoil(&geom);
+        let paneled = panel_foil(&geom);
 
         // Chord should be approximately 1.0
         assert!(

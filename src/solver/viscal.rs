@@ -5,14 +5,16 @@
 
 use crate::bl::blsolv::solve_newton_system;
 use crate::solver::blstate::SolverState;
-use crate::solver::clcalc::{cdcalc, clcalc, comset, cpcalc};
+use crate::solver::clcalc::{compute_cd, compute_cl_cm, compute_cp, set_compressibility};
 use crate::solver::ggcalc::InviscidSystem;
-use crate::solver::pointers::{iblpan, iblsys, stfind, stmove, xicalc};
+use crate::solver::pointers::{
+    find_stagnation, map_stations_to_nodes, map_stations_to_rows, move_stagnation, set_station_xi,
+};
 use crate::solver::qdcalc::build_dij;
 use crate::solver::setbl::{assemble_newton_system, set_mach_re_from_cl};
 use crate::solver::update::apply_newton_update;
-use crate::solver::velocity::{gamqv, qiset, qvfue, uicalc};
-use crate::solver::xywake::{qwcalc, xywake};
+use crate::solver::velocity::{set_gamma_from_q_viscous, set_q_inviscid, set_q_viscous_from_ue, set_ue_inviscid};
+use crate::solver::xywake::{build_wake, set_wake_q_basis};
 
 /// Convergence tolerance EPS1
 pub const CONVERGENCE_TOLERANCE: f64 = 1.0e-4;
@@ -57,31 +59,31 @@ pub fn solve_viscous(
 ) -> bool {
     // calculate wake trajectory from current inviscid solution if necessary
     if !st.wake_built {
-        xywake(st, waklen);
+        build_wake(st, waklen);
     }
 
     // set velocities on wake from airfoil vorticity for alpha=0, 90
-    qwcalc(st);
+    set_wake_q_basis(st);
 
     // set velocities on airfoil and wake for initial alpha
-    qiset(st, st.alpha);
+    set_q_inviscid(st, st.alpha);
 
     if !st.pointers_built {
         if st.bl_initialised {
-            gamqv(st);
+            set_gamma_from_q_viscous(st);
         }
         // locate stagnation point arc length position and panel index
-        stfind(st);
+        find_stagnation(st);
         // set  BL position -> panel position  pointers
-        iblpan(st);
+        map_stations_to_nodes(st);
         // calculate surface arc length array for current stagnation point location
-        xicalc(st);
+        set_station_xi(st);
         // set  BL position -> system line  pointers
-        iblsys(st);
+        map_stations_to_rows(st);
     }
 
     // set inviscid BL edge velocity UINV from QINV
-    uicalc(st);
+    set_ue_inviscid(st);
 
     if !st.bl_initialised {
         // set initial Ue from inviscid Ue
@@ -94,17 +96,17 @@ pub fn solve_viscous(
 
     if st.converged {
         // set correct CL if converged point exists
-        qvfue(st);
+        set_q_viscous_from_ue(st);
         let nt = st.n_foil_nodes + st.n_wake_nodes;
         if st.viscous {
-            st.cp_viscous = cpcalc(nt, &st.q_viscous, st.qinf, st.mach);
-            st.cp_inviscid = cpcalc(nt, &st.q_inviscid, st.qinf, st.mach);
+            st.cp_viscous = compute_cp(nt, &st.q_viscous, st.qinf, st.mach);
+            st.cp_inviscid = compute_cp(nt, &st.q_inviscid, st.qinf, st.mach);
         } else {
-            st.cp_inviscid = cpcalc(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
+            st.cp_inviscid = compute_cp(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
         }
-        gamqv(st);
-        clcalc(st);
-        cdcalc(st);
+        set_gamma_from_q_viscous(st);
+        compute_cl_cm(st);
+        compute_cd(st);
     }
 
     // set up source influence matrix if it doesn't exist
@@ -131,22 +133,22 @@ pub fn solve_viscous(
             let (m_cl, re_cl) = set_mach_re_from_cl(st, st.cl);
             st.mach_d_cl = m_cl;
             st.re_d_cl = re_cl;
-            comset(st);
+            set_compressibility(st);
         } else {
             // set new inviscid speeds QINV and UINV for new alpha
-            qiset(st, st.alpha);
-            uicalc(st);
+            set_q_inviscid(st, st.alpha);
+            set_ue_inviscid(st);
         }
 
         // calculate edge velocities QVIS(.) from UEDG(..)
-        qvfue(st);
+        set_q_viscous_from_ue(st);
         // set GAM distribution from QVIS
-        gamqv(st);
+        set_gamma_from_q_viscous(st);
         // relocate stagnation point
-        stmove(st);
+        move_stagnation(st);
         // set updated CL,CD
-        clcalc(st);
-        cdcalc(st);
+        compute_cl_cm(st);
+        compute_cd(st);
 
         // display changes and test for convergence
         let conv = u.residual < CONVERGENCE_TOLERANCE;
@@ -187,7 +189,7 @@ pub fn solve_viscous(
     // 'VISCAL:  Convergence failed' if the loop ran out
 
     let nt = st.n_foil_nodes + st.n_wake_nodes;
-    st.cp_inviscid = cpcalc(nt, &st.q_inviscid, st.qinf, st.mach);
-    st.cp_viscous = cpcalc(nt, &st.q_viscous, st.qinf, st.mach);
+    st.cp_inviscid = compute_cp(nt, &st.q_inviscid, st.qinf, st.mach);
+    st.cp_viscous = compute_cp(nt, &st.q_viscous, st.qinf, st.mach);
     converged
 }

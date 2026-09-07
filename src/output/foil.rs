@@ -25,7 +25,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::bl::system::{FlowParameters, FlowRegime, StationState};
-use crate::geometry::{seval, PaneledAirfoil};
+use crate::geometry::{spline_value, PaneledAirfoil};
 use crate::solver::blstate::SolverState;
 
 // ============================================================================
@@ -619,8 +619,8 @@ fn side_output(
 /// Position on the airfoil spline at arc length `s`
 fn spline_point(st: &SolverState, s: f64) -> (f64, f64) {
     let n = st.n_foil_nodes;
-    let x = seval(s, &st.x[1..=n], &st.dxds[1..=n], &st.s[1..=n]);
-    let y = seval(s, &st.y[1..=n], &st.dyds[1..=n], &st.s[1..=n]);
+    let x = spline_value(s, &st.x[1..=n], &st.dxds[1..=n], &st.s[1..=n]);
+    let y = spline_value(s, &st.y[1..=n], &st.dyds[1..=n], &st.s[1..=n]);
     (x, y)
 }
 
@@ -745,9 +745,9 @@ mod tests {
 
     #[test]
     fn geometry_from_paneled_has_no_wake_and_matches_nodes() {
-        use crate::geometry::{create_paneled_airfoil, naca_4digit};
+        use crate::geometry::{naca_4digit, panel_foil};
         let geom = naca_4digit("2412", 100).unwrap();
-        let airfoil = create_paneled_airfoil(&geom);
+        let airfoil = panel_foil(&geom);
         let g = FoilGeometryOutput::from_paneled(&airfoil);
         assert_eq!(g.n(), 100);
         assert!(g.wake.is_none());

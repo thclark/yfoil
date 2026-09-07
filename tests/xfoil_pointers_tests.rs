@@ -10,10 +10,12 @@ mod utilities;
 use fixtures::pointers_fixtures::{parse_inviscid_gam, parse_pointers, parse_uinv, PointersFixture};
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_PURE};
-use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
+use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::blstate::SolverState;
-use yfoil::solver::pointers::{iblpan, iblsys, stfind, tecalc, xicalc};
-use yfoil::solver::velocity::{qiset, uicalc};
+use yfoil::solver::pointers::{
+    find_stagnation, map_stations_to_nodes, map_stations_to_rows, set_station_xi, set_te_thickness,
+};
+use yfoil::solver::velocity::{set_q_inviscid, set_ue_inviscid};
 
 fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
@@ -37,7 +39,7 @@ fn state_from_fixture(f: &PointersFixture) -> SolverState {
     st.gamma = gam;
     // xp/yp only enter XICALC's wake-gap cubic; take YFoil's spline for those
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
-    let af = create_paneled_airfoil(&geom);
+    let af = panel_foil(&geom);
     for i in 1..=f.n {
         st.dxds[i] = af.xp[i - 1];
         st.dyds[i] = af.yp[i - 1];
@@ -53,7 +55,7 @@ fn assert_bits(a: f64, b: f64, what: &str) {
 fn test_tecalc_matches_xfoil() {
     let f = pointers();
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
-    let af = create_paneled_airfoil(&geom);
+    let af = panel_foil(&geom);
     let st = SolverState::from_foil(&af, f.nw);
     // arc length is pure arithmetic (SCALC): bit-identical
     for i in 1..=f.n {
@@ -63,7 +65,7 @@ fn test_tecalc_matches_xfoil() {
     // ANTE depends on spline derivatives XP/YP at the TE
     assert_within(st.te_thickness_normal, f.ante, TOL_PURE, 1.0, "ANTE");
     let mut st2 = st.clone();
-    tecalc(&mut st2);
+    set_te_thickness(&mut st2);
     assert_bits(st2.te_thickness_normal, st.te_thickness_normal, "TECALC idempotent");
 }
 
@@ -71,7 +73,7 @@ fn test_tecalc_matches_xfoil() {
 fn test_stfind_matches_xfoil() {
     let f = pointers();
     let mut st = state_from_fixture(&f);
-    stfind(&mut st);
+    find_stagnation(&mut st);
     assert_eq!(st.i_stagnation_node, f.ist, "IST");
     assert_bits(st.s_stagnation, f.sst, "SST");
     assert_bits(st.s_stagnation_d_gamma_node0, f.sst_go, "SST_GO");
@@ -83,8 +85,8 @@ fn test_iblpan_and_iblsys_match_xfoil() {
     let f = pointers();
     let mut st = state_from_fixture(&f);
     st.i_stagnation_node = f.ist;
-    iblpan(&mut st);
-    iblsys(&mut st);
+    map_stations_to_nodes(&mut st);
+    map_stations_to_rows(&mut st);
     assert_eq!(st.i_te_station[1..], f.iblte[1..], "IBLTE");
     assert_eq!(st.n_stations[1..], f.nbl[1..], "NBL");
     assert_eq!(st.n_rows, f.nsys, "NSYS");
@@ -110,8 +112,8 @@ fn test_xicalc_matches_xfoil() {
     let mut st = state_from_fixture(&f);
     st.i_stagnation_node = f.ist;
     st.s_stagnation = f.sst;
-    iblpan(&mut st);
-    xicalc(&mut st);
+    map_stations_to_nodes(&mut st);
+    set_station_xi(&mut st);
     for is in 1..=2 {
         for ibl in 1..=f.nbl[is] {
             assert_bits(st.xi[is][ibl], f.xssi[is][ibl], &format!("XSSI({ibl},{is})"));
@@ -137,10 +139,10 @@ fn test_qiset_and_uicalc_match_xfoil() {
     assert_eq!((u.n, u.nw), (f.n, f.nw));
     let mut st = state_from_fixture(&f);
     st.i_stagnation_node = f.ist;
-    iblpan(&mut st);
+    map_stations_to_nodes(&mut st);
     st.q_inviscid_basis[1] = u.qinvu1.clone();
     st.q_inviscid_basis[2] = u.qinvu2.clone();
-    qiset(&mut st, u.alfa);
+    set_q_inviscid(&mut st, u.alfa);
     // cos/sin come from libm: same host gives identical bits, other hosts an ULP — TOL_PURE
     for i in 1..=(f.n + f.nw) {
         assert_within(st.q_inviscid[i], u.qinv[i], TOL_PURE, 1.0, &format!("QINV({i})"));
@@ -155,7 +157,7 @@ fn test_qiset_and_uicalc_match_xfoil() {
     // UICALC is a sign flip: feed XFOIL's QINV and require bit-identity
     st.q_inviscid = u.qinv.clone();
     st.q_inviscid_d_alpha = u.qinv_a.clone();
-    uicalc(&mut st);
+    set_ue_inviscid(&mut st);
     for is in 1..=2 {
         assert_eq!(u.uinv[is].len(), f.nbl[is] + 1, "UINV rows side {is}");
         for ibl in 1..=f.nbl[is] {
@@ -176,21 +178,21 @@ fn test_prologue_from_yfoil_geometry_matches_xfoil() {
     let f = pointers();
     let u = parse_uinv(&fixture_path("xfoil_uinv.dat"), 1);
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
-    let af = create_paneled_airfoil(&geom);
+    let af = panel_foil(&geom);
     let mut st = SolverState::from_foil(&af, f.nw);
     st.set_wake_nodes(&f.x[f.n + 1..], &f.y[f.n + 1..], &f.s[f.n + 1..]);
     st.q_inviscid_basis[1] = u.qinvu1.clone();
     st.q_inviscid_basis[2] = u.qinvu2.clone();
-    qiset(&mut st, u.alfa);
+    set_q_inviscid(&mut st, u.alfa);
     // before the first viscous iteration GAM is the inviscid solution at this alpha
     for i in 1..=f.n {
         st.gamma[i] = st.q_inviscid[i];
     }
-    stfind(&mut st);
-    iblpan(&mut st);
-    xicalc(&mut st);
-    iblsys(&mut st);
-    uicalc(&mut st);
+    find_stagnation(&mut st);
+    map_stations_to_nodes(&mut st);
+    set_station_xi(&mut st);
+    map_stations_to_rows(&mut st);
+    set_ue_inviscid(&mut st);
 
     assert_eq!(st.i_stagnation_node, f.ist, "IST");
     assert_within(st.s_stagnation, f.sst, TOL_PURE, 1.0, "SST");
@@ -229,7 +231,7 @@ fn test_prologue_from_yfoil_geometry_matches_xfoil() {
 fn test_airfoil_normals_and_panel_angles_match_xfoil() {
     let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
-    let af = create_paneled_airfoil(&geom);
+    let af = panel_foil(&geom);
     for i in 1..=f.n {
         assert_within(af.nx[i - 1], f.nx[i], TOL_PURE, 1.0, &format!("NX({i})"));
         assert_within(af.ny[i - 1], f.ny[i], TOL_PURE, 1.0, &format!("NY({i})"));

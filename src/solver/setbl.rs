@@ -10,10 +10,10 @@ use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFla
 use crate::bl::mrchdu::march_prescribed_dstar;
 use crate::bl::mrchue::march_direct;
 use crate::bl::system::{check_transition, FlowParameters, FlowRegime, IntervalSystem, TransitionCheck};
-use crate::geometry::seval;
+use crate::geometry::spline_value;
 use crate::solver::blstate::SolverState;
-use crate::solver::pointers::xifset;
-use crate::solver::velocity::ueset;
+use crate::solver::pointers::xi_trip;
+use crate::solver::velocity::set_ue_with_sources;
 
 /// Everything SETBL produces besides the arrays it writes into `SolverState`.
 #[derive(Debug, Clone)]
@@ -125,7 +125,7 @@ pub fn assemble_newton_system(st: &mut SolverState) -> AssembledSystem {
     march_prescribed_dstar(st, &params, acrit, None);
 
     let mut usav: [Vec<f64>; 3] = [Vec::new(), st.ue[1].clone(), st.ue[2].clone()];
-    ueset(st);
+    set_ue_with_sources(st);
     for is in 1..=2 {
         for ibl in 2..=st.n_stations[is] {
             std::mem::swap(&mut usav[is][ibl], &mut st.ue[is][ibl]);
@@ -198,7 +198,7 @@ pub fn assemble_newton_system(st: &mut SolverState) -> AssembledSystem {
         let amcrit = st.ncrit[is];
 
         // set forced transition arc length position
-        let xiforc = xifset(st, is);
+        let xiforc = xi_trip(st, is);
 
         let mut tran;
         let mut turb;
@@ -396,8 +396,8 @@ pub fn assemble_newton_system(st: &mut SolverState) -> AssembledSystem {
                 let chy = st.y_te - st.y_le;
                 let chsq = chx * chx + chy * chy;
                 let n = st.n_foil_nodes;
-                let xtr = seval(str, &st.x[1..=n], &st.dxds[1..=n], &st.s[1..=n]);
-                let ytr = seval(str, &st.y[1..=n], &st.dyds[1..=n], &st.s[1..=n]);
+                let xtr = spline_value(str, &st.x[1..=n], &st.dxds[1..=n], &st.s[1..=n]);
+                let ytr = spline_value(str, &st.y[1..=n], &st.dyds[1..=n], &st.s[1..=n]);
                 st.x_transition[is] = ((xtr - st.x_le) * chx + (ytr - st.y_le) * chy) / chsq;
                 st.y_transition[is] = ((ytr - st.y_le) * chx - (xtr - st.x_le) * chy) / chsq;
             }

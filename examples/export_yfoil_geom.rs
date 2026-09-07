@@ -1,11 +1,11 @@
 //! Export yfoil geometry to XFOIL format
 
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{naca_4digit, panel_foil};
 
 fn main() {
     // Generate NACA 0012 with 160 panels using yfoil
     let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     // Output in XFOIL .dat format (Selig format)
     // First line: name

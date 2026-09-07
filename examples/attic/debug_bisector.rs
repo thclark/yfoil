@@ -1,7 +1,7 @@
 //! Debug bisector condition computation
 
 use std::f64::consts::PI;
-use yfoil::geometry::{create_paneled_airfoil, read_dat_file};
+use yfoil::geometry::{panel_foil, read_dat_file};
 
 fn main() {
     println!("=== Debug Bisector Condition ===\n");
@@ -9,7 +9,7 @@ fn main() {
     let (_, geom) =
         read_dat_file("/tmp/xfoil_naca0012_paneled.dat").expect("Run XFOIL first");
 
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let n = airfoil.n;
 
     println!("N = {}, sharp_te = {}", n, airfoil.sharp_te);

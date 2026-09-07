@@ -12,25 +12,25 @@
 
 /// Result type for closure relations that includes sensitivities
 #[derive(Debug, Clone, Copy)]
-pub struct ClosureResult {
+pub struct Closure {
     /// Primary value
-    pub val: f64,
+    pub value: f64,
     /// Sensitivity to kinematic shape factor Hk
-    pub val_hk: f64,
+    pub value_d_hk: f64,
     /// Sensitivity to momentum thickness Reynolds number Rt
-    pub val_rt: f64,
+    pub value_d_retheta: f64,
     /// Sensitivity to Mach number squared
-    pub val_msq: f64,
+    pub value_d_machsqd: f64,
 }
 
-impl ClosureResult {
+impl Closure {
     /// Create a new closure result with only the value (zero sensitivities)
     pub fn value(val: f64) -> Self {
         Self {
-            val,
-            val_hk: 0.0,
-            val_rt: 0.0,
-            val_msq: 0.0,
+            value: val,
+            value_d_hk: 0.0,
+            value_d_retheta: 0.0,
+            value_d_machsqd: 0.0,
         }
     }
 }
@@ -44,7 +44,7 @@ impl ClosureResult {
 /// Hk = (H - 0.29*M²) / (1 + 0.113*M²)
 ///
 /// This accounts for compressibility effects (from Whitfield)
-pub fn hkin(h: f64, msq: f64) -> (f64, f64, f64) {
+pub fn hk_from_h(h: f64, msq: f64) -> (f64, f64, f64) {
     let denom = 1.0 + 0.113 * msq;
     let hk = (h - 0.29 * msq) / denom;
     let hk_h = 1.0 / denom;
@@ -62,7 +62,7 @@ pub fn hkin(h: f64, msq: f64) -> (f64, f64, f64) {
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
-pub fn cf_lam(hk: f64, rt: f64, _msq: f64) -> ClosureResult {
+pub fn cf_laminar(hk: f64, rt: f64, _msq: f64) -> Closure {
     let (cf, cf_hk) = if hk < 5.5 {
         let tmp = (5.5 - hk).powi(3) / (hk + 1.0);
         let cf = (0.0727 * tmp - 0.07) / rt;
@@ -77,11 +77,11 @@ pub fn cf_lam(hk: f64, rt: f64, _msq: f64) -> ClosureResult {
 
     let cf_rt = -cf / rt;
 
-    ClosureResult {
-        val: cf,
-        val_hk: cf_hk,
-        val_rt: cf_rt,
-        val_msq: 0.0,
+    Closure {
+        value: cf,
+        value_d_hk: cf_hk,
+        value_d_retheta: cf_rt,
+        value_d_machsqd: 0.0,
     }
 }
 
@@ -91,7 +91,7 @@ pub fn cf_lam(hk: f64, rt: f64, _msq: f64) -> ClosureResult {
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number (not used in laminar)
 /// * `msq` - Mach number squared (not used in laminar)
-pub fn hs_lam(hk: f64, _rt: f64, _msq: f64) -> ClosureResult {
+pub fn hstar_laminar(hk: f64, _rt: f64, _msq: f64) -> Closure {
     let (hs, hs_hk) = if hk < 4.35 {
         let tmp = hk - 4.35;
         let hs =
@@ -107,11 +107,11 @@ pub fn hs_lam(hk: f64, _rt: f64, _msq: f64) -> ClosureResult {
         (hs, hs_hk)
     };
 
-    ClosureResult {
-        val: hs,
-        val_hk: hs_hk,
-        val_rt: 0.0,
-        val_msq: 0.0,
+    Closure {
+        value: hs,
+        value_d_hk: hs_hk,
+        value_d_retheta: 0.0,
+        value_d_machsqd: 0.0,
     }
 }
 
@@ -120,7 +120,7 @@ pub fn hs_lam(hk: f64, _rt: f64, _msq: f64) -> ClosureResult {
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
-pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
+pub fn cdiss_laminar(hk: f64, rt: f64) -> Closure {
     let (di, di_hk) = if hk < 4.0 {
         let di = (0.00205 * (4.0 - hk).powf(5.5) + 0.207) / rt;
         let di_hk = (-0.00205 * 5.5 * (4.0 - hk).powf(4.5)) / rt;
@@ -135,11 +135,11 @@ pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
 
     let di_rt = -di / rt;
 
-    ClosureResult {
-        val: di,
-        val_hk: di_hk,
-        val_rt: di_rt,
-        val_msq: 0.0,
+    Closure {
+        value: di,
+        value_d_hk: di_hk,
+        value_d_retheta: di_rt,
+        value_d_machsqd: 0.0,
     }
 }
 
@@ -154,7 +154,7 @@ pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
 /// * `cffac` - Skin friction factor (typically 1.0)
-pub fn cf_turb(hk: f64, rt: f64, msq: f64, cffac: f64) -> ClosureResult {
+pub fn cf_turbulent(hk: f64, rt: f64, msq: f64, cffac: f64) -> Closure {
     const GAM: f64 = 1.4;
     let gm1 = GAM - 1.0;
 
@@ -172,11 +172,11 @@ pub fn cf_turb(hk: f64, rt: f64, msq: f64, cffac: f64) -> ClosureResult {
     let cf_rt = gex * cfo / (fc * grt) / rt;
     let cf_msq = gex * cfo / (fc * grt) * (-0.25 * gm1 / fc.powi(2)) - 0.25 * gm1 * cf / fc.powi(2);
 
-    ClosureResult {
-        val: cf,
-        val_hk: cf_hk,
-        val_rt: cf_rt,
-        val_msq: cf_msq,
+    Closure {
+        value: cf,
+        value_d_hk: cf_hk,
+        value_d_retheta: cf_rt,
+        value_d_machsqd: cf_msq,
     }
 }
 
@@ -186,7 +186,7 @@ pub fn cf_turb(hk: f64, rt: f64, msq: f64, cffac: f64) -> ClosureResult {
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
-pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
+pub fn hstar_turbulent(hk: f64, rt: f64, msq: f64) -> Closure {
     const HSMIN: f64 = 1.5;
     const DHSINF: f64 = 0.015;
 
@@ -234,16 +234,16 @@ pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
     let hs_rt_final = hs_rt / fm;
     let hs_msq = (0.028 - 0.014 * hs_final) / fm;
 
-    ClosureResult {
-        val: hs_final,
-        val_hk: hs_hk_final,
-        val_rt: hs_rt_final,
-        val_msq: hs_msq,
+    Closure {
+        value: hs_final,
+        value_d_hk: hs_hk_final,
+        value_d_retheta: hs_rt_final,
+        value_d_machsqd: hs_msq,
     }
 }
 
 /// Density shape parameter (from Whitfield)
-pub fn hc_turb(hk: f64, msq: f64) -> (f64, f64, f64) {
+pub fn hstarstar(hk: f64, msq: f64) -> (f64, f64, f64) {
     let hc = msq * (0.064 / (hk - 0.8) + 0.251);
     let hc_hk = msq * (-0.064 / (hk - 0.8).powi(2));
     let hc_msq = 0.064 / (hk - 0.8) + 0.251;
@@ -251,20 +251,20 @@ pub fn hc_turb(hk: f64, msq: f64) -> (f64, f64, f64) {
 }
 
 /// DILW (xblsys.f): laminar wake dissipation function 2*CD/H* and its Hk, Rt sensitivities.
-pub fn dilw(hk: f64, rt: f64) -> ClosureResult {
+pub fn cdiss_wake(hk: f64, rt: f64) -> Closure {
     let msq = 0.0;
-    let hs = hs_lam(hk, rt, msq);
+    let hs = hstar_laminar(hk, rt, msq);
     // Laminar wake dissipation function  ( 2 CD/H* )
     let rcd = 1.10 * ((1.0 - 1.0 / hk) * (1.0 - 1.0 / hk)) / hk;
     let rcd_hk = -1.10 * (1.0 - 1.0 / hk) * 2.0 / ((hk * hk) * hk) - rcd / hk;
-    let di = 2.0 * rcd / (hs.val * rt);
-    let di_hk = 2.0 * rcd_hk / (hs.val * rt) - (di / hs.val) * hs.val_hk;
-    let di_rt = -di / rt - (di / hs.val) * hs.val_rt;
-    ClosureResult {
-        val: di,
-        val_hk: di_hk,
-        val_rt: di_rt,
-        val_msq: 0.0,
+    let di = 2.0 * rcd / (hs.value * rt);
+    let di_hk = 2.0 * rcd_hk / (hs.value * rt) - (di / hs.value) * hs.value_d_hk;
+    let di_rt = -di / rt - (di / hs.value) * hs.value_d_retheta;
+    Closure {
+        value: di,
+        value_d_hk: di_hk,
+        value_d_retheta: di_rt,
+        value_d_machsqd: 0.0,
     }
 }
 
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn test_hkin_incompressible() {
         // At M=0, Hk = H
-        let (hk, hk_h, hk_msq) = hkin(2.5, 0.0);
+        let (hk, hk_h, hk_msq) = hk_from_h(2.5, 0.0);
         assert_relative_eq!(hk, 2.5, epsilon = 1e-10);
         assert_relative_eq!(hk_h, 1.0, epsilon = 1e-10);
         // hk_msq = (-0.29 - 0.113*hk) / denom = -0.29 - 0.2825 = -0.5725
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_hkin_compressible() {
         // At M=0.5 (M²=0.25), Hk should be reduced
-        let (hk, _, _) = hkin(2.5, 0.25);
+        let (hk, _, _) = hk_from_h(2.5, 0.25);
         assert!(hk < 2.5);
         assert!(hk > 2.0);
     }
@@ -303,33 +303,33 @@ mod tests {
     fn test_cf_lam_blasius() {
         // For Blasius flow, Hk ≈ 2.59, Cf ≈ 0.664/√Re_x
         // At Rθ = 1000, Cf ≈ 0.664/√Rex ≈ 0.0021 for appropriate Rex
-        let result = cf_lam(2.59, 1000.0, 0.0);
-        assert!(result.val > 0.0);
-        assert!(result.val < 0.01);
+        let result = cf_laminar(2.59, 1000.0, 0.0);
+        assert!(result.value > 0.0);
+        assert!(result.value < 0.01);
         // Cf should decrease with increasing Rt
-        assert!(result.val_rt < 0.0);
+        assert!(result.value_d_retheta < 0.0);
     }
 
     #[test]
     fn test_cf_lam_separated() {
         // For separated flow (high Hk), Cf should be small or negative
-        let result = cf_lam(6.0, 1000.0, 0.0);
-        assert!(result.val < 0.0); // Negative Cf indicates separation
+        let result = cf_laminar(6.0, 1000.0, 0.0);
+        assert!(result.value < 0.0); // Negative Cf indicates separation
     }
 
     #[test]
     fn test_hs_lam_attached() {
         // For attached laminar flow, H* should be around 1.5-1.6
-        let result = hs_lam(2.59, 1000.0, 0.0);
-        assert!(result.val > 1.4);
-        assert!(result.val < 1.8);
+        let result = hstar_laminar(2.59, 1000.0, 0.0);
+        assert!(result.value > 1.4);
+        assert!(result.value < 1.8);
     }
 
     #[test]
     fn test_di_lam_positive() {
         // Dissipation should always be positive for physical flows
-        let result = di_lam(2.59, 1000.0);
-        assert!(result.val > 0.0);
+        let result = cdiss_laminar(2.59, 1000.0);
+        assert!(result.value > 0.0);
     }
 
     // ========================================================================
@@ -339,24 +339,24 @@ mod tests {
     #[test]
     fn test_cf_turb_attached() {
         // Turbulent Cf for attached flow (Hk ≈ 1.3-1.5)
-        let result = cf_turb(1.4, 10000.0, 0.0, 1.0);
-        assert!(result.val > 0.002);
-        assert!(result.val < 0.01);
+        let result = cf_turbulent(1.4, 10000.0, 0.0, 1.0);
+        assert!(result.value > 0.002);
+        assert!(result.value < 0.01);
     }
 
     #[test]
     fn test_cf_turb_reynolds_effect() {
         // Cf should decrease with increasing Reynolds number
-        let cf1 = cf_turb(1.4, 10000.0, 0.0, 1.0);
-        let cf2 = cf_turb(1.4, 100000.0, 0.0, 1.0);
-        assert!(cf2.val < cf1.val);
+        let cf1 = cf_turbulent(1.4, 10000.0, 0.0, 1.0);
+        let cf2 = cf_turbulent(1.4, 100000.0, 0.0, 1.0);
+        assert!(cf2.value < cf1.value);
     }
 
     #[test]
     fn test_hs_turb_range() {
         // Turbulent H* should be > 1.5 (minimum) and typically < 2.5
-        let result = hs_turb(1.4, 10000.0, 0.0);
-        assert!(result.val >= 1.5);
-        assert!(result.val < 3.0);
+        let result = hstar_turbulent(1.4, 10000.0, 0.0);
+        assert!(result.value >= 1.5);
+        assert!(result.value < 3.0);
     }
 }

@@ -3,11 +3,11 @@
 //! distributions. Also the OPER-level bookkeeping that precedes it when a new alpha is specified.
 
 use crate::solver::blstate::SolverState;
-use crate::solver::clcalc::{clcalc, comset, cpcalc};
+use crate::solver::clcalc::{compute_cl_cm, compute_cp, set_compressibility};
 use crate::solver::ggcalc::{build_inviscid_system, InviscidSystem};
-use crate::solver::pointers::tecalc;
+use crate::solver::pointers::set_te_thickness;
 use crate::solver::setbl::set_mach_re_from_cl;
-use crate::solver::velocity::qiset;
+use crate::solver::velocity::set_q_inviscid;
 
 /// OPER's `ALFA` command: sets LALFA, ALFA (radians) and QINF = 1, runs SPECAL, then
 /// invalidates the wake and the converged flag when alpha or Mach moved by more than 1e-5
@@ -63,18 +63,18 @@ pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSy
         st.gamma_d_alpha[i] = -sina * st.q_inviscid_basis[1][i] + cosa * st.q_inviscid_basis[2][i];
     }
 
-    tecalc(st);
-    qiset(st, st.alpha);
+    set_te_thickness(st);
+    set_q_inviscid(st, st.alpha);
 
     // set initial guess for the Newton variable CLM
     let mut clm = 1.0;
 
     // set corresponding  M(CLM), Re(CLM)
     let (mut minf_clm, _reinf_clm) = set_mach_re_from_cl(st, clm);
-    comset(st);
+    set_compressibility(st);
 
     // set corresponding CL(M)
-    clcalc(st);
+    compute_cl_cm(st);
 
     // iterate on CLM
     for _itcl in 1..=20 {
@@ -100,8 +100,8 @@ pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSy
         }
 
         // set new CL(M)
-        comset(st);
-        clcalc(st);
+        set_compressibility(st);
+        compute_cl_cm(st);
 
         if dclm.abs() <= 1.0e-6 {
             break;
@@ -113,15 +113,15 @@ pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSy
     let (m_cl, re_cl) = set_mach_re_from_cl(st, st.cl);
     st.mach_d_cl = m_cl;
     st.re_d_cl = re_cl;
-    comset(st);
-    clcalc(st);
-    st.cp_inviscid = cpcalc(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
+    set_compressibility(st);
+    compute_cl_cm(st);
+    st.cp_inviscid = compute_cp(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
     if st.viscous {
         let nt = st.n_foil_nodes + st.n_wake_nodes;
-        st.cp_viscous = cpcalc(nt, &st.q_viscous, st.qinf, st.mach);
-        st.cp_inviscid = cpcalc(nt, &st.q_inviscid, st.qinf, st.mach);
+        st.cp_viscous = compute_cp(nt, &st.q_viscous, st.qinf, st.mach);
+        st.cp_inviscid = compute_cp(nt, &st.q_inviscid, st.qinf, st.mach);
     } else {
-        st.cp_inviscid = cpcalc(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
+        st.cp_inviscid = compute_cp(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
     }
 }
 
@@ -137,7 +137,7 @@ pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSyste
     let (m_cl, re_cl) = set_mach_re_from_cl(st, st.cl_specified);
     st.mach_d_cl = m_cl;
     st.re_d_cl = re_cl;
-    comset(st);
+    set_compressibility(st);
 
     // current alpha is the initial guess for Newton variable ALFA
     let set_gam = |st: &mut SolverState| {
@@ -151,7 +151,7 @@ pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSyste
     set_gam(st);
 
     // get corresponding CL, CL_alpha, CL_Mach
-    clcalc(st);
+    compute_cl_cm(st);
 
     // Newton loop for alpha to get specified inviscid CL
     for _ital in 1..=20 {
@@ -163,7 +163,7 @@ pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSyste
         set_gam(st);
 
         // set new CL(alpha)
-        clcalc(st);
+        compute_cl_cm(st);
 
         if dalfa.abs() <= 1.0e-6 {
             break;
@@ -172,14 +172,14 @@ pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSyste
     // 'SPECCL:  CL convergence failed' if the loop ran out
 
     // set final surface speed and Cp distributions
-    tecalc(st);
-    qiset(st, st.alpha);
+    set_te_thickness(st);
+    set_q_inviscid(st, st.alpha);
     if st.viscous {
         let nt = st.n_foil_nodes + st.n_wake_nodes;
-        st.cp_viscous = cpcalc(nt, &st.q_viscous, st.qinf, st.mach);
-        st.cp_inviscid = cpcalc(nt, &st.q_inviscid, st.qinf, st.mach);
+        st.cp_viscous = compute_cp(nt, &st.q_viscous, st.qinf, st.mach);
+        st.cp_inviscid = compute_cp(nt, &st.q_inviscid, st.qinf, st.mach);
     } else {
-        st.cp_inviscid = cpcalc(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
+        st.cp_inviscid = compute_cp(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
     }
 }
 

@@ -3,11 +3,11 @@
 //! Each function is a line-for-line translation; the Fortran statement is quoted where the
 //! translation is not obvious. Indexing is 1-based (see `blstate.rs`).
 
-use crate::geometry::{deval, seval, spline};
+use crate::geometry::{spline_derivatives, spline_slope, spline_value};
 use crate::solver::blstate::SolverState;
 
 /// TECALC (xfoil.f): TE gap areas and the sharp-TE flag.
-pub fn tecalc(st: &mut SolverState) {
+pub fn set_te_thickness(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     // set TE base vector and TE bisector components
     let dxte = st.x[1] - st.x[n];
@@ -24,7 +24,7 @@ pub fn tecalc(st: &mut SolverState) {
 
 /// STFIND (xpanel.f): stagnation point arc length SST, panel index IST, and the
 /// sensitivities SST_GO = dSST/dGAM(IST), SST_GP = dSST/dGAM(IST+1).
-pub fn stfind(st: &mut SolverState) {
+pub fn find_stagnation(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     let mut i = n / 2; // fallback if no sign change is found ("Stagnation point not found")
     for ii in 1..n {
@@ -57,7 +57,7 @@ pub fn stfind(st: &mut SolverState) {
 }
 
 /// IBLPAN (xpanel.f): BL station -> panel node pointers IPAN, the VTI sign, IBLTE and NBL.
-pub fn iblpan(st: &mut SolverState) {
+pub fn map_stations_to_nodes(st: &mut SolverState) {
     let (n, nw, ist) = (st.n_foil_nodes, st.n_wake_nodes, st.i_stagnation_node);
 
     // top surface first
@@ -101,7 +101,7 @@ pub fn iblpan(st: &mut SolverState) {
 
 /// XICALC (xpanel.f): BL arc length XSSI on each side and along the wake, and the TE
 /// "dead air" gap array WGAP.
-pub fn xicalc(st: &mut SolverState) {
+pub fn set_station_xi(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     let xfeps = 1.0e-7;
     // minimum xi node arc length near stagnation point
@@ -171,7 +171,7 @@ pub fn xicalc(st: &mut SolverState) {
 }
 
 /// IBLSYS (xbl.f): Newton-system row number ISYS for each BL station, and NSYS.
-pub fn iblsys(st: &mut SolverState) {
+pub fn map_stations_to_rows(st: &mut SolverState) {
     let mut iv = 0;
     for is in 1..=2 {
         for ibl in 2..=st.n_stations[is] {
@@ -184,12 +184,12 @@ pub fn iblsys(st: &mut SolverState) {
 
 /// SINVRT (spline.f): inverse spline S(X) by Newton iteration from the initial guess `si`.
 /// Returns the input value if 10 iterations do not converge (XFOIL prints a warning).
-pub fn sinvrt(mut si: f64, xi: f64, x: &[f64], xs: &[f64], s: &[f64]) -> f64 {
+pub fn s_at_x(mut si: f64, xi: f64, x: &[f64], xs: &[f64], s: &[f64]) -> f64 {
     let n = s.len();
     let sisav = si;
     for _ in 0..10 {
-        let res = seval(si, x, xs, s) - xi;
-        let resp = deval(si, x, xs, s);
+        let res = spline_value(si, x, xs, s) - xi;
+        let resp = spline_slope(si, x, xs, s);
         let ds = -res / resp;
         si += ds;
         if (ds / (s[n - 1] - s[0])).abs() < 1.0e-5 {
@@ -200,7 +200,7 @@ pub fn sinvrt(mut si: f64, xi: f64, x: &[f64], xs: &[f64], s: &[f64]) -> f64 {
 }
 
 /// XIFSET (xbl.f): forced-transition BL coordinate XIFORC for side `is`.
-pub fn xifset(st: &SolverState, is: usize) -> f64 {
+pub fn xi_trip(st: &SolverState, is: usize) -> f64 {
     if st.x_trip[is] >= 1.0 {
         return st.xi[is][st.i_te_station[is]];
     }
@@ -217,18 +217,18 @@ pub fn xifset(st: &SolverState, is: usize) -> f64 {
         w1[i - 1] = ((st.x[i] - st.x_le) * chx + (st.y[i] - st.y_le) * chy) / chsq;
         w2[i - 1] = ((st.y[i] - st.y_le) * chx - (st.x[i] - st.x_le) * chy) / chsq;
     }
-    let w3 = spline(&w1, &s); // SPLIND(W1,W3,S,N,-999.0,-999.0)
-    let _w4 = spline(&w2, &s); // SPLIND(W2,W4,S,N,-999.0,-999.0) — computed, unused by XFOIL too
+    let w3 = spline_derivatives(&w1, &s); // SPLIND(W1,W3,S,N,-999.0,-999.0)
+    let _w4 = spline_derivatives(&w2, &s); // SPLIND(W2,W4,S,N,-999.0,-999.0) — computed, unused by XFOIL too
 
     let mut xiforc = if is == 1 {
         // set approximate arc length of forced transition point for SINVRT
         let str0 = st.s_le + (st.s[1] - st.s_le) * st.x_trip[is];
-        let str_ = sinvrt(str0, st.x_trip[is], &w1, &w3, &s);
+        let str_ = s_at_x(str0, st.x_trip[is], &w1, &w3, &s);
         (st.s_stagnation - str_).min(st.xi[is][st.i_te_station[is]])
     } else {
         // same for bottom side
         let str0 = st.s_le + (st.s[n] - st.s_le) * st.x_trip[is];
-        let str_ = sinvrt(str0, st.x_trip[is], &w1, &w3, &s);
+        let str_ = s_at_x(str0, st.x_trip[is], &w1, &w3, &s);
         (str_ - st.s_stagnation).min(st.xi[is][st.i_te_station[is]])
     };
 
@@ -242,23 +242,23 @@ pub fn xifset(st: &SolverState, is: usize) -> f64 {
 /// STMOVE: moves the stagnation point location to a new panel. Re-runs STFIND on the current
 /// GAM; if IST is unchanged only XICALC is redone, otherwise the pointer layer is rebuilt and
 /// the BL arrays and ITRAN are shifted by IDIF. Always refreshes MASS = DSTR*UEDG.
-pub fn stmove(st: &mut SolverState) {
+pub fn move_stagnation(st: &mut SolverState) {
     // locate new stagnation point arc length SST from GAM distribution
     let istold = st.i_stagnation_node;
-    stfind(st);
+    find_stagnation(st);
 
     if istold == st.i_stagnation_node {
         // recalculate new arc length array
-        xicalc(st);
+        set_station_xi(st);
     } else {
         // set new BL position -> panel position pointers
-        iblpan(st);
+        map_stations_to_nodes(st);
         // set new inviscid BL edge velocity UINV from QINV
-        crate::solver::velocity::uicalc(st);
+        crate::solver::velocity::set_ue_inviscid(st);
         // recalculate new arc length array
-        xicalc(st);
+        set_station_xi(st);
         // set BL position -> system line pointers
-        iblsys(st);
+        map_stations_to_rows(st);
 
         if st.i_stagnation_node > istold {
             // increase in number of points on top side (IS=1)
@@ -353,12 +353,12 @@ mod tests {
     fn xifset_free_transition_returns_te_arc_length() {
         let mut st = SolverState::empty(10, 3);
         st.i_stagnation_node = 5;
-        iblpan(&mut st);
+        map_stations_to_nodes(&mut st);
         st.xi[1][st.i_te_station[1]] = 1.25;
         st.xi[2][st.i_te_station[2]] = 1.5;
         st.x_trip = [0.0, 1.0, 1.0];
-        assert_eq!(xifset(&st, 1), 1.25);
-        assert_eq!(xifset(&st, 2), 1.5);
+        assert_eq!(xi_trip(&st, 1), 1.25);
+        assert_eq!(xi_trip(&st, 2), 1.5);
     }
 
     /// SINVRT on the identity spline x(s) = s returns s = xi.
@@ -366,8 +366,8 @@ mod tests {
     fn sinvrt_identity_spline() {
         let s: Vec<f64> = (0..11).map(|i| i as f64 * 0.1).collect();
         let x = s.clone();
-        let xs = spline(&x, &s);
-        let si = sinvrt(0.3, 0.42, &x, &xs, &s);
+        let xs = spline_derivatives(&x, &s);
+        let si = s_at_x(0.3, 0.42, &x, &xs, &s);
         assert!((si - 0.42).abs() < 1e-5 * (s[10] - s[0]) * 10.0, "si = {si}");
     }
 }

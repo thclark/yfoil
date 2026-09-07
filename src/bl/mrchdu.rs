@@ -6,10 +6,10 @@
 
 use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
-use crate::bl::hkin;
+use crate::bl::hk_from_h;
 use crate::bl::system::{check_transition, limit_dstar, FlowParameters, FlowRegime, IntervalSystem, TransitionCheck};
 use crate::solver::blstate::SolverState;
-use crate::solver::pointers::xifset;
+use crate::solver::pointers::xi_trip;
 
 /// One Newton iteration of one station, as the reference trace records it.
 #[derive(Debug, Clone, Default)]
@@ -82,7 +82,7 @@ pub fn march_prescribed_dstar(
         let amcrit = acrit[is];
 
         // set forced transition arc length position
-        let xiforc = xifset(st, is);
+        let xiforc = xi_trip(st, is);
 
         // (leading edge pressure gradient parameter BULE = 1.0 is the constant BLDIF uses)
 
@@ -218,7 +218,7 @@ pub fn march_prescribed_dstar(
                         let thm = st.theta[is][ibl - 1];
                         let msq = uem * uem * params.h_stagnation_inv
                             / (params.gamma_gas_m1 * (1.0 - 0.5 * uem * uem * params.h_stagnation_inv));
-                        let (hk, _, _) = hkin(dsm / thm, msq);
+                        let (hk, _, _) = hk_from_h(dsm / thm, msq);
                         hkref = hk;
                     }
 

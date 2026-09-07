@@ -1,12 +1,12 @@
 //! Debug script to check airfoil symmetry and inviscid solution
 
-use yfoil::geometry::{create_paneled_airfoil, naca_4digit};
+use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::panel::solve_inviscid;
 
 fn main() {
     // Create NACA 0012 airfoil with 160 panels
     let geom = naca_4digit("0012", 160).expect("Failed to create airfoil");
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
 
     println!("=== Geometry Symmetry Check ===");
     println!("N panels: {}", airfoil.n);

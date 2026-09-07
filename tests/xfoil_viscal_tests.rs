@@ -15,7 +15,7 @@ use fixtures::pointers_fixtures::parse_viscal_inviscid;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_SOLVER};
 use yfoil::solver::blstate::SolverState;
-use yfoil::solver::clcalc::comset;
+use yfoil::solver::clcalc::set_compressibility;
 use yfoil::solver::viscal::{solve_viscous, IterationRecord};
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -75,7 +75,7 @@ fn state_entering_newton_loop() -> SolverState {
     st.bl_initialised = true;
     st.dij_wake_built = true;
     st.viscous = true;
-    comset(&mut st);
+    set_compressibility(&mut st);
     assert_eq!(
         st.karman_tsien.to_bits(),
         inv.header["TKLAM"].parse::<f64>().unwrap().to_bits(),

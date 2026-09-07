@@ -4,7 +4,7 @@
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use yfoil::geometry::{create_paneled_airfoil, read_dat_file};
+use yfoil::geometry::{panel_foil, read_dat_file};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::{extract_upper_surface, find_stagnation_point};
 
@@ -15,7 +15,7 @@ fn main() {
     let (_, geom) = read_dat_file("/tmp/xfoil_naca0012_paneled.dat")
         .expect("Run XFOIL first");
 
-    let airfoil = create_paneled_airfoil(&geom);
+    let airfoil = panel_foil(&geom);
     let solution = solve_inviscid(&airfoil);
     let vel = solution.velocity_at_alpha(0.0);
     let stag = find_stagnation_point(&airfoil, &vel);
