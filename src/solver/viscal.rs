@@ -8,7 +8,7 @@ use crate::solver::blstate::SolverState;
 use crate::solver::clcalc::{cdcalc, clcalc, comset, cpcalc};
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::pointers::{iblpan, iblsys, stfind, stmove, xicalc};
-use crate::solver::qdcalc::qdcalc;
+use crate::solver::qdcalc::build_dij;
 use crate::solver::setbl::{assemble_newton_system, set_mach_re_from_cl};
 use crate::solver::update::apply_newton_update;
 use crate::solver::velocity::{gamqv, qiset, qvfue, uicalc};
@@ -108,12 +108,12 @@ pub fn solve_viscous(
     }
 
     // set up source influence matrix if it doesn't exist
-    let ladij = sys.as_ref().map(|s| s.ladij).unwrap_or(true);
+    let ladij = sys.as_ref().map(|s| s.dij_foil_built).unwrap_or(true);
     if !st.dij_wake_built || !ladij {
         let s = sys
             .as_mut()
             .expect("VISCAL: the source influence matrix does not exist and no inviscid system was given");
-        qdcalc(st, s);
+        build_dij(st, s);
     }
 
     // Newton iteration for entire BL solution

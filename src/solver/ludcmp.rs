@@ -6,12 +6,12 @@
 #[derive(Debug, Clone)]
 pub struct LuFactors {
     pub n: usize,
-    pub a: Vec<Vec<f64>>,
-    pub indx: Vec<usize>,
+    pub lu: Vec<Vec<f64>>,
+    pub pivots: Vec<usize>,
 }
 
 /// LUDCMP: factor `a` (1-based, n×n, modified in place) into LU form.
-pub fn ludcmp(n: usize, mut a: Vec<Vec<f64>>) -> LuFactors {
+pub fn lu_decompose(n: usize, mut a: Vec<Vec<f64>>) -> LuFactors {
     let mut vv = vec![0.0; n + 1];
     let mut indx = vec![0usize; n + 1];
 
@@ -64,16 +64,16 @@ pub fn ludcmp(n: usize, mut a: Vec<Vec<f64>>) -> LuFactors {
             }
         }
     }
-    LuFactors { n, a, indx }
+    LuFactors { n, lu: a, pivots: indx }
 }
 
 /// BAKSUB: solve L·U·x = b in place (`b` is 1-based, length n+1).
-pub fn baksub(lu: &LuFactors, b: &mut [f64]) {
+pub fn lu_back_substitute(lu: &LuFactors, b: &mut [f64]) {
     let n = lu.n;
-    let a = &lu.a;
+    let a = &lu.lu;
     let mut ii = 0usize;
     for i in 1..=n {
-        let ll = lu.indx[i];
+        let ll = lu.pivots[i];
         let mut sum = b[ll];
         b[ll] = b[i];
         if ii != 0 {
@@ -109,9 +109,9 @@ mod tests {
             vec![0.0, 1.0, 1.0, 1.0],
             vec![0.0, 4.0, 3.0, 2.0],
         ];
-        let lu = ludcmp(3, a);
+        let lu = lu_decompose(3, a);
         let mut b = vec![0.0, 5.0, 6.0, 20.0]; // x = (3, 2, 1)
-        baksub(&lu, &mut b);
+        lu_back_substitute(&lu, &mut b);
         assert!(
             (b[1] - 3.0).abs() < 1e-12 && (b[2] - 2.0).abs() < 1e-12 && (b[3] - 1.0).abs() < 1e-12,
             "{b:?}"

@@ -3,21 +3,21 @@
 //! factored AIJ and the source-influence matrix BIJ that QDCALC needs.
 
 use crate::solver::blstate::SolverState;
-use crate::solver::ludcmp::{baksub, ludcmp, LuFactors};
-use crate::solver::psilin::psilin;
+use crate::solver::ludcmp::{lu_back_substitute, lu_decompose, LuFactors};
+use crate::solver::psilin::panel_influence;
 
 /// The linear system GGCALC leaves behind: factored dPsi/dGam (AIJ, (N+1)×(N+1)) and
 /// dPsi/dSig (BIJ, (N+1)×(N+NW); wake columns filled by QDCALC). 1-based.
 #[derive(Debug, Clone)]
 pub struct InviscidSystem {
-    pub aij: LuFactors,
+    pub aij_lu: LuFactors,
     pub bij: Vec<Vec<f64>>,
     /// LADIJ: airfoil block of DIJ already computed
-    pub ladij: bool,
+    pub dij_foil_built: bool,
 }
 
 /// ATANC (xutils.f): ATAN2 with branch-cut checking against a previous angle.
-pub fn atanc(y: f64, x: f64, thold: f64) -> f64 {
+pub fn continuous_atan2(y: f64, x: f64, thold: f64) -> f64 {
     let pi: f64 = "3.1415926535897932384".parse().unwrap();
     let tpi: f64 = "6.2831853071795864769".parse().unwrap();
     let thnew = y.atan2(x);
@@ -27,7 +27,7 @@ pub fn atanc(y: f64, x: f64, thold: f64) -> f64 {
 }
 
 /// GGCALC. Sets `st.gam = 0`, `st.qinvu[1..=2][1..=n]`, and returns the factored system.
-pub fn ggcalc(st: &mut SolverState) -> InviscidSystem {
+pub fn build_inviscid_system(st: &mut SolverState) -> InviscidSystem {
     let n = st.n_foil_nodes;
     let np = n + st.n_wake_nodes;
     // distance of internal control point ahead of sharp TE (fraction of smaller panel length)
@@ -46,15 +46,15 @@ pub fn ggcalc(st: &mut SolverState) -> InviscidSystem {
 
     // Set up matrix system for Psi = Psio on airfoil surface; unknowns (dGamma)i and dPsio.
     for i in 1..=n {
-        let p = psilin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
+        let p = panel_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
         // RES1 = PSI( 0) - PSIO,  RES2 = PSI(90) - PSIO
         let res1 = st.qinf * st.y[i];
         let res2 = -st.qinf * st.x[i];
         for j in 1..=n {
-            aij[i][j] = p.dzdg[j];
+            aij[i][j] = p.psi_d_gamma[j];
         }
         for j in 1..=n {
-            bij[i][j] = -p.dzdm[j];
+            bij[i][j] = -p.psi_d_sigma[j];
         }
         aij[i][n + 1] = -1.0;
         gamu1[i] = -res1;
@@ -78,7 +78,7 @@ pub fn ggcalc(st: &mut SolverState) -> InviscidSystem {
     if st.sharp_te {
         // zero internal velocity in TE corner: TE bisector angle
         let ag1 = (-st.dyds[1]).atan2(-st.dxds[1]);
-        let ag2 = atanc(st.dyds[n], st.dxds[n], ag1);
+        let ag2 = continuous_atan2(st.dyds[n], st.dxds[n], ag1);
         let abis = 0.5 * (ag1 + ag2);
         let cbis = abis.cos();
         let sbis = abis.sin();
@@ -90,12 +90,12 @@ pub fn ggcalc(st: &mut SolverState) -> InviscidSystem {
         let xbis = st.x_te - bwt * dsmin * cbis;
         let ybis = st.y_te - bwt * dsmin * sbis;
         // velocity component along bisector line (I = 0: off-surface point)
-        let p = psilin(st, 0, xbis, ybis, -sbis, cbis, true);
+        let p = panel_influence(st, 0, xbis, ybis, -sbis, cbis, true);
         for j in 1..=n {
-            aij[n][j] = p.dqdg[j];
+            aij[n][j] = p.qtan_d_gamma[j];
         }
         for j in 1..=n {
-            bij[n][j] = -p.dqdm[j];
+            bij[n][j] = -p.qtan_d_sigma[j];
         }
         aij[n][n + 1] = 0.0;
         gamu1[n] = -cbis;
@@ -103,9 +103,9 @@ pub fn ggcalc(st: &mut SolverState) -> InviscidSystem {
     }
 
     // LU-factor coefficient matrix AIJ and solve for the two vorticity distributions
-    let lu = ludcmp(n + 1, aij);
-    baksub(&lu, &mut gamu1);
-    baksub(&lu, &mut gamu2);
+    let lu = lu_decompose(n + 1, aij);
+    lu_back_substitute(&lu, &mut gamu1);
+    lu_back_substitute(&lu, &mut gamu2);
 
     // inviscid alpha=0,90 surface speeds for this geometry
     st.q_inviscid_basis[1][1..=n].copy_from_slice(&gamu1[1..=n]);
@@ -113,8 +113,8 @@ pub fn ggcalc(st: &mut SolverState) -> InviscidSystem {
     // GAMU(N+1) is PSIO for each solution; keep it with the airfoil arrays via qinvu's slot n+1
     // only if there is no wake node there — the wake overwrites it in QWCALC as XFOIL does too.
     InviscidSystem {
-        aij: lu,
+        aij_lu: lu,
         bij,
-        ladij: false,
+        dij_foil_built: false,
     }
 }

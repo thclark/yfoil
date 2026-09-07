@@ -4,7 +4,7 @@
 
 use crate::solver::blstate::SolverState;
 use crate::solver::clcalc::{clcalc, comset, cpcalc};
-use crate::solver::ggcalc::{ggcalc, InviscidSystem};
+use crate::solver::ggcalc::{build_inviscid_system, InviscidSystem};
 use crate::solver::pointers::tecalc;
 use crate::solver::setbl::set_mach_re_from_cl;
 use crate::solver::velocity::qiset;
@@ -50,7 +50,7 @@ pub fn aseq_point(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: 
 pub fn specal(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
-        *sys = Some(ggcalc(st));
+        *sys = Some(build_inviscid_system(st));
     }
 
     let cosa = st.alpha.cos();
@@ -130,7 +130,7 @@ pub fn specal(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
 pub fn speccl(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
-        *sys = Some(ggcalc(st));
+        *sys = Some(build_inviscid_system(st));
     }
 
     // set freestream Mach from specified CL -- Mach will be held fixed

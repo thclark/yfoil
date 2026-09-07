@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_LINALG, TOL_PURE, TOL_SOLVER};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
 use yfoil::solver::blstate::SolverState;
-use yfoil::solver::ggcalc::{ggcalc, InviscidSystem};
-use yfoil::solver::qdcalc::qdcalc;
+use yfoil::solver::ggcalc::{build_inviscid_system, InviscidSystem};
+use yfoil::solver::qdcalc::build_dij;
 use yfoil::solver::velocity::qiset;
 use yfoil::solver::xywake::{qwcalc, xywake};
 
@@ -31,7 +31,7 @@ fn prologue_to_specal() -> (SolverState, InviscidSystem, fixtures::pointers_fixt
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = create_paneled_airfoil(&geom);
     let mut st = SolverState::from_foil(&af, f.nw);
-    let sys = ggcalc(&mut st);
+    let sys = build_inviscid_system(&mut st);
     st.alpha = u.alfa;
     qiset(&mut st, u.alfa);
     // SPECAL: GAM(I) = COSA*GAMU(I,1) + SINA*GAMU(I,2)  (= QINV on the airfoil)
@@ -121,7 +121,7 @@ fn test_qdcalc_matches_xfoil_dij_given_xfoil_wake() {
         st.q_inviscid_basis[1][i] = u.qinvu1[i];
         st.q_inviscid_basis[2][i] = u.qinvu2[i];
     }
-    qdcalc(&mut st, &mut sys);
+    build_dij(&mut st, &mut sys);
     check_dij(&st, TOL_LINALG, "qdcalc (XFOIL wake)");
 }
 
@@ -143,6 +143,6 @@ fn test_prologue_dij_from_yfoil_geometry() {
             &format!("wake QINVU({i},1)"),
         );
     }
-    qdcalc(&mut st, &mut sys);
+    build_dij(&mut st, &mut sys);
     check_dij(&st, TOL_SOLVER, "qdcalc (YFoil wake)");
 }

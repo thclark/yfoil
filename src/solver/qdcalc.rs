@@ -3,21 +3,21 @@
 
 use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
-use crate::solver::ludcmp::baksub;
-use crate::solver::psilin::{pi_consts, psilin};
+use crate::solver::ludcmp::lu_back_substitute;
+use crate::solver::psilin::{panel_influence, pi_consts};
 
 /// What PSWLIN returns: Psi, dPsi/dn, and the wake-source sensitivities (indexed n+1..=n+nw).
 #[derive(Debug, Clone)]
-pub struct Pswlin {
+pub struct WakeSourceInfluence {
     pub psi: f64,
-    pub psi_ni: f64,
-    pub dzdm: Vec<f64>,
-    pub dqdm: Vec<f64>,
+    pub psi_d_n: f64,
+    pub psi_d_sigma: Vec<f64>,
+    pub qtan_d_sigma: Vec<f64>,
 }
 
 /// PSWLIN(I, XI, YI, NXI, NYI, PSI, PSI_NI): streamfunction at node I due to the wake
 /// sources. Note the branch-cut correction is `- (0.5-0.5*SGN)*PI` here (PSILIN has `+`).
-pub fn pswlin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> Pswlin {
+pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> WakeSourceInfluence {
     let n = st.n_foil_nodes;
     let nw = st.n_wake_nodes;
     let np = n + nw;
@@ -25,11 +25,11 @@ pub fn pswlin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) 
     let (x, y) = (&st.x, &st.y);
     let io = i;
 
-    let mut out = Pswlin {
+    let mut out = WakeSourceInfluence {
         psi: 0.0,
-        psi_ni: 0.0,
-        dzdm: vec![0.0; np + 1],
-        dqdm: vec![0.0; np + 1],
+        psi_d_n: 0.0,
+        psi_d_sigma: vec![0.0; np + 1],
+        qtan_d_sigma: vec![0.0; np + 1],
     };
 
     for jo in (n + 1)..=(n + nw - 1) {
@@ -110,17 +110,17 @@ pub fn pswlin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) 
         out.psi += qopi * (psum * ssum + pdif * sdif);
 
         // dPsi/dm
-        out.dzdm[jm] += qopi * (-psum * dsim + pdif * dsim);
-        out.dzdm[jo] += qopi * (-psum * dsio - pdif * dsio);
-        out.dzdm[jp] += qopi * (psum * (dsio + dsim) + pdif * (dsio - dsim));
+        out.psi_d_sigma[jm] += qopi * (-psum * dsim + pdif * dsim);
+        out.psi_d_sigma[jo] += qopi * (-psum * dsio - pdif * dsio);
+        out.psi_d_sigma[jp] += qopi * (psum * (dsio + dsim) + pdif * (dsio - dsim));
 
         // dPsi/dni
         let psni = psx1 * x1i + psx0 * (x1i + x2i) * 0.5 + psyy * yyi;
         let pdni = pdx1 * x1i + pdx0 * (x1i + x2i) * 0.5 + pdyy * yyi;
-        out.psi_ni += qopi * (psni * ssum + pdni * sdif);
-        out.dqdm[jm] += qopi * (-psni * dsim + pdni * dsim);
-        out.dqdm[jo] += qopi * (-psni * dsio - pdni * dsio);
-        out.dqdm[jp] += qopi * (psni * (dsio + dsim) + pdni * (dsio - dsim));
+        out.psi_d_n += qopi * (psni * ssum + pdni * sdif);
+        out.qtan_d_sigma[jm] += qopi * (-psni * dsim + pdni * dsim);
+        out.qtan_d_sigma[jo] += qopi * (-psni * dsio - pdni * dsio);
+        out.qtan_d_sigma[jp] += qopi * (psni * (dsio + dsim) + pdni * (dsio - dsim));
 
         // calculate source contribution to Psi for 0-2 half-panel
         let dxinv = 1.0 / (x0 - x2);
@@ -144,24 +144,24 @@ pub fn pswlin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) 
         out.psi += qopi * (psum * ssum + pdif * sdif);
 
         // dPsi/dm
-        out.dzdm[jo] += qopi * (-psum * (dsip + dsio) - pdif * (dsip - dsio));
-        out.dzdm[jp] += qopi * (psum * dsio - pdif * dsio);
-        out.dzdm[jq] += qopi * (psum * dsip + pdif * dsip);
+        out.psi_d_sigma[jo] += qopi * (-psum * (dsip + dsio) - pdif * (dsip - dsio));
+        out.psi_d_sigma[jp] += qopi * (psum * dsio - pdif * dsio);
+        out.psi_d_sigma[jq] += qopi * (psum * dsip + pdif * dsip);
 
         // dPsi/dni
         let psni = psx0 * (x1i + x2i) * 0.5 + psx2 * x2i + psyy * yyi;
         let pdni = pdx0 * (x1i + x2i) * 0.5 + pdx2 * x2i + pdyy * yyi;
-        out.psi_ni += qopi * (psni * ssum + pdni * sdif);
-        out.dqdm[jo] += qopi * (-psni * (dsip + dsio) - pdni * (dsip - dsio));
-        out.dqdm[jp] += qopi * (psni * dsio - pdni * dsio);
-        out.dqdm[jq] += qopi * (psni * dsip + pdni * dsip);
+        out.psi_d_n += qopi * (psni * ssum + pdni * sdif);
+        out.qtan_d_sigma[jo] += qopi * (-psni * (dsip + dsio) - pdni * (dsip - dsio));
+        out.qtan_d_sigma[jp] += qopi * (psni * dsio - pdni * dsio);
+        out.qtan_d_sigma[jq] += qopi * (psni * dsip + pdni * dsip);
     }
     out
 }
 
 /// QDCALC: source panel influence coefficient matrix for the current airfoil and wake
 /// geometry, stored 1-based in `st.dij[i][j]` for i, j in 1..=N+NW.
-pub fn qdcalc(st: &mut SolverState, sys: &mut InviscidSystem) {
+pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
     let n = st.n_foil_nodes;
     let nw = st.n_wake_nodes;
     let np = n + nw;
@@ -171,12 +171,12 @@ pub fn qdcalc(st: &mut SolverState, sys: &mut InviscidSystem) {
         st.dij = vec![vec![0.0; np + 1]; np + 1];
     }
 
-    if !sys.ladij {
+    if !sys.dij_foil_built {
         // source influence matrix for airfoil surface: multiply each dPsi/dSig vector by the
         // inverse of the factored dPsi/dGam matrix
         for j in 1..=n {
             let mut col: Vec<f64> = (0..=(n + 1)).map(|i| sys.bij[i][j]).collect();
-            baksub(&sys.aij, &mut col);
+            lu_back_substitute(&sys.aij_lu, &mut col);
             for i in 1..=(n + 1) {
                 sys.bij[i][j] = col[i];
             }
@@ -185,14 +185,14 @@ pub fn qdcalc(st: &mut SolverState, sys: &mut InviscidSystem) {
                 st.dij[i][j] = sys.bij[i][j];
             }
         }
-        sys.ladij = true;
+        sys.dij_foil_built = true;
     }
 
     // set up coefficient matrix of dPsi/dm on airfoil surface
     for i in 1..=n {
-        let p = pswlin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
+        let p = wake_source_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
         for j in (n + 1)..=np {
-            sys.bij[i][j] = -p.dzdm[j];
+            sys.bij[i][j] = -p.psi_d_sigma[j];
         }
     }
 
@@ -210,7 +210,7 @@ pub fn qdcalc(st: &mut SolverState, sys: &mut InviscidSystem) {
     // multiply by inverse of factored dPsi/dGam matrix
     for j in (n + 1)..=np {
         let mut col: Vec<f64> = (0..=(n + 1)).map(|i| sys.bij[i][j]).collect();
-        baksub(&sys.aij, &mut col);
+        lu_back_substitute(&sys.aij_lu, &mut col);
         for i in 1..=(n + 1) {
             sys.bij[i][j] = col[i];
         }
@@ -228,17 +228,17 @@ pub fn qdcalc(st: &mut SolverState, sys: &mut InviscidSystem) {
     for i in (n + 1)..=np {
         let iw = i - n;
         // airfoil contribution at wake panel node
-        let p = psilin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
+        let p = panel_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
         for j in 1..=n {
-            cij[iw][j] = p.dqdg[j];
+            cij[iw][j] = p.qtan_d_gamma[j];
         }
         for j in 1..=n {
-            st.dij[i][j] = p.dqdm[j];
+            st.dij[i][j] = p.qtan_d_sigma[j];
         }
         // wake contribution
-        let w = pswlin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
+        let w = wake_source_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
         for j in (n + 1)..=np {
-            st.dij[i][j] = w.dqdm[j];
+            st.dij[i][j] = w.qtan_d_sigma[j];
         }
     }
 

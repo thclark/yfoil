@@ -10,19 +10,19 @@ use crate::solver::blstate::SolverState;
 
 /// Everything PSILIN leaves in COMMON that analysis mode reads.
 #[derive(Debug, Clone)]
-pub struct Psilin {
+pub struct PanelInfluence {
     pub psi: f64,
-    pub psi_ni: f64,
-    pub qtan1: f64,
-    pub qtan2: f64,
-    pub qtanm: f64,
-    pub z_qinf: f64,
-    pub z_alfa: f64,
+    pub psi_d_n: f64,
+    pub qtan_alpha0: f64,
+    pub qtan_alpha90: f64,
+    pub qtan_sigma: f64,
+    pub psi_d_qinf: f64,
+    pub psi_d_alpha: f64,
     /// 1-based, 1..=n
-    pub dzdg: Vec<f64>,
-    pub dqdg: Vec<f64>,
-    pub dzdm: Vec<f64>,
-    pub dqdm: Vec<f64>,
+    pub psi_d_gamma: Vec<f64>,
+    pub qtan_d_gamma: Vec<f64>,
+    pub psi_d_sigma: Vec<f64>,
+    pub qtan_d_sigma: Vec<f64>,
 }
 
 /// XFOIL's INIT: PI = 4.0*ATAN(1.0), HOPI = 0.5/PI, QOPI = 0.25/PI — computed the same way.
@@ -34,7 +34,15 @@ pub fn pi_consts() -> (f64, f64, f64) {
 /// PSILIN(I, XI, YI, NXI, NYI, PSI, PSI_NI, GEOLIN=.FALSE., SIGLIN).
 /// `i` is the 1-based node index the point belongs to (airfoil 1..=n, wake n+1..=n+nw);
 /// it only affects the self-influence skips and the arctan reflection flag.
-pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, siglin: bool) -> Psilin {
+pub fn panel_influence(
+    st: &SolverState,
+    i: usize,
+    xi: f64,
+    yi: f64,
+    nxi: f64,
+    nyi: f64,
+    siglin: bool,
+) -> PanelInfluence {
     let n = st.n_foil_nodes;
     let (pi, hopi, qopi) = pi_consts();
     let (x, y, s) = (&st.x, &st.y, &st.s);
@@ -47,18 +55,18 @@ pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, 
     let cosa = st.alpha.cos();
     let sina = st.alpha.sin();
 
-    let mut out = Psilin {
+    let mut out = PanelInfluence {
         psi: 0.0,
-        psi_ni: 0.0,
-        qtan1: 0.0,
-        qtan2: 0.0,
-        qtanm: 0.0,
-        z_qinf: 0.0,
-        z_alfa: 0.0,
-        dzdg: vec![0.0; n + 1],
-        dqdg: vec![0.0; n + 1],
-        dzdm: vec![0.0; n + 1],
-        dqdm: vec![0.0; n + 1],
+        psi_d_n: 0.0,
+        qtan_alpha0: 0.0,
+        qtan_alpha90: 0.0,
+        qtan_sigma: 0.0,
+        psi_d_qinf: 0.0,
+        psi_d_alpha: 0.0,
+        psi_d_gamma: vec![0.0; n + 1],
+        qtan_d_gamma: vec![0.0; n + 1],
+        psi_d_sigma: vec![0.0; n + 1],
+        qtan_d_sigma: vec![0.0; n + 1],
     };
 
     let (scs, sds) = if st.sharp_te {
@@ -175,19 +183,19 @@ pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, 
             out.psi += qopi * (psum * ssum + pdif * sdif);
 
             // dPsi/dm
-            out.dzdm[jm] += qopi * (-psum * dsim + pdif * dsim);
-            out.dzdm[jo] += qopi * (-psum * dsio - pdif * dsio);
-            out.dzdm[jp] += qopi * (psum * (dsio + dsim) + pdif * (dsio - dsim));
+            out.psi_d_sigma[jm] += qopi * (-psum * dsim + pdif * dsim);
+            out.psi_d_sigma[jo] += qopi * (-psum * dsio - pdif * dsio);
+            out.psi_d_sigma[jp] += qopi * (psum * (dsio + dsim) + pdif * (dsio - dsim));
 
             // dPsi/dni
             let psni = psx1 * x1i + psx0 * (x1i + x2i) * 0.5 + psyy * yyi;
             let pdni = pdx1 * x1i + pdx0 * (x1i + x2i) * 0.5 + pdyy * yyi;
-            out.psi_ni += qopi * (psni * ssum + pdni * sdif);
-            out.qtanm += qopi * (psni * ssum + pdni * sdif);
+            out.psi_d_n += qopi * (psni * ssum + pdni * sdif);
+            out.qtan_sigma += qopi * (psni * ssum + pdni * sdif);
 
-            out.dqdm[jm] += qopi * (-psni * dsim + pdni * dsim);
-            out.dqdm[jo] += qopi * (-psni * dsio - pdni * dsio);
-            out.dqdm[jp] += qopi * (psni * (dsio + dsim) + pdni * (dsio - dsim));
+            out.qtan_d_sigma[jm] += qopi * (-psni * dsim + pdni * dsim);
+            out.qtan_d_sigma[jo] += qopi * (-psni * dsio - pdni * dsio);
+            out.qtan_d_sigma[jp] += qopi * (psni * (dsio + dsim) + pdni * (dsio - dsim));
 
             // calculate source contribution to Psi for 0-2 half-panel
             let dxinv = 1.0 / (x0 - x2);
@@ -211,19 +219,19 @@ pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, 
             out.psi += qopi * (psum * ssum + pdif * sdif);
 
             // dPsi/dm
-            out.dzdm[jo] += qopi * (-psum * (dsip + dsio) - pdif * (dsip - dsio));
-            out.dzdm[jp] += qopi * (psum * dsio - pdif * dsio);
-            out.dzdm[jq] += qopi * (psum * dsip + pdif * dsip);
+            out.psi_d_sigma[jo] += qopi * (-psum * (dsip + dsio) - pdif * (dsip - dsio));
+            out.psi_d_sigma[jp] += qopi * (psum * dsio - pdif * dsio);
+            out.psi_d_sigma[jq] += qopi * (psum * dsip + pdif * dsip);
 
             // dPsi/dni
             let psni = psx0 * (x1i + x2i) * 0.5 + psx2 * x2i + psyy * yyi;
             let pdni = pdx0 * (x1i + x2i) * 0.5 + pdx2 * x2i + pdyy * yyi;
-            out.psi_ni += qopi * (psni * ssum + pdni * sdif);
-            out.qtanm += qopi * (psni * ssum + pdni * sdif);
+            out.psi_d_n += qopi * (psni * ssum + pdni * sdif);
+            out.qtan_sigma += qopi * (psni * ssum + pdni * sdif);
 
-            out.dqdm[jo] += qopi * (-psni * (dsip + dsio) - pdni * (dsip - dsio));
-            out.dqdm[jp] += qopi * (psni * dsio - pdni * dsio);
-            out.dqdm[jq] += qopi * (psni * dsip + pdni * dsip);
+            out.qtan_d_sigma[jo] += qopi * (-psni * (dsip + dsio) - pdni * (dsip - dsio));
+            out.qtan_d_sigma[jp] += qopi * (psni * dsio - pdni * dsio);
+            out.qtan_d_sigma[jq] += qopi * (psni * dsip + pdni * dsip);
         }
 
         // calculate vortex panel contribution to Psi
@@ -250,18 +258,18 @@ pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, 
         out.psi += qopi * (psis * gsum + psid * gdif);
 
         // dPsi/dGam
-        out.dzdg[jo] += qopi * (psis - psid);
-        out.dzdg[jp] += qopi * (psis + psid);
+        out.psi_d_gamma[jo] += qopi * (psis - psid);
+        out.psi_d_gamma[jp] += qopi * (psis + psid);
 
         // dPsi/dni
         let psni = psx1 * x1i + psx2 * x2i + psyy * yyi;
         let pdni = pdx1 * x1i + pdx2 * x2i + pdyy * yyi;
-        out.psi_ni += qopi * (gsum * psni + gdif * pdni);
-        out.qtan1 += qopi * (gsum1 * psni + gdif1 * pdni);
-        out.qtan2 += qopi * (gsum2 * psni + gdif2 * pdni);
+        out.psi_d_n += qopi * (gsum * psni + gdif * pdni);
+        out.qtan_alpha0 += qopi * (gsum1 * psni + gdif1 * pdni);
+        out.qtan_alpha90 += qopi * (gsum2 * psni + gdif2 * pdni);
 
-        out.dqdg[jo] += qopi * (psni - pdni);
-        out.dqdg[jp] += qopi * (psni + pdni);
+        out.qtan_d_gamma[jo] += qopi * (psni - pdni);
+        out.qtan_d_gamma[jp] += qopi * (psni + pdni);
     }
 
     if !te_closed {
@@ -292,27 +300,27 @@ pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, 
         out.psi += hopi * (psig * sigte + pgam * gamte);
 
         // dPsi/dGam
-        out.dzdg[jo] -= hopi * psig * scs * 0.5;
-        out.dzdg[jp] += hopi * psig * scs * 0.5;
-        out.dzdg[jo] += hopi * pgam * sds * 0.5;
-        out.dzdg[jp] -= hopi * pgam * sds * 0.5;
+        out.psi_d_gamma[jo] -= hopi * psig * scs * 0.5;
+        out.psi_d_gamma[jp] += hopi * psig * scs * 0.5;
+        out.psi_d_gamma[jo] += hopi * pgam * sds * 0.5;
+        out.psi_d_gamma[jp] -= hopi * pgam * sds * 0.5;
 
         // dPsi/dni
-        out.psi_ni += hopi * (psigni * sigte + pgamni * gamte);
-        out.qtan1 += hopi * (psigni * sigte1 + pgamni * gamte1);
-        out.qtan2 += hopi * (psigni * sigte2 + pgamni * gamte2);
+        out.psi_d_n += hopi * (psigni * sigte + pgamni * gamte);
+        out.qtan_alpha0 += hopi * (psigni * sigte1 + pgamni * gamte1);
+        out.qtan_alpha90 += hopi * (psigni * sigte2 + pgamni * gamte2);
 
-        out.dqdg[jo] -= hopi * (psigni * 0.5 * scs - pgamni * 0.5 * sds);
-        out.dqdg[jp] += hopi * (psigni * 0.5 * scs - pgamni * 0.5 * sds);
+        out.qtan_d_gamma[jo] -= hopi * (psigni * 0.5 * scs - pgamni * 0.5 * sds);
+        out.qtan_d_gamma[jp] += hopi * (psigni * 0.5 * scs - pgamni * 0.5 * sds);
     }
 
     // label 12: freestream terms
     out.psi += st.qinf * (cosa * yi - sina * xi);
-    out.psi_ni += st.qinf * (cosa * nyi - sina * nxi);
-    out.qtan1 += st.qinf * nyi;
-    out.qtan2 -= st.qinf * nxi;
-    out.z_qinf += cosa * yi - sina * xi;
-    out.z_alfa -= st.qinf * (sina * yi + cosa * xi);
+    out.psi_d_n += st.qinf * (cosa * nyi - sina * nxi);
+    out.qtan_alpha0 += st.qinf * nyi;
+    out.qtan_alpha90 -= st.qinf * nxi;
+    out.psi_d_qinf += cosa * yi - sina * xi;
+    out.psi_d_alpha -= st.qinf * (sina * yi + cosa * xi);
 
     out
 }

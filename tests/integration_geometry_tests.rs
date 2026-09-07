@@ -233,7 +233,7 @@ fn test_thickness_values() {
 
 use yfoil::solver::analysis::{analyze, FlowSpec, Session};
 use yfoil::solver::blstate::SolverState;
-use yfoil::solver::ggcalc::ggcalc;
+use yfoil::solver::ggcalc::build_inviscid_system;
 use yfoil::solver::specal::specal;
 
 fn inviscid_cl(airfoil: &yfoil::geometry::PaneledAirfoil, alpha: f64) -> f64 {
@@ -499,7 +499,7 @@ fn test_kutta_condition_both_te_types() {
     // GGCALC's Kutta row: GAMU(1) + GAMU(N) = 0 for both the alpha = 0 and alpha = 90 solutions
     let kutta = |airfoil: &yfoil::geometry::PaneledAirfoil| -> (f64, f64) {
         let mut st = SolverState::from_foil(airfoil, airfoil.n / 12 + 10);
-        ggcalc(&mut st);
+        build_inviscid_system(&mut st);
         let n = airfoil.n;
         (
             st.q_inviscid_basis[1][1] + st.q_inviscid_basis[1][n],

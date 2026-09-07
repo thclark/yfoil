@@ -2,7 +2,7 @@
 //! streamlines of the current solution, and the alpha = 0, 90 tangential velocities on it.
 
 use crate::solver::blstate::SolverState;
-use crate::solver::psilin::psilin;
+use crate::solver::psilin::panel_influence;
 
 /// SETEXP: geometrically stretched array S(1..=nn) with S(1) = 0, S(2)-S(1) = ds1, S(nn) = smax.
 /// Ported character for character: the ratio is found by Newton iteration to |dRatio| < 1e-5
@@ -86,8 +86,8 @@ pub fn xywake(st: &mut SolverState, waklen: f64) {
     st.s[i] = st.s[n];
 
     // calculate streamfunction gradient components at first point
-    let psi_x = psilin(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_ni;
-    let psi_y = psilin(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_ni;
+    let psi_x = panel_influence(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_d_n;
+    let psi_y = panel_influence(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_d_n;
 
     // set unit vector normal to wake at first point
     st.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
@@ -110,8 +110,8 @@ pub fn xywake(st: &mut SolverState, waklen: f64) {
         }
 
         // calculate normal vector for next point
-        let psi_x = psilin(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_ni;
-        let psi_y = psilin(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_ni;
+        let psi_x = panel_influence(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_d_n;
+        let psi_y = panel_influence(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_d_n;
 
         st.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
         st.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
@@ -134,8 +134,8 @@ pub fn qwcalc(st: &mut SolverState) {
     st.q_inviscid_basis[2][n + 1] = st.q_inviscid_basis[2][n];
     // rest of wake
     for i in (n + 2)..=(n + st.n_wake_nodes) {
-        let p = psilin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], false);
-        st.q_inviscid_basis[1][i] = p.qtan1;
-        st.q_inviscid_basis[2][i] = p.qtan2;
+        let p = panel_influence(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], false);
+        st.q_inviscid_basis[1][i] = p.qtan_alpha0;
+        st.q_inviscid_basis[2][i] = p.qtan_alpha90;
     }
 }
