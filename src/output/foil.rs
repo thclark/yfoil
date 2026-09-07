@@ -777,8 +777,8 @@ mod tests {
 
     #[test]
     fn geometry_from_paneled_has_no_wake_and_matches_nodes() {
-        use crate::geometry::{naca_4digit, panel_foil};
-        let geom = naca_4digit("2412", 100).unwrap();
+        use crate::geometry::{naca_4digit, panel_foil, Thickness};
+        let geom = naca_4digit("2412", 100, Thickness::Perpendicular).unwrap();
         let airfoil = panel_foil(&geom);
         let g = FoilNodes::from_panelled(&airfoil);
         assert_eq!(g.n(), 100);

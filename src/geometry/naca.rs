@@ -3,12 +3,26 @@
 //! Generate standard NACA airfoil profiles from their designation numbers.
 
 use super::airfoil::Geometry;
+use super::panel::{repanel_by_curvature, PaneConfig};
+
+/// How a NACA section's thickness distribution is applied to its camber line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum Thickness {
+    /// Perpendicular to the camber line: the NACA definition (YFoil's spacing)
+    #[default]
+    Perpendicular,
+    /// Vertical, as XFOIL's NACA4/NACA5 apply it (`naca.f:62`), on XFOIL's 245-point buffer
+    /// and then panelled with PANGEN to the requested count
+    Vertical,
+}
 
 /// Generate a NACA 4-digit airfoil
 ///
 /// # Arguments
 /// * `designation` - 4-digit string (e.g., "0012", "4412")
 /// * `n_panels` - Number of panel points to generate
+///
+/// * `thickness` - perpendicular to the camber line (the NACA definition) or vertical (XFOIL's)
 ///
 /// # Returns
 /// Geometry with cosine-spaced points from TE around to TE
@@ -17,7 +31,11 @@ use super::airfoil::Geometry;
 /// - First digit: maximum camber as percentage of chord
 /// - Second digit: position of maximum camber in tenths of chord
 /// - Last two digits: maximum thickness as percentage of chord
-pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaError> {
+pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
+    if thickness == Thickness::Vertical {
+        let buffer = naca_4digit_vertical(designation)?;
+        return Ok(repanel_by_curvature(&buffer, n_panels, &PaneConfig::default()));
+    }
     if designation.len() != 4 {
         return Err(NacaError::InvalidDesignation(
             "NACA 4-digit designation must be exactly 4 characters".to_string(),
@@ -118,7 +136,11 @@ pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
 /// - Last two digits: maximum thickness as percentage of chord
 ///
 /// Common examples: 23012, 23015, 24112 (reflex)
-pub fn naca_5digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaError> {
+pub fn naca_5digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
+    if thickness == Thickness::Vertical {
+        let buffer = naca_5digit_vertical(designation)?;
+        return Ok(repanel_by_curvature(&buffer, n_panels, &PaneConfig::default()));
+    }
     if designation.len() != 5 {
         return Err(NacaError::InvalidDesignation(
             "NACA 5-digit designation must be exactly 5 characters".to_string(),
@@ -410,7 +432,7 @@ fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
 }
 
 /// `NACA4` as XFOIL runs it (vertical thickness, AN = 1.5 spacing, 2·NSIDE − 1 = 245 points).
-pub fn naca_4digit_xfoil(designation: &str) -> Result<Geometry, NacaError> {
+pub fn naca_4digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
     if designation.len() != 4 || !designation.chars().all(|c| c.is_ascii_digit()) {
         return Err(NacaError::InvalidDesignation(
             "NACA 4-digit designation must be exactly 4 digits".to_string(),
@@ -441,7 +463,7 @@ pub fn naca_4digit_xfoil(designation: &str) -> Result<Geometry, NacaError> {
 }
 
 /// `NACA5` as XFOIL runs it (210xx … 250xx camber lines by its M/C table, vertical thickness).
-pub fn naca_5digit_xfoil(designation: &str) -> Result<Geometry, NacaError> {
+pub fn naca_5digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
     if designation.len() != 5 || !designation.chars().all(|c| c.is_ascii_digit()) {
         return Err(NacaError::InvalidDesignation(
             "NACA 5-digit designation must be exactly 5 digits".to_string(),
@@ -490,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_naca_0012_symmetric() {
-        let geom = naca_4digit("0012", 100).unwrap();
+        let geom = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
 
         // Should produce exactly the requested number of points
         assert_eq!(geom.x.len(), 100);
@@ -510,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_naca_4412_cambered() {
-        let geom = naca_4digit("4412", 100).unwrap();
+        let geom = naca_4digit("4412", 100, Thickness::Perpendicular).unwrap();
 
         // Cambered airfoil: upper surface should have more positive y values
         let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -538,7 +560,7 @@ mod tests {
 
     #[test]
     fn test_naca_23012() {
-        let geom = naca_5digit("23012", 100).unwrap();
+        let geom = naca_5digit("23012", 100, Thickness::Perpendicular).unwrap();
 
         // Should have points on both sides
         assert!(geom.x.len() > 100);
@@ -561,7 +583,7 @@ mod tests {
 
     #[test]
     fn test_naca_23015() {
-        let geom = naca_5digit("23015", 100).unwrap();
+        let geom = naca_5digit("23015", 100, Thickness::Perpendicular).unwrap();
 
         let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -574,8 +596,8 @@ mod tests {
     #[test]
     fn test_naca_5digit_different_cl() {
         // NACA 13012 has lower Cl than 23012
-        let geom_low = naca_5digit("13012", 100).unwrap();
-        let geom_high = naca_5digit("23012", 100).unwrap();
+        let geom_low = naca_5digit("13012", 100, Thickness::Perpendicular).unwrap();
+        let geom_high = naca_5digit("23012", 100, Thickness::Perpendicular).unwrap();
 
         // Higher Cl should have more camber (larger y values on upper surface)
         let max_y_low = geom_low.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -587,7 +609,7 @@ mod tests {
     #[test]
     fn test_naca_5digit_symmetric() {
         // NACA 00012 - symmetric 5-digit (Cl = 0)
-        let geom = naca_5digit("00012", 100).unwrap();
+        let geom = naca_5digit("00012", 100, Thickness::Perpendicular).unwrap();
 
         let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -599,17 +621,17 @@ mod tests {
     #[test]
     fn test_naca_5digit_invalid() {
         // Invalid length
-        assert!(naca_5digit("2301", 100).is_err());
-        assert!(naca_5digit("230123", 100).is_err());
+        assert!(naca_5digit("2301", 100, Thickness::Perpendicular).is_err());
+        assert!(naca_5digit("230123", 100, Thickness::Perpendicular).is_err());
 
         // Invalid camber position for non-reflex
-        assert!(naca_5digit("26012", 100).is_err()); // p = 0.30 not in table
+        assert!(naca_5digit("26012", 100, Thickness::Perpendicular).is_err()); // p = 0.30 not in table
     }
 
     #[test]
     fn test_naca_5digit_reflex() {
         // NACA 23112 - reflex camber (third digit = 1)
-        let geom = naca_5digit("23112", 100).unwrap();
+        let geom = naca_5digit("23112", 100, Thickness::Perpendicular).unwrap();
 
         // Should generate valid geometry
         assert!(geom.x.len() > 100);

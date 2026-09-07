@@ -5,6 +5,7 @@
 
 use std::fs::File;
 use std::io::BufReader;
+use yfoil::geometry::Thickness;
 
 use approx::assert_relative_eq;
 use serde::Deserialize;
@@ -43,7 +44,7 @@ fn test_naca_0012_te_coordinates() {
     let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
     // Generate YFoil geometry
-    let geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
+    let geom = naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
     let airfoil = panel_foil(&geom);
 
     // Check panel count
@@ -103,7 +104,7 @@ fn test_naca_0012_panel_spacing() {
     let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
     // Generate YFoil geometry
-    let geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
+    let geom = naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
     let airfoil = panel_foil(&geom);
 
     println!("=== Panel Spacing Comparison (first 10 panels) ===");
@@ -171,7 +172,7 @@ fn test_naca_0012_pane_algorithm() {
 
     // Generate buffer geometry with high resolution for input to PANE
     // XFOIL's PANE takes a buffer airfoil with more points and redistributes
-    let buffer_geom = naca_4digit("0012", 200).expect("Failed to create buffer airfoil");
+    let buffer_geom = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create buffer airfoil");
 
     // Apply PANE algorithm with XFOIL defaults
     let config = PaneConfig::default();
@@ -179,7 +180,8 @@ fn test_naca_0012_pane_algorithm() {
     let paned_airfoil = panel_foil(&paned_geom);
 
     // Also generate with cosine spacing for comparison
-    let cosine_geom = naca_4digit("0012", fixture.n_panels).expect("Failed to create airfoil");
+    let cosine_geom =
+        naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
     let cosine_airfoil = panel_foil(&cosine_geom);
 
     // Calculate RMS errors
@@ -270,7 +272,7 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     }
 
     // Generate buffer geometry with high resolution for input to PANE
-    let buffer_geom = naca_4digit("0012", 200).expect("Failed to create buffer airfoil");
+    let buffer_geom = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create buffer airfoil");
 
     // Apply PANE algorithm with specific CTERAT
     let config = PaneConfig {
@@ -373,7 +375,7 @@ fn test_pane_cterat_0_50() {
 /// Test that PANE method produces valid geometry for aerodynamic analysis
 #[test]
 fn test_pane_method_produces_valid_paneled_airfoil() {
-    let original = naca_4digit("0012", 100).expect("Failed to create airfoil");
+    let original = naca_4digit("0012", 100, Thickness::Perpendicular).expect("Failed to create airfoil");
     let config = PaneConfig::default();
     let paned = repanel_by_curvature(&original, 160, &config);
     let paneled = panel_foil(&paned);
@@ -411,7 +413,7 @@ fn test_pane_method_produces_valid_paneled_airfoil() {
 /// Test that cosine method produces valid geometry for aerodynamic analysis
 #[test]
 fn test_cosine_method_produces_valid_paneled_airfoil() {
-    let original = naca_4digit("0012", 100).expect("Failed to create airfoil");
+    let original = naca_4digit("0012", 100, Thickness::Perpendicular).expect("Failed to create airfoil");
     let cosined = repanel_cosine(&original, 160, 0.15);
     let paneled = panel_foil(&cosined);
 
@@ -444,7 +446,7 @@ fn test_cosine_method_produces_valid_paneled_airfoil() {
 /// Test that PANE and cosine methods produce different panel distributions
 #[test]
 fn test_pane_and_cosine_methods_differ() {
-    let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
+    let original = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create airfoil");
     let config = PaneConfig::default();
 
     let paned = repanel_by_curvature(&original, 160, &config);
@@ -477,7 +479,7 @@ fn test_pane_and_cosine_methods_differ() {
 /// Test that both repaneling methods preserve airfoil shape (extents)
 #[test]
 fn test_both_methods_preserve_shape() {
-    let original = naca_4digit("4412", 120).expect("Failed to create cambered airfoil");
+    let original = naca_4digit("4412", 120, Thickness::Perpendicular).expect("Failed to create cambered airfoil");
 
     let config = PaneConfig::default();
     let paned = repanel_by_curvature(&original, 160, &config);
@@ -517,7 +519,7 @@ fn test_both_methods_preserve_shape() {
 /// Test PANE method clusters panels at leading edge (high curvature)
 #[test]
 fn test_pane_clusters_at_leading_edge() {
-    let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
+    let original = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create airfoil");
     let config = PaneConfig::default();
     let paned = repanel_by_curvature(&original, 160, &config);
 
@@ -556,7 +558,7 @@ fn test_pane_clusters_at_leading_edge() {
 /// Test that PANE config parameters affect the output
 #[test]
 fn test_pane_config_affects_output() {
-    let original = naca_4digit("0012", 200).expect("Failed to create airfoil");
+    let original = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create airfoil");
 
     let config_low_te = PaneConfig {
         cterat: 0.10,

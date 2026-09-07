@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_PURE};
 use yfoil::geometry::{
-    arc_coordinate, find_le, naca_4digit_xfoil, naca_5digit_xfoil, panel_foil, repanel_by_curvature, spline_segmented,
-    PaneConfig, XFOIL_NACA_NSIDE,
+    arc_coordinate, find_le, naca_4digit_vertical, naca_5digit_vertical, panel_foil, repanel_by_curvature,
+    spline_segmented, PaneConfig, XFOIL_NACA_NSIDE,
 };
 
 struct PangenDump {
@@ -72,9 +72,9 @@ fn check(case: &str, spec: &str, npan: usize) {
 
     // the buffer airfoil
     let buffer = if spec.len() == 4 {
-        naca_4digit_xfoil(spec).unwrap()
+        naca_4digit_vertical(spec).unwrap()
     } else {
-        naca_5digit_xfoil(spec).unwrap()
+        naca_5digit_vertical(spec).unwrap()
     };
     assert_eq!(buffer.x.len(), d.buffer.len(), "{case}: buffer point count");
     let sb = arc_coordinate(&buffer.x, &buffer.y);

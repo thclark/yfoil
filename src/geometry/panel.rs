@@ -762,6 +762,7 @@ fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::Thickness;
     use approx::assert_relative_eq;
 
     #[test]
@@ -801,7 +802,7 @@ mod tests {
     fn test_paneled_airfoil_from_naca0012() {
         use crate::geometry::naca::naca_4digit;
 
-        let geom = naca_4digit("0012", 100).unwrap();
+        let geom = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
         let paneled = panel_foil(&geom);
 
         // Check basic properties - should produce exactly requested panels
@@ -825,7 +826,7 @@ mod tests {
     fn test_normal_vectors_unit_length() {
         use crate::geometry::naca::naca_4digit;
 
-        let geom = naca_4digit("0012", 100).unwrap();
+        let geom = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
         let paneled = panel_foil(&geom);
 
         // All normal vectors should have unit length
@@ -839,7 +840,7 @@ mod tests {
     fn test_normal_vectors_point_outward() {
         use crate::geometry::naca::naca_4digit;
 
-        let geom = naca_4digit("0012", 100).unwrap();
+        let geom = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
         let paneled = panel_foil(&geom);
 
         // For a symmetric airfoil centered on y=0:
@@ -884,7 +885,7 @@ mod tests {
         use crate::geometry::naca::naca_4digit;
 
         // NACA 0012 with XFOIL-compatible blunt TE should be detected as blunt
-        let geom = naca_4digit("0012", 100).unwrap();
+        let geom = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
         let paneled = panel_foil(&geom);
 
         // The NACA generator uses original coefficients for blunt TE (XFOIL-compatible)
@@ -896,7 +897,7 @@ mod tests {
     fn test_repanel_preserves_shape() {
         use crate::geometry::naca::naca_4digit;
 
-        let original = naca_4digit("0012", 100).unwrap();
+        let original = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
         let repaneled = repanel_cosine(&original, 150, 0.15);
 
         // Should have approximately the target number of points
@@ -921,7 +922,7 @@ mod tests {
     fn test_repanel_cosine_spacing() {
         use crate::geometry::naca::naca_4digit;
 
-        let original = naca_4digit("0012", 100).unwrap();
+        let original = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
         let repaneled = repanel_cosine(&original, 100, 0.15);
 
         // Cosine spacing should cluster points near LE and TE

@@ -1,12 +1,13 @@
 //! YFoil CLI - Aerofoil analysis tool
 
 use std::path::PathBuf;
+use yfoil::geometry::Thickness;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
 use yfoil::geometry::{
-    naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, panel_foil, read_dat_file, read_geometry_from_file,
-    repanel_by_curvature, repanel_cosine, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
+    naca_4digit, naca_5digit, panel_foil, read_dat_file, read_geometry_from_file, repanel_by_curvature, repanel_cosine,
+    write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
 use yfoil::output::{AnalysisOutput, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
@@ -161,7 +162,7 @@ enum PlotAction {
     /// point analysis JSONs (one design point each; same panels), or one polar JSON written with
     /// `--distributions` (one design point per alpha)
     Foil {
-        /// Geometry (.json/.dat), analysis JSON (`yfoil analyze -o`) or polar JSON (`yfoil polar --distributions -o`)
+        /// Geometry (.json/.dat), analysis JSON (`yfoil analyse -o`) or polar JSON (`yfoil polar --distributions -o`)
         #[arg(required = true)]
         files: Vec<PathBuf>,
 
@@ -289,12 +290,12 @@ enum GeomAction {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Airfoil name (for .dat output)
-        #[arg(long, default_value = "Airfoil")]
+        /// Aerofoil name (for .dat output)
+        #[arg(long, default_value = "Aerofoil")]
         name: String,
     },
 
-    /// Generate NACA airfoil
+    /// Generate NACA aerofoil
     Naca {
         /// NACA designation (e.g., "0012", "4412", "23015")
         spec: String,
@@ -310,18 +311,18 @@ enum GeomAction {
         /// Close the trailing edge (zero TE gap; XFOIL's SHARP path)
         #[arg(long)]
         sharp: bool,
-        /// Generator model: "exact" (NACA definition, thickness perpendicular to the camber
-        /// line, YFoil's spacing) or "xfoil" (XFOIL's NACA4/NACA5: vertical thickness, 245-point
-        /// buffer, then PANGEN to the requested panel count)
-        #[arg(long, default_value = "exact")]
-        naca_model: String,
+        /// Thickness distribution: perpendicular to the camber line (the NACA definition, YFoil's
+        /// spacing) or vertical (XFOIL's NACA4/NACA5 on its 245-point buffer, then PANGEN to the
+        /// requested panel count)
+        #[arg(long, value_enum, default_value_t = Thickness::Perpendicular)]
+        thickness: Thickness,
 
         /// Output file path
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 
-    /// Repanel airfoil with new point distribution
+    /// Repanel aerofoil with new point distribution
     Repanel {
         /// Input file path
         input: PathBuf,
@@ -330,13 +331,13 @@ enum GeomAction {
         #[arg(short = 'n', long, default_value_t = 160)]
         panels: usize,
 
-        /// Repaneling method: xfoil (curvature-based PANE) or cosine (modified cosine spacing)
-        #[arg(long, default_value = "xfoil")]
+        /// Repanelling method: curvature (XFOIL's PANE) or cosine (modified cosine spacing)
+        #[arg(long, default_value = "curvature")]
         method: String,
 
-        /// LE/TE panel density ratio (for cosine method only)
+        /// TE/LE panel density ratio (XFOIL's CTERAT; cosine method only)
         #[arg(long, default_value_t = 0.15)]
-        le_ratio: f64,
+        te_le_ratio: f64,
 
         /// Output file path
         #[arg(short, long)]
@@ -459,7 +460,7 @@ fn main() {
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
-            let airfoil = panel_foil(&geometry);
+            let aerofoil = panel_foil(&geometry);
             let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
             // Set up polar configuration
@@ -480,7 +481,7 @@ fn main() {
             // Run polar sweep, capturing every visited point's state when asked to
             let mut records: Vec<AnalysisOutput> = Vec::new();
             let result = if distributions {
-                compute_polar_with(&airfoil, &config, &mut |session, p| {
+                compute_polar_with(&aerofoil, &config, &mut |session, p| {
                     records.push(AnalysisOutput::from_session(
                         session,
                         p,
@@ -489,7 +490,7 @@ fn main() {
                     ));
                 })
             } else {
-                compute_polar(&airfoil, &config)
+                compute_polar(&aerofoil, &config)
             };
             records.sort_by(|a, b| a.results.alpha_deg.partial_cmp(&b.results.alpha_deg).unwrap());
 
@@ -511,7 +512,7 @@ fn main() {
                 // Human-readable output
                 println!("Polar Results");
                 println!("=============");
-                println!("Airfoil: {}", file.display());
+                println!("Aerofoil: {}", file.display());
                 println!("Re:      {:.2e}", reynolds);
                 println!("Mach:    {:.3}", mach);
                 println!("Ncrit:   {:.1}", ncrit);
@@ -839,7 +840,7 @@ fn read_foil_input(path: &PathBuf) -> FoilInput {
         return FoilInput::Geometry(g);
     }
     fail(&format!(
-        "{}: not a geometry, analysis or polar JSON (analysis JSON must come from this version's `yfoil analyze -o`)",
+        "{}: not a geometry, analysis or polar JSON (analysis JSON must come from this version's `yfoil analyse -o`)",
         path.display()
     ))
 }
@@ -919,35 +920,22 @@ fn handle_geom(action: GeomAction) {
             panels,
             to,
             sharp,
-            naca_model,
+            thickness,
             output,
         } => {
-            let geometry = if naca_model == "xfoil" {
-                let buffer = if spec.len() == 4 {
-                    naca_4digit_xfoil(&spec)
-                } else {
-                    naca_5digit_xfoil(&spec)
-                };
-                match buffer {
-                    Ok(b) => repanel_by_curvature(&b, panels, &PaneConfig::default()),
-                    Err(e) => {
-                        eprintln!("Error generating NACA airfoil: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else if spec.len() == 4 {
-                match naca_4digit(&spec, panels) {
+            let geometry = if spec.len() == 4 {
+                match naca_4digit(&spec, panels, thickness) {
                     Ok(g) => g,
                     Err(e) => {
-                        eprintln!("Error generating NACA airfoil: {}", e);
+                        eprintln!("Error generating NACA aerofoil: {}", e);
                         std::process::exit(1);
                     }
                 }
             } else if spec.len() == 5 {
-                match naca_5digit(&spec, panels) {
+                match naca_5digit(&spec, panels, thickness) {
                     Ok(g) => g,
                     Err(e) => {
-                        eprintln!("Error generating NACA airfoil: {}", e);
+                        eprintln!("Error generating NACA aerofoil: {}", e);
                         std::process::exit(1);
                     }
                 }
@@ -988,23 +976,23 @@ fn handle_geom(action: GeomAction) {
             input,
             panels,
             method,
-            le_ratio,
+            te_le_ratio,
             output,
         } => {
             let geometry = read_geometry_auto(&input);
 
-            let repaneled = match method.to_lowercase().as_str() {
-                "xfoil" | "pane" => {
-                    // Use XFOIL's curvature-based PANE algorithm
+            let repanelled = match method.to_lowercase().as_str() {
+                "curvature" => {
+                    // XFOIL's curvature-based PANE algorithm
                     let config = PaneConfig::default();
                     repanel_by_curvature(&geometry, panels, &config)
                 }
                 "cosine" => {
-                    // Use modified cosine spacing
-                    repanel_cosine(&geometry, panels, le_ratio)
+                    // Modified cosine spacing
+                    repanel_cosine(&geometry, panels, te_le_ratio)
                 }
                 _ => {
-                    eprintln!("Unknown repaneling method: {}. Use 'xfoil' or 'cosine'", method);
+                    eprintln!("Unknown repanelling method: {}. Use 'curvature' or 'cosine'", method);
                     std::process::exit(1);
                 }
             };
@@ -1016,15 +1004,15 @@ fn handle_geom(action: GeomAction) {
                 p
             });
 
-            if let Err(e) = write_geometry_to_json(&repaneled, &output_path) {
+            if let Err(e) = write_geometry_to_json(&repanelled, &output_path) {
                 eprintln!("Error writing output: {}", e);
                 std::process::exit(1);
             }
 
             println!(
-                "Repaneled from {} to {} points using {} method",
+                "Repanelled from {} to {} points using {} method",
                 geometry.x.len(),
-                repaneled.x.len(),
+                repanelled.x.len(),
                 method
             );
             println!("Wrote to {}", output_path.display());
@@ -1032,8 +1020,8 @@ fn handle_geom(action: GeomAction) {
 
         GeomAction::Info { input, output } => {
             let geometry = read_geometry_auto(&input);
-            let airfoil = panel_foil(&geometry);
-            let info = yfoil::output::GeometryInfo::from_panelled(&airfoil);
+            let aerofoil = panel_foil(&geometry);
+            let info = yfoil::output::GeometryInfo::from_panelled(&aerofoil);
 
             if let Some(ref path) = output {
                 // Write full JSON to file

@@ -2,6 +2,7 @@
 
 use approx::assert_relative_eq;
 use tempfile::NamedTempFile;
+use yfoil::geometry::Thickness;
 
 use yfoil::geometry::{
     naca_4digit, naca_5digit, panel_foil, read_dat_file, read_geometry_from_file, repanel_cosine, write_dat_file,
@@ -64,7 +65,7 @@ fn test_naca_0012_against_standard_formula() {
 /// Test roundtrip: generate -> write -> read -> compare
 #[test]
 fn test_json_roundtrip() {
-    let original = naca_4digit("4412", 120).unwrap();
+    let original = naca_4digit("4412", 120, Thickness::Perpendicular).unwrap();
 
     // Write to temp file
     let temp_file = NamedTempFile::with_suffix(".json").unwrap();
@@ -84,7 +85,7 @@ fn test_json_roundtrip() {
 /// Test roundtrip: generate -> write DAT -> read DAT -> compare
 #[test]
 fn test_dat_roundtrip() {
-    let original = naca_5digit("23015", 100).unwrap();
+    let original = naca_5digit("23015", 100, Thickness::Perpendicular).unwrap();
 
     // Write to temp file
     let temp_file = NamedTempFile::with_suffix(".dat").unwrap();
@@ -105,7 +106,7 @@ fn test_dat_roundtrip() {
 /// Test format conversion: JSON -> DAT -> JSON
 #[test]
 fn test_format_conversion() {
-    let original = naca_4digit("2412", 120).unwrap();
+    let original = naca_4digit("2412", 120, Thickness::Perpendicular).unwrap();
 
     // Write JSON
     let json_file = NamedTempFile::with_suffix(".json").unwrap();
@@ -132,7 +133,7 @@ fn test_format_conversion() {
 /// Test repaneling preserves airfoil shape
 #[test]
 fn test_repanel_shape_preservation() {
-    let original = naca_4digit("0012", 100).unwrap();
+    let original = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
     let repaneled = repanel_cosine(&original, 200, 0.15);
 
     // Maximum thickness should be preserved
@@ -150,7 +151,7 @@ fn test_repanel_shape_preservation() {
 #[test]
 fn test_full_geometry_pipeline() {
     // Generate NACA airfoil
-    let raw = naca_5digit("23012", 100).unwrap();
+    let raw = naca_5digit("23012", 100, Thickness::Perpendicular).unwrap();
 
     // Repanel with finer distribution
     let repaneled = repanel_cosine(&raw, 160, 0.15);
@@ -181,7 +182,7 @@ fn test_full_geometry_pipeline() {
 /// Test that symmetric airfoils are indeed symmetric
 #[test]
 fn test_airfoil_symmetry() {
-    let geom = naca_4digit("0015", 160).unwrap();
+    let geom = naca_4digit("0015", 160, Thickness::Perpendicular).unwrap();
 
     let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -194,13 +195,13 @@ fn test_airfoil_symmetry() {
 #[test]
 fn test_airfoil_camber() {
     // NACA 4-digit cambered
-    let geom_4 = naca_4digit("6412", 160).unwrap();
+    let geom_4 = naca_4digit("6412", 160, Thickness::Perpendicular).unwrap();
     let max_y_4 = geom_4.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let min_y_4 = geom_4.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!(max_y_4 > -min_y_4, "4-digit should have positive camber");
 
     // NACA 5-digit cambered
-    let geom_5 = naca_5digit("23018", 160).unwrap();
+    let geom_5 = naca_5digit("23018", 160, Thickness::Perpendicular).unwrap();
     let max_y_5 = geom_5.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let min_y_5 = geom_5.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!(max_y_5 > -min_y_5, "5-digit should have positive camber");
@@ -209,9 +210,9 @@ fn test_airfoil_camber() {
 /// Test different thickness values
 #[test]
 fn test_thickness_values() {
-    let thin = naca_4digit("0006", 100).unwrap();
-    let medium = naca_4digit("0012", 100).unwrap();
-    let thick = naca_4digit("0024", 100).unwrap();
+    let thin = naca_4digit("0006", 100, Thickness::Perpendicular).unwrap();
+    let medium = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
+    let thick = naca_4digit("0024", 100, Thickness::Perpendicular).unwrap();
 
     let thick_thin = thin.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
     let thick_med = medium.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
@@ -255,7 +256,7 @@ fn inviscid_cl(airfoil: &yfoil::geometry::PanelledFoil, alpha: f64) -> f64 {
 /// thickness effects (typically 5.8-6.2).
 #[test]
 fn test_panel_method_lift_slope() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
     let airfoil = panel_foil(&geom);
     // Calculate CL at two angles
     let alpha1 = 0.0_f64;
@@ -273,7 +274,7 @@ fn test_panel_method_lift_slope() {
 /// Test that symmetric airfoil has zero lift at alpha=0
 #[test]
 fn test_panel_method_symmetric_zero_lift() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
     let airfoil = panel_foil(&geom);
     let cl = inviscid_cl(&airfoil, 0.0);
     assert!(
@@ -285,7 +286,7 @@ fn test_panel_method_symmetric_zero_lift() {
 /// Test that cambered airfoil has positive lift at alpha=0
 #[test]
 fn test_panel_method_cambered_lift() {
-    let geom = naca_4digit("4412", 160).unwrap();
+    let geom = naca_4digit("4412", 160, Thickness::Perpendicular).unwrap();
     let airfoil = panel_foil(&geom);
     let cl = inviscid_cl(&airfoil, 0.0);
     // NACA 4412 has 4% camber, should produce positive lift at α=0
@@ -391,7 +392,7 @@ fn test_laminar_amplification_on_above_critical() {
 /// Test that blunt TE detection works correctly
 #[test]
 fn test_blunt_te_detection() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
 
     // Blunten the geometry
     let blunt_geom = geom.blunten(0.002);
@@ -411,7 +412,7 @@ fn test_blunt_te_detection() {
 /// be physically reasonable even if not as clean as sharp TE.
 #[test]
 fn test_blunt_te_reasonable_results() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
     let blunt_geom = geom.blunten(0.002); // 0.2% gap
     let airfoil = panel_foil(&blunt_geom);
 
@@ -455,7 +456,7 @@ fn test_blunt_te_reasonable_results() {
 #[test]
 fn test_te_type_lift_slope_comparison() {
     // Sharp TE
-    let geom_sharp = naca_4digit("0012", 160).unwrap();
+    let geom_sharp = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
     let airfoil_sharp = panel_foil(&geom_sharp);
 
     // Blunt TE
@@ -508,7 +509,7 @@ fn test_kutta_condition_both_te_types() {
     };
 
     // Sharp TE
-    let geom_sharp = naca_4digit("0012", 160).unwrap().sharpen();
+    let geom_sharp = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap().sharpen();
     let airfoil_sharp = panel_foil(&geom_sharp);
     assert!(airfoil_sharp.sharp_te);
     let (k0, k90) = kutta(&airfoil_sharp);
@@ -516,7 +517,7 @@ fn test_kutta_condition_both_te_types() {
     assert!(k90.abs() < 1e-9, "Sharp TE Kutta condition violated for α=90°: {k90}");
 
     // Blunt TE
-    let geom_blunt = naca_4digit("0012", 160).unwrap();
+    let geom_blunt = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
     let airfoil_blunt = panel_foil(&geom_blunt);
     assert!(!airfoil_blunt.sharp_te);
     let (k0, k90) = kutta(&airfoil_blunt);
@@ -532,7 +533,7 @@ fn test_kutta_condition_both_te_types() {
 fn test_sharp_te_smooth_gamma() {
     // For the symmetric airfoil at α = 0 the TE vorticity is small and the second differences
     // approaching the TE from both sides agree (the sharp-TE bisector row of GGCALC)
-    let geom = naca_4digit("0012", 160).unwrap().sharpen();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap().sharpen();
     let airfoil = panel_foil(&geom);
     let mut st = SolverState::from_foil(&airfoil, airfoil.n_foil_nodes / 12 + 10);
     let mut sys = None;

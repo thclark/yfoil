@@ -2,11 +2,12 @@
 //! (4–5 significant figures). The gates are the instrumented-dump tests under `tests/`; this
 //! only shows that the CLI-level path runs and lands in the right place.
 
+use yfoil::geometry::Thickness;
 use yfoil::geometry::{naca_4digit, panel_foil};
 use yfoil::solver::analysis::{analyse, FlowConditions};
 
 fn main() {
-    let geometry = naca_4digit("0012", 160).expect("NACA 0012");
+    let geometry = naca_4digit("0012", 160, Thickness::Perpendicular).expect("NACA 0012");
     let airfoil = panel_foil(&geometry);
     let spec = FlowConditions {
         re: Some(1.0e6),

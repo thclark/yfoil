@@ -473,9 +473,9 @@ mod tests {
 
     #[test]
     fn test_geometry_info_from_paneled() {
-        use crate::geometry::{naca_4digit, panel_foil};
+        use crate::geometry::{naca_4digit, panel_foil, Thickness};
 
-        let geom = naca_4digit("0012", 160).unwrap();
+        let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
         let airfoil = panel_foil(&geom);
         let info = GeometryInfo::from_panelled(&airfoil);
 
@@ -506,9 +506,9 @@ mod tests {
 
     #[test]
     fn test_geometry_info_serialization() {
-        use crate::geometry::{naca_4digit, panel_foil};
+        use crate::geometry::{naca_4digit, panel_foil, Thickness};
 
-        let geom = naca_4digit("0012", 120).unwrap();
+        let geom = naca_4digit("0012", 120, Thickness::Perpendicular).unwrap();
         let airfoil = panel_foil(&geom);
         let info = GeometryInfo::from_panelled(&airfoil);
 
