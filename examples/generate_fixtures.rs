@@ -28,54 +28,6 @@ struct TestInput {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct GeometryFixture {
-    n: usize,
-    x: Vec<f64>,
-    y: Vec<f64>,
-    s: Vec<f64>,
-    nx: Vec<f64>,
-    ny: Vec<f64>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct InviscidFixture {
-    alpha_rad: f64,
-    gamma: Vec<f64>,
-    qinv: Vec<f64>,
-    cpi: Vec<f64>,
-    cl_inv: f64,
-    cm_inv: f64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct FixtureStation {
-    ibl: usize,
-    x: f64,
-    s: f64,
-    ue: f64,
-    dstar: f64,
-    theta: f64,
-    hk: f64,
-    cf: f64,
-    ctau: f64,
-    mass: f64,
-    regime: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct FixtureSide {
-    n_stations: usize,
-    stations: Vec<FixtureStation>,
-    itran: usize,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BLFixture {
-    upper: FixtureSide,
-    lower: FixtureSide,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 struct ViscalIteration {
     iter: usize,
     alpha_deg: f64,
