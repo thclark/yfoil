@@ -6,29 +6,29 @@
 // ============================================================================
 
 /// Shear coefficient lag constant
-pub const SCCON: f64 = 5.6;
+pub const LAG_CONSTANT: f64 = 5.6;
 
 /// G-beta locus constant (G-beta relation)
-pub const GACON: f64 = 6.70;
+pub const GBETA_LOCUS_A: f64 = 6.70;
 
 /// G-beta locus constant
-pub const GBCON: f64 = 0.75;
+pub const GBETA_LOCUS_B: f64 = 0.75;
 
 /// Wall term constant for G-beta
-pub const GCCON: f64 = 18.0;
+pub const GBETA_LOCUS_WALL: f64 = 18.0;
 
 /// Wall/wake dissipation length ratio Lo/L
-pub const DLCON: f64 = 0.9;
+pub const WAKE_DISSIPATION_LENGTH_RATIO: f64 = 0.9;
 
 /// Ctau weighting coefficient (derived from G-beta constants)
 /// CTCON = 0.5 / (GACON² * GBCON)
-pub const CTCON: f64 = 0.5 / (GACON * GACON * GBCON);
+pub const SQRTCTAUEQ_COEFFICIENT: f64 = 0.5 / (GBETA_LOCUS_A * GBETA_LOCUS_A * GBETA_LOCUS_B);
 
 /// Skin friction factor (usually 1.0)
-pub const CFFAC: f64 = 1.0;
+pub const CF_TURBULENT_FACTOR: f64 = 1.0;
 
 /// Shear lag UxEQ weight
-pub const DUXCON: f64 = 1.0;
+pub const LAG_PRESSURE_GRADIENT_WEIGHT: f64 = 1.0;
 
 /// Similarity station pressure gradient parameter (x/U dU/dx)
 /// Set to 1.0 for stagnation point
@@ -36,10 +36,10 @@ pub const BULE: f64 = 1.0;
 
 /// Initial turbulent Ctau coefficient at transition
 /// CTR = CTRCON * exp(-CTRCEX/(Hk-1))
-pub const CTRCON: f64 = 1.8;
+pub const TRANSITION_SQRTCTAU_FACTOR: f64 = 1.8;
 
 /// Initial turbulent Ctau exponent at transition
-pub const CTRCEX: f64 = 3.3;
+pub const TRANSITION_SQRTCTAU_EXPONENT: f64 = 3.3;
 
 // ============================================================================
 // BL Flow Type Enum
@@ -47,7 +47,7 @@ pub const CTRCEX: f64 = 3.3;
 
 /// Type of BL flow at a station
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BLFlowType {
+pub enum FlowRegime {
     /// Laminar flow
     Laminar = 1,
     /// Turbulent flow (attached)
@@ -65,43 +65,43 @@ pub enum BLFlowType {
 /// These parameters are constant throughout the BL calculation for a given
 /// flow condition (Mach, Reynolds number).
 #[derive(Debug, Clone)]
-pub struct BLGlobalParams {
+pub struct FlowParameters {
     /// IDAMPV: amplification model selected in SETBL from IDAMP (0 = DAMPL, 1 = DAMPL2)
     pub idampv: usize,
     /// Freestream velocity qinf
     pub qinf: f64,
 
     /// Karman-Tsien parameter TKBL = (1 - M²)^(-1/2) - 1 for subsonic
-    pub tk: f64,
+    pub karman_tsien: f64,
     /// d(TKBL)/d(M²)
-    pub tk_ms: f64,
+    pub karman_tsien_d_machsqd: f64,
 
     /// Stagnation density ratio ρ_stag/ρ_∞
-    pub rst: f64,
+    pub rho_stagnation: f64,
     /// d(RST)/d(M²)
-    pub rst_ms: f64,
+    pub rho_stagnation_d_machsqd: f64,
 
     /// 1 / stagnation enthalpy
-    pub hstinv: f64,
+    pub h_stagnation_inv: f64,
     /// d(HSTINV)/d(M²)
-    pub hstinv_ms: f64,
+    pub h_stagnation_inv_d_machsqd: f64,
 
     /// Reynolds number based on freestream
-    pub reybl: f64,
+    pub re: f64,
     /// d(REYBL)/d(M²)
-    pub reybl_ms: f64,
+    pub re_d_machsqd: f64,
     /// d(REYBL)/d(Re) = normalized sensitivity
-    pub reybl_re: f64,
+    pub re_d_re: f64,
 
     /// Gas constants
-    pub gamma: f64, // Cp/Cv (typically 1.4)
-    pub gm1: f64, // gamma - 1
+    pub gamma_gas: f64, // Cp/Cv (typically 1.4)
+    pub gamma_gas_m1: f64, // gamma - 1
 
     /// Viscosity ratio (Hvrat in XFOIL)
-    pub hvrat: f64,
+    pub sutherland_ratio: f64,
 }
 
-impl BLGlobalParams {
+impl FlowParameters {
     /// Create global BL parameters from flow conditions
     ///
     /// This is equivalent to the parameter setup in SETBL/COMSET.
@@ -151,18 +151,18 @@ impl BLGlobalParams {
         Self {
             idampv: 0,
             qinf,
-            tk,
-            tk_ms,
-            rst,
-            rst_ms,
-            hstinv,
-            hstinv_ms,
-            reybl,
-            reybl_ms,
-            reybl_re,
-            gamma,
-            gm1,
-            hvrat,
+            karman_tsien: tk,
+            karman_tsien_d_machsqd: tk_ms,
+            rho_stagnation: rst,
+            rho_stagnation_d_machsqd: rst_ms,
+            h_stagnation_inv: hstinv,
+            h_stagnation_inv_d_machsqd: hstinv_ms,
+            re: reybl,
+            re_d_machsqd: reybl_ms,
+            re_d_re: reybl_re,
+            gamma_gas: gamma,
+            gamma_gas_m1: gm1,
+            sutherland_ratio: hvrat,
         }
     }
 
@@ -177,35 +177,35 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     // ========================================================================
-    // BLGlobalParams Tests
+    // FlowParameters Tests
     // ========================================================================
 
     #[test]
     fn test_global_params_incompressible() {
-        let params = BLGlobalParams::incompressible(1e6);
+        let params = FlowParameters::incompressible(1e6);
 
         // At M=0, TKBL should be 0
-        assert_eq!(params.tk, 0.0);
+        assert_eq!(params.karman_tsien, 0.0);
 
         // RST = 1.0 at M=0
-        assert_eq!(params.rst, 1.0);
+        assert_eq!(params.rho_stagnation, 1.0);
 
         // HSTINV = 0 at M=0
-        assert_eq!(params.hstinv, 0.0);
+        assert_eq!(params.h_stagnation_inv, 0.0);
 
         // REYBL should equal REINF at M=0 (with some correction factor)
-        assert_relative_eq!(params.reybl, 1e6, epsilon = 1.0);
+        assert_relative_eq!(params.re, 1e6, epsilon = 1.0);
     }
 
     #[test]
     #[ignore = "S10: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
     fn test_global_params_compressible() {
-        let params = BLGlobalParams::new(0.5, 1e6, 1.4);
+        let params = FlowParameters::new(0.5, 1e6, 1.4);
 
         // Reference values from Fortran test
-        assert_relative_eq!(params.tk, 0.1547005177, epsilon = 1e-6);
-        assert_relative_eq!(params.rst, 1.129726171, epsilon = 1e-6);
-        assert_relative_eq!(params.hstinv, 0.09523809701, epsilon = 1e-6);
-        assert_relative_eq!(params.reybl, 963411.5, epsilon = 10.0);
+        assert_relative_eq!(params.karman_tsien, 0.1547005177, epsilon = 1e-6);
+        assert_relative_eq!(params.rho_stagnation, 1.129726171, epsilon = 1e-6);
+        assert_relative_eq!(params.h_stagnation_inv, 0.09523809701, epsilon = 1e-6);
+        assert_relative_eq!(params.re, 963411.5, epsilon = 10.0);
     }
 }

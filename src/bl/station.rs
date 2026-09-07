@@ -164,7 +164,7 @@ impl BLStationState {
         dsi: f64,
         dswaki: f64,
         uei: f64,
-        params: &BLGlobalParams,
+        params: &FlowParameters,
     ) {
         self.x = xsi;
         self.ampl = ami;
@@ -175,7 +175,7 @@ impl BLStationState {
 
         // Karman-Tsien velocity transformation: Ue_compressible from Ue_incompressible
         // U2 = UEI*(1-TKBL) / (1 - TKBL*(UEI/QINFBL)^2)
-        let tk = params.tk;
+        let tk = params.karman_tsien;
         let qinf = params.qinf;
         let uei_q = uei / qinf;
         let uei_q2 = uei_q * uei_q;
@@ -189,7 +189,7 @@ impl BLStationState {
 
         // Derivative: ∂U/∂M² (through TK)
         // U2_MS = (U2*(UEI/QINFBL)^2 - UEI) * TKBL_MS / denom
-        self.u_ms = (self.u * uei_q2 - uei) * params.tk_ms / denom;
+        self.u_ms = (self.u * uei_q2 - uei) * params.karman_tsien_d_machsqd / denom;
     }
 
     /// Calculate turbulence-independent secondary variables (BLKIN equivalent)
@@ -200,19 +200,19 @@ impl BLStationState {
     ///
     /// # Arguments
     /// * `params` - Global BL parameters
-    pub fn blkin(&mut self, params: &BLGlobalParams) {
+    pub fn blkin(&mut self, params: &FlowParameters) {
         let u = self.u;
         let t = self.theta;
         let d = self.dstar;
-        let gm1 = params.gm1;
-        let hstinv = params.hstinv;
-        let hstinv_ms = params.hstinv_ms;
-        let hvrat = params.hvrat;
-        let rst = params.rst;
-        let rst_ms = params.rst_ms;
-        let reybl = params.reybl;
-        let reybl_ms = params.reybl_ms;
-        let reybl_re = params.reybl_re;
+        let gm1 = params.gamma_gas_m1;
+        let hstinv = params.h_stagnation_inv;
+        let hstinv_ms = params.h_stagnation_inv_d_machsqd;
+        let hvrat = params.sutherland_ratio;
+        let rst = params.rho_stagnation;
+        let rst_ms = params.rho_stagnation_d_machsqd;
+        let reybl = params.re;
+        let reybl_ms = params.re_d_machsqd;
+        let reybl_re = params.re_d_re;
 
         // Edge Mach number squared
         // M² = U²·HSTINV / (γ-1)·(1 - 0.5·U²·HSTINV))
@@ -282,7 +282,7 @@ impl BLStationState {
     /// # Arguments
     /// * `flow_type` - Type of BL flow (Laminar, Turbulent, or Wake)
     /// * `params` - Global BL parameters
-    pub fn blvar(&mut self, flow_type: BLFlowType, _params: &BLGlobalParams) {
+    pub fn blvar(&mut self, flow_type: FlowRegime, _params: &FlowParameters) {
         let hk = self.hk;
         let rt = self.rt;
         let msq = self.msq;
@@ -295,7 +295,7 @@ impl BLStationState {
         // derivatives as BLKIN set them. The clamped value persists: BLMID, the next station's
         // HK1 (after COM1 = COM2) and MRCHUE's HTARG all read it, so it is written back here.
         let hk = match flow_type {
-            BLFlowType::Wake => hk.max(1.00005),
+            FlowRegime::Wake => hk.max(1.00005),
             _ => hk.max(1.05),
         };
         self.hk = hk;
@@ -315,8 +315,8 @@ impl BLStationState {
         // Energy shape factor H* (from HSL or HST)
         // ====================================================================
         let hs_result = match flow_type {
-            BLFlowType::Laminar => hs_lam(hk, rt, msq),
-            BLFlowType::Turbulent | BLFlowType::Wake => hs_turb(hk, rt, msq),
+            FlowRegime::Laminar => hs_lam(hk, rt, msq),
+            FlowRegime::Turbulent | FlowRegime::Wake => hs_turb(hk, rt, msq),
         };
 
         self.hs = hs_result.val;
@@ -327,17 +327,17 @@ impl BLStationState {
         self.hs_re = hs_result.val_rt * self.rt_re;
 
         // ---- normalized slip velocity  Us
-        let us = 0.5 * self.hs * (1.0 - (hk - 1.0) / (GBCON * h));
-        let us_hs = 0.5 * (1.0 - (hk - 1.0) / (GBCON * h));
-        let us_hk = 0.5 * self.hs * (-1.0 / (GBCON * h));
-        let us_h = 0.5 * self.hs * (hk - 1.0) / (GBCON * (h * h));
+        let us = 0.5 * self.hs * (1.0 - (hk - 1.0) / (GBETA_LOCUS_B * h));
+        let us_hs = 0.5 * (1.0 - (hk - 1.0) / (GBETA_LOCUS_B * h));
+        let us_hk = 0.5 * self.hs * (-1.0 / (GBETA_LOCUS_B * h));
+        let us_h = 0.5 * self.hs * (hk - 1.0) / (GBETA_LOCUS_B * (h * h));
         self.us = us;
         self.us_u = us_hs * self.hs_u + us_hk * self.hk_u;
         self.us_t = us_hs * self.hs_t + us_hk * self.hk_t + us_h * self.h_t;
         self.us_d = us_hs * self.hs_d + us_hk * self.hk_d + us_h * self.h_d;
         self.us_ms = us_hs * self.hs_ms + us_hk * self.hk_ms;
         self.us_re = us_hs * self.hs_re;
-        if flow_type != BLFlowType::Wake && self.us > 0.95 {
+        if flow_type != FlowRegime::Wake && self.us > 0.95 {
             self.us = 0.98;
             self.us_u = 0.0;
             self.us_t = 0.0;
@@ -345,7 +345,7 @@ impl BLStationState {
             self.us_ms = 0.0;
             self.us_re = 0.0;
         }
-        if flow_type == BLFlowType::Wake && self.us > 0.99995 {
+        if flow_type == FlowRegime::Wake && self.us > 0.99995 {
             self.us = 0.99995;
             self.us_u = 0.0;
             self.us_t = 0.0;
@@ -359,8 +359,8 @@ impl BLStationState {
         let mut hkc = hk - 1.0;
         let mut hkc_hk = 1.0;
         let mut hkc_rt = 0.0;
-        if flow_type == BLFlowType::Turbulent {
-            let gcc = GCCON;
+        if flow_type == FlowRegime::Turbulent {
+            let gcc = GBETA_LOCUS_WALL;
             hkc = hk - 1.0 - gcc / rt;
             hkc_hk = 1.0;
             hkc_rt = gcc / (rt * rt);
@@ -372,14 +372,14 @@ impl BLStationState {
         }
         let hkb = hk - 1.0;
         let usb = 1.0 - us;
-        let cq = (CTCON * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk))).sqrt();
-        let cq_hs = CTCON * hkb * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq;
-        let cq_us = CTCON * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / usb * 0.5 / cq;
-        let cq_hk = CTCON * self.hs * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq
-            - CTCON * self.hs * hkb * (hkc * hkc) / (usb * h * ((hk * hk) * hk)) * 2.0 * 0.5 / cq
-            + CTCON * self.hs * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_hk;
-        let cq_rt = CTCON * self.hs * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_rt;
-        let cq_h = -(CTCON * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / h * 0.5 / cq);
+        let cq = (SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk))).sqrt();
+        let cq_hs = SQRTCTAUEQ_COEFFICIENT * hkb * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq;
+        let cq_us = SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / usb * 0.5 / cq;
+        let cq_hk = SQRTCTAUEQ_COEFFICIENT * self.hs * (hkc * hkc) / (usb * h * (hk * hk)) * 0.5 / cq
+            - SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * ((hk * hk) * hk)) * 2.0 * 0.5 / cq
+            + SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_hk;
+        let cq_rt = SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * hkc / (usb * h * (hk * hk)) * 2.0 * 0.5 / cq * hkc_rt;
+        let cq_h = -(SQRTCTAUEQ_COEFFICIENT * self.hs * hkb * (hkc * hkc) / (usb * h * (hk * hk)) / h * 0.5 / cq);
         self.cq = cq;
         self.cq_u = cq_hs * self.hs_u + cq_us * self.us_u + cq_hk * self.hk_u;
         self.cq_t = cq_hs * self.hs_t + cq_us * self.us_t + cq_hk * self.hk_t;
@@ -395,15 +395,15 @@ impl BLStationState {
         // ---- set skin friction coefficient
         let (cf, cf_hk, cf_rt, cf_m) = match flow_type {
             // wake
-            BLFlowType::Wake => (0.0, 0.0, 0.0, 0.0),
+            FlowRegime::Wake => (0.0, 0.0, 0.0, 0.0),
             // laminar
-            BLFlowType::Laminar => {
+            FlowRegime::Laminar => {
                 let r = cf_lam(hk, rt, msq);
                 (r.val, r.val_hk, r.val_rt, r.val_msq)
             }
             // turbulent
-            BLFlowType::Turbulent => {
-                let r = cf_turb(hk, rt, msq, CFFAC);
+            FlowRegime::Turbulent => {
+                let r = cf_turb(hk, rt, msq, CF_TURBULENT_FACTOR);
                 let l = cf_lam(hk, rt, msq);
                 if l.val > r.val {
                     // laminar Cf is greater than turbulent Cf -- use laminar
@@ -423,7 +423,7 @@ impl BLStationState {
 
         // ---- dissipation function    2 CD / H*
         match flow_type {
-            BLFlowType::Laminar => {
+            FlowRegime::Laminar => {
                 // laminar
                 let r = di_lam(hk, rt);
                 self.di = r.val;
@@ -434,9 +434,9 @@ impl BLStationState {
                 self.di_ms = r.val_hk * self.hk_ms + r.val_rt * self.rt_ms;
                 self.di_re = r.val_rt * self.rt_re;
             }
-            BLFlowType::Turbulent => {
+            FlowRegime::Turbulent => {
                 // turbulent wall contribution
-                let c = cf_turb(hk, rt, msq, CFFAC);
+                let c = cf_turb(hk, rt, msq, CF_TURBULENT_FACTOR);
                 let cf2t = c.val;
                 let cf2t_u = c.val_hk * self.hk_u + c.val_rt * self.rt_u + c.val_msq * self.msq_u;
                 let cf2t_t = c.val_hk * self.hk_t + c.val_rt * self.rt_t;
@@ -485,7 +485,7 @@ impl BLStationState {
                 self.di_ms = di_ms;
                 self.di_re = di_re;
             }
-            BLFlowType::Wake => {
+            FlowRegime::Wake => {
                 // zero wall contribution for wake
                 self.di = 0.0;
                 self.di_s = 0.0;
@@ -498,7 +498,7 @@ impl BLStationState {
         }
 
         // ---- Add on turbulent outer layer contribution
-        if flow_type != BLFlowType::Laminar {
+        if flow_type != FlowRegime::Laminar {
             let dd = (s * s) * (0.995 - us) * 2.0 / self.hs;
             let dd_hs = -((s * s) * (0.995 - us) * 2.0 / (self.hs * self.hs));
             let dd_us = -((s * s) * 2.0 / self.hs);
@@ -524,7 +524,7 @@ impl BLStationState {
             self.di_re = self.di_re + dd_hs * self.hs_re + dd_us * self.us_re + dd_rt * self.rt_re;
         }
 
-        if flow_type == BLFlowType::Turbulent {
+        if flow_type == FlowRegime::Turbulent {
             let l = di_lam(hk, rt);
             if l.val > self.di {
                 // laminar CD is greater than turbulent CD -- use laminar
@@ -539,7 +539,7 @@ impl BLStationState {
             }
         }
 
-        if flow_type == BLFlowType::Wake {
+        if flow_type == FlowRegime::Wake {
             // laminar wake CD
             let l = dilw(hk, rt);
             if l.val > self.di {
@@ -554,7 +554,7 @@ impl BLStationState {
             }
         }
 
-        if flow_type == BLFlowType::Wake {
+        if flow_type == FlowRegime::Wake {
             // double dissipation for the wake (two wake halves)
             self.di *= 2.0;
             self.di_s *= 2.0;
@@ -630,7 +630,7 @@ impl MidpointCf {
     /// * `s2` - Station 2 state
     /// * `flow_type` - Type of BL flow
     /// * `is_similarity` - True if this is a similarity station (copy s2→s1)
-    pub fn compute(s1: &BLStationState, s2: &BLStationState, flow_type: BLFlowType, is_similarity: bool) -> Self {
+    pub fn compute(s1: &BLStationState, s2: &BLStationState, flow_type: FlowRegime, is_similarity: bool) -> Self {
         let mut result = Self::default();
 
         // For similarity station, station 1 equals station 2
@@ -665,18 +665,18 @@ impl MidpointCf {
 
         // Midpoint skin friction coefficient
         let (cfm, cfm_hka, cfm_rta, cfm_ma) = match flow_type {
-            BLFlowType::Wake => {
+            FlowRegime::Wake => {
                 // Zero skin friction in wake
                 (0.0, 0.0, 0.0, 0.0)
             }
-            BLFlowType::Laminar => {
+            FlowRegime::Laminar => {
                 // Laminar Cf
                 let cf_result = cf_lam(hka, rta, ma);
                 (cf_result.val, cf_result.val_hk, cf_result.val_rt, 0.0)
             }
-            BLFlowType::Turbulent => {
+            FlowRegime::Turbulent => {
                 // Turbulent Cf
-                let cf_turb_result = cf_turb(hka, rta, ma, CFFAC);
+                let cf_turb_result = cf_turb(hka, rta, ma, CF_TURBULENT_FACTOR);
                 // Check if laminar is higher
                 let cf_lam_result = cf_lam(hka, rta, ma);
 
@@ -757,7 +757,7 @@ mod tests {
     fn test_blprv_incompressible() {
         // Test case: M=0, Re=1e6
         // XFOIL reference values from Fortran test
-        let params = BLGlobalParams::incompressible(1e6);
+        let params = FlowParameters::incompressible(1e6);
         let mut state = BLStationState::default();
 
         // Inputs
@@ -793,7 +793,7 @@ mod tests {
     fn test_blprv_compressible() {
         // Test case: M=0.5, Re=1e6
         // XFOIL reference values from Fortran test
-        let params = BLGlobalParams::new(0.5, 1e6, 1.4);
+        let params = FlowParameters::new(0.5, 1e6, 1.4);
         let mut state = BLStationState::default();
 
         // Same inputs
@@ -822,7 +822,7 @@ mod tests {
     #[test]
     fn test_blkin_incompressible() {
         // Test case: M=0, Re=1e6
-        let params = BLGlobalParams::incompressible(1e6);
+        let params = FlowParameters::incompressible(1e6);
         let mut state = BLStationState::default();
 
         // Run BLPRV first
@@ -860,7 +860,7 @@ mod tests {
     #[ignore = "S10: expected values were unsourced (assumed HVRAT=0.35; XFOIL's analysis path leaves HVRAT=0) — regenerate from the M=0.3 coverage case"]
     fn test_blkin_compressible() {
         // Test case: M=0.5, Re=1e6
-        let params = BLGlobalParams::new(0.5, 1e6, 1.4);
+        let params = FlowParameters::new(0.5, 1e6, 1.4);
         let mut state = BLStationState::default();
 
         // Run BLPRV first
@@ -886,7 +886,7 @@ mod tests {
     #[test]
     fn test_blkin_shape_factor_derivatives() {
         // Verify shape factor derivatives are computed correctly
-        let params = BLGlobalParams::incompressible(1e6);
+        let params = FlowParameters::incompressible(1e6);
         let mut state = BLStationState::default();
 
         state.blprv(0.1, 3.0, 0.015, 0.002, 0.005, 0.0, 1.2, &params);
@@ -907,7 +907,7 @@ mod tests {
     fn test_blvar_laminar() {
         // Test case: Laminar BL
         // XFOIL reference values from Fortran test
-        let params = BLGlobalParams::incompressible(1e6);
+        let params = FlowParameters::incompressible(1e6);
         let mut state = BLStationState::default();
 
         // Set up: HK=2.5, RT=2400, M=0, H=2.5, T=0.002, D=0.005, S=3.0
@@ -935,7 +935,7 @@ mod tests {
         state.msq_u = 0.0;
         state.msq_ms = 0.0;
 
-        state.blvar(BLFlowType::Laminar, &params);
+        state.blvar(FlowRegime::Laminar, &params);
 
         // XFOIL reference values:
         // HC2 = 0.0 (M=0)
@@ -964,7 +964,7 @@ mod tests {
     fn test_blvar_turbulent() {
         // Test case: Turbulent BL
         // XFOIL reference values from Fortran test
-        let params = BLGlobalParams::incompressible(1e6);
+        let params = FlowParameters::incompressible(1e6);
         let mut state = BLStationState::default();
 
         // Set up: HK=1.4, RT=10000, M=0, H=1.4, T=0.005, D=0.007, S=0.015
@@ -1000,7 +1000,7 @@ mod tests {
         state.us_ms = 0.0;
         state.us_re = 0.0;
 
-        state.blvar(BLFlowType::Turbulent, &params);
+        state.blvar(FlowRegime::Turbulent, &params);
 
         // XFOIL reference values:
         // HS2 = 1.755310297
@@ -1064,7 +1064,7 @@ mod tests {
         s2.msq_u = 0.0;
         s2.msq_ms = 0.0;
 
-        let result = MidpointCf::compute(&s1, &s2, BLFlowType::Laminar, false);
+        let result = MidpointCf::compute(&s1, &s2, FlowRegime::Laminar, false);
 
         // XFOIL reference values
         assert_relative_eq!(result.cfm, 0.2577280102e-3, epsilon = 1e-7);
@@ -1116,7 +1116,7 @@ mod tests {
         s2.msq_u = 0.0;
         s2.msq_ms = 0.0;
 
-        let result = MidpointCf::compute(&s1, &s2, BLFlowType::Turbulent, false);
+        let result = MidpointCf::compute(&s1, &s2, FlowRegime::Turbulent, false);
 
         // XFOIL reference values (turbulent Cf used)
         assert_relative_eq!(result.cfm, 0.2450317144e-2, epsilon = 1e-5);
@@ -1133,7 +1133,7 @@ mod tests {
         let s1 = BLStationState::default();
         let s2 = BLStationState::default();
 
-        let result = MidpointCf::compute(&s1, &s2, BLFlowType::Wake, false);
+        let result = MidpointCf::compute(&s1, &s2, FlowRegime::Wake, false);
 
         assert_eq!(result.cfm, 0.0);
         assert_eq!(result.cfm_u1, 0.0);

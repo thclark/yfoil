@@ -2,7 +2,7 @@
 //! from the "1" and "2" station states, exactly as XFOIL sequences BLVAR/BLMID/TRDIF/BLDIF,
 //! the similarity-station folding, and the conversion of the Ue columns to incompressible Uei.
 
-use crate::bl::system::{BLFlowType, BLGlobalParams, BLLocalSystem, BLStationState, MidpointCf, TransitionLocation};
+use crate::bl::system::{BLLocalSystem, BLStationState, FlowParameters, FlowRegime, MidpointCf, TransitionLocation};
 
 /// XFOIL's interval flags (XBL.INC): SIMI, TRAN, TURB, WAKE.
 #[derive(Debug, Clone, Copy, Default)]
@@ -22,15 +22,15 @@ pub fn blsys(
     flags: IntervalFlags,
     trans: Option<&TransitionLocation>,
     acrit: f64,
-    params: &BLGlobalParams,
+    params: &FlowParameters,
 ) {
     // calculate secondary BL variables and their sensitivities
     let ityp = if flags.wake {
-        BLFlowType::Wake
+        FlowRegime::Wake
     } else if flags.turb || flags.tran {
-        BLFlowType::Turbulent
+        FlowRegime::Turbulent
     } else {
-        BLFlowType::Laminar
+        FlowRegime::Laminar
     };
     s2.blvar(ityp, params);
 
@@ -51,15 +51,15 @@ pub fn blsys(
             params,
         );
     } else if flags.simi {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Laminar, true, acrit, params.idampv);
+        sys.bldif(s1, s2, &cfm, FlowRegime::Laminar, true, acrit, params.idampv);
     // BLDIF(0)
     } else if !flags.turb {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Laminar, false, acrit, params.idampv);
+        sys.bldif(s1, s2, &cfm, FlowRegime::Laminar, false, acrit, params.idampv);
     // BLDIF(1)
     } else if flags.wake {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Wake, false, acrit, params.idampv); // BLDIF(3)
+        sys.bldif(s1, s2, &cfm, FlowRegime::Wake, false, acrit, params.idampv); // BLDIF(3)
     } else {
-        sys.bldif(s1, s2, &cfm, BLFlowType::Turbulent, false, acrit, params.idampv);
+        sys.bldif(s1, s2, &cfm, FlowRegime::Turbulent, false, acrit, params.idampv);
         // BLDIF(2)
     }
 
@@ -86,7 +86,7 @@ pub fn blsys(
 
 /// TESYS(CTE, TTE, DTE): the "dummy" system between the airfoil TE point and the first wake
 /// point. Calls BLVAR(3) first, as XFOIL does; no Uei conversion is applied.
-pub fn tesys(sys: &mut BLLocalSystem, s2: &mut BLStationState, cte: f64, tte: f64, dte: f64, params: &BLGlobalParams) {
+pub fn tesys(sys: &mut BLLocalSystem, s2: &mut BLStationState, cte: f64, tte: f64, dte: f64, params: &FlowParameters) {
     for k in 0..4 {
         sys.vsrez[k] = 0.0;
         sys.vsm[k] = 0.0;
@@ -97,7 +97,7 @@ pub fn tesys(sys: &mut BLLocalSystem, s2: &mut BLStationState, cte: f64, tte: f6
             sys.vs2[k][l] = 0.0;
         }
     }
-    s2.blvar(BLFlowType::Wake, params);
+    s2.blvar(FlowRegime::Wake, params);
 
     sys.vs1[0][0] = -1.0;
     sys.vs2[0][0] = 1.0;

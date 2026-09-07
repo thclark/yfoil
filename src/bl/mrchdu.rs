@@ -7,7 +7,7 @@
 use crate::bl::blsys::{blsys, tesys, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
 use crate::bl::hkin;
-use crate::bl::system::{dslim, trchek, BLFlowType, BLGlobalParams, BLLocalSystem, TransitionResult};
+use crate::bl::system::{dslim, trchek, BLLocalSystem, FlowParameters, FlowRegime, TransitionResult};
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
 
@@ -55,7 +55,7 @@ pub struct MrchduTrace {
 /// MRCHDU. Requires the pointer layer (XSSI, IBLTE, NBL, WGAP), the current
 /// UEDG/THET/DSTR/CTAU, ITRAN from the previous march, ANTE, XSTRIP and the transition
 /// thresholds. Updates THET/DSTR/CTAU/UEDG/MASS/TAU/DIS/CTQ/DELT/TSTR, ITRAN, XSSITR and TFORCE.
-pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut trace: Option<&mut MrchduTrace>) {
+pub fn mrchdu(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut trace: Option<&mut MrchduTrace>) {
     const DEPS: f64 = 5.0e-6;
 
     // constant controlling how far Hk is allowed to deviate from the specified value
@@ -195,7 +195,8 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                         let uem = st.uedg[is][ibl - 1];
                         let dsm = st.dstr[is][ibl - 1];
                         let thm = st.thet[is][ibl - 1];
-                        let msq = uem * uem * params.hstinv / (params.gm1 * (1.0 - 0.5 * uem * uem * params.hstinv));
+                        let msq = uem * uem * params.h_stagnation_inv
+                            / (params.gamma_gas_m1 * (1.0 - 0.5 * uem * uem * params.h_stagnation_inv));
                         let (hk, _, _) = hkin(dsm / thm, msq);
                         hkref = hk;
                     }
@@ -302,7 +303,8 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                     cti = cti.max(0.0000001);
                 }
                 let hklim = if ibl <= st.iblte[is] { 1.02 } else { 1.00005 };
-                let msq = uei * uei * params.hstinv / (params.gm1 * (1.0 - 0.5 * uei * uei * params.hstinv));
+                let msq = uei * uei * params.h_stagnation_inv
+                    / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
                 let mut dsw = dsi - dswaki;
                 dslim(&mut dsw, thi, uei, msq, hklim);
                 dsi = dsw + dswaki;
@@ -386,13 +388,13 @@ pub fn mrchdu(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                 // this order, each call clamping HK2 in place, so the sequence is kept.
                 // (BLMID only sets the interval CFM, which nothing reads after this point.)
                 if ibl < st.itran[is] {
-                    s2.blvar(BLFlowType::Laminar, params);
+                    s2.blvar(FlowRegime::Laminar, params);
                 }
                 if ibl >= st.itran[is] {
-                    s2.blvar(BLFlowType::Turbulent, params);
+                    s2.blvar(FlowRegime::Turbulent, params);
                 }
                 if wake {
-                    s2.blvar(BLFlowType::Wake, params);
+                    s2.blvar(FlowRegime::Wake, params);
                 }
             }
 

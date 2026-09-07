@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-use crate::bl::system::{BLFlowType, BLGlobalParams, BLStationState};
+use crate::bl::system::{BLStationState, FlowParameters, FlowRegime};
 use crate::geometry::{seval, PaneledAirfoil};
 use crate::solver::blstate::BlState;
 
@@ -504,7 +504,7 @@ struct Live {
 
 /// BLPRV → BLKIN → BLVAR on the converged primaries of station (is, ibl), with the flow type
 /// SETBL would use there (laminar ahead of ITRAN, turbulent from it, wake past IBLTE).
-fn live_closures(st: &BlState, params: &BLGlobalParams, is: usize, ibl: usize) -> Live {
+fn live_closures(st: &BlState, params: &FlowParameters, is: usize, ibl: usize) -> Live {
     let wake = ibl > st.iblte[is];
     let turb = ibl >= st.itran[is];
     let ctau = st.ctau[is][ibl];
@@ -536,11 +536,11 @@ fn live_closures(st: &BlState, params: &BLGlobalParams, is: usize, ibl: usize) -
     s.blkin(params);
     let (h, hk, rt, msq) = (s.h, s.hk, s.rt, s.msq);
     let flow = if wake {
-        BLFlowType::Wake
+        FlowRegime::Wake
     } else if turb {
-        BLFlowType::Turbulent
+        FlowRegime::Turbulent
     } else {
-        BLFlowType::Laminar
+        FlowRegime::Laminar
     };
     s.blvar(flow, params);
 
@@ -564,7 +564,7 @@ fn live_closures(st: &BlState, params: &BLGlobalParams, is: usize, ibl: usize) -
 
 fn side_output(
     st: &BlState,
-    params: &BLGlobalParams,
+    params: &FlowParameters,
     is: usize,
     stations: impl Iterator<Item = usize>,
 ) -> BlSideOutput {
@@ -652,7 +652,7 @@ impl BoundaryLayerOutput {
     /// Every station of a solved state. Requires the pointer layer and BL arrays (any state after
     /// a viscous VISCAL call, converged or not).
     pub fn from_state(st: &BlState) -> Self {
-        let params = BLGlobalParams::new(st.minf, st.reinf, st.gamma);
+        let params = FlowParameters::new(st.minf, st.reinf, st.gamma);
         let upper = side_output(st, &params, 1, 2..=st.iblte[1]);
         let lower = side_output(st, &params, 2, 2..=st.iblte[2]);
         let wake = side_output(st, &params, 2, st.iblte[2] + 1..=st.nbl[2]);

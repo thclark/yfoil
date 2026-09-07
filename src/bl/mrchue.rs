@@ -4,7 +4,7 @@
 
 use crate::bl::blsys::{blsys, tesys, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
-use crate::bl::system::{dslim, trchek, BLGlobalParams, BLLocalSystem, TransitionResult};
+use crate::bl::system::{dslim, trchek, BLLocalSystem, FlowParameters, TransitionResult};
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
 
@@ -46,7 +46,7 @@ pub struct MrchueTrace {
 
 /// MRCHUE. Requires the pointer layer (XSSI, IPAN, IBLTE, NBL, WGAP), UEDG initialised
 /// (UINV on the first call), ANTE, XSTRIP and the transition thresholds.
-pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut trace: Option<&mut MrchueTrace>) {
+pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut trace: Option<&mut MrchueTrace>) {
     // shape parameters for separation criteria
     let hlmax = 3.8;
     let htmax = 2.5;
@@ -69,7 +69,7 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
         let uei0 = st.uedg[is][ibl0];
         let bule = 1.0_f64;
         let ucon = uei0 / xsi0.powf(bule);
-        let tsq = 0.45 / (ucon * (5.0 * bule + 1.0) * params.reybl) * xsi0.powf(1.0 - bule);
+        let tsq = 0.45 / (ucon * (5.0 * bule + 1.0) * params.re) * xsi0.powf(1.0 - bule);
         let mut thi = tsq.sqrt();
         let mut dsi = 2.2 * thi;
         let mut ami = 0.0;
@@ -217,7 +217,8 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                     // see if direct mode is not applicable
                     if ibl != st.iblte[is] + 1 {
                         // calculate resulting kinematic shape parameter Hk
-                        let msq = uei * uei * params.hstinv / (params.gm1 * (1.0 - 0.5 * uei * uei * params.hstinv));
+                        let msq = uei * uei * params.h_stagnation_inv
+                            / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
                         let htest = (dsi + rlx * r[2]) / (thi + rlx * r[1]);
                         let (hktest, _, _) = crate::bl::hkin(htest, msq);
 
@@ -289,7 +290,8 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                     cti = cti.max(0.0000001);
                 }
                 let hklim = if ibl <= st.iblte[is] { 1.02 } else { 1.00005 };
-                let msq = uei * uei * params.hstinv / (params.gm1 * (1.0 - 0.5 * uei * uei * params.hstinv));
+                let msq = uei * uei * params.h_stagnation_inv
+                    / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
                 let mut dsw = dsi - dswaki;
                 dslim(&mut dsw, thi, uei, msq, hklim);
                 dsi = dsw + dswaki;
@@ -369,11 +371,11 @@ pub fn mrchue(st: &mut BlState, params: &BLGlobalParams, acrit: [f64; 3], mut tr
                 }
                 // set all other extrapolated values for current station (BLVAR/BLMID)
                 let ityp = if wake {
-                    crate::bl::system::BLFlowType::Wake
+                    crate::bl::system::FlowRegime::Wake
                 } else if ibl < st.itran[is] {
-                    crate::bl::system::BLFlowType::Laminar
+                    crate::bl::system::FlowRegime::Laminar
                 } else {
-                    crate::bl::system::BLFlowType::Turbulent
+                    crate::bl::system::FlowRegime::Turbulent
                 };
                 s2.blvar(ityp, params);
                 hk2_snapshot = s2.hk;

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use yfoil::bl::system::dampl;
-use yfoil::bl::system::{BLFlowType, BLGlobalParams, BLStationState};
+use yfoil::bl::system::{BLStationState, FlowParameters, FlowRegime};
 use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb};
 
 /// Machine epsilon for f64
@@ -715,12 +715,12 @@ fn test_blkin_all_fixtures() {
         // Set up global params
         // Note: We need to construct params that give us the expected hstinv, gm1, rst, etc.
         // For BLKIN test, we create a params with the specific values from the fixture
-        let mut params = BLGlobalParams::new(0.0, fixture.input.reybl, 1.0 + fixture.input.gm1bl);
-        params.hstinv = fixture.input.hstinv;
-        params.gm1 = fixture.input.gm1bl;
-        params.rst = fixture.input.rstbl;
-        params.hvrat = fixture.input.hvrat;
-        params.reybl = fixture.input.reybl;
+        let mut params = FlowParameters::new(0.0, fixture.input.reybl, 1.0 + fixture.input.gm1bl);
+        params.h_stagnation_inv = fixture.input.hstinv;
+        params.gamma_gas_m1 = fixture.input.gm1bl;
+        params.rho_stagnation = fixture.input.rstbl;
+        params.sutherland_ratio = fixture.input.hvrat;
+        params.re = fixture.input.reybl;
 
         // Call blkin
         state.blkin(&params);
@@ -856,15 +856,15 @@ fn test_blvar_all_fixtures() {
         state.h_t = -state.h / state.theta;
         state.h_d = 1.0 / state.theta;
 
-        // Map ITYP to BLFlowType
+        // Map ITYP to FlowRegime
         let flow_type = match fixture.input.ityp {
-            1 => BLFlowType::Laminar,
-            2 => BLFlowType::Turbulent,
-            3 => BLFlowType::Wake,
+            1 => FlowRegime::Laminar,
+            2 => FlowRegime::Turbulent,
+            3 => FlowRegime::Wake,
             _ => panic!("Unknown flow type {}", fixture.input.ityp),
         };
 
-        let params = BLGlobalParams::new(0.0, 1e6, 1.4);
+        let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Call blvar
         state.blvar(flow_type, &params);

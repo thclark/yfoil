@@ -9,7 +9,7 @@ use crate::bl::blsolv::BlsolvInput;
 use crate::bl::blsys::{blsys, tesys, IntervalFlags};
 use crate::bl::mrchdu::mrchdu;
 use crate::bl::mrchue::mrchue;
-use crate::bl::system::{trchek, BLFlowType, BLGlobalParams, BLLocalSystem, TransitionResult};
+use crate::bl::system::{trchek, BLLocalSystem, FlowParameters, FlowRegime, TransitionResult};
 use crate::geometry::seval;
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
@@ -21,7 +21,7 @@ pub struct SetblResult {
     /// The global BL Newton system as BLSOLV sees it (VA, VB, VDEL, VM, VZ, NSYS, IVTE1, IVZ).
     pub sys: BlsolvInput,
     /// The BL parameters SETBL derived (REYBL, HSTINV, ...): the marches and UPDATE share them.
-    pub params: BLGlobalParams,
+    pub params: FlowParameters,
     /// RE_CLMR, MSQ_CLMR: d(Re)/d(CL) and d(M²)/d(CL) for the fixed-CL sensitivity column.
     pub re_clmr: f64,
     pub msq_clmr: f64,
@@ -106,7 +106,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
     // set compressibility parameter TKLAM and derivative TK_MSQ (COMSET), gas constant, the
     // parameters for compressibility correction, stagnation density and 1/enthalpy, and the
     // Reynolds number based on freestream density, velocity, viscosity
-    let mut params = BLGlobalParams::new(st.minf, st.reinf, st.gamma);
+    let mut params = FlowParameters::new(st.minf, st.reinf, st.gamma);
 
     // IDAMPV = IDAMP
     params.idampv = st.idamp;
@@ -391,7 +391,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             if ibl == st.iblte[is] {
                 // set "2" variables at TE to wake correlations for next station
                 // (BLVAR(3); BLMID(3) only sets the interval CFM, which the next BLSYS recomputes)
-                s2.blvar(BLFlowType::Wake, &params);
+                s2.blvar(FlowRegime::Wake, &params);
             }
 
             for js in 1..=2 {

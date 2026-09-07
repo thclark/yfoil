@@ -79,7 +79,7 @@ pub fn trchek(
     ampl1: f64,
     acrit: f64,
     xiforc: f64,
-    params: &BLGlobalParams,
+    params: &FlowParameters,
 ) -> TransitionResult {
     const DAEPS: f64 = 5.0e-5;
     let (x1, x2) = (s1.x, s2.x);
@@ -893,7 +893,7 @@ mod tests {
         // Test case: Rtheta below critical, no amplification
         // AX = 0 when RT is below critical Reynolds number
 
-        let params = BLGlobalParams::new(0.0, 1e6, 1.4);
+        let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations with low Rtheta (below critical for HK ~2.5)
         // Critical log10(RT) for HK=2.5 is about 2.86, so RT ~720 is below critical
@@ -932,7 +932,7 @@ mod tests {
     fn test_trchek_no_transition_below_ncrit() {
         // Test case: Amplification growing but not reaching Ncrit
 
-        let params = BLGlobalParams::new(0.0, 1e6, 1.4);
+        let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations with moderate Rtheta (above critical, amplification active)
         let mut s1 = BLStationState::default();
@@ -970,7 +970,7 @@ mod tests {
     fn test_trchek_free_transition() {
         // Test case: Amplification exceeds Ncrit within interval
 
-        let params = BLGlobalParams::new(0.0, 1e6, 1.4);
+        let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations with high Rtheta and amplification close to Ncrit
         let mut s1 = BLStationState::default();
@@ -1022,7 +1022,7 @@ mod tests {
     fn test_trchek_forced_transition() {
         // Test case: Forced transition at prescribed location
 
-        let params = BLGlobalParams::new(0.0, 1e6, 1.4);
+        let params = FlowParameters::new(0.0, 1e6, 1.4);
 
         // Create stations where natural transition wouldn't occur
         let mut s1 = BLStationState::default();

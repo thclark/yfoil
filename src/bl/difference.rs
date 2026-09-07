@@ -113,7 +113,7 @@ impl BLLocalSystem {
         s1: &BLStationState,
         s2: &BLStationState,
         cfm: &MidpointCf,
-        flow_type: BLFlowType,
+        flow_type: FlowRegime,
         is_similarity: bool,
         acrit: f64,
         idampv: usize,
@@ -144,18 +144,18 @@ impl BLLocalSystem {
         };
 
         // Compute upwinding parameters
-        let is_wake = flow_type == BLFlowType::Wake;
+        let is_wake = flow_type == FlowRegime::Wake;
         let upw = compute_upwinding(s1, s2, is_wake);
 
         // Equation 1: Amplification (laminar) or Shear lag (turbulent/wake)
         match flow_type {
-            BLFlowType::Laminar if is_similarity => {
+            FlowRegime::Laminar if is_similarity => {
                 // LE point: set zero amplification factor (XFOIL: VS2(1,1) = 1.0)
                 // This ensures the pivot in BLSOLV is well-conditioned
                 self.vs2[0][0] = 1.0;
                 self.vsrez[0] = -s2.ampl;
             }
-            BLFlowType::Laminar => {
+            FlowRegime::Laminar => {
                 // laminar part --> set amplification equation (BLDIF ITYP=1), verbatim:
                 // set average amplification AX over interval X1..X2
                 let r = axset(
@@ -181,7 +181,7 @@ impl BLLocalSystem {
                 self.vsx[0] = 0.0;
                 self.vsrez[0] = -rezc;
             }
-            BLFlowType::Turbulent | BLFlowType::Wake => {
+            FlowRegime::Turbulent | FlowRegime::Wake => {
                 // Shear lag equation
                 self.setup_shear_lag_equation(s1, s2, &upw, flow_type);
             }
@@ -200,7 +200,7 @@ impl BLLocalSystem {
         s1: &BLStationState,
         s2: &BLStationState,
         upw: &UpwindParams,
-        flow_type: BLFlowType,
+        flow_type: FlowRegime,
     ) {
         let u = upw.upw;
         let sa = (1.0 - u) * s1.ctau + u * s2.ctau;
@@ -212,11 +212,15 @@ impl BLLocalSystem {
         let dea = 0.5 * (s1.de + s2.de);
         let da = 0.5 * (s1.dstar + s2.dstar);
         // increased dissipation length in wake (decrease its reciprocal)
-        let ald = if flow_type == BLFlowType::Wake { DLCON } else { 1.0 };
+        let ald = if flow_type == FlowRegime::Wake {
+            WAKE_DISSIPATION_LENGTH_RATIO
+        } else {
+            1.0
+        };
 
         // set and linearize  equilibrium 1/Ue dUe/dx   ...  NEW  12 Oct 94
-        let (hkc, hkc_hka, hkc_rta) = if flow_type == BLFlowType::Turbulent {
-            let gcc = GCCON;
+        let (hkc, hkc_hka, hkc_rta) = if flow_type == FlowRegime::Turbulent {
+            let gcc = GBETA_LOCUS_WALL;
             let mut hkc = hka - 1.0 - gcc / rta;
             let mut hkc_hka = 1.0;
             let mut hkc_rta = gcc / (rta * rta);
@@ -229,16 +233,16 @@ impl BLLocalSystem {
         } else {
             (hka - 1.0, 1.0, 0.0)
         };
-        let hr = hkc / (GACON * ald * hka);
-        let hr_hka = hkc_hka / (GACON * ald * hka) - hr / hka;
-        let _hr_rta = hkc_rta / (GACON * ald * hka);
-        let uq = (0.5 * cfa - hr * hr) / (GBCON * da);
-        let uq_hka = -2.0 * hr * hr_hka / (GBCON * da);
-        let uq_cfa = 0.5 / (GBCON * da);
+        let hr = hkc / (GBETA_LOCUS_A * ald * hka);
+        let hr_hka = hkc_hka / (GBETA_LOCUS_A * ald * hka) - hr / hka;
+        let _hr_rta = hkc_rta / (GBETA_LOCUS_A * ald * hka);
+        let uq = (0.5 * cfa - hr * hr) / (GBETA_LOCUS_B * da);
+        let uq_hka = -2.0 * hr * hr_hka / (GBETA_LOCUS_B * da);
+        let uq_cfa = 0.5 / (GBETA_LOCUS_B * da);
         let uq_da = -uq / da;
         // (XFOIL also forms UQ_RTA and UQ_T1..UQ_RE here; none of them enter the Jacobian below)
 
-        let scc = SCCON * 1.333 / (1.0 + usa);
+        let scc = LAG_CONSTANT * 1.333 / (1.0 + usa);
         let scc_usa = -scc / (1.0 + usa);
         let scc_us1 = scc_usa * 0.5;
         let scc_us2 = scc_usa * 0.5;
@@ -248,18 +252,19 @@ impl BLLocalSystem {
         let dxi = s2.x - s1.x;
         let ulog = (s2.u / s1.u).ln();
 
-        let rezc = scc * (cqa - sa * ald) * dxi - dea * 2.0 * slog + dea * 2.0 * (uq * dxi - ulog) * DUXCON;
+        let rezc = scc * (cqa - sa * ald) * dxi - dea * 2.0 * slog
+            + dea * 2.0 * (uq * dxi - ulog) * LAG_PRESSURE_GRADIENT_WEIGHT;
 
-        let z_cfa = dea * 2.0 * uq_cfa * dxi * DUXCON;
-        let z_hka = dea * 2.0 * uq_hka * dxi * DUXCON;
-        let z_da = dea * 2.0 * uq_da * dxi * DUXCON;
+        let z_cfa = dea * 2.0 * uq_cfa * dxi * LAG_PRESSURE_GRADIENT_WEIGHT;
+        let z_hka = dea * 2.0 * uq_hka * dxi * LAG_PRESSURE_GRADIENT_WEIGHT;
+        let z_da = dea * 2.0 * uq_da * dxi * LAG_PRESSURE_GRADIENT_WEIGHT;
         let z_sl = -dea * 2.0;
-        let z_ul = -dea * 2.0 * DUXCON;
-        let z_dxi = scc * (cqa - sa * ald) + dea * 2.0 * uq * DUXCON;
+        let z_ul = -dea * 2.0 * LAG_PRESSURE_GRADIENT_WEIGHT;
+        let z_dxi = scc * (cqa - sa * ald) + dea * 2.0 * uq * LAG_PRESSURE_GRADIENT_WEIGHT;
         let z_usa = scc_usa * (cqa - sa * ald) * dxi;
         let z_cqa = scc * dxi;
         let z_sa = -scc * dxi * ald;
-        let z_dea = 2.0 * ((uq * dxi - ulog) * DUXCON - slog);
+        let z_dea = 2.0 * ((uq * dxi - ulog) * LAG_PRESSURE_GRADIENT_WEIGHT - slog);
         let z_upw =
             z_cqa * (s2.cq - s1.cq) + z_sa * (s2.ctau - s1.ctau) + z_cfa * (s2.cf - s1.cf) + z_hka * (s2.hk - s1.hk);
 
@@ -517,7 +522,7 @@ impl BLLocalSystem {
         s2: &BLStationState,
         trans: &TransitionLocation,
         acrit: f64,
-        params: &BLGlobalParams,
+        params: &FlowParameters,
     ) {
         // Weighting factors for linear interpolation to transition point
         let wf2 = (trans.xt - s1.x) / (s2.x - s1.x);
@@ -608,14 +613,14 @@ impl BLLocalSystem {
         st.ampl = acrit;
         st.ctau = 0.0;
         st.blkin(params);
-        st.blvar(BLFlowType::Laminar, params);
+        st.blvar(FlowRegime::Laminar, params);
 
         // Calculate midpoint Cf for X1-XT
-        let cfm_lam = MidpointCf::compute(s1, &st, BLFlowType::Laminar, false);
+        let cfm_lam = MidpointCf::compute(s1, &st, FlowRegime::Laminar, false);
 
         // Call BLDIF for laminar part (X1 to XT)
         let mut lam_sys = BLLocalSystem::default();
-        lam_sys.bldif(s1, &st, &cfm_lam, BLFlowType::Laminar, false, acrit, params.idampv);
+        lam_sys.bldif(s1, &st, &cfm_lam, FlowRegime::Laminar, false, acrit, params.idampv);
 
         // Convert laminar system sensitivities from "T" variables to "1" and "2" variables
         // Using chain rule for derivatives
@@ -693,13 +698,13 @@ impl BLLocalSystem {
         // *** PART 2: Turbulent from XT to X2 ***
 
         // Calculate equilibrium shear coefficient CQT at transition
-        st.blvar(BLFlowType::Turbulent, params);
+        st.blvar(FlowRegime::Turbulent, params);
 
         // Set initial shear stress: ST = CTR * CQ
         // where CTR = CTRCON * exp(-CTRCEX/(HK-1))
         let hk_minus_one = st.hk - 1.0;
-        let ctr = CTRCON * (-CTRCEX / hk_minus_one).exp();
-        let ctr_hk = ctr * CTRCEX / (hk_minus_one * hk_minus_one);
+        let ctr = TRANSITION_SQRTCTAU_FACTOR * (-TRANSITION_SQRTCTAU_EXPONENT / hk_minus_one).exp();
+        let ctr_hk = ctr * TRANSITION_SQRTCTAU_EXPONENT / (hk_minus_one * hk_minus_one);
 
         let s_t = ctr * st.cq;
         let st_tt = ctr * st.cq_t + st.cq * ctr_hk * st.hk_t;
@@ -726,14 +731,14 @@ impl BLLocalSystem {
         st.ctau = s_t;
 
         // Recalculate turbulent secondary variables with proper CTI
-        st.blvar(BLFlowType::Turbulent, params);
+        st.blvar(FlowRegime::Turbulent, params);
 
         // Calculate midpoint Cf for XT-X2
-        let cfm_turb = MidpointCf::compute(&st, s2, BLFlowType::Turbulent, false);
+        let cfm_turb = MidpointCf::compute(&st, s2, FlowRegime::Turbulent, false);
 
         // Call BLDIF for turbulent part (XT to X2)
         let mut turb_sys = BLLocalSystem::default();
-        turb_sys.bldif(&st, s2, &cfm_turb, BLFlowType::Turbulent, false, acrit, params.idampv);
+        turb_sys.bldif(&st, s2, &cfm_turb, FlowRegime::Turbulent, false, acrit, params.idampv);
 
         // Convert turbulent system sensitivities from "T" variables to "1" and "2" variables
         let mut bt1: [[f64; 5]; 4] = [[0.0; 5]; 4];
@@ -999,7 +1004,7 @@ mod tests {
 
         // Run BLDIF
         let mut sys = BLLocalSystem::default();
-        sys.bldif(&s1, &s2, &cfm, BLFlowType::Turbulent, false, 9.0, 0);
+        sys.bldif(&s1, &s2, &cfm, FlowRegime::Turbulent, false, 9.0, 0);
 
         // Check momentum equation residual (row 2)
         // VSREZ[2] = -0.7123274356e-1 from Fortran

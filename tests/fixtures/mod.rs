@@ -8,7 +8,7 @@ use mrchdu_fixtures::{parse_bl_dump, BlDump};
 use mrchue_fixtures::parse_bl_state;
 use pointers_fixtures::{parse_dij, parse_pointers, parse_uinv};
 use yfoil::bl::mrchue::mrchue;
-use yfoil::bl::system::BLGlobalParams;
+use yfoil::bl::system::FlowParameters;
 use yfoil::solver::blstate::BlState;
 
 pub mod blsolv_fixtures;
@@ -288,7 +288,7 @@ pub const REF_CASE: &str = "tests/fixtures/xfoil/naca0012_n60_a2_re1e6";
 /// XFOIL's complete state at the start of MRCHUE on the reference case: the pointer layer,
 /// UEDG = UINV, and the BL parameters SETBL derives (asserted bitwise against the dump).
 #[allow(dead_code)]
-pub fn state_before_mrchue() -> (BlState, BLGlobalParams, [f64; 3]) {
+pub fn state_before_mrchue() -> (BlState, FlowParameters, [f64; 3]) {
     let f = parse_pointers(&require_fixture(&format!("{}/{}", REF_CASE, "xfoil_pointers.dat")), 1);
     let u = parse_uinv(&require_fixture(&format!("{}/{}", REF_CASE, "xfoil_uinv.dat")), 1);
     let d = parse_bl_state(&require_fixture(&format!("{}/{}", REF_CASE, "mrchdu_input_1.dat")));
@@ -321,11 +321,11 @@ pub fn state_before_mrchue() -> (BlState, BLGlobalParams, [f64; 3]) {
             st.uedg[is][ibl] = u.uinv[is][ibl];
         }
     }
-    let params = BLGlobalParams::new(d.minf, d.reinf, 1.4);
+    let params = FlowParameters::new(d.minf, d.reinf, 1.4);
     // the BL parameters SETBL derives must match the reference bitwise before marching
-    assert_eq!(params.reybl.to_bits(), d.reybl.to_bits(), "REYBL");
-    assert_eq!(params.hstinv.to_bits(), d.hstinv.to_bits(), "HSTINV");
-    assert_eq!(params.gm1.to_bits(), d.gm1bl.to_bits(), "GM1BL");
+    assert_eq!(params.re.to_bits(), d.reybl.to_bits(), "REYBL");
+    assert_eq!(params.h_stagnation_inv.to_bits(), d.hstinv.to_bits(), "HSTINV");
+    assert_eq!(params.gamma_gas_m1.to_bits(), d.gm1bl.to_bits(), "GM1BL");
     (st, params, [0.0, d.acrit[1], d.acrit[2]])
 }
 
@@ -335,7 +335,7 @@ pub fn state_before_mrchue() -> (BlState, BLGlobalParams, [f64; 3]) {
 /// the SETBL control flags. On call 1 the COMMON state (COM1/COM2/XT) is what MRCHUE left
 /// behind, obtained by replaying MRCHUE from its own gated input.
 #[allow(dead_code)]
-pub fn state_before_setbl_march(k: usize) -> (BlState, BLGlobalParams, BlDump) {
+pub fn state_before_setbl_march(k: usize) -> (BlState, FlowParameters, BlDump) {
     let fx = |name: &str| require_fixture(&format!("{}/{}", REF_CASE, name));
     let f = parse_pointers(&fx("xfoil_pointers.dat"), 1);
     let u = parse_uinv(&fx("xfoil_uinv.dat"), 1);
@@ -424,10 +424,10 @@ pub fn state_before_setbl_march(k: usize) -> (BlState, BLGlobalParams, BlDump) {
             }
         }
     }
-    let params = BLGlobalParams::new(d.real("MINF"), d.real("REINF"), 1.4);
-    assert_eq!(params.reybl.to_bits(), d.real("REYBL").to_bits(), "REYBL");
-    assert_eq!(params.hstinv.to_bits(), d.real("HSTINV").to_bits(), "HSTINV");
-    assert_eq!(params.gm1.to_bits(), d.real("GM1BL").to_bits(), "GM1BL");
+    let params = FlowParameters::new(d.real("MINF"), d.real("REINF"), 1.4);
+    assert_eq!(params.re.to_bits(), d.real("REYBL").to_bits(), "REYBL");
+    assert_eq!(params.h_stagnation_inv.to_bits(), d.real("HSTINV").to_bits(), "HSTINV");
+    assert_eq!(params.gamma_gas_m1.to_bits(), d.real("GM1BL").to_bits(), "GM1BL");
     if k == 1 {
         let (mut pre, p2, a2) = state_before_mrchue();
         mrchue(&mut pre, &p2, a2, None);
