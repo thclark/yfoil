@@ -24,7 +24,7 @@ struct TestInput {
     reynolds: f64,
     mach: f64,
     n_panels: usize,
-    n_crit: f64,
+    ncrit: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,12 +48,12 @@ struct InviscidFixture {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct BLStation {
+struct FixtureStation {
     ibl: usize,
     x: f64,
     s: f64,
     ue: f64,
-    delta_star: f64,
+    dstar: f64,
     theta: f64,
     hk: f64,
     cf: f64,
@@ -63,16 +63,16 @@ struct BLStation {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct BLSide {
+struct FixtureSide {
     n_stations: usize,
-    stations: Vec<BLStation>,
+    stations: Vec<FixtureStation>,
     itran: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BLFixture {
-    upper: BLSide,
-    lower: BLSide,
+    upper: FixtureSide,
+    lower: FixtureSide,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -224,7 +224,7 @@ QUIT
         reynolds: case.reynolds,
         mach: 0.0,
         n_panels: 160,
-        n_crit: 9.0,
+        ncrit: 9.0,
     };
     write_json(&output_dir.join("input.json"), &input)?;
 

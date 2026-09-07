@@ -1,6 +1,6 @@
 {
   "case": {
-    "airfoil": "xfoil-naca:23012",
+    "foil": "xfoil-naca:23012",
     "geometry_only": true,
     "n_panels": 160,
     "name": "pangen_naca23012_n160"

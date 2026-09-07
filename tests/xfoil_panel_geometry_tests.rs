@@ -451,16 +451,16 @@ fn test_pane_and_cosine_methods_differ() {
     let cosined = repanel_cosine(&original, 160, 0.15);
 
     // Both should produce geometry with similar extent
-    let paned_max_x = paned.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let cosined_max_x = cosined.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let paned_max_x = paned.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cosined_max_x = cosined.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     assert_relative_eq!(paned_max_x, cosined_max_x, epsilon = 0.01);
 
     // But interior point distributions should differ
     // Count points where x coordinates differ by more than 0.001
-    let min_len = paned.x_c.len().min(cosined.x_c.len());
+    let min_len = paned.x.len().min(cosined.x.len());
     let mut differences = 0;
     for i in 10..min_len.saturating_sub(10) {
-        let dx = (paned.x_c[i] - cosined.x_c[i]).abs();
+        let dx = (paned.x[i] - cosined.x[i]).abs();
         if dx > 0.001 {
             differences += 1;
         }
@@ -484,22 +484,22 @@ fn test_both_methods_preserve_shape() {
     let cosined = repanel_cosine(&original, 160, 0.15);
 
     // Original extents
-    let orig_max_x = original.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let orig_min_x = original.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
-    let orig_max_y = original.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let orig_min_y = original.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let orig_max_x = original.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let orig_min_x = original.x.iter().cloned().fold(f64::INFINITY, f64::min);
+    let orig_max_y = original.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let orig_min_y = original.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
     // PANE extents
-    let paned_max_x = paned.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let paned_min_x = paned.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
-    let paned_max_y = paned.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let paned_min_y = paned.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let paned_max_x = paned.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let paned_min_x = paned.x.iter().cloned().fold(f64::INFINITY, f64::min);
+    let paned_max_y = paned.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let paned_min_y = paned.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
     // Cosine extents
-    let cosined_max_x = cosined.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let cosined_min_x = cosined.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
-    let cosined_max_y = cosined.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let cosined_min_y = cosined.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let cosined_max_x = cosined.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cosined_min_x = cosined.x.iter().cloned().fold(f64::INFINITY, f64::min);
+    let cosined_max_y = cosined.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let cosined_min_y = cosined.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
     // Both should preserve x extents
     assert_relative_eq!(paned_max_x, orig_max_x, epsilon = 0.01);
@@ -525,12 +525,12 @@ fn test_pane_clusters_at_leading_edge() {
     let mut le_spacings = Vec::new();
     let mut mid_spacings = Vec::new();
 
-    for i in 1..paned.x_c.len() {
-        let dx = (paned.x_c[i] - paned.x_c[i - 1]).abs();
-        let dy = (paned.y_c[i] - paned.y_c[i - 1]).abs();
+    for i in 1..paned.x.len() {
+        let dx = (paned.x[i] - paned.x[i - 1]).abs();
+        let dy = (paned.y[i] - paned.y[i - 1]).abs();
         let ds = (dx * dx + dy * dy).sqrt();
 
-        let avg_x = (paned.x_c[i] + paned.x_c[i - 1]) / 2.0;
+        let avg_x = (paned.x[i] + paned.x[i - 1]) / 2.0;
 
         if avg_x < 0.1 {
             le_spacings.push(ds);
@@ -571,8 +571,8 @@ fn test_pane_config_affects_output() {
     let paned_high = repanel_by_curvature(&original, 160, &config_high_te);
 
     // Count panels in TE region (x > 0.9)
-    let te_count_low = paned_low.x_c.iter().filter(|&&x| x > 0.9).count();
-    let te_count_high = paned_high.x_c.iter().filter(|&&x| x > 0.9).count();
+    let te_count_low = paned_low.x.iter().filter(|&&x| x > 0.9).count();
+    let te_count_high = paned_high.x.iter().filter(|&&x| x > 0.9).count();
 
     // Higher CTERAT should produce more panels at TE (more TE bunching)
     println!(
@@ -585,8 +585,8 @@ fn test_pane_config_affects_output() {
         te_count_low != te_count_high || {
             // If counts are same, check that positions differ
             let mut diff_count = 0;
-            for i in 0..paned_low.x_c.len().min(paned_high.x_c.len()) {
-                if (paned_low.x_c[i] - paned_high.x_c[i]).abs() > 0.001 {
+            for i in 0..paned_low.x.len().min(paned_high.x.len()) {
+                if (paned_low.x[i] - paned_high.x[i]).abs() > 0.001 {
                     diff_count += 1;
                 }
             }

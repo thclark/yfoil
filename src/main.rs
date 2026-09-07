@@ -1023,8 +1023,8 @@ fn handle_geom(action: GeomAction) {
 
             println!(
                 "Repaneled from {} to {} points using {} method",
-                geometry.x_c.len(),
-                repaneled.x_c.len(),
+                geometry.x.len(),
+                repaneled.x.len(),
                 method
             );
             println!("Wrote to {}", output_path.display());

@@ -99,9 +99,9 @@ pub fn naca_4digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
     }
 
     Ok(Geometry {
-        reference: [0.25, 0.0], // Quarter chord
-        x_c,
-        y_c,
+        cm_ref: [0.25, 0.0], // Quarter chord
+        x: x_c,
+        y: y_c,
     })
 }
 
@@ -208,9 +208,9 @@ pub fn naca_5digit(designation: &str, n_panels: usize) -> Result<Geometry, NacaE
     }
 
     Ok(Geometry {
-        reference: [0.25, 0.0],
-        x_c,
-        y_c,
+        cm_ref: [0.25, 0.0],
+        x: x_c,
+        y: y_c,
     })
 }
 
@@ -403,9 +403,9 @@ fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
         y_c.push(yc[i] - yt[i]);
     }
     Geometry {
-        reference: [0.25, 0.0],
-        x_c,
-        y_c,
+        cm_ref: [0.25, 0.0],
+        x: x_c,
+        y: y_c,
     }
 }
 
@@ -493,15 +493,15 @@ mod tests {
         let geom = naca_4digit("0012", 100).unwrap();
 
         // Should produce exactly the requested number of points
-        assert_eq!(geom.x_c.len(), 100);
+        assert_eq!(geom.x.len(), 100);
 
         // Should start and end at trailing edge (x=1.0)
-        assert!((geom.x_c[0] - 1.0).abs() < 0.01);
-        assert!((geom.x_c.last().unwrap() - 1.0).abs() < 0.01);
+        assert!((geom.x[0] - 1.0).abs() < 0.01);
+        assert!((geom.x.last().unwrap() - 1.0).abs() < 0.01);
 
         // Symmetric airfoil: check that max thickness is approximately 12%
-        let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
         // Max thickness should be approximately 0.12 * 0.5 = 0.06 (half-thickness)
         assert_relative_eq!(max_y, 0.06, epsilon = 0.01);
@@ -513,8 +513,8 @@ mod tests {
         let geom = naca_4digit("4412", 100).unwrap();
 
         // Cambered airfoil: upper surface should have more positive y values
-        let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
         // Upper surface should be thicker due to camber
         assert!(max_y > 0.08);
@@ -541,15 +541,15 @@ mod tests {
         let geom = naca_5digit("23012", 100).unwrap();
 
         // Should have points on both sides
-        assert!(geom.x_c.len() > 100);
+        assert!(geom.x.len() > 100);
 
         // Should start and end near trailing edge
-        assert!(geom.x_c[0] > 0.95);
-        assert!(geom.x_c.last().unwrap() > &0.95);
+        assert!(geom.x[0] > 0.95);
+        assert!(geom.x.last().unwrap() > &0.95);
 
         // NACA 23012 is cambered - upper surface should be higher
-        let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
         // Check for positive camber (max_y should be larger in magnitude than |min_y|)
         assert!(max_y > -min_y * 0.8, "Expected positive camber");
@@ -563,8 +563,8 @@ mod tests {
     fn test_naca_23015() {
         let geom = naca_5digit("23015", 100).unwrap();
 
-        let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
         // Thickness should be approximately 15%
         let thickness = max_y - min_y;
@@ -578,8 +578,8 @@ mod tests {
         let geom_high = naca_5digit("23012", 100).unwrap();
 
         // Higher Cl should have more camber (larger y values on upper surface)
-        let max_y_low = geom_low.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let max_y_high = geom_high.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let max_y_low = geom_low.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let max_y_high = geom_high.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
         assert!(max_y_high > max_y_low, "Higher Cl design should have more camber");
     }
@@ -589,8 +589,8 @@ mod tests {
         // NACA 00012 - symmetric 5-digit (Cl = 0)
         let geom = naca_5digit("00012", 100).unwrap();
 
-        let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
         // Should be symmetric
         assert_relative_eq!(max_y, -min_y, epsilon = 0.001);
@@ -612,10 +612,10 @@ mod tests {
         let geom = naca_5digit("23112", 100).unwrap();
 
         // Should generate valid geometry
-        assert!(geom.x_c.len() > 100);
+        assert!(geom.x.len() > 100);
 
         // Reflex camber should still have positive camber but trailing edge should curve up
-        let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         assert!(max_y > 0.0);
     }
 }

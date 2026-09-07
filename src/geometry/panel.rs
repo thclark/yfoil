@@ -41,12 +41,12 @@ impl Default for PaneConfig {
 /// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `panel_foil` exactly as
 /// PANGEN's tail does.
 pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
-    let nb = geometry.x_c.len();
+    let nb = geometry.x.len();
     if nb < 2 {
         return geometry.clone();
     }
-    let xb = &geometry.x_c;
-    let yb = &geometry.y_c;
+    let xb = &geometry.x;
+    let yb = &geometry.y;
     let (xsref1, xsref2) = config.xsref.unwrap_or((1.0, 1.0));
     let (xpref1, xpref2) = config.xpref.unwrap_or((1.0, 1.0));
 
@@ -406,9 +406,9 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneC
     }
 
     Geometry {
-        reference: geometry.reference,
-        x_c: x,
-        y_c: y,
+        cm_ref: geometry.cm_ref,
+        x,
+        y,
     }
 }
 
@@ -555,19 +555,19 @@ pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64])
 /// # Returns
 /// New geometry with redistributed points
 pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) -> Geometry {
-    let n = geometry.x_c.len();
+    let n = geometry.x.len();
 
     // Calculate arc length along the surface
-    let s = arc_coordinate(&geometry.x_c, &geometry.y_c);
+    let s = arc_coordinate(&geometry.x, &geometry.y);
 
     // Create splines for x and y
-    let xp = spline_derivatives(&geometry.x_c, &s);
-    let yp = spline_derivatives(&geometry.y_c, &s);
+    let xp = spline_derivatives(&geometry.x, &s);
+    let yp = spline_derivatives(&geometry.y, &s);
 
     let s_total = s[n - 1];
 
     // Find LE arc length (approximately midway for a closed airfoil)
-    let sle = find_le(&geometry.x_c, &xp, &geometry.y_c, &yp, &s);
+    let sle = find_le(&geometry.x, &xp, &geometry.y, &yp, &s);
 
     // Generate new parameter values using modified cosine spacing
     // with different densities at TE vs LE
@@ -620,19 +620,13 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     }
 
     // Evaluate splines at new parameter values
-    let x_c: Vec<f64> = s_new
-        .iter()
-        .map(|&si| spline_value(si, &geometry.x_c, &xp, &s))
-        .collect();
-    let y_c: Vec<f64> = s_new
-        .iter()
-        .map(|&si| spline_value(si, &geometry.y_c, &yp, &s))
-        .collect();
+    let x_c: Vec<f64> = s_new.iter().map(|&si| spline_value(si, &geometry.x, &xp, &s)).collect();
+    let y_c: Vec<f64> = s_new.iter().map(|&si| spline_value(si, &geometry.y, &yp, &s)).collect();
 
     Geometry {
-        reference: geometry.reference,
-        x_c,
-        y_c,
+        cm_ref: geometry.cm_ref,
+        x: x_c,
+        y: y_c,
     }
 }
 
@@ -645,9 +639,9 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
 /// - Panel angles
 /// - Leading edge location
 pub fn panel_foil(geometry: &Geometry) -> PanelledFoil {
-    let n = geometry.x_c.len();
-    let x = geometry.x_c.clone();
-    let y = geometry.y_c.clone();
+    let n = geometry.x.len();
+    let x = geometry.x.clone();
+    let y = geometry.y.clone();
 
     // SCALC / SEGSPL
     let s = arc_coordinate(&x, &y);
@@ -691,7 +685,7 @@ pub fn panel_foil(geometry: &Geometry) -> PanelledFoil {
         i_le_node: le_index,
         chord,
         sharp_te,
-        cm_ref: geometry.reference,
+        cm_ref: geometry.cm_ref,
     }
 }
 
@@ -906,20 +900,20 @@ mod tests {
         let repaneled = repanel_cosine(&original, 150, 0.15);
 
         // Should have approximately the target number of points
-        assert!(repaneled.x_c.len() > 140 && repaneled.x_c.len() < 160);
+        assert!(repaneled.x.len() > 140 && repaneled.x.len() < 160);
 
         // Extents should be preserved
-        let orig_max_x = original.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let new_max_x = repaneled.x_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let orig_max_x = original.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let new_max_x = repaneled.x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         assert_relative_eq!(orig_max_x, new_max_x, epsilon = 0.01);
 
-        let orig_min_x = original.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
-        let new_min_x = repaneled.x_c.iter().cloned().fold(f64::INFINITY, f64::min);
+        let orig_min_x = original.x.iter().cloned().fold(f64::INFINITY, f64::min);
+        let new_min_x = repaneled.x.iter().cloned().fold(f64::INFINITY, f64::min);
         assert_relative_eq!(orig_min_x, new_min_x, epsilon = 0.01);
 
         // Maximum thickness should be preserved
-        let orig_max_y = original.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let new_max_y = repaneled.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let orig_max_y = original.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let new_max_y = repaneled.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         assert_relative_eq!(orig_max_y, new_max_y, epsilon = 0.01);
     }
 
@@ -937,12 +931,12 @@ mod tests {
         let mut le_spacings = Vec::new();
         let mut mid_spacings = Vec::new();
 
-        for i in 1..repaneled.x_c.len() {
-            let dx = (repaneled.x_c[i] - repaneled.x_c[i - 1]).abs();
-            let dy = (repaneled.y_c[i] - repaneled.y_c[i - 1]).abs();
+        for i in 1..repaneled.x.len() {
+            let dx = (repaneled.x[i] - repaneled.x[i - 1]).abs();
+            let dy = (repaneled.y[i] - repaneled.y[i - 1]).abs();
             let ds = (dx * dx + dy * dy).sqrt();
 
-            let avg_x = (repaneled.x_c[i] + repaneled.x_c[i - 1]) / 2.0;
+            let avg_x = (repaneled.x[i] + repaneled.x[i - 1]) / 2.0;
 
             if avg_x < 0.1 || avg_x > 0.9 {
                 le_spacings.push(ds);

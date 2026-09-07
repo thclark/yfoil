@@ -76,13 +76,13 @@ fn check(case: &str, spec: &str, npan: usize) {
     } else {
         naca_5digit_xfoil(spec).unwrap()
     };
-    assert_eq!(buffer.x_c.len(), d.buffer.len(), "{case}: buffer point count");
-    let sb = arc_coordinate(&buffer.x_c, &buffer.y_c);
+    assert_eq!(buffer.x.len(), d.buffer.len(), "{case}: buffer point count");
+    let sb = arc_coordinate(&buffer.x, &buffer.y);
     let (mut bits, mut worst) = (0usize, 0.0_f64);
     for (i, b) in d.buffer.iter().enumerate() {
         for (name, ours, theirs) in [
-            ("XB", buffer.x_c[i], b[0]),
-            ("YB", buffer.y_c[i], b[1]),
+            ("XB", buffer.x[i], b[0]),
+            ("YB", buffer.y[i], b[1]),
             ("SB", sb[i], b[2]),
         ] {
             if ours.to_bits() == theirs.to_bits() {
@@ -99,9 +99,9 @@ fn check(case: &str, spec: &str, npan: usize) {
     );
 
     // LEFIND on the buffer (SBLE), then PANGEN
-    let xbp = spline_segmented(&buffer.x_c, &sb);
-    let ybp = spline_segmented(&buffer.y_c, &sb);
-    let sble = find_le(&buffer.x_c, &xbp, &buffer.y_c, &ybp, &sb);
+    let xbp = spline_segmented(&buffer.x, &sb);
+    let ybp = spline_segmented(&buffer.y, &sb);
+    let sble = find_le(&buffer.x, &xbp, &buffer.y, &ybp, &sb);
     assert_within(
         sble,
         d.header["SBLE"].parse().unwrap(),
@@ -111,7 +111,7 @@ fn check(case: &str, spec: &str, npan: usize) {
     );
 
     let paneled = repanel_by_curvature(&buffer, npan, &PaneConfig::default());
-    assert_eq!(paneled.x_c.len(), d.panels.len(), "{case}: node count");
+    assert_eq!(paneled.x.len(), d.panels.len(), "{case}: node count");
     let af = panel_foil(&paneled);
     let (mut bits, mut worst) = (0usize, 0.0_f64);
     for (i, p) in d.panels.iter().enumerate() {

@@ -24,7 +24,7 @@ struct Cases {
 #[derive(Debug, Deserialize, Clone)]
 struct Case {
     name: String,
-    airfoil: String,
+    foil: String,
     n_panels: usize,
     alphas: Vec<f64>,
     #[serde(default)]
@@ -64,7 +64,7 @@ struct Case {
     #[serde(default = "default_ncrit")]
     ncrit: f64,
     #[serde(default = "default_iter")]
-    iter: usize,
+    max_iterations: usize,
     #[serde(default)]
     track: bool,
 }
@@ -189,7 +189,7 @@ fn fixtures(flags: &[String]) {
         if case.geometry_only {
             // XFOIL's own NACA generator and PANGEN: `NACA dddd` (which calls PANGEN with the
             // default NPAN) then `PPAR / N n` to repanel at the case's n_panels
-            let (kind, spec) = case.airfoil.split_once(':').expect("airfoil = \"xfoil-naca:0012\"");
+            let (kind, spec) = case.foil.split_once(':').expect("airfoil = \"xfoil-naca:0012\"");
             assert_eq!(kind, "xfoil-naca", "geometry_only cases use xfoil-naca:<digits>");
             let script = format!("PLOP\nG F\n\nNACA {spec}\nPPAR\nN {}\n\n\n\nQUIT\n", case.n_panels);
             fs::write(work.join("xfoil.inp"), &script).unwrap();
@@ -208,7 +208,7 @@ fn fixtures(flags: &[String]) {
                 continue;
             }
             let manifest = serde_json::json!({
-                "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "geometry_only": true },
+                "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "geometry_only": true },
                 "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
                 "generated_by": "cargo xtask fixtures",
             });
@@ -251,7 +251,7 @@ fn fixtures(flags: &[String]) {
         }
 
         // 1. geometry, by YFoil only
-        let mut parts = case.airfoil.split(':');
+        let mut parts = case.foil.split(':');
         let kind = parts.next().unwrap();
         let spec = parts.next().expect("airfoil = \"naca4:0012[:sharp]\"");
         let sharp = matches!(parts.next(), Some("sharp"));
@@ -292,7 +292,7 @@ fn fixtures(flags: &[String]) {
         };
         s += &format!(
             "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
-            case.re, case.mach, case.ncrit, case.iter
+            case.re, case.mach, case.ncrit, case.max_iterations
         );
         if case.matyp != 0 {
             s += &format!("TYPE {}\n", case.matyp);
@@ -377,9 +377,9 @@ fn fixtures(flags: &[String]) {
 
         // 4. manifest
         let manifest = serde_json::json!({
-            "case": { "name": case.name, "airfoil": case.airfoil, "n_panels": case.n_panels, "alphas": case.alphas,
+            "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "iter": case.iter, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls },
+                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",

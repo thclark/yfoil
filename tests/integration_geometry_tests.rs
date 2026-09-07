@@ -30,9 +30,9 @@ fn test_naca_0012_against_standard_formula() {
     }
 
     // For each reference point, compute what our formula gives and compare
-    for i in 0..reference.x_c.len() {
-        let ref_x = reference.x_c[i];
-        let ref_y = reference.y_c[i];
+    for i in 0..reference.x.len() {
+        let ref_x = reference.x[i];
+        let ref_y = reference.y[i];
 
         // Our formula's expected y at this x (symmetric airfoil)
         let our_y = if ref_y >= 0.0 {
@@ -74,10 +74,10 @@ fn test_json_roundtrip() {
     let loaded = read_geometry_from_file(temp_file.path()).unwrap();
 
     // Compare
-    assert_eq!(original.x_c.len(), loaded.x_c.len());
-    for i in 0..original.x_c.len() {
-        assert_relative_eq!(original.x_c[i], loaded.x_c[i], epsilon = 1e-10);
-        assert_relative_eq!(original.y_c[i], loaded.y_c[i], epsilon = 1e-10);
+    assert_eq!(original.x.len(), loaded.x.len());
+    for i in 0..original.x.len() {
+        assert_relative_eq!(original.x[i], loaded.x[i], epsilon = 1e-10);
+        assert_relative_eq!(original.y[i], loaded.y[i], epsilon = 1e-10);
     }
 }
 
@@ -95,10 +95,10 @@ fn test_dat_roundtrip() {
 
     // Compare
     assert_eq!(name, "NACA 23015");
-    assert_eq!(original.x_c.len(), loaded.x_c.len());
-    for i in 0..original.x_c.len() {
-        assert_relative_eq!(original.x_c[i], loaded.x_c[i], epsilon = 1e-5);
-        assert_relative_eq!(original.y_c[i], loaded.y_c[i], epsilon = 1e-5);
+    assert_eq!(original.x.len(), loaded.x.len());
+    for i in 0..original.x.len() {
+        assert_relative_eq!(original.x[i], loaded.x[i], epsilon = 1e-5);
+        assert_relative_eq!(original.y[i], loaded.y[i], epsilon = 1e-5);
     }
 }
 
@@ -122,10 +122,10 @@ fn test_format_conversion() {
     let (_, from_dat) = read_dat_file(dat_file.path()).unwrap();
 
     // Compare original to final
-    assert_eq!(original.x_c.len(), from_dat.x_c.len());
-    for i in 0..original.x_c.len() {
-        assert_relative_eq!(original.x_c[i], from_dat.x_c[i], epsilon = 1e-5);
-        assert_relative_eq!(original.y_c[i], from_dat.y_c[i], epsilon = 1e-5);
+    assert_eq!(original.x.len(), from_dat.x.len());
+    for i in 0..original.x.len() {
+        assert_relative_eq!(original.x[i], from_dat.x[i], epsilon = 1e-5);
+        assert_relative_eq!(original.y[i], from_dat.y[i], epsilon = 1e-5);
     }
 }
 
@@ -136,13 +136,13 @@ fn test_repanel_shape_preservation() {
     let repaneled = repanel_cosine(&original, 200, 0.15);
 
     // Maximum thickness should be preserved
-    let orig_max_y = original.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let new_max_y = repaneled.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let orig_max_y = original.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let new_max_y = repaneled.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     assert_relative_eq!(orig_max_y, new_max_y, epsilon = 0.002);
 
     // Minimum thickness should be preserved
-    let orig_min_y = original.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
-    let new_min_y = repaneled.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let orig_min_y = original.y.iter().cloned().fold(f64::INFINITY, f64::min);
+    let new_min_y = repaneled.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert_relative_eq!(orig_min_y, new_min_y, epsilon = 0.002);
 }
 
@@ -183,8 +183,8 @@ fn test_full_geometry_pipeline() {
 fn test_airfoil_symmetry() {
     let geom = naca_4digit("0015", 160).unwrap();
 
-    let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
     // Should be symmetric about y=0
     assert_relative_eq!(max_y, -min_y, epsilon = 0.001);
@@ -195,14 +195,14 @@ fn test_airfoil_symmetry() {
 fn test_airfoil_camber() {
     // NACA 4-digit cambered
     let geom_4 = naca_4digit("6412", 160).unwrap();
-    let max_y_4 = geom_4.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y_4 = geom_4.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max_y_4 = geom_4.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_y_4 = geom_4.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!(max_y_4 > -min_y_4, "4-digit should have positive camber");
 
     // NACA 5-digit cambered
     let geom_5 = naca_5digit("23018", 160).unwrap();
-    let max_y_5 = geom_5.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y_5 = geom_5.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max_y_5 = geom_5.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_y_5 = geom_5.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!(max_y_5 > -min_y_5, "5-digit should have positive camber");
 }
 
@@ -213,9 +213,9 @@ fn test_thickness_values() {
     let medium = naca_4digit("0012", 100).unwrap();
     let thick = naca_4digit("0024", 100).unwrap();
 
-    let thick_thin = thin.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
-    let thick_med = medium.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
-    let thick_thick = thick.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
+    let thick_thin = thin.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
+    let thick_med = medium.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
+    let thick_thick = thick.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
 
     // Thickness should scale appropriately
     assert!(thick_thin < thick_med);
