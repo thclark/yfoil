@@ -98,7 +98,7 @@ These parameters originate from:
 
 ## YFoil Mapping
 
-These parameters are defined in `src/bl/constants.rs`:
+These parameters are defined in `src/bl/params.rs` (`LAG_CONSTANT`, `GBETA_LOCUS_*`, `WAKE_DISSIPATION_LENGTH_RATIO`, `TRANSITION_SQRTCTAU_*`, `LAG_PRESSURE_GRADIENT_WEIGHT`, `SQRTCTAUEQ_COEFFICIENT`, `CF_TURBULENT_FACTOR`; see the mapping table 5):
 
 | XFOIL | YFoil |
 |-------|-------|

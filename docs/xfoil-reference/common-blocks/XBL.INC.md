@@ -256,14 +256,8 @@ EQUIVALENCE (X1,COM1(1)), (X2,COM2(1))
 
 This allows copying all station variables with a single array operation.
 
-## YFoil Mapping
+## YFoil mapping
 
-| XFOIL Variable | YFoil Equivalent |
-|---------------|------------------|
-| `U1, U2` | `BLStation.ue` |
-| `T1, T2` | `BLStation.theta` |
-| `D1, D2` | `BLStation.delta_star` |
-| `HK1, HK2` | `BLStation.hk` |
-| `RT1, RT2` | `BLStation.re_theta` |
-| `CF1, CF2` | `BLStation.cf` |
-| `SIMI, TRAN, TURB, WAKE` | `BLState.regime` enum |
+See [`xfoil-to-yfoil-mapping.md`](../xfoil-to-yfoil-mapping.md) (tables 1–4 cover this
+block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).
+

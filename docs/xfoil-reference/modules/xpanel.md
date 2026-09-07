@@ -273,7 +273,7 @@ The global system couples:
 
 ## YFoil Equivalent
 
-`src/panel/influence.rs`, `src/panel/solver.rs`
+`src/solver/psilin.rs`, `src/solver/ggcalc.rs`, `src/solver/qdcalc.rs`, `src/solver/xywake.rs`, `src/solver/pointers.rs`, `src/solver/velocity.rs`
 
 ```rust
 /// Calculate streamfunction influence coefficients

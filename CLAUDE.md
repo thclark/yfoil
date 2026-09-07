@@ -69,7 +69,7 @@ Newton loop). If XFOIL does X, YFoil does X — including XFOIL's own bugs and q
 
 | Divergence | Why | Where |
 |---|---|---|
-| NACA 4/5-digit thickness applied perpendicular to the camber line | XFOIL's `NACA4` (`naca.f:62`) applies it vertically, which is not the NACA definition. Irrelevant for validation because YFoil generates the panels and XFOIL consumes them (Rule 4). XFOIL's variant is available as `--naca-model xfoil`. | `src/geometry/naca.rs` |
+| NACA 4/5-digit thickness applied perpendicular to the camber line | XFOIL's `NACA4` (`naca.f:62`) applies it vertically, which is not the NACA definition. Irrelevant for validation because YFoil generates the panels and XFOIL consumes them (Rule 4). XFOIL's variant is available as `--thickness vertical`. | `src/geometry/naca.rs` |
 
 Adding a row to that table requires the same evidence standard as a bug report against XFOIL.
 
@@ -102,7 +102,7 @@ Progress is measured by fixture matches, never by an end-to-end number moving in
 Different panels make any comparison meaningless. The workflow, and the only one:
 
 ```bash
-yfoil geometry naca 0012 -n 160 -o geometry.json      # or repanel: yfoil geometry repanel --method xfoil
+yfoil geometry naca 0012 -n 160 -o geometry.json      # or repanel: yfoil geometry repanel --method curvature
 yfoil geometry convert geometry.json --to dat -o geometry.dat
 # XFOIL:  PLOP / G F / LOAD geometry.dat / ...      never NACA, never PANE, never PPAR
 ```
@@ -151,8 +151,8 @@ as stale. Measured 2026-09-04 over 20 cases: 1320 branches, 1125 taken, 90 open 
 measurement found one translation gap — OPER `DAMP` (IDAMPV=1, `DAMPL2`) was reachable and not translated — now
 closed and gated by the `naca0012_n60_a2_re1e6_damp` case.
 
-XFOIL-independent invariants are also required, because two codes can share a misunderstanding: symmetric airfoil at
-α=0 → CL=CM=0 to the noise floor; mirrored airfoil at −α; Blasius flat plate.
+XFOIL-independent invariants are also required, because two codes can share a misunderstanding: symmetric aerofoil at
+α=0 → CL=CM=0 to the noise floor; mirrored aerofoil at −α; Blasius flat plate.
 
 ### Rule 7: Fixtures are intentional, tracked, and never silently skipped
 
@@ -183,12 +183,17 @@ XFOIL uses Fortran COMMON blocks; YFoil passes state explicitly. Pure functions 
 coefficients and splines; explicit data passing everywhere; plotting behind a cargo feature.
 
 **Inside `src/solver/` and `src/bl/`, the BL state mirrors XFOIL's data model exactly**: two sides with the wake
-appended to side 2 (`NBL(2) = IBLTE(2) + NW`), explicit `IPAN/VTI/ISYS/IBLTE/NBL/ITRAN`, and 1-based station
-arrays with a dummy slot 0, so translated lines read identically to the Fortran and can be diffed by eye. There is
-no third "wake surface". Elsewhere in the crate, idiomatic Rust.
+appended to side 2 (`NBL(2) = IBLTE(2) + NW`), explicit station→node and station→row maps (`i_node`, `i_row`,
+`velocity_sign`, `i_te_station`, `n_stations`, `i_transition_station`), and 1-based station arrays with a dummy
+slot 0, so a translated statement corresponds one-for-one to its Fortran line. There is no third "wake surface".
+**Names are not XFOIL's**: they follow `docs/conventions/naming.md` (symbols from the equations, the four index
+systems, `_d_<token>` sensitivities), and the XFOIL name of every variable and routine is recorded in
+`docs/xfoil-reference/xfoil-to-yfoil-mapping.md` and in `#[doc(alias = "SETBL")]` on the translating function.
+Inside a translated body, short locals bound at the top from the named fields (`let hk1 = station1.hk;`) keep the
+formula lines diffable against the Fortran. Elsewhere in the crate, idiomatic Rust.
 
 ```
-geometry/   - Airfoil coordinates, splines, paneling, NACA generation
+geometry/   - Aerofoil coordinates, splines, panelling, NACA generation
 panel/      - Inviscid panel method, influence matrices, wake geometry, DIJ
 bl/         - BL closures, BLDIF/TRDIF/TESYS, MRCHUE, MRCHDU, BLSOLV
 solver/     - Pointer layer (IBLPAN/XICALC/IBLSYS/STFIND/STMOVE), velocity layer (UESET/QVFUE/GAMQV…),
@@ -204,11 +209,12 @@ field or state variable is added, renamed or re-represented.
 
 ```
 yfoil geometry - convert | naca | repanel | info                (alias: geom)
-yfoil analyze  - single operating point (--alpha or --cl); -o writes forces + geometry + wake +
-                 every per-station BL quantity (live closures and XFOIL's stored arrays)
+yfoil analyse  - single operating point (--alpha or --cl, --inviscid); -o writes conditions, results,
+                 geometry (+ wake), surface q/Cp and every per-station BL quantity (primaries and the
+                 closures evaluated on them; --include-lagged-closures adds XFOIL's lagged arrays)
 yfoil polar    - alpha sweep (state machine: 0°→max, reinitialise, 0°→min, stitched ascending);
                  --label names the curve, -o writes the polar JSON, --distributions embeds a full
-                 point record at every sweep point
+                 analysis record at every sweep point (--max-iterations, --ncrit as for analyse)
 yfoil plot     - foil <file>... | analysis <file> | polar <file>...   (feature-gated)
                  foil: geometry files (panels only), analysis JSONs (design points, same panels) or
                  one polar JSON (--alpha selects points); --panels notches|dots|none, --wake,
@@ -220,7 +226,7 @@ Analysis commands accept JSON geometry only; use `yfoil geometry convert` for `.
 
 ```bash
 yfoil geometry naca 4412 -n 160 -o naca4412.json
-yfoil polar naca4412.json --alpha-min -5 --alpha-max 15 --alpha-step 0.5 -r 1e6 --iterations 20 \
+yfoil polar naca4412.json --alpha-min -5 --alpha-max 15 --alpha-step 0.5 -r 1e6 --max-iterations 20 \
     --label "NACA 4412" --distributions -o naca4412_polar.json
 yfoil plot polar --title "NACA 0012 vs 4412" naca0012_polar.json naca4412_polar.json -o compare.svg
 yfoil plot foil naca4412_polar.json --alpha 0,5,10 --quantity dstar,theta --wake --panels notches -o foil.svg

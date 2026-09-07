@@ -277,7 +277,7 @@ RLX = min(1.0,
 
 ## YFoil Equivalent
 
-`src/bl/march.rs`
+`src/bl/mrchue.rs`, `src/bl/mrchdu.rs`, `src/solver/setbl.rs`, `src/solver/update.rs`
 
 ```rust
 pub fn march_bl_direct(

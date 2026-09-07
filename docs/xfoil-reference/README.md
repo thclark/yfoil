@@ -98,16 +98,31 @@ Input Geometry (X, Y coordinates)
 └───────────────────┘
 ```
 
-## YFoil Equivalents
+## YFoil equivalents
 
-| XFOIL             | YFoil                    |
-|-------------------|--------------------------|
-| `xoper.f:VISCAL`  | `src/solver/viscal.rs`   |
-| `xblsys.f:BLKIN`  | `src/bl/closure.rs`      |
-| `xblsys.f:BLVAR`  | `src/bl/secondary.rs`    |
-| `xblsys.f:BLSYS`  | `src/bl/system.rs`       |
-| `xbl.f:MRCHUE`    | `src/bl/march.rs`        |
-| `xpanel.f:PSILIN` | `src/panel/influence.rs` |
+The full XFOIL → YFoil name mapping is [`xfoil-to-yfoil-mapping.md`](xfoil-to-yfoil-mapping.md);
+the naming rules are [`docs/conventions/naming.md`](../conventions/naming.md). Where the
+translated routines live:
+
+| XFOIL             | YFoil                                                  |
+|-------------------|--------------------------------------------------------|
+| `xoper.f:VISCAL`  | `src/solver/viscal.rs::solve_viscous`                  |
+| `xoper.f:SPECAL`  | `src/solver/specal.rs::solve_inviscid_at_alpha`        |
+| `xbl.f:SETBL`     | `src/solver/setbl.rs::assemble_newton_system`          |
+| `xbl.f:UPDATE`    | `src/solver/update.rs::apply_newton_update`            |
+| `xbl.f:MRCHUE`    | `src/bl/mrchue.rs::march_direct`                       |
+| `xbl.f:MRCHDU`    | `src/bl/mrchdu.rs::march_prescribed_dstar`             |
+| `xblsys.f:BLKIN`  | `src/bl/station.rs::StationState::set_kinematic_variables` |
+| `xblsys.f:BLVAR`  | `src/bl/station.rs::StationState::set_closure_variables`   |
+| `xblsys.f:BLSYS`  | `src/bl/blsys.rs::assemble_interval_system`            |
+| `xblsys.f:BLDIF`  | `src/bl/difference.rs::IntervalSystem::assemble_interval_equations` |
+| `xblsys.f:TRCHEK2`| `src/bl/transition.rs::check_transition`               |
+| `xsolve.f:BLSOLV` | `src/bl/blsolv.rs::solve_newton_system`                |
+| `xpanel.f:PSILIN` | `src/solver/psilin.rs::panel_influence`                |
+| `xpanel.f:GGCALC` | `src/solver/ggcalc.rs::build_inviscid_system`          |
+
+Every translating function carries `#[doc(alias = "XFOIL NAME")]`, so `cargo doc` search by the
+Fortran name finds it.
 
 ## Generating Architecture PDF
 
