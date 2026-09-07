@@ -1,12 +1,12 @@
 //! AXSET function validation tests against XFOIL
 //!
 //! These tests load fixtures generated from instrumented XFOIL and verify
-//! that YFoil's axset function produces identical output.
+//! that YFoil's interval_amplification_rate function produces identical output.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use yfoil::bl::system::axset;
+use yfoil::bl::system::interval_amplification_rate;
 
 const REL_TOL: f64 = 1e-10;
 const ABS_TOL: f64 = 1e-14;
@@ -98,21 +98,21 @@ fn test_axset_against_xfoil_fixtures() {
         let inp = &f.input;
         let out = &f.output;
 
-        let result = axset(
+        let result = interval_amplification_rate(
             inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit, 0,
         );
 
         // Check each output value
         let checks = [
-            ("AX", out.ax, result.ax),
-            ("AX_HK1", out.ax_hk1, result.ax_hk1),
-            ("AX_T1", out.ax_t1, result.ax_t1),
-            ("AX_RT1", out.ax_rt1, result.ax_rt1),
-            ("AX_A1", out.ax_a1, result.ax_a1),
-            ("AX_HK2", out.ax_hk2, result.ax_hk2),
-            ("AX_T2", out.ax_t2, result.ax_t2),
-            ("AX_RT2", out.ax_rt2, result.ax_rt2),
-            ("AX_A2", out.ax_a2, result.ax_a2),
+            ("AX", out.ax, result.rate),
+            ("AX_HK1", out.ax_hk1, result.rate_d_hk_station1),
+            ("AX_T1", out.ax_t1, result.rate_d_theta_station1),
+            ("AX_RT1", out.ax_rt1, result.rate_d_retheta_station1),
+            ("AX_A1", out.ax_a1, result.rate_d_ampl_station1),
+            ("AX_HK2", out.ax_hk2, result.rate_d_hk_station2),
+            ("AX_T2", out.ax_t2, result.rate_d_theta_station2),
+            ("AX_RT2", out.ax_rt2, result.rate_d_retheta_station2),
+            ("AX_A2", out.ax_a2, result.rate_d_ampl_station2),
         ];
 
         let mut case_passed = true;
@@ -158,19 +158,19 @@ fn test_axset_sample_cases() {
         let inp = &f.input;
         let out = &f.output;
 
-        let result = axset(
+        let result = interval_amplification_rate(
             inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit, 0,
         );
 
-        check_value("AX", 1, out.ax, result.ax);
-        check_value("AX_HK1", 1, out.ax_hk1, result.ax_hk1);
-        check_value("AX_T1", 1, out.ax_t1, result.ax_t1);
-        check_value("AX_RT1", 1, out.ax_rt1, result.ax_rt1);
-        check_value("AX_A1", 1, out.ax_a1, result.ax_a1);
-        check_value("AX_HK2", 1, out.ax_hk2, result.ax_hk2);
-        check_value("AX_T2", 1, out.ax_t2, result.ax_t2);
-        check_value("AX_RT2", 1, out.ax_rt2, result.ax_rt2);
-        check_value("AX_A2", 1, out.ax_a2, result.ax_a2);
+        check_value("AX", 1, out.ax, result.rate);
+        check_value("AX_HK1", 1, out.ax_hk1, result.rate_d_hk_station1);
+        check_value("AX_T1", 1, out.ax_t1, result.rate_d_theta_station1);
+        check_value("AX_RT1", 1, out.ax_rt1, result.rate_d_retheta_station1);
+        check_value("AX_A1", 1, out.ax_a1, result.rate_d_ampl_station1);
+        check_value("AX_HK2", 1, out.ax_hk2, result.rate_d_hk_station2);
+        check_value("AX_T2", 1, out.ax_t2, result.rate_d_theta_station2);
+        check_value("AX_RT2", 1, out.ax_rt2, result.rate_d_retheta_station2);
+        check_value("AX_A2", 1, out.ax_a2, result.rate_d_ampl_station2);
     }
 
     // Test last case to cover different parameter ranges
@@ -179,12 +179,12 @@ fn test_axset_sample_cases() {
         let inp = &f.input;
         let out = &f.output;
 
-        let result = axset(
+        let result = interval_amplification_rate(
             inp.hk1, inp.t1, inp.rt1, inp.a1, inp.hk2, inp.t2, inp.rt2, inp.a2, inp.acrit, 0,
         );
 
-        check_value("AX", idx, out.ax, result.ax);
-        check_value("AX_A1", idx, out.ax_a1, result.ax_a1);
-        check_value("AX_A2", idx, out.ax_a2, result.ax_a2);
+        check_value("AX", idx, out.ax, result.rate);
+        check_value("AX_A1", idx, out.ax_a1, result.rate_d_ampl_station1);
+        check_value("AX_A2", idx, out.ax_a2, result.rate_d_ampl_station2);
     }
 }

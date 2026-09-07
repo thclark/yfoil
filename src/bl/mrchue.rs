@@ -2,9 +2,9 @@
 //! inverse (prescribed-Hk) step where the direct step would separate. Line-for-line on
 //! `BlState`, with an optional trace at the same points as the reference instrumentation.
 
-use crate::bl::blsys::{blsys, tesys, IntervalFlags};
+use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
-use crate::bl::system::{limit_dstar, trchek, BLLocalSystem, FlowParameters, TransitionResult};
+use crate::bl::system::{check_transition, limit_dstar, FlowParameters, IntervalSystem, TransitionCheck};
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
 
@@ -81,7 +81,7 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
         let mut turb = false;
         st.itran[is] = st.iblte[is];
 
-        let mut sys = BLLocalSystem::default();
+        let mut sys = IntervalSystem::default();
         let mut trforc = false;
         // TE quantities defined at the first wake station (used again by the fallback)
         let (mut cte, mut tte, mut dte) = (0.0, 0.0, 0.0);
@@ -109,18 +109,21 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                 s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, params);
                 s2.set_kinematic_variables(params);
                 // the reference trace records AMPL1/AMPL2/XT/TRAN/ITRAN here, before TRCHEK
-                let pre = ([s1.ampl, s2.ampl, trloc.xt, amcrit], tran, st.itran[is]);
+                let pre = ([s1.ampl, s2.ampl, trloc.xi_transition, amcrit], tran, st.itran[is]);
 
                 // check for transition and set appropriate flags and things
                 if !simi && !turb {
-                    match trchek(&s1, &s2, s1.ampl, amcrit, xiforc, params) {
-                        TransitionResult::NoTransition { ampl2 } => {
+                    match check_transition(&s1, &s2, s1.ampl, amcrit, xiforc, params) {
+                        TransitionCheck::None { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            trloc.xt = s2.xi; // TRCHEK2 leaves XT = X2 (and the XT_* as they were)
+                            trloc.xi_transition = s2.xi; // TRCHEK2 leaves XT = X2 (and the XT_* as they were)
                             st.itran[is] = ibl + 2;
                         }
-                        TransitionResult::FreeTransition { location, ampl2 } => {
+                        TransitionCheck::Free {
+                            transition: location,
+                            ampl2,
+                        } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
@@ -131,7 +134,7 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                                 s2.sqrtctau = cti;
                             }
                         }
-                        TransitionResult::ForcedTransition { location } => {
+                        TransitionCheck::Forced { transition: location } => {
                             tran = true;
                             trforc = true;
                             trloc = location;
@@ -145,33 +148,38 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                     s2.ampl = ami;
                 }
 
-                let flags = IntervalFlags { simi, tran, turb, wake };
+                let flags = IntervalFlags {
+                    similarity: simi,
+                    transition: tran,
+                    turbulent: turb,
+                    wake,
+                };
                 if ibl == st.iblte[is] + 1 {
                     tte = st.thet[1][st.iblte[1]] + st.thet[2][st.iblte[2]];
                     dte = st.dstr[1][st.iblte[1]] + st.dstr[2][st.iblte[2]] + st.ante;
                     cte = (st.ctau[1][st.iblte[1]] * st.thet[1][st.iblte[1]]
                         + st.ctau[2][st.iblte[2]] * st.thet[2][st.iblte[2]])
                         / tte;
-                    tesys(&mut sys, &mut s2, cte, tte, dte, params);
+                    assemble_te_system(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
-                    blsys(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, params);
+                    assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, params);
                 }
                 hk2_snapshot = s2.hk;
 
                 if direct {
                     // try direct mode (set dUe = 0 in currently empty 4th line)
-                    sys.vs2[3][0] = 0.0;
-                    sys.vs2[3][1] = 0.0;
-                    sys.vs2[3][2] = 0.0;
-                    sys.vs2[3][3] = 1.0;
-                    sys.vsrez[3] = 0.0;
+                    sys.jacobian_station2[3][0] = 0.0;
+                    sys.jacobian_station2[3][1] = 0.0;
+                    sys.jacobian_station2[3][2] = 0.0;
+                    sys.jacobian_station2[3][3] = 1.0;
+                    sys.residual[3] = 0.0;
                 } else {
                     // inverse mode (force Hk to prescribed value HTARG)
-                    sys.vs2[3][0] = 0.0;
-                    sys.vs2[3][1] = s2.hk_d_theta;
-                    sys.vs2[3][2] = s2.hk_d_dstar;
-                    sys.vs2[3][3] = s2.hk_d_ue;
-                    sys.vsrez[3] = htarg - s2.hk;
+                    sys.jacobian_station2[3][0] = 0.0;
+                    sys.jacobian_station2[3][1] = s2.hk_d_theta;
+                    sys.jacobian_station2[3][2] = s2.hk_d_dstar;
+                    sys.jacobian_station2[3][3] = s2.hk_d_ue;
+                    sys.residual[3] = htarg - s2.hk;
                 }
 
                 let mut rec = StationIter {
@@ -184,8 +192,12 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                     primary: [s2.xi, s2.ue, s2.theta, s2.dstar, s2.sqrtctau],
                     kinematic: [s2.machsqd_edge, s2.h, s2.hk, s2.retheta, s2.nu],
                     closure: [s2.hstar, s2.us, s2.sqrtctaueq, s2.cf, s2.cdiss],
-                    residual: sys.vsrez,
-                    vs2: [sys.vs2[0], sys.vs2[1], sys.vs2[2]],
+                    residual: sys.residual,
+                    vs2: [
+                        sys.jacobian_station2[0],
+                        sys.jacobian_station2[1],
+                        sys.jacobian_station2[2],
+                    ],
                     has_update: true,
                     ..Default::default()
                 };
@@ -194,9 +206,9 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                 let mut z = [[0.0f64; 4]; 4];
                 let mut r = [0.0f64; 4];
                 for k in 0..4 {
-                    r[k] = sys.vsrez[k];
+                    r[k] = sys.residual[k];
                     for l in 0..4 {
-                        z[k][l] = sys.vs2[k][l];
+                        z[k][l] = sys.jacobian_station2[k][l];
                     }
                 }
                 gauss_solve_4x4(&mut z, &mut r);
@@ -242,7 +254,9 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                             s1.hk + 0.03 * (s2.xi - s1.xi) / s1.theta
                         } else if ibl == st.itran[is] {
                             // transition interval: weighted laminar and turbulent case
-                            s1.hk + (0.03 * (trloc.xt - s1.xi) - 0.15 * (s2.xi - trloc.xt)) / s1.theta
+                            s1.hk
+                                + (0.03 * (trloc.xi_transition - s1.xi) - 0.15 * (s2.xi - trloc.xi_transition))
+                                    / s1.theta
                         } else if wake {
                             // turbulent wake case: asymptotic wake behavior with approximate Backward Euler
                             let cnst = 0.03 * (s2.xi - s1.xi) / s1.theta;
@@ -346,21 +360,24 @@ pub fn mrchue(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut tr
                 s2.set_kinematic_variables(params);
                 // check for transition and set appropriate flags and things
                 if !simi && !turb {
-                    match trchek(&s1, &s2, s1.ampl, amcrit, xiforc, params) {
-                        TransitionResult::NoTransition { ampl2 } => {
+                    match check_transition(&s1, &s2, s1.ampl, amcrit, xiforc, params) {
+                        TransitionCheck::None { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            trloc.xt = s2.xi;
+                            trloc.xi_transition = s2.xi;
                             st.itran[is] = ibl + 2;
                         }
-                        TransitionResult::FreeTransition { location, ampl2 } => {
+                        TransitionCheck::Free {
+                            transition: location,
+                            ampl2,
+                        } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
                             trloc = location;
                             st.itran[is] = ibl;
                         }
-                        TransitionResult::ForcedTransition { location } => {
+                        TransitionCheck::Forced { transition: location } => {
                             tran = true;
                             trforc = true;
                             trloc = location;

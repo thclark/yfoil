@@ -3,7 +3,7 @@
 
 use super::params::*;
 use super::station::{MidpointCf, StationState};
-use super::transition::{axset, TransitionLocation};
+use super::transition::{interval_amplification_rate, Transition};
 
 // ============================================================================
 // Local BL Equation Coefficients
@@ -12,7 +12,7 @@ use super::transition::{axset, TransitionLocation};
 /// Upwinding parameter calculation
 ///
 /// Returns (upw, upw_u1, upw_t1, upw_d1, upw_u2, upw_t2, upw_d2, upw_ms)
-fn compute_upwinding(s1: &StationState, s2: &StationState, is_wake: bool) -> UpwindParams {
+fn upwinding(s1: &StationState, s2: &StationState, is_wake: bool) -> Upwinding {
     let hk1 = s1.hk;
     let hk2 = s2.hk;
 
@@ -42,58 +42,58 @@ fn compute_upwinding(s1: &StationState, s2: &StationState, is_wake: bool) -> Upw
     let upw_hk1 = upw_hl * hl_hk1 + upw_hd * hd_hk1;
     let upw_hk2 = upw_hl * hl_hk2 + upw_hd * hd_hk2;
 
-    UpwindParams {
-        upw,
-        upw_u1: upw_hk1 * s1.hk_d_ue,
-        upw_t1: upw_hk1 * s1.hk_d_theta,
-        upw_d1: upw_hk1 * s1.hk_d_dstar,
-        upw_u2: upw_hk2 * s2.hk_d_ue,
-        upw_t2: upw_hk2 * s2.hk_d_theta,
-        upw_d2: upw_hk2 * s2.hk_d_dstar,
-        upw_ms: upw_hk1 * s1.hk_d_machsqd + upw_hk2 * s2.hk_d_machsqd,
+    Upwinding {
+        weight: upw,
+        weight_d_ue_station1: upw_hk1 * s1.hk_d_ue,
+        weight_d_theta_station1: upw_hk1 * s1.hk_d_theta,
+        weight_d_dstar_station1: upw_hk1 * s1.hk_d_dstar,
+        weight_d_ue_station2: upw_hk2 * s2.hk_d_ue,
+        weight_d_theta_station2: upw_hk2 * s2.hk_d_theta,
+        weight_d_dstar_station2: upw_hk2 * s2.hk_d_dstar,
+        weight_d_machsqd: upw_hk1 * s1.hk_d_machsqd + upw_hk2 * s2.hk_d_machsqd,
     }
 }
 
 /// Upwinding parameters
 #[derive(Debug, Clone, Default)]
-struct UpwindParams {
-    upw: f64,
-    upw_u1: f64,
-    upw_t1: f64,
-    upw_d1: f64,
-    upw_u2: f64,
-    upw_t2: f64,
-    upw_d2: f64,
-    upw_ms: f64,
+struct Upwinding {
+    weight: f64,
+    weight_d_ue_station1: f64,
+    weight_d_theta_station1: f64,
+    weight_d_dstar_station1: f64,
+    weight_d_ue_station2: f64,
+    weight_d_theta_station2: f64,
+    weight_d_dstar_station2: f64,
+    weight_d_machsqd: f64,
 }
 
 /// Local BL equation coefficients (from XFOIL's V_SYS)
 ///
 /// These are the Jacobian entries for a single station pair (1→2).
 #[derive(Debug, Clone, Default)]
-pub struct BLLocalSystem {
+pub struct IntervalSystem {
     /// Jacobian w.r.t. previous station: VS1(4,5)
     /// Rows: 4 equations (momentum, shape, lag, auxiliary)
     /// Cols: 5 variables (Ctau, Theta, Dstar, Ue, X)
-    pub vs1: [[f64; 5]; 4],
+    pub jacobian_station1: [[f64; 5]; 4],
 
     /// Jacobian w.r.t. current station: VS2(4,5)
-    pub vs2: [[f64; 5]; 4],
+    pub jacobian_station2: [[f64; 5]; 4],
 
     /// Residual vector: VSREZ(4)
-    pub vsrez: [f64; 4],
+    pub residual: [f64; 4],
 
     /// Sensitivity to Reynolds number: VSR(4)
-    pub vsr: [f64; 4],
+    pub residual_d_re: [f64; 4],
 
     /// Sensitivity to Mach squared: VSM(4)
-    pub vsm: [f64; 4],
+    pub residual_d_machsqd: [f64; 4],
 
     /// Sensitivity to arc length: VSX(4)
-    pub vsx: [f64; 4],
+    pub residual_d_xi: [f64; 4],
 }
 
-impl BLLocalSystem {
+impl IntervalSystem {
     /// Set up the Newton system for a BL interval (BLDIF equivalent)
     ///
     /// This sets up the Jacobian and residual for the BL equations between
@@ -108,7 +108,7 @@ impl BLLocalSystem {
     /// * `cfm` - Midpoint skin friction
     /// * `flow_type` - Type of BL flow
     /// * `is_similarity` - True if station 2 is a similarity station (LE)
-    pub fn bldif(
+    pub fn assemble_interval_equations(
         &mut self,
         s1: &StationState,
         s2: &StationState,
@@ -120,13 +120,13 @@ impl BLLocalSystem {
     ) {
         // Initialize to zero
         for k in 0..4 {
-            self.vsrez[k] = 0.0;
-            self.vsm[k] = 0.0;
-            self.vsr[k] = 0.0;
-            self.vsx[k] = 0.0;
+            self.residual[k] = 0.0;
+            self.residual_d_machsqd[k] = 0.0;
+            self.residual_d_re[k] = 0.0;
+            self.residual_d_xi[k] = 0.0;
             for l in 0..5 {
-                self.vs1[k][l] = 0.0;
-                self.vs2[k][l] = 0.0;
+                self.jacobian_station1[k][l] = 0.0;
+                self.jacobian_station2[k][l] = 0.0;
             }
         }
 
@@ -145,67 +145,70 @@ impl BLLocalSystem {
 
         // Compute upwinding parameters
         let is_wake = flow_type == FlowRegime::Wake;
-        let upw = compute_upwinding(s1, s2, is_wake);
+        let upw = upwinding(s1, s2, is_wake);
 
         // Equation 1: Amplification (laminar) or Shear lag (turbulent/wake)
         match flow_type {
             FlowRegime::Laminar if is_similarity => {
                 // LE point: set zero amplification factor (XFOIL: VS2(1,1) = 1.0)
                 // This ensures the pivot in BLSOLV is well-conditioned
-                self.vs2[0][0] = 1.0;
-                self.vsrez[0] = -s2.ampl;
+                self.jacobian_station2[0][0] = 1.0;
+                self.residual[0] = -s2.ampl;
             }
             FlowRegime::Laminar => {
                 // laminar part --> set amplification equation (BLDIF ITYP=1), verbatim:
                 // set average amplification AX over interval X1..X2
-                let r = axset(
+                let r = interval_amplification_rate(
                     s1.hk, s1.theta, s1.retheta, s1.ampl, s2.hk, s2.theta, s2.retheta, s2.ampl, acrit, idampv,
                 );
-                let ax = r.ax;
+                let ax = r.rate;
                 let rezc = s2.ampl - s1.ampl - ax * (s2.xi - s1.xi);
                 let z_ax = -(s2.xi - s1.xi);
 
-                self.vs1[0][0] = z_ax * r.ax_a1 - 1.0;
-                self.vs1[0][1] = z_ax * (r.ax_hk1 * s1.hk_d_theta + r.ax_t1 + r.ax_rt1 * s1.retheta_d_theta);
-                self.vs1[0][2] = z_ax * (r.ax_hk1 * s1.hk_d_dstar);
-                self.vs1[0][3] = z_ax * (r.ax_hk1 * s1.hk_d_ue + r.ax_rt1 * s1.retheta_d_ue);
-                self.vs1[0][4] = ax;
-                self.vs2[0][0] = z_ax * r.ax_a2 + 1.0;
-                self.vs2[0][1] = z_ax * (r.ax_hk2 * s2.hk_d_theta + r.ax_t2 + r.ax_rt2 * s2.retheta_d_theta);
-                self.vs2[0][2] = z_ax * (r.ax_hk2 * s2.hk_d_dstar);
-                self.vs2[0][3] = z_ax * (r.ax_hk2 * s2.hk_d_ue + r.ax_rt2 * s2.retheta_d_ue);
-                self.vs2[0][4] = -ax;
-                self.vsm[0] = z_ax
-                    * (r.ax_hk1 * s1.hk_d_machsqd
-                        + r.ax_rt1 * s1.retheta_d_machsqd
-                        + r.ax_hk2 * s2.hk_d_machsqd
-                        + r.ax_rt2 * s2.retheta_d_machsqd);
-                self.vsr[0] = z_ax * (r.ax_rt1 * s1.retheta_d_re + r.ax_rt2 * s2.retheta_d_re);
-                self.vsx[0] = 0.0;
-                self.vsrez[0] = -rezc;
+                self.jacobian_station1[0][0] = z_ax * r.rate_d_ampl_station1 - 1.0;
+                self.jacobian_station1[0][1] = z_ax
+                    * (r.rate_d_hk_station1 * s1.hk_d_theta
+                        + r.rate_d_theta_station1
+                        + r.rate_d_retheta_station1 * s1.retheta_d_theta);
+                self.jacobian_station1[0][2] = z_ax * (r.rate_d_hk_station1 * s1.hk_d_dstar);
+                self.jacobian_station1[0][3] =
+                    z_ax * (r.rate_d_hk_station1 * s1.hk_d_ue + r.rate_d_retheta_station1 * s1.retheta_d_ue);
+                self.jacobian_station1[0][4] = ax;
+                self.jacobian_station2[0][0] = z_ax * r.rate_d_ampl_station2 + 1.0;
+                self.jacobian_station2[0][1] = z_ax
+                    * (r.rate_d_hk_station2 * s2.hk_d_theta
+                        + r.rate_d_theta_station2
+                        + r.rate_d_retheta_station2 * s2.retheta_d_theta);
+                self.jacobian_station2[0][2] = z_ax * (r.rate_d_hk_station2 * s2.hk_d_dstar);
+                self.jacobian_station2[0][3] =
+                    z_ax * (r.rate_d_hk_station2 * s2.hk_d_ue + r.rate_d_retheta_station2 * s2.retheta_d_ue);
+                self.jacobian_station2[0][4] = -ax;
+                self.residual_d_machsqd[0] = z_ax
+                    * (r.rate_d_hk_station1 * s1.hk_d_machsqd
+                        + r.rate_d_retheta_station1 * s1.retheta_d_machsqd
+                        + r.rate_d_hk_station2 * s2.hk_d_machsqd
+                        + r.rate_d_retheta_station2 * s2.retheta_d_machsqd);
+                self.residual_d_re[0] =
+                    z_ax * (r.rate_d_retheta_station1 * s1.retheta_d_re + r.rate_d_retheta_station2 * s2.retheta_d_re);
+                self.residual_d_xi[0] = 0.0;
+                self.residual[0] = -rezc;
             }
             FlowRegime::Turbulent | FlowRegime::Wake => {
                 // Shear lag equation
-                self.setup_shear_lag_equation(s1, s2, &upw, flow_type);
+                self.shear_lag_equation(s1, s2, &upw, flow_type);
             }
         }
 
         // Equation 2: Momentum integral equation
-        self.setup_momentum_equation(s1, s2, cfm, xlog, ulog, tlog, ddlog);
+        self.momentum_equation(s1, s2, cfm, xlog, ulog, tlog, ddlog);
 
         // Equation 3: Shape parameter equation
-        self.setup_shape_equation(s1, s2, &upw, xlog, ulog, hlog, ddlog);
+        self.shape_equation(s1, s2, &upw, xlog, ulog, hlog, ddlog);
     }
 
     /// BLDIF (xblsys.f) "turbulent part --> set shear lag equation" (row 1), line for line.
-    fn setup_shear_lag_equation(
-        &mut self,
-        s1: &StationState,
-        s2: &StationState,
-        upw: &UpwindParams,
-        flow_type: FlowRegime,
-    ) {
-        let u = upw.upw;
+    fn shear_lag_equation(&mut self, s1: &StationState, s2: &StationState, upw: &Upwinding, flow_type: FlowRegime) {
+        let u = upw.weight;
         let sa = (1.0 - u) * s1.sqrtctau + u * s2.sqrtctau;
         let cqa = (1.0 - u) * s1.sqrtctaueq + u * s2.sqrtctaueq;
         let cfa = (1.0 - u) * s1.cf + u * s2.cf;
@@ -292,42 +295,63 @@ impl BLLocalSystem {
         let z_hk1 = (1.0 - u) * z_hka;
         let z_hk2 = u * z_hka;
 
-        self.vs1[0][0] = z_s1;
-        self.vs1[0][1] = z_upw * upw.upw_t1 + z_de1 * s1.delta_d_theta + z_us1 * s1.us_d_theta;
-        self.vs1[0][2] = z_d1 + z_upw * upw.upw_d1 + z_de1 * s1.delta_d_dstar + z_us1 * s1.us_d_dstar;
-        self.vs1[0][3] = z_u1 + z_upw * upw.upw_u1 + z_de1 * s1.delta_d_ue + z_us1 * s1.us_d_ue;
-        self.vs1[0][4] = z_x1;
-        self.vs2[0][0] = z_s2;
-        self.vs2[0][1] = z_upw * upw.upw_t2 + z_de2 * s2.delta_d_theta + z_us2 * s2.us_d_theta;
-        self.vs2[0][2] = z_d2 + z_upw * upw.upw_d2 + z_de2 * s2.delta_d_dstar + z_us2 * s2.us_d_dstar;
-        self.vs2[0][3] = z_u2 + z_upw * upw.upw_u2 + z_de2 * s2.delta_d_ue + z_us2 * s2.us_d_ue;
-        self.vs2[0][4] = z_x2;
-        self.vsm[0] = z_upw * upw.upw_ms
+        self.jacobian_station1[0][0] = z_s1;
+        self.jacobian_station1[0][1] =
+            z_upw * upw.weight_d_theta_station1 + z_de1 * s1.delta_d_theta + z_us1 * s1.us_d_theta;
+        self.jacobian_station1[0][2] =
+            z_d1 + z_upw * upw.weight_d_dstar_station1 + z_de1 * s1.delta_d_dstar + z_us1 * s1.us_d_dstar;
+        self.jacobian_station1[0][3] =
+            z_u1 + z_upw * upw.weight_d_ue_station1 + z_de1 * s1.delta_d_ue + z_us1 * s1.us_d_ue;
+        self.jacobian_station1[0][4] = z_x1;
+        self.jacobian_station2[0][0] = z_s2;
+        self.jacobian_station2[0][1] =
+            z_upw * upw.weight_d_theta_station2 + z_de2 * s2.delta_d_theta + z_us2 * s2.us_d_theta;
+        self.jacobian_station2[0][2] =
+            z_d2 + z_upw * upw.weight_d_dstar_station2 + z_de2 * s2.delta_d_dstar + z_us2 * s2.us_d_dstar;
+        self.jacobian_station2[0][3] =
+            z_u2 + z_upw * upw.weight_d_ue_station2 + z_de2 * s2.delta_d_ue + z_us2 * s2.us_d_ue;
+        self.jacobian_station2[0][4] = z_x2;
+        self.residual_d_machsqd[0] = z_upw * upw.weight_d_machsqd
             + z_de1 * s1.delta_d_machsqd
             + z_us1 * s1.us_d_machsqd
             + z_de2 * s2.delta_d_machsqd
             + z_us2 * s2.us_d_machsqd;
 
-        self.vs1[0][1] = self.vs1[0][1] + z_cq1 * s1.sqrtctaueq_d_theta + z_cf1 * s1.cf_d_theta + z_hk1 * s1.hk_d_theta;
-        self.vs1[0][2] = self.vs1[0][2] + z_cq1 * s1.sqrtctaueq_d_dstar + z_cf1 * s1.cf_d_dstar + z_hk1 * s1.hk_d_dstar;
-        self.vs1[0][3] = self.vs1[0][3] + z_cq1 * s1.sqrtctaueq_d_ue + z_cf1 * s1.cf_d_ue + z_hk1 * s1.hk_d_ue;
-        self.vs2[0][1] = self.vs2[0][1] + z_cq2 * s2.sqrtctaueq_d_theta + z_cf2 * s2.cf_d_theta + z_hk2 * s2.hk_d_theta;
-        self.vs2[0][2] = self.vs2[0][2] + z_cq2 * s2.sqrtctaueq_d_dstar + z_cf2 * s2.cf_d_dstar + z_hk2 * s2.hk_d_dstar;
-        self.vs2[0][3] = self.vs2[0][3] + z_cq2 * s2.sqrtctaueq_d_ue + z_cf2 * s2.cf_d_ue + z_hk2 * s2.hk_d_ue;
-        self.vsm[0] = self.vsm[0]
+        self.jacobian_station1[0][1] = self.jacobian_station1[0][1]
+            + z_cq1 * s1.sqrtctaueq_d_theta
+            + z_cf1 * s1.cf_d_theta
+            + z_hk1 * s1.hk_d_theta;
+        self.jacobian_station1[0][2] = self.jacobian_station1[0][2]
+            + z_cq1 * s1.sqrtctaueq_d_dstar
+            + z_cf1 * s1.cf_d_dstar
+            + z_hk1 * s1.hk_d_dstar;
+        self.jacobian_station1[0][3] =
+            self.jacobian_station1[0][3] + z_cq1 * s1.sqrtctaueq_d_ue + z_cf1 * s1.cf_d_ue + z_hk1 * s1.hk_d_ue;
+        self.jacobian_station2[0][1] = self.jacobian_station2[0][1]
+            + z_cq2 * s2.sqrtctaueq_d_theta
+            + z_cf2 * s2.cf_d_theta
+            + z_hk2 * s2.hk_d_theta;
+        self.jacobian_station2[0][2] = self.jacobian_station2[0][2]
+            + z_cq2 * s2.sqrtctaueq_d_dstar
+            + z_cf2 * s2.cf_d_dstar
+            + z_hk2 * s2.hk_d_dstar;
+        self.jacobian_station2[0][3] =
+            self.jacobian_station2[0][3] + z_cq2 * s2.sqrtctaueq_d_ue + z_cf2 * s2.cf_d_ue + z_hk2 * s2.hk_d_ue;
+        self.residual_d_machsqd[0] = self.residual_d_machsqd[0]
             + z_cq1 * s1.sqrtctaueq_d_machsqd
             + z_cf1 * s1.cf_d_machsqd
             + z_hk1 * s1.hk_d_machsqd
             + z_cq2 * s2.sqrtctaueq_d_machsqd
             + z_cf2 * s2.cf_d_machsqd
             + z_hk2 * s2.hk_d_machsqd;
-        self.vsr[0] = z_cq1 * s1.sqrtctaueq_d_re + z_cf1 * s1.cf_d_re + z_cq2 * s2.sqrtctaueq_d_re + z_cf2 * s2.cf_d_re;
-        self.vsx[0] = 0.0;
-        self.vsrez[0] = -rezc;
+        self.residual_d_re[0] =
+            z_cq1 * s1.sqrtctaueq_d_re + z_cf1 * s1.cf_d_re + z_cq2 * s2.sqrtctaueq_d_re + z_cf2 * s2.cf_d_re;
+        self.residual_d_xi[0] = 0.0;
+        self.residual[0] = -rezc;
     }
 
     /// Set up the momentum integral equation (row 2)
-    fn setup_momentum_equation(
+    fn momentum_equation(
         &mut self,
         s1: &StationState,
         s2: &StationState,
@@ -382,38 +406,44 @@ impl BLLocalSystem {
         let z_u2 = z_ul / s2.ue;
 
         // Jacobian entries for row 2
-        self.vs1[1][1] = 0.5 * z_ha * s1.h_d_theta + z_cfm * cfm.cf_d_theta_station1 + z_cf1 * s1.cf_d_theta + z_t1;
-        self.vs1[1][2] = 0.5 * z_ha * s1.h_d_dstar + z_cfm * cfm.cf_d_dstar_station1 + z_cf1 * s1.cf_d_dstar;
-        self.vs1[1][3] = 0.5 * z_ma * s1.machsqd_edge_d_ue + z_cfm * cfm.cf_d_ue_station1 + z_cf1 * s1.cf_d_ue + z_u1;
-        self.vs1[1][4] = z_x1;
+        self.jacobian_station1[1][1] =
+            0.5 * z_ha * s1.h_d_theta + z_cfm * cfm.cf_d_theta_station1 + z_cf1 * s1.cf_d_theta + z_t1;
+        self.jacobian_station1[1][2] =
+            0.5 * z_ha * s1.h_d_dstar + z_cfm * cfm.cf_d_dstar_station1 + z_cf1 * s1.cf_d_dstar;
+        self.jacobian_station1[1][3] =
+            0.5 * z_ma * s1.machsqd_edge_d_ue + z_cfm * cfm.cf_d_ue_station1 + z_cf1 * s1.cf_d_ue + z_u1;
+        self.jacobian_station1[1][4] = z_x1;
 
-        self.vs2[1][1] = 0.5 * z_ha * s2.h_d_theta + z_cfm * cfm.cf_d_theta_station2 + z_cf2 * s2.cf_d_theta + z_t2;
-        self.vs2[1][2] = 0.5 * z_ha * s2.h_d_dstar + z_cfm * cfm.cf_d_dstar_station2 + z_cf2 * s2.cf_d_dstar;
-        self.vs2[1][3] = 0.5 * z_ma * s2.machsqd_edge_d_ue + z_cfm * cfm.cf_d_ue_station2 + z_cf2 * s2.cf_d_ue + z_u2;
-        self.vs2[1][4] = z_x2;
+        self.jacobian_station2[1][1] =
+            0.5 * z_ha * s2.h_d_theta + z_cfm * cfm.cf_d_theta_station2 + z_cf2 * s2.cf_d_theta + z_t2;
+        self.jacobian_station2[1][2] =
+            0.5 * z_ha * s2.h_d_dstar + z_cfm * cfm.cf_d_dstar_station2 + z_cf2 * s2.cf_d_dstar;
+        self.jacobian_station2[1][3] =
+            0.5 * z_ma * s2.machsqd_edge_d_ue + z_cfm * cfm.cf_d_ue_station2 + z_cf2 * s2.cf_d_ue + z_u2;
+        self.jacobian_station2[1][4] = z_x2;
 
-        self.vsm[1] = 0.5 * z_ma * s1.machsqd_edge_d_machsqd
+        self.residual_d_machsqd[1] = 0.5 * z_ma * s1.machsqd_edge_d_machsqd
             + z_cfm * cfm.cf_d_machsqd
             + z_cf1 * s1.cf_d_machsqd
             + 0.5 * z_ma * s2.machsqd_edge_d_machsqd
             + z_cf2 * s2.cf_d_machsqd;
-        self.vsr[1] = z_cfm * cfm.cf_d_re + z_cf1 * s1.cf_d_re + z_cf2 * s2.cf_d_re;
+        self.residual_d_re[1] = z_cfm * cfm.cf_d_re + z_cf1 * s1.cf_d_re + z_cf2 * s2.cf_d_re;
 
-        self.vsrez[1] = -rezt;
+        self.residual[1] = -rezt;
     }
 
     /// Set up the shape parameter equation (row 3)
-    fn setup_shape_equation(
+    fn shape_equation(
         &mut self,
         s1: &StationState,
         s2: &StationState,
-        upw: &UpwindParams,
+        upw: &Upwinding,
         xlog: f64,
         ulog: f64,
         hlog: f64,
         ddlog: f64,
     ) {
-        let u = upw.upw;
+        let u = upw.weight;
         let xot1 = s1.xi / s1.theta;
         let xot2 = s2.xi / s2.theta;
 
@@ -464,62 +494,62 @@ impl BLLocalSystem {
         let z_u2 = z_ul / s2.ue;
 
         // Jacobian entries for row 3
-        self.vs1[2][0] = z_di1 * s1.cdiss_d_sqrtctau;
-        self.vs1[2][1] = z_hs1 * s1.hstar_d_theta
+        self.jacobian_station1[2][0] = z_di1 * s1.cdiss_d_sqrtctau;
+        self.jacobian_station1[2][1] = z_hs1 * s1.hstar_d_theta
             + z_cf1 * s1.cf_d_theta
             + z_di1 * s1.cdiss_d_theta
             + z_t1
             + 0.5 * (z_hca * s1.hstarstar_d_theta + z_ha * s1.h_d_theta)
-            + z_upw * upw.upw_t1;
-        self.vs1[2][2] = z_hs1 * s1.hstar_d_dstar
+            + z_upw * upw.weight_d_theta_station1;
+        self.jacobian_station1[2][2] = z_hs1 * s1.hstar_d_dstar
             + z_cf1 * s1.cf_d_dstar
             + z_di1 * s1.cdiss_d_dstar
             + 0.5 * (z_hca * s1.hstarstar_d_dstar + z_ha * s1.h_d_dstar)
-            + z_upw * upw.upw_d1;
-        self.vs1[2][3] = z_hs1 * s1.hstar_d_ue
+            + z_upw * upw.weight_d_dstar_station1;
+        self.jacobian_station1[2][3] = z_hs1 * s1.hstar_d_ue
             + z_cf1 * s1.cf_d_ue
             + z_di1 * s1.cdiss_d_ue
             + z_u1
             + 0.5 * z_hca * s1.hstarstar_d_ue
-            + z_upw * upw.upw_u1;
-        self.vs1[2][4] = z_x1;
+            + z_upw * upw.weight_d_ue_station1;
+        self.jacobian_station1[2][4] = z_x1;
 
-        self.vs2[2][0] = z_di2 * s2.cdiss_d_sqrtctau;
-        self.vs2[2][1] = z_hs2 * s2.hstar_d_theta
+        self.jacobian_station2[2][0] = z_di2 * s2.cdiss_d_sqrtctau;
+        self.jacobian_station2[2][1] = z_hs2 * s2.hstar_d_theta
             + z_cf2 * s2.cf_d_theta
             + z_di2 * s2.cdiss_d_theta
             + z_t2
             + 0.5 * (z_hca * s2.hstarstar_d_theta + z_ha * s2.h_d_theta)
-            + z_upw * upw.upw_t2;
-        self.vs2[2][2] = z_hs2 * s2.hstar_d_dstar
+            + z_upw * upw.weight_d_theta_station2;
+        self.jacobian_station2[2][2] = z_hs2 * s2.hstar_d_dstar
             + z_cf2 * s2.cf_d_dstar
             + z_di2 * s2.cdiss_d_dstar
             + 0.5 * (z_hca * s2.hstarstar_d_dstar + z_ha * s2.h_d_dstar)
-            + z_upw * upw.upw_d2;
-        self.vs2[2][3] = z_hs2 * s2.hstar_d_ue
+            + z_upw * upw.weight_d_dstar_station2;
+        self.jacobian_station2[2][3] = z_hs2 * s2.hstar_d_ue
             + z_cf2 * s2.cf_d_ue
             + z_di2 * s2.cdiss_d_ue
             + z_u2
             + 0.5 * z_hca * s2.hstarstar_d_ue
-            + z_upw * upw.upw_u2;
-        self.vs2[2][4] = z_x2;
+            + z_upw * upw.weight_d_ue_station2;
+        self.jacobian_station2[2][4] = z_x2;
 
-        self.vsm[2] = z_hs1 * s1.hstar_d_machsqd
+        self.residual_d_machsqd[2] = z_hs1 * s1.hstar_d_machsqd
             + z_cf1 * s1.cf_d_machsqd
             + z_di1 * s1.cdiss_d_machsqd
             + z_hs2 * s2.hstar_d_machsqd
             + z_cf2 * s2.cf_d_machsqd
             + z_di2 * s2.cdiss_d_machsqd
             + 0.5 * (z_hca * s1.hstarstar_d_machsqd + z_hca * s2.hstarstar_d_machsqd)
-            + z_upw * upw.upw_ms;
-        self.vsr[2] = z_hs1 * s1.hstar_d_re
+            + z_upw * upw.weight_d_machsqd;
+        self.residual_d_re[2] = z_hs1 * s1.hstar_d_re
             + z_cf1 * s1.cf_d_re
             + z_di1 * s1.cdiss_d_re
             + z_hs2 * s2.hstar_d_re
             + z_cf2 * s2.cf_d_re
             + z_di2 * s2.cdiss_d_re;
 
-        self.vsrez[2] = -rezh;
+        self.residual[2] = -rezh;
     }
 
     /// Set up Newton system for transition interval (TRDIF equivalent)
@@ -536,32 +566,32 @@ impl BLLocalSystem {
     /// * `acrit` - Critical amplification factor
     /// * `params` - Global BL parameters
     #[allow(clippy::too_many_lines)]
-    pub fn trdif(
+    pub fn assemble_transition_equations(
         &mut self,
         s1: &StationState,
         s2: &StationState,
-        trans: &TransitionLocation,
+        trans: &Transition,
         acrit: f64,
         params: &FlowParameters,
     ) {
         // Weighting factors for linear interpolation to transition point
-        let wf2 = (trans.xt - s1.xi) / (s2.xi - s1.xi);
+        let wf2 = (trans.xi_transition - s1.xi) / (s2.xi - s1.xi);
         let wf2_xt = 1.0 / (s2.xi - s1.xi);
         let wf1 = 1.0 - wf2;
 
         // Derivatives of weighting factors w.r.t. station variables
-        let wf2_a1 = wf2_xt * trans.xt_a1;
-        let wf2_x1 = wf2_xt * trans.xt_x1 + (wf2 - 1.0) / (s2.xi - s1.xi);
-        let wf2_x2 = wf2_xt * trans.xt_x2 - wf2 / (s2.xi - s1.xi);
-        let wf2_t1 = wf2_xt * trans.xt_t1;
-        let wf2_t2 = wf2_xt * trans.xt_t2;
-        let wf2_d1 = wf2_xt * trans.xt_d1;
-        let wf2_d2 = wf2_xt * trans.xt_d2;
-        let wf2_u1 = wf2_xt * trans.xt_u1;
-        let wf2_u2 = wf2_xt * trans.xt_u2;
-        let wf2_ms = wf2_xt * trans.xt_ms;
-        let wf2_re = wf2_xt * trans.xt_re;
-        let wf2_xf = wf2_xt * trans.xt_xf;
+        let wf2_a1 = wf2_xt * trans.xi_transition_d_ampl_station1;
+        let wf2_x1 = wf2_xt * trans.xi_transition_d_xi_station1 + (wf2 - 1.0) / (s2.xi - s1.xi);
+        let wf2_x2 = wf2_xt * trans.xi_transition_d_xi_station2 - wf2 / (s2.xi - s1.xi);
+        let wf2_t1 = wf2_xt * trans.xi_transition_d_theta_station1;
+        let wf2_t2 = wf2_xt * trans.xi_transition_d_theta_station2;
+        let wf2_d1 = wf2_xt * trans.xi_transition_d_dstar_station1;
+        let wf2_d2 = wf2_xt * trans.xi_transition_d_dstar_station2;
+        let wf2_u1 = wf2_xt * trans.xi_transition_d_ue_station1;
+        let wf2_u2 = wf2_xt * trans.xi_transition_d_ue_station2;
+        let wf2_ms = wf2_xt * trans.xi_transition_d_machsqd;
+        let wf2_re = wf2_xt * trans.xi_transition_d_re;
+        let wf2_xf = wf2_xt * trans.xi_transition_d_x_trip;
 
         let wf1_a1 = -wf2_a1;
         let wf1_x1 = -wf2_x1;
@@ -626,7 +656,7 @@ impl BLLocalSystem {
         // X2/T2/D2/U2/AMPL2/S2 on the saved station-2 COMMON, so U2_UEI, U2_MS and DW2 are
         // those of station 2 — no BLPRV here.
         let mut st = s2.clone();
-        st.xi = trans.xt;
+        st.xi = trans.xi_transition;
         st.theta = tt;
         st.dstar = dt;
         st.ue = ut;
@@ -639,8 +669,8 @@ impl BLLocalSystem {
         let cfm_lam = MidpointCf::compute(s1, &st, FlowRegime::Laminar, false);
 
         // Call BLDIF for laminar part (X1 to XT)
-        let mut lam_sys = BLLocalSystem::default();
-        lam_sys.bldif(s1, &st, &cfm_lam, FlowRegime::Laminar, false, acrit, params.idampv);
+        let mut lam_sys = IntervalSystem::default();
+        lam_sys.assemble_interval_equations(s1, &st, &cfm_lam, FlowRegime::Laminar, false, acrit, params.idampv);
 
         // Convert laminar system sensitivities from "T" variables to "1" and "2" variables
         // Using chain rule for derivatives
@@ -653,66 +683,66 @@ impl BLLocalSystem {
 
         for k in 1..3 {
             // Row 2 and 3 (momentum and shape)
-            blrez[k] = lam_sys.vsrez[k];
-            blm[k] = lam_sys.vsm[k]
-                + lam_sys.vs2[k][1] * tt_ms
-                + lam_sys.vs2[k][2] * dt_ms
-                + lam_sys.vs2[k][3] * ut_ms
-                + lam_sys.vs2[k][4] * trans.xt_ms;
-            blr[k] = lam_sys.vsr[k]
-                + lam_sys.vs2[k][1] * tt_re
-                + lam_sys.vs2[k][2] * dt_re
-                + lam_sys.vs2[k][3] * ut_re
-                + lam_sys.vs2[k][4] * trans.xt_re;
-            blx[k] = lam_sys.vsx[k]
-                + lam_sys.vs2[k][1] * tt_xf
-                + lam_sys.vs2[k][2] * dt_xf
-                + lam_sys.vs2[k][3] * ut_xf
-                + lam_sys.vs2[k][4] * trans.xt_xf;
+            blrez[k] = lam_sys.residual[k];
+            blm[k] = lam_sys.residual_d_machsqd[k]
+                + lam_sys.jacobian_station2[k][1] * tt_ms
+                + lam_sys.jacobian_station2[k][2] * dt_ms
+                + lam_sys.jacobian_station2[k][3] * ut_ms
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_machsqd;
+            blr[k] = lam_sys.residual_d_re[k]
+                + lam_sys.jacobian_station2[k][1] * tt_re
+                + lam_sys.jacobian_station2[k][2] * dt_re
+                + lam_sys.jacobian_station2[k][3] * ut_re
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_re;
+            blx[k] = lam_sys.residual_d_xi[k]
+                + lam_sys.jacobian_station2[k][1] * tt_xf
+                + lam_sys.jacobian_station2[k][2] * dt_xf
+                + lam_sys.jacobian_station2[k][3] * ut_xf
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_x_trip;
 
-            bl1[k][0] = lam_sys.vs1[k][0]
-                + lam_sys.vs2[k][1] * tt_a1
-                + lam_sys.vs2[k][2] * dt_a1
-                + lam_sys.vs2[k][3] * ut_a1
-                + lam_sys.vs2[k][4] * trans.xt_a1;
-            bl1[k][1] = lam_sys.vs1[k][1]
-                + lam_sys.vs2[k][1] * tt_t1
-                + lam_sys.vs2[k][2] * dt_t1
-                + lam_sys.vs2[k][3] * ut_t1
-                + lam_sys.vs2[k][4] * trans.xt_t1;
-            bl1[k][2] = lam_sys.vs1[k][2]
-                + lam_sys.vs2[k][1] * tt_d1
-                + lam_sys.vs2[k][2] * dt_d1
-                + lam_sys.vs2[k][3] * ut_d1
-                + lam_sys.vs2[k][4] * trans.xt_d1;
-            bl1[k][3] = lam_sys.vs1[k][3]
-                + lam_sys.vs2[k][1] * tt_u1
-                + lam_sys.vs2[k][2] * dt_u1
-                + lam_sys.vs2[k][3] * ut_u1
-                + lam_sys.vs2[k][4] * trans.xt_u1;
-            bl1[k][4] = lam_sys.vs1[k][4]
-                + lam_sys.vs2[k][1] * tt_x1
-                + lam_sys.vs2[k][2] * dt_x1
-                + lam_sys.vs2[k][3] * ut_x1
-                + lam_sys.vs2[k][4] * trans.xt_x1;
+            bl1[k][0] = lam_sys.jacobian_station1[k][0]
+                + lam_sys.jacobian_station2[k][1] * tt_a1
+                + lam_sys.jacobian_station2[k][2] * dt_a1
+                + lam_sys.jacobian_station2[k][3] * ut_a1
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_ampl_station1;
+            bl1[k][1] = lam_sys.jacobian_station1[k][1]
+                + lam_sys.jacobian_station2[k][1] * tt_t1
+                + lam_sys.jacobian_station2[k][2] * dt_t1
+                + lam_sys.jacobian_station2[k][3] * ut_t1
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_theta_station1;
+            bl1[k][2] = lam_sys.jacobian_station1[k][2]
+                + lam_sys.jacobian_station2[k][1] * tt_d1
+                + lam_sys.jacobian_station2[k][2] * dt_d1
+                + lam_sys.jacobian_station2[k][3] * ut_d1
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_dstar_station1;
+            bl1[k][3] = lam_sys.jacobian_station1[k][3]
+                + lam_sys.jacobian_station2[k][1] * tt_u1
+                + lam_sys.jacobian_station2[k][2] * dt_u1
+                + lam_sys.jacobian_station2[k][3] * ut_u1
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_ue_station1;
+            bl1[k][4] = lam_sys.jacobian_station1[k][4]
+                + lam_sys.jacobian_station2[k][1] * tt_x1
+                + lam_sys.jacobian_station2[k][2] * dt_x1
+                + lam_sys.jacobian_station2[k][3] * ut_x1
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_xi_station1;
 
             bl2[k][0] = 0.0; // No dA2 dependence (A2 is turbulent Ctau)
-            bl2[k][1] = lam_sys.vs2[k][1] * tt_t2
-                + lam_sys.vs2[k][2] * dt_t2
-                + lam_sys.vs2[k][3] * ut_t2
-                + lam_sys.vs2[k][4] * trans.xt_t2;
-            bl2[k][2] = lam_sys.vs2[k][1] * tt_d2
-                + lam_sys.vs2[k][2] * dt_d2
-                + lam_sys.vs2[k][3] * ut_d2
-                + lam_sys.vs2[k][4] * trans.xt_d2;
-            bl2[k][3] = lam_sys.vs2[k][1] * tt_u2
-                + lam_sys.vs2[k][2] * dt_u2
-                + lam_sys.vs2[k][3] * ut_u2
-                + lam_sys.vs2[k][4] * trans.xt_u2;
-            bl2[k][4] = lam_sys.vs2[k][1] * tt_x2
-                + lam_sys.vs2[k][2] * dt_x2
-                + lam_sys.vs2[k][3] * ut_x2
-                + lam_sys.vs2[k][4] * trans.xt_x2;
+            bl2[k][1] = lam_sys.jacobian_station2[k][1] * tt_t2
+                + lam_sys.jacobian_station2[k][2] * dt_t2
+                + lam_sys.jacobian_station2[k][3] * ut_t2
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_theta_station2;
+            bl2[k][2] = lam_sys.jacobian_station2[k][1] * tt_d2
+                + lam_sys.jacobian_station2[k][2] * dt_d2
+                + lam_sys.jacobian_station2[k][3] * ut_d2
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_dstar_station2;
+            bl2[k][3] = lam_sys.jacobian_station2[k][1] * tt_u2
+                + lam_sys.jacobian_station2[k][2] * dt_u2
+                + lam_sys.jacobian_station2[k][3] * ut_u2
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_ue_station2;
+            bl2[k][4] = lam_sys.jacobian_station2[k][1] * tt_x2
+                + lam_sys.jacobian_station2[k][2] * dt_x2
+                + lam_sys.jacobian_station2[k][3] * ut_x2
+                + lam_sys.jacobian_station2[k][4] * trans.xi_transition_d_xi_station2;
         }
 
         // *** PART 2: Turbulent from XT to X2 ***
@@ -757,8 +787,8 @@ impl BLLocalSystem {
         let cfm_turb = MidpointCf::compute(&st, s2, FlowRegime::Turbulent, false);
 
         // Call BLDIF for turbulent part (XT to X2)
-        let mut turb_sys = BLLocalSystem::default();
-        turb_sys.bldif(&st, s2, &cfm_turb, FlowRegime::Turbulent, false, acrit, params.idampv);
+        let mut turb_sys = IntervalSystem::default();
+        turb_sys.assemble_interval_equations(&st, s2, &cfm_turb, FlowRegime::Turbulent, false, acrit, params.idampv);
 
         // Convert turbulent system sensitivities from "T" variables to "1" and "2" variables
         let mut bt1: [[f64; 5]; 4] = [[0.0; 5]; 4];
@@ -769,100 +799,100 @@ impl BLLocalSystem {
         let mut btx: [f64; 4] = [0.0; 4];
 
         for k in 0..3 {
-            btrez[k] = turb_sys.vsrez[k];
-            btm[k] = turb_sys.vsm[k]
-                + turb_sys.vs1[k][0] * st_ms_total
-                + turb_sys.vs1[k][1] * tt_ms
-                + turb_sys.vs1[k][2] * dt_ms
-                + turb_sys.vs1[k][3] * ut_ms
-                + turb_sys.vs1[k][4] * trans.xt_ms;
-            btr[k] = turb_sys.vsr[k]
-                + turb_sys.vs1[k][0] * st_re_total
-                + turb_sys.vs1[k][1] * tt_re
-                + turb_sys.vs1[k][2] * dt_re
-                + turb_sys.vs1[k][3] * ut_re
-                + turb_sys.vs1[k][4] * trans.xt_re;
-            btx[k] = turb_sys.vsx[k]
-                + turb_sys.vs1[k][0] * st_xf
-                + turb_sys.vs1[k][1] * tt_xf
-                + turb_sys.vs1[k][2] * dt_xf
-                + turb_sys.vs1[k][3] * ut_xf
-                + turb_sys.vs1[k][4] * trans.xt_xf;
+            btrez[k] = turb_sys.residual[k];
+            btm[k] = turb_sys.residual_d_machsqd[k]
+                + turb_sys.jacobian_station1[k][0] * st_ms_total
+                + turb_sys.jacobian_station1[k][1] * tt_ms
+                + turb_sys.jacobian_station1[k][2] * dt_ms
+                + turb_sys.jacobian_station1[k][3] * ut_ms
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_machsqd;
+            btr[k] = turb_sys.residual_d_re[k]
+                + turb_sys.jacobian_station1[k][0] * st_re_total
+                + turb_sys.jacobian_station1[k][1] * tt_re
+                + turb_sys.jacobian_station1[k][2] * dt_re
+                + turb_sys.jacobian_station1[k][3] * ut_re
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_re;
+            btx[k] = turb_sys.residual_d_xi[k]
+                + turb_sys.jacobian_station1[k][0] * st_xf
+                + turb_sys.jacobian_station1[k][1] * tt_xf
+                + turb_sys.jacobian_station1[k][2] * dt_xf
+                + turb_sys.jacobian_station1[k][3] * ut_xf
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_x_trip;
 
-            bt1[k][0] = turb_sys.vs1[k][0] * st_a1
-                + turb_sys.vs1[k][1] * tt_a1
-                + turb_sys.vs1[k][2] * dt_a1
-                + turb_sys.vs1[k][3] * ut_a1
-                + turb_sys.vs1[k][4] * trans.xt_a1;
-            bt1[k][1] = turb_sys.vs1[k][0] * st_t1
-                + turb_sys.vs1[k][1] * tt_t1
-                + turb_sys.vs1[k][2] * dt_t1
-                + turb_sys.vs1[k][3] * ut_t1
-                + turb_sys.vs1[k][4] * trans.xt_t1;
-            bt1[k][2] = turb_sys.vs1[k][0] * st_d1
-                + turb_sys.vs1[k][1] * tt_d1
-                + turb_sys.vs1[k][2] * dt_d1
-                + turb_sys.vs1[k][3] * ut_d1
-                + turb_sys.vs1[k][4] * trans.xt_d1;
-            bt1[k][3] = turb_sys.vs1[k][0] * st_u1
-                + turb_sys.vs1[k][1] * tt_u1
-                + turb_sys.vs1[k][2] * dt_u1
-                + turb_sys.vs1[k][3] * ut_u1
-                + turb_sys.vs1[k][4] * trans.xt_u1;
-            bt1[k][4] = turb_sys.vs1[k][0] * st_x1
-                + turb_sys.vs1[k][1] * tt_x1
-                + turb_sys.vs1[k][2] * dt_x1
-                + turb_sys.vs1[k][3] * ut_x1
-                + turb_sys.vs1[k][4] * trans.xt_x1;
+            bt1[k][0] = turb_sys.jacobian_station1[k][0] * st_a1
+                + turb_sys.jacobian_station1[k][1] * tt_a1
+                + turb_sys.jacobian_station1[k][2] * dt_a1
+                + turb_sys.jacobian_station1[k][3] * ut_a1
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_ampl_station1;
+            bt1[k][1] = turb_sys.jacobian_station1[k][0] * st_t1
+                + turb_sys.jacobian_station1[k][1] * tt_t1
+                + turb_sys.jacobian_station1[k][2] * dt_t1
+                + turb_sys.jacobian_station1[k][3] * ut_t1
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_theta_station1;
+            bt1[k][2] = turb_sys.jacobian_station1[k][0] * st_d1
+                + turb_sys.jacobian_station1[k][1] * tt_d1
+                + turb_sys.jacobian_station1[k][2] * dt_d1
+                + turb_sys.jacobian_station1[k][3] * ut_d1
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_dstar_station1;
+            bt1[k][3] = turb_sys.jacobian_station1[k][0] * st_u1
+                + turb_sys.jacobian_station1[k][1] * tt_u1
+                + turb_sys.jacobian_station1[k][2] * dt_u1
+                + turb_sys.jacobian_station1[k][3] * ut_u1
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_ue_station1;
+            bt1[k][4] = turb_sys.jacobian_station1[k][0] * st_x1
+                + turb_sys.jacobian_station1[k][1] * tt_x1
+                + turb_sys.jacobian_station1[k][2] * dt_x1
+                + turb_sys.jacobian_station1[k][3] * ut_x1
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_xi_station1;
 
-            bt2[k][0] = turb_sys.vs2[k][0];
-            bt2[k][1] = turb_sys.vs2[k][1]
-                + turb_sys.vs1[k][0] * st_t2
-                + turb_sys.vs1[k][1] * tt_t2
-                + turb_sys.vs1[k][2] * dt_t2
-                + turb_sys.vs1[k][3] * ut_t2
-                + turb_sys.vs1[k][4] * trans.xt_t2;
-            bt2[k][2] = turb_sys.vs2[k][2]
-                + turb_sys.vs1[k][0] * st_d2
-                + turb_sys.vs1[k][1] * tt_d2
-                + turb_sys.vs1[k][2] * dt_d2
-                + turb_sys.vs1[k][3] * ut_d2
-                + turb_sys.vs1[k][4] * trans.xt_d2;
-            bt2[k][3] = turb_sys.vs2[k][3]
-                + turb_sys.vs1[k][0] * st_u2
-                + turb_sys.vs1[k][1] * tt_u2
-                + turb_sys.vs1[k][2] * dt_u2
-                + turb_sys.vs1[k][3] * ut_u2
-                + turb_sys.vs1[k][4] * trans.xt_u2;
-            bt2[k][4] = turb_sys.vs2[k][4]
-                + turb_sys.vs1[k][0] * st_x2
-                + turb_sys.vs1[k][1] * tt_x2
-                + turb_sys.vs1[k][2] * dt_x2
-                + turb_sys.vs1[k][3] * ut_x2
-                + turb_sys.vs1[k][4] * trans.xt_x2;
+            bt2[k][0] = turb_sys.jacobian_station2[k][0];
+            bt2[k][1] = turb_sys.jacobian_station2[k][1]
+                + turb_sys.jacobian_station1[k][0] * st_t2
+                + turb_sys.jacobian_station1[k][1] * tt_t2
+                + turb_sys.jacobian_station1[k][2] * dt_t2
+                + turb_sys.jacobian_station1[k][3] * ut_t2
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_theta_station2;
+            bt2[k][2] = turb_sys.jacobian_station2[k][2]
+                + turb_sys.jacobian_station1[k][0] * st_d2
+                + turb_sys.jacobian_station1[k][1] * tt_d2
+                + turb_sys.jacobian_station1[k][2] * dt_d2
+                + turb_sys.jacobian_station1[k][3] * ut_d2
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_dstar_station2;
+            bt2[k][3] = turb_sys.jacobian_station2[k][3]
+                + turb_sys.jacobian_station1[k][0] * st_u2
+                + turb_sys.jacobian_station1[k][1] * tt_u2
+                + turb_sys.jacobian_station1[k][2] * dt_u2
+                + turb_sys.jacobian_station1[k][3] * ut_u2
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_ue_station2;
+            bt2[k][4] = turb_sys.jacobian_station2[k][4]
+                + turb_sys.jacobian_station1[k][0] * st_x2
+                + turb_sys.jacobian_station1[k][1] * tt_x2
+                + turb_sys.jacobian_station1[k][2] * dt_x2
+                + turb_sys.jacobian_station1[k][3] * ut_x2
+                + turb_sys.jacobian_station1[k][4] * trans.xi_transition_d_xi_station2;
         }
 
         // *** COMBINE: Add laminar and turbulent parts ***
 
         // Row 1: Shear stress (from turbulent part only - laminar row is amplification)
-        self.vsrez[0] = btrez[0];
-        self.vsm[0] = btm[0];
-        self.vsr[0] = btr[0];
-        self.vsx[0] = btx[0];
+        self.residual[0] = btrez[0];
+        self.residual_d_machsqd[0] = btm[0];
+        self.residual_d_re[0] = btr[0];
+        self.residual_d_xi[0] = btx[0];
         for l in 0..5 {
-            self.vs1[0][l] = bt1[0][l];
-            self.vs2[0][l] = bt2[0][l];
+            self.jacobian_station1[0][l] = bt1[0][l];
+            self.jacobian_station2[0][l] = bt2[0][l];
         }
 
         // Rows 2 and 3: Sum laminar and turbulent contributions
         for k in 1..3 {
-            self.vsrez[k] = blrez[k] + btrez[k];
-            self.vsm[k] = blm[k] + btm[k];
-            self.vsr[k] = blr[k] + btr[k];
-            self.vsx[k] = blx[k] + btx[k];
+            self.residual[k] = blrez[k] + btrez[k];
+            self.residual_d_machsqd[k] = blm[k] + btm[k];
+            self.residual_d_re[k] = blr[k] + btr[k];
+            self.residual_d_xi[k] = blx[k] + btx[k];
             for l in 0..5 {
-                self.vs1[k][l] = bl1[k][l] + bt1[k][l];
-                self.vs2[k][l] = bl2[k][l] + bt2[k][l];
+                self.jacobian_station1[k][l] = bl1[k][l] + bt1[k][l];
+                self.jacobian_station2[k][l] = bl2[k][l] + bt2[k][l];
             }
         }
     }
@@ -1023,31 +1053,31 @@ mod tests {
         cfm.cf_d_re = 0.5 * (s1.cf_d_re + s2.cf_d_re);
 
         // Run BLDIF
-        let mut sys = BLLocalSystem::default();
-        sys.bldif(&s1, &s2, &cfm, FlowRegime::Turbulent, false, 9.0, 0);
+        let mut sys = IntervalSystem::default();
+        sys.assemble_interval_equations(&s1, &s2, &cfm, FlowRegime::Turbulent, false, 9.0, 0);
 
         // Check momentum equation residual (row 2)
         // VSREZ[2] = -0.7123274356e-1 from Fortran
-        assert_relative_eq!(sys.vsrez[1], -0.07123274356, epsilon = 1e-4);
+        assert_relative_eq!(sys.residual[1], -0.07123274356, epsilon = 1e-4);
 
         // Check Jacobian entries for row 2 (momentum)
         // Note: indexing is [row][col] where col is 0=S, 1=T, 2=D, 3=U, 4=X
         // VS1[2,1] (dT1) = -0.5339051514e+3
-        assert_relative_eq!(sys.vs1[1][1], -533.9, epsilon = 1.0);
+        assert_relative_eq!(sys.jacobian_station1[1][1], -533.9, epsilon = 1.0);
 
         // VS1[2,2] (dD1) = -0.7342562675e+1
-        assert_relative_eq!(sys.vs1[1][2], -7.34, epsilon = 0.1);
+        assert_relative_eq!(sys.jacobian_station1[1][2], -7.34, epsilon = 0.1);
 
         // VS1[2,3] (dU1) = -0.3853754759e+1
-        assert_relative_eq!(sys.vs1[1][3], -3.85, epsilon = 0.1);
+        assert_relative_eq!(sys.jacobian_station1[1][3], -3.85, epsilon = 0.1);
 
         // VS2[2,1] (dT2) = 0.4716367493e+3
-        assert_relative_eq!(sys.vs2[1][1], 471.6, epsilon = 1.0);
+        assert_relative_eq!(sys.jacobian_station2[1][1], 471.6, epsilon = 1.0);
 
         // VS2[2,2] (dD2) = -0.6007551670e+1
-        assert_relative_eq!(sys.vs2[1][2], -6.0, epsilon = 0.1);
+        assert_relative_eq!(sys.jacobian_station2[1][2], -6.0, epsilon = 0.1);
 
         // VS2[2,3] (dU2) = 0.3956980467e+1
-        assert_relative_eq!(sys.vs2[1][3], 3.96, epsilon = 0.1);
+        assert_relative_eq!(sys.jacobian_station2[1][3], 3.96, epsilon = 0.1);
     }
 }

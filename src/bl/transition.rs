@@ -13,54 +13,54 @@ use super::station::StationState;
 /// Used by TRDIF to handle intervals containing laminar-turbulent transition.
 /// The transition location XT is where N(x) = Ncrit.
 #[derive(Debug, Clone, Default)]
-pub struct TransitionLocation {
+pub struct Transition {
     /// Transition x-location
-    pub xt: f64,
+    pub xi_transition: f64,
     /// ∂XT/∂N1 (amplification at station 1)
-    pub xt_a1: f64,
+    pub xi_transition_d_ampl_station1: f64,
     /// ∂XT/∂θ1
-    pub xt_t1: f64,
+    pub xi_transition_d_theta_station1: f64,
     /// ∂XT/∂δ*1
-    pub xt_d1: f64,
+    pub xi_transition_d_dstar_station1: f64,
     /// ∂XT/∂Ue1
-    pub xt_u1: f64,
+    pub xi_transition_d_ue_station1: f64,
     /// ∂XT/∂X1
-    pub xt_x1: f64,
+    pub xi_transition_d_xi_station1: f64,
     /// ∂XT/∂θ2
-    pub xt_t2: f64,
+    pub xi_transition_d_theta_station2: f64,
     /// ∂XT/∂δ*2
-    pub xt_d2: f64,
+    pub xi_transition_d_dstar_station2: f64,
     /// ∂XT/∂Ue2
-    pub xt_u2: f64,
+    pub xi_transition_d_ue_station2: f64,
     /// ∂XT/∂X2
-    pub xt_x2: f64,
+    pub xi_transition_d_xi_station2: f64,
     /// ∂XT/∂M²
-    pub xt_ms: f64,
+    pub xi_transition_d_machsqd: f64,
     /// ∂XT/∂Re
-    pub xt_re: f64,
+    pub xi_transition_d_re: f64,
     /// ∂XT/∂Xforc (forced transition location)
-    pub xt_xf: f64,
+    pub xi_transition_d_x_trip: f64,
 }
 
 /// Result of transition check (TRCHEK2 equivalent)
 #[derive(Debug, Clone)]
-pub enum TransitionResult {
+pub enum TransitionCheck {
     /// No transition in this interval - return updated amplification
-    NoTransition {
+    None {
         /// Amplification factor at station 2
         ampl2: f64,
     },
     /// Free transition (N = Ncrit) occurred
-    FreeTransition {
+    Free {
         /// Transition location and derivatives
-        location: TransitionLocation,
+        transition: Transition,
         /// Amplification at station 2 (= Ncrit)
         ampl2: f64,
     },
     /// Forced transition at prescribed location
-    ForcedTransition {
+    Forced {
         /// Transition location (= xiforc)
-        location: TransitionLocation,
+        transition: Transition,
     },
 }
 
@@ -73,19 +73,19 @@ pub enum TransitionResult {
 /// tests rather than returning early, and the returned `ampl2` is the iterated value (which
 /// may exceed Ncrit) — exactly what XFOIL leaves in `AMPL2`.
 #[allow(unused_assignments)] // loop-carried locals mirror the Fortran; the loop always runs
-pub fn trchek(
+pub fn check_transition(
     s1: &StationState,
     s2: &StationState,
     ampl1: f64,
     acrit: f64,
     xiforc: f64,
     params: &FlowParameters,
-) -> TransitionResult {
+) -> TransitionCheck {
     const DAEPS: f64 = 5.0e-5;
     let (x1, x2) = (s1.xi, s2.xi);
 
     // calculate average amplification rate AX over X1..X2 interval, with the current AMPL2
-    let r0 = axset(
+    let r0 = interval_amplification_rate(
         s1.hk,
         s1.theta,
         s1.retheta,
@@ -98,7 +98,7 @@ pub fn trchek(
         params.idampv,
     );
     // set initial guess for iterate N2 (AMPL2) at X2
-    let mut ampl2 = ampl1 + r0.ax * (x2 - x1);
+    let mut ampl2 = ampl1 + r0.rate * (x2 - x1);
 
     // loop state carried into the post-loop section (as XFOIL's locals/COMMON are)
     let mut amplt_a2 = 0.0;
@@ -173,7 +173,7 @@ pub fn trchek(
         st.set_kinematic_variables(params);
 
         // calculate amplification rate AX over current X1-XT interval
-        r = axset(
+        r = interval_amplification_rate(
             s1.hk,
             s1.theta,
             s1.retheta,
@@ -187,18 +187,21 @@ pub fn trchek(
         );
 
         // punch out early if there is no amplification here
-        if r.ax <= 0.0 {
+        if r.rate <= 0.0 {
             break;
         }
 
         // set sensitivity of AX(A2)
-        let ax_a2 = (r.ax_hk2 * st.hk_d_theta + r.ax_t2 + r.ax_rt2 * st.retheta_d_theta) * tt_a2
-            + (r.ax_hk2 * st.hk_d_dstar) * dt_a2
-            + (r.ax_hk2 * st.hk_d_ue + r.ax_rt2 * st.retheta_d_ue) * ut_a2
-            + r.ax_a2 * amplt_a2;
+        let ax_a2 = (r.rate_d_hk_station2 * st.hk_d_theta
+            + r.rate_d_theta_station2
+            + r.rate_d_retheta_station2 * st.retheta_d_theta)
+            * tt_a2
+            + (r.rate_d_hk_station2 * st.hk_d_dstar) * dt_a2
+            + (r.rate_d_hk_station2 * st.hk_d_ue + r.rate_d_retheta_station2 * st.retheta_d_ue) * ut_a2
+            + r.rate_d_ampl_station2 * amplt_a2;
 
         // residual for implicit AMPL2 definition (amplification equation)
-        let res = ampl2 - ampl1 - r.ax * (x2 - x1);
+        let res = ampl2 - ampl1 - r.rate * (x2 - x1);
         let res_a2 = 1.0 - ax_a2 * (x2 - x1);
 
         let da2 = -res / res_a2;
@@ -234,7 +237,7 @@ pub fn trchek(
     // set transition interval flag
     let tran = trforc || trfree;
     if !tran {
-        return TransitionResult::NoTransition { ampl2 };
+        return TransitionCheck::None { ampl2 };
     }
 
     // resolve if both forced and free transition
@@ -246,12 +249,12 @@ pub fn trchek(
 
     if trforc {
         // if forced transition, then XT is prescribed
-        let location = TransitionLocation {
-            xt: xiforc,
-            xt_xf: 1.0,
+        let location = Transition {
+            xi_transition: xiforc,
+            xi_transition_d_x_trip: 1.0,
             ..Default::default()
         };
-        return TransitionResult::ForcedTransition { location };
+        return TransitionCheck::Forced { transition: location };
     }
 
     // free transition ... set sensitivities of XT
@@ -298,34 +301,39 @@ pub fn trchek(
         st.retheta_d_machsqd,
         st.retheta_d_re,
     );
-    let ax_t1 = r.ax_hk1 * s1.hk_d_theta
-        + r.ax_t1
-        + r.ax_rt1 * s1.retheta_d_theta
-        + (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_t1;
-    let ax_d1 = r.ax_hk1 * s1.hk_d_dstar + (r.ax_hk2 * hkt_dt) * dt_d1;
-    let ax_u1 = r.ax_hk1 * s1.hk_d_ue + r.ax_rt1 * s1.retheta_d_ue + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_u1;
-    let ax_a1 = r.ax_a1
-        + (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_a1
-        + (r.ax_hk2 * hkt_dt) * dt_a1
-        + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_a1;
-    let ax_x1 = (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_x1
-        + (r.ax_hk2 * hkt_dt) * dt_x1
-        + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_x1;
-    let ax_t2 = (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_t2;
-    let ax_d2 = (r.ax_hk2 * hkt_dt) * dt_d2;
-    let ax_u2 = (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_u2;
-    let ax_a2 = r.ax_a2 * amplt_a2
-        + (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_a2
-        + (r.ax_hk2 * hkt_dt) * dt_a2
-        + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_a2;
-    let ax_x2 = (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_x2
-        + (r.ax_hk2 * hkt_dt) * dt_x2
-        + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_x2;
-    let ax_xf = (r.ax_hk2 * hkt_tt + r.ax_t2 + r.ax_rt2 * rtt_tt) * tt_xf
-        + (r.ax_hk2 * hkt_dt) * dt_xf
-        + (r.ax_hk2 * hkt_ut + r.ax_rt2 * rtt_ut) * ut_xf;
-    let ax_ms = r.ax_hk2 * hkt_ms + r.ax_rt2 * rtt_ms + r.ax_hk1 * s1.hk_d_machsqd + r.ax_rt1 * s1.retheta_d_machsqd;
-    let ax_re = r.ax_rt2 * rtt_re + r.ax_rt1 * s1.retheta_d_re;
+    let ax_t1 = r.rate_d_hk_station1 * s1.hk_d_theta
+        + r.rate_d_theta_station1
+        + r.rate_d_retheta_station1 * s1.retheta_d_theta
+        + (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_t1;
+    let ax_d1 = r.rate_d_hk_station1 * s1.hk_d_dstar + (r.rate_d_hk_station2 * hkt_dt) * dt_d1;
+    let ax_u1 = r.rate_d_hk_station1 * s1.hk_d_ue
+        + r.rate_d_retheta_station1 * s1.retheta_d_ue
+        + (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_u1;
+    let ax_a1 = r.rate_d_ampl_station1
+        + (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_a1
+        + (r.rate_d_hk_station2 * hkt_dt) * dt_a1
+        + (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_a1;
+    let ax_x1 = (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_x1
+        + (r.rate_d_hk_station2 * hkt_dt) * dt_x1
+        + (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_x1;
+    let ax_t2 = (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_t2;
+    let ax_d2 = (r.rate_d_hk_station2 * hkt_dt) * dt_d2;
+    let ax_u2 = (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_u2;
+    let ax_a2 = r.rate_d_ampl_station2 * amplt_a2
+        + (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_a2
+        + (r.rate_d_hk_station2 * hkt_dt) * dt_a2
+        + (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_a2;
+    let ax_x2 = (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_x2
+        + (r.rate_d_hk_station2 * hkt_dt) * dt_x2
+        + (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_x2;
+    let ax_xf = (r.rate_d_hk_station2 * hkt_tt + r.rate_d_theta_station2 + r.rate_d_retheta_station2 * rtt_tt) * tt_xf
+        + (r.rate_d_hk_station2 * hkt_dt) * dt_xf
+        + (r.rate_d_hk_station2 * hkt_ut + r.rate_d_retheta_station2 * rtt_ut) * ut_xf;
+    let ax_ms = r.rate_d_hk_station2 * hkt_ms
+        + r.rate_d_retheta_station2 * rtt_ms
+        + r.rate_d_hk_station1 * s1.hk_d_machsqd
+        + r.rate_d_retheta_station1 * s1.retheta_d_machsqd;
+    let ax_re = r.rate_d_retheta_station2 * rtt_re + r.rate_d_retheta_station1 * s1.retheta_d_re;
 
     // set sensitivities of residual RES
     let z_ax = -(x2 - x1);
@@ -333,33 +341,36 @@ pub fn trchek(
     let z_t1 = z_ax * ax_t1;
     let z_d1 = z_ax * ax_d1;
     let z_u1 = z_ax * ax_u1;
-    let z_x1 = z_ax * ax_x1 + r.ax;
+    let z_x1 = z_ax * ax_x1 + r.rate;
     let z_a2 = z_ax * ax_a2 + 1.0;
     let z_t2 = z_ax * ax_t2;
     let z_d2 = z_ax * ax_d2;
     let z_u2 = z_ax * ax_u2;
-    let z_x2 = z_ax * ax_x2 - r.ax;
+    let z_x2 = z_ax * ax_x2 - r.rate;
     let _z_xf = z_ax * ax_xf;
     let z_ms = z_ax * ax_ms;
     let z_re = z_ax * ax_re;
 
     // set sensitivities of XT, with RES being stationary for A2 constraint
-    let location = TransitionLocation {
-        xt,
-        xt_a1: xt_a1 - (xt_a2 / z_a2) * z_a1,
-        xt_t1: -(xt_a2 / z_a2) * z_t1,
-        xt_d1: -(xt_a2 / z_a2) * z_d1,
-        xt_u1: -(xt_a2 / z_a2) * z_u1,
-        xt_x1: xt_x1 - (xt_a2 / z_a2) * z_x1,
-        xt_t2: -(xt_a2 / z_a2) * z_t2,
-        xt_d2: -(xt_a2 / z_a2) * z_d2,
-        xt_u2: -(xt_a2 / z_a2) * z_u2,
-        xt_x2: xt_x2 - (xt_a2 / z_a2) * z_x2,
-        xt_ms: -(xt_a2 / z_a2) * z_ms,
-        xt_re: -(xt_a2 / z_a2) * z_re,
-        xt_xf: 0.0,
+    let location = Transition {
+        xi_transition: xt,
+        xi_transition_d_ampl_station1: xt_a1 - (xt_a2 / z_a2) * z_a1,
+        xi_transition_d_theta_station1: -(xt_a2 / z_a2) * z_t1,
+        xi_transition_d_dstar_station1: -(xt_a2 / z_a2) * z_d1,
+        xi_transition_d_ue_station1: -(xt_a2 / z_a2) * z_u1,
+        xi_transition_d_xi_station1: xt_x1 - (xt_a2 / z_a2) * z_x1,
+        xi_transition_d_theta_station2: -(xt_a2 / z_a2) * z_t2,
+        xi_transition_d_dstar_station2: -(xt_a2 / z_a2) * z_d2,
+        xi_transition_d_ue_station2: -(xt_a2 / z_a2) * z_u2,
+        xi_transition_d_xi_station2: xt_x2 - (xt_a2 / z_a2) * z_x2,
+        xi_transition_d_machsqd: -(xt_a2 / z_a2) * z_ms,
+        xi_transition_d_re: -(xt_a2 / z_a2) * z_re,
+        xi_transition_d_x_trip: 0.0,
     };
-    TransitionResult::FreeTransition { location, ampl2 }
+    TransitionCheck::Free {
+        transition: location,
+        ampl2,
+    }
 }
 
 // ============================================================================
@@ -370,13 +381,13 @@ pub fn trchek(
 #[derive(Debug, Clone, Default)]
 pub struct AmplificationRate {
     /// Spatial amplification rate dN/dx
-    pub ax: f64,
+    pub rate: f64,
     /// ∂AX/∂Hk
-    pub ax_hk: f64,
+    pub rate_d_hk: f64,
     /// ∂AX/∂θ
-    pub ax_th: f64,
+    pub rate_d_theta: f64,
     /// ∂AX/∂Rθ
-    pub ax_rt: f64,
+    pub rate_d_retheta: f64,
 }
 
 /// Calculate local amplification rate (DAMPL equivalent)
@@ -392,7 +403,7 @@ pub struct AmplificationRate {
 ///
 /// # Returns
 /// Spatial amplification rate and derivatives
-pub fn dampl(hk: f64, th: f64, rt: f64) -> AmplificationRate {
+pub fn amplification_rate(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     const DGR: f64 = 0.08; // Ramp width in log10(Rt)
 
     let hmi = 1.0 / (hk - 1.0);
@@ -449,18 +460,18 @@ pub fn dampl(hk: f64, th: f64, rt: f64) -> AmplificationRate {
         let ax_rt = (af * dadr / th) * rfac_rt;
 
         AmplificationRate {
-            ax,
-            ax_hk,
-            ax_th,
-            ax_rt,
+            rate: ax,
+            rate_d_hk: ax_hk,
+            rate_d_theta: ax_th,
+            rate_d_retheta: ax_rt,
         }
     }
 }
 
 /// DAMPL2 (xblsys.f): amplification rate for the *modified* envelope e^n method (Nov 1996) —
-/// the envelope rate of `dampl`, blended for Hk > 3.5 with the Orr–Sommerfeld maximum
+/// the envelope rate of `amplification_rate`, blended for Hk > 3.5 with the Orr–Sommerfeld maximum
 /// amplification correlation for separated profiles. Selected by OPER `DAMP` (IDAMPV = 1).
-pub fn dampl2(hk: f64, th: f64, rt: f64) -> AmplificationRate {
+pub fn amplification_rate_modified(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     const DGR: f64 = 0.08;
     const HK1: f64 = 3.5;
     const HK2: f64 = 4.0;
@@ -531,10 +542,10 @@ pub fn dampl2(hk: f64, th: f64, rt: f64) -> AmplificationRate {
 
     if hk < HK1 {
         return AmplificationRate {
-            ax,
-            ax_hk,
-            ax_th,
-            ax_rt,
+            rate: ax,
+            rate_d_hk: ax_hk,
+            rate_d_theta: ax_th,
+            rate_d_retheta: ax_rt,
         };
     }
 
@@ -586,34 +597,34 @@ pub fn dampl2(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     ax_th = hfac * ax2_th + (1.0 - hfac) * ax1_th;
 
     AmplificationRate {
-        ax,
-        ax_hk,
-        ax_th,
-        ax_rt,
+        rate: ax,
+        rate_d_hk: ax_hk,
+        rate_d_theta: ax_th,
+        rate_d_retheta: ax_rt,
     }
 }
 
 /// Result from AXSET - averaged amplification rate over interval
 #[derive(Debug, Clone, Default)]
-pub struct AveragedAmplification {
+pub struct IntervalAmplificationRate {
     /// Average amplification rate
-    pub ax: f64,
+    pub rate: f64,
     /// ∂AX/∂Hk1
-    pub ax_hk1: f64,
+    pub rate_d_hk_station1: f64,
     /// ∂AX/∂θ1
-    pub ax_t1: f64,
+    pub rate_d_theta_station1: f64,
     /// ∂AX/∂Rθ1
-    pub ax_rt1: f64,
+    pub rate_d_retheta_station1: f64,
     /// ∂AX/∂N1 (amplification factor)
-    pub ax_a1: f64,
+    pub rate_d_ampl_station1: f64,
     /// ∂AX/∂Hk2
-    pub ax_hk2: f64,
+    pub rate_d_hk_station2: f64,
     /// ∂AX/∂θ2
-    pub ax_t2: f64,
+    pub rate_d_theta_station2: f64,
     /// ∂AX/∂Rθ2
-    pub ax_rt2: f64,
+    pub rate_d_retheta_station2: f64,
     /// ∂AX/∂N2
-    pub ax_a2: f64,
+    pub rate_d_ampl_station2: f64,
 }
 
 /// Calculate averaged amplification rate over interval (AXSET equivalent)
@@ -627,7 +638,7 @@ pub struct AveragedAmplification {
 ///
 /// # Returns
 /// Averaged amplification rate and derivatives
-pub fn axset(
+pub fn interval_amplification_rate(
     hk1: f64,
     t1: f64,
     rt1: f64,
@@ -638,17 +649,20 @@ pub fn axset(
     a2: f64,
     acrit: f64,
     idampv: usize,
-) -> AveragedAmplification {
+) -> IntervalAmplificationRate {
     // 2nd-order: local amplification rates at both stations, envelope (IDAMPV = 0) or
     // modified-envelope (IDAMPV = 1, OPER DAMP) method
     let (ax1_result, ax2_result) = if idampv == 0 {
-        (dampl(hk1, t1, rt1), dampl(hk2, t2, rt2))
+        (amplification_rate(hk1, t1, rt1), amplification_rate(hk2, t2, rt2))
     } else {
-        (dampl2(hk1, t1, rt1), dampl2(hk2, t2, rt2))
+        (
+            amplification_rate_modified(hk1, t1, rt1),
+            amplification_rate_modified(hk2, t2, rt2),
+        )
     };
 
-    let ax1 = ax1_result.ax;
-    let ax2 = ax2_result.ax;
+    let ax1 = ax1_result.rate;
+    let ax2 = ax2_result.rate;
 
     // RMS-average version (better on coarse grids)
     let axsq = 0.5 * (ax1 * ax1 + ax2 * ax2);
@@ -677,16 +691,16 @@ pub fn axset(
     // Final result
     let ax = axa + dax;
 
-    AveragedAmplification {
-        ax,
-        ax_hk1: axa_ax1 * ax1_result.ax_hk,
-        ax_t1: axa_ax1 * ax1_result.ax_th + dax_t1,
-        ax_rt1: axa_ax1 * ax1_result.ax_rt,
-        ax_a1: dax_a1,
-        ax_hk2: axa_ax2 * ax2_result.ax_hk,
-        ax_t2: axa_ax2 * ax2_result.ax_th + dax_t2,
-        ax_rt2: axa_ax2 * ax2_result.ax_rt,
-        ax_a2: dax_a2,
+    IntervalAmplificationRate {
+        rate: ax,
+        rate_d_hk_station1: axa_ax1 * ax1_result.rate_d_hk,
+        rate_d_theta_station1: axa_ax1 * ax1_result.rate_d_theta + dax_t1,
+        rate_d_retheta_station1: axa_ax1 * ax1_result.rate_d_retheta,
+        rate_d_ampl_station1: dax_a1,
+        rate_d_hk_station2: axa_ax2 * ax2_result.rate_d_hk,
+        rate_d_theta_station2: axa_ax2 * ax2_result.rate_d_theta + dax_t2,
+        rate_d_retheta_station2: axa_ax2 * ax2_result.rate_d_retheta,
+        rate_d_ampl_station2: dax_a2,
     }
 }
 
@@ -702,12 +716,12 @@ mod tests {
     fn test_dampl_below_critical() {
         // Test case 1: Below critical Rt (should return 0)
         // HK = 2.5, TH = 0.001, RT = 100
-        let result = dampl(2.5, 0.001, 100.0);
+        let result = amplification_rate(2.5, 0.001, 100.0);
 
-        assert_eq!(result.ax, 0.0);
-        assert_eq!(result.ax_hk, 0.0);
-        assert_eq!(result.ax_th, 0.0);
-        assert_eq!(result.ax_rt, 0.0);
+        assert_eq!(result.rate, 0.0);
+        assert_eq!(result.rate_d_hk, 0.0);
+        assert_eq!(result.rate_d_theta, 0.0);
+        assert_eq!(result.rate_d_retheta, 0.0);
     }
 
     #[test]
@@ -715,12 +729,12 @@ mod tests {
         // Test case 2: Near critical Rt (ramp region)
         // HK = 2.5, TH = 0.001, RT = 700
         // XFOIL reference: AX = 0.5576204658E+00
-        let result = dampl(2.5, 0.001, 700.0);
+        let result = amplification_rate(2.5, 0.001, 700.0);
 
-        assert_relative_eq!(result.ax, 0.5576, epsilon = 0.01);
-        assert_relative_eq!(result.ax_hk, 68.78, epsilon = 1.0);
-        assert_relative_eq!(result.ax_th, -557.6, epsilon = 1.0);
-        assert!(result.ax_rt > 0.0); // Should be positive in ramp region
+        assert_relative_eq!(result.rate, 0.5576, epsilon = 0.01);
+        assert_relative_eq!(result.rate_d_hk, 68.78, epsilon = 1.0);
+        assert_relative_eq!(result.rate_d_theta, -557.6, epsilon = 1.0);
+        assert!(result.rate_d_retheta > 0.0); // Should be positive in ramp region
     }
 
     #[test]
@@ -732,12 +746,12 @@ mod tests {
         // AX_HK = 0.3105413914E+01
         // AX_T = -0.3706101379E+03
         // AX_RT = 0.0 (above ramp)
-        let result = dampl(2.5, 0.002, 2000.0);
+        let result = amplification_rate(2.5, 0.002, 2000.0);
 
-        assert_relative_eq!(result.ax, 0.7412, epsilon = 0.001);
-        assert_relative_eq!(result.ax_hk, 3.105, epsilon = 0.01);
-        assert_relative_eq!(result.ax_th, -370.6, epsilon = 0.5);
-        assert_eq!(result.ax_rt, 0.0); // Above ramp, derivative is 0
+        assert_relative_eq!(result.rate, 0.7412, epsilon = 0.001);
+        assert_relative_eq!(result.rate_d_hk, 3.105, epsilon = 0.01);
+        assert_relative_eq!(result.rate_d_theta, -370.6, epsilon = 0.5);
+        assert_eq!(result.rate_d_retheta, 0.0); // Above ramp, derivative is 0
     }
 
     #[test]
@@ -745,11 +759,11 @@ mod tests {
         // Test case 4: Lower Hk (more unstable profile)
         // HK = 2.2, TH = 0.0015, RT = 5000
         // XFOIL reference: AX = 0.5429499745E+00
-        let result = dampl(2.2, 0.0015, 5000.0);
+        let result = amplification_rate(2.2, 0.0015, 5000.0);
 
-        assert_relative_eq!(result.ax, 0.543, epsilon = 0.01);
-        assert_relative_eq!(result.ax_hk, 7.95, epsilon = 0.1);
-        assert_relative_eq!(result.ax_th, -362.0, epsilon = 1.0);
+        assert_relative_eq!(result.rate, 0.543, epsilon = 0.01);
+        assert_relative_eq!(result.rate_d_hk, 7.95, epsilon = 0.1);
+        assert_relative_eq!(result.rate_d_theta, -362.0, epsilon = 1.0);
     }
 
     #[test]
@@ -757,11 +771,11 @@ mod tests {
         // Test case 5: Higher Hk (more stable profile)
         // HK = 2.8, TH = 0.0025, RT = 3000
         // XFOIL reference: AX = 0.2168501139E+01
-        let result = dampl(2.8, 0.0025, 3000.0);
+        let result = amplification_rate(2.8, 0.0025, 3000.0);
 
-        assert_relative_eq!(result.ax, 2.168, epsilon = 0.01);
-        assert_relative_eq!(result.ax_hk, 7.416, epsilon = 0.1);
-        assert_relative_eq!(result.ax_th, -867.4, epsilon = 1.0);
+        assert_relative_eq!(result.rate, 2.168, epsilon = 0.01);
+        assert_relative_eq!(result.rate_d_hk, 7.416, epsilon = 0.1);
+        assert_relative_eq!(result.rate_d_theta, -867.4, epsilon = 1.0);
     }
 
     // ========================================================================
@@ -778,13 +792,13 @@ mod tests {
         let th = 0.2202254221917420e-03;
         let rt = 0.2615260734070808e+03;
 
-        let result = dampl(hk, th, rt);
+        let result = amplification_rate(hk, th, rt);
 
         let rel_tol = 1e-10;
-        assert_relative_eq!(result.ax, 0.4909634245555000e-01, epsilon = rel_tol);
-        assert_relative_eq!(result.ax_hk, 0.5787501799836026e+02, epsilon = rel_tol * 100.0);
-        assert_relative_eq!(result.ax_th, -0.2229367616459996e+03, epsilon = rel_tol * 1000.0);
-        assert_relative_eq!(result.ax_rt, 0.2419961491556620e-01, epsilon = rel_tol);
+        assert_relative_eq!(result.rate, 0.4909634245555000e-01, epsilon = rel_tol);
+        assert_relative_eq!(result.rate_d_hk, 0.5787501799836026e+02, epsilon = rel_tol * 100.0);
+        assert_relative_eq!(result.rate_d_theta, -0.2229367616459996e+03, epsilon = rel_tol * 1000.0);
+        assert_relative_eq!(result.rate_d_retheta, 0.2419961491556620e-01, epsilon = rel_tol);
     }
 
     #[test]
@@ -796,13 +810,17 @@ mod tests {
         let th = 0.2328303859189811e-03;
         let rt = 0.2761529642099222e+03;
 
-        let result = dampl(hk, th, rt);
+        let result = amplification_rate(hk, th, rt);
 
         let rel_tol = 1e-10;
-        assert_relative_eq!(result.ax, 0.4728845409931889e+01, epsilon = rel_tol);
-        assert_relative_eq!(result.ax_hk, 0.3642605131865983e+03, epsilon = rel_tol * 1000.0);
-        assert_relative_eq!(result.ax_th, -0.2031025886620058e+05, epsilon = rel_tol * 100000.0);
-        assert_relative_eq!(result.ax_rt, 0.1445021321701126e+00, epsilon = rel_tol);
+        assert_relative_eq!(result.rate, 0.4728845409931889e+01, epsilon = rel_tol);
+        assert_relative_eq!(result.rate_d_hk, 0.3642605131865983e+03, epsilon = rel_tol * 1000.0);
+        assert_relative_eq!(
+            result.rate_d_theta,
+            -0.2031025886620058e+05,
+            epsilon = rel_tol * 100000.0
+        );
+        assert_relative_eq!(result.rate_d_retheta, 0.1445021321701126e+00, epsilon = rel_tol);
     }
 
     #[test]
@@ -814,13 +832,17 @@ mod tests {
         let th = 0.2455695046420016e-03;
         let rt = 0.2907803892252000e+03;
 
-        let result = dampl(hk, th, rt);
+        let result = amplification_rate(hk, th, rt);
 
         let rel_tol = 1e-10;
-        assert_relative_eq!(result.ax, 0.9712213028497693e+01, epsilon = rel_tol);
-        assert_relative_eq!(result.ax_hk, 0.1409468673226392e+03, epsilon = rel_tol * 1000.0);
-        assert_relative_eq!(result.ax_th, -0.3954975208610060e+05, epsilon = rel_tol * 100000.0);
-        assert_relative_eq!(result.ax_rt, 0.4082874225503037e-01, epsilon = rel_tol);
+        assert_relative_eq!(result.rate, 0.9712213028497693e+01, epsilon = rel_tol);
+        assert_relative_eq!(result.rate_d_hk, 0.1409468673226392e+03, epsilon = rel_tol * 1000.0);
+        assert_relative_eq!(
+            result.rate_d_theta,
+            -0.3954975208610060e+05,
+            epsilon = rel_tol * 100000.0
+        );
+        assert_relative_eq!(result.rate_d_retheta, 0.4082874225503037e-01, epsilon = rel_tol);
     }
 
     #[test]
@@ -832,13 +854,17 @@ mod tests {
         let th = 0.2584472817606003e-03;
         let rt = 0.3054087290294926e+03;
 
-        let result = dampl(hk, th, rt);
+        let result = amplification_rate(hk, th, rt);
 
         let rel_tol = 1e-10;
-        assert_relative_eq!(result.ax, 0.1002497313242920e+02, epsilon = rel_tol);
-        assert_relative_eq!(result.ax_hk, 0.4715318465087587e+02, epsilon = rel_tol * 100.0);
-        assert_relative_eq!(result.ax_th, -0.3878923803778030e+05, epsilon = rel_tol * 100000.0);
-        assert_eq!(result.ax_rt, 0.0); // Above ramp
+        assert_relative_eq!(result.rate, 0.1002497313242920e+02, epsilon = rel_tol);
+        assert_relative_eq!(result.rate_d_hk, 0.4715318465087587e+02, epsilon = rel_tol * 100.0);
+        assert_relative_eq!(
+            result.rate_d_theta,
+            -0.3878923803778030e+05,
+            epsilon = rel_tol * 100000.0
+        );
+        assert_eq!(result.rate_d_retheta, 0.0); // Above ramp
     }
 
     // ========================================================================
@@ -849,7 +875,7 @@ mod tests {
     fn test_axset_growing_bl() {
         // AXSET Test 1: Growing BL
         // XFOIL reference values
-        let result = axset(
+        let result = interval_amplification_rate(
             2.5, 0.0015, 1800.0, 3.0, // Station 1: HK, T, RT, A
             2.6, 0.0018, 2200.0, 4.5, // Station 2
             9.0, // ACRIT
@@ -857,22 +883,22 @@ mod tests {
         );
 
         // AX = 0.1160733819E+01
-        assert_relative_eq!(result.ax, 1.1607, epsilon = 0.01);
+        assert_relative_eq!(result.rate, 1.1607, epsilon = 0.01);
         // AX_HK1 = 0.1762713194E+01
-        assert_relative_eq!(result.ax_hk1, 1.76, epsilon = 0.1);
+        assert_relative_eq!(result.rate_d_hk_station1, 1.76, epsilon = 0.1);
         // AX_T1 = -0.2804905396E+03
-        assert_relative_eq!(result.ax_t1, -280.5, epsilon = 1.0);
+        assert_relative_eq!(result.rate_d_theta_station1, -280.5, epsilon = 1.0);
         // AX_HK2 = 0.3531968832E+01
-        assert_relative_eq!(result.ax_hk2, 3.53, epsilon = 0.1);
+        assert_relative_eq!(result.rate_d_hk_station2, 3.53, epsilon = 0.1);
         // AX_T2 = -0.4111100464E+03
-        assert_relative_eq!(result.ax_t2, -411.1, epsilon = 1.0);
+        assert_relative_eq!(result.rate_d_theta_station2, -411.1, epsilon = 1.0);
     }
 
     #[test]
     fn test_axset_near_transition() {
         // AXSET Test 2: Near transition
         // XFOIL reference values
-        let result = axset(
+        let result = interval_amplification_rate(
             2.5, 0.002, 2500.0, 7.5, // Station 1
             2.55, 0.0022, 2750.0, 8.5, // Station 2
             9.0, // ACRIT
@@ -880,15 +906,15 @@ mod tests {
         );
 
         // AX = 0.7944293022E+00
-        assert_relative_eq!(result.ax, 0.794, epsilon = 0.01);
+        assert_relative_eq!(result.rate, 0.794, epsilon = 0.01);
         // AX_HK1 = 0.1448710322E+01
-        assert_relative_eq!(result.ax_hk1, 1.45, epsilon = 0.1);
+        assert_relative_eq!(result.rate_d_hk_station1, 1.45, epsilon = 0.1);
         // AX_T1 = -0.1728937836E+03
-        assert_relative_eq!(result.ax_t1, -172.9, epsilon = 1.0);
+        assert_relative_eq!(result.rate_d_theta_station1, -172.9, epsilon = 1.0);
         // AX_HK2 = 0.2121723175E+01
-        assert_relative_eq!(result.ax_hk2, 2.12, epsilon = 0.1);
+        assert_relative_eq!(result.rate_d_hk_station2, 2.12, epsilon = 0.1);
         // AX_T2 = -0.2039280548E+03
-        assert_relative_eq!(result.ax_t2, -203.9, epsilon = 1.0);
+        assert_relative_eq!(result.rate_d_theta_station2, -203.9, epsilon = 1.0);
     }
 
     // ========================================================================
@@ -923,11 +949,11 @@ mod tests {
         s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
         s2.set_kinematic_variables(&params);
 
-        let result = trchek(&s1, &s2, 0.0, 9.0, 1e6, &params);
+        let result = check_transition(&s1, &s2, 0.0, 9.0, 1e6, &params);
 
-        // Should return NoTransition since RT is below critical
+        // Should return None since RT is below critical
         match result {
-            TransitionResult::NoTransition { ampl2 } => {
+            TransitionCheck::None { ampl2 } => {
                 // ampl2 should be close to 0 (no growth)
                 assert!(ampl2 < 1.0, "Expected no significant amplification growth");
             }
@@ -960,11 +986,11 @@ mod tests {
         s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
         s2.set_kinematic_variables(&params);
 
-        let result = trchek(&s1, &s2, 2.0, 9.0, 1e6, &params);
+        let result = check_transition(&s1, &s2, 2.0, 9.0, 1e6, &params);
 
-        // Should return NoTransition with growing ampl2
+        // Should return None with growing ampl2
         match result {
-            TransitionResult::NoTransition { ampl2 } => {
+            TransitionCheck::None { ampl2 } => {
                 // ampl2 should be greater than ampl1 but less than Ncrit
                 assert!(ampl2 >= 2.0, "Amplification should grow");
                 assert!(ampl2 < 9.0, "Amplification should not reach Ncrit");
@@ -998,20 +1024,23 @@ mod tests {
         s2.set_primary_variables(s2.xi, s2.ampl, 0.0, s2.theta, s2.dstar, 0.0, s2.ue, &params);
         s2.set_kinematic_variables(&params);
 
-        let result = trchek(&s1, &s2, 8.0, 9.0, 1e6, &params);
+        let result = check_transition(&s1, &s2, 8.0, 9.0, 1e6, &params);
 
-        // Should return FreeTransition
+        // Should return Free
         match result {
-            TransitionResult::FreeTransition { location, ampl2 } => {
+            TransitionCheck::Free {
+                transition: location,
+                ampl2,
+            } => {
                 // Transition should occur between X1 and X2
                 assert!(
-                    location.xt >= s1.xi && location.xt <= s2.xi,
+                    location.xi_transition >= s1.xi && location.xi_transition <= s2.xi,
                     "Transition location should be within interval"
                 );
                 // ampl2 should equal Ncrit
                 assert_relative_eq!(ampl2, 9.0, epsilon = 0.01);
             }
-            TransitionResult::NoTransition { ampl2 } => {
+            TransitionCheck::None { ampl2 } => {
                 // If no transition, ampl2 must have grown past Ncrit
                 // This might happen if amplification is very fast
                 if ampl2 >= 9.0 {
@@ -1052,22 +1081,27 @@ mod tests {
 
         // Force transition at x = 0.15
         let xiforc = 0.15;
-        let result = trchek(&s1, &s2, 2.0, 9.0, xiforc, &params);
+        let result = check_transition(&s1, &s2, 2.0, 9.0, xiforc, &params);
 
-        // Should return ForcedTransition at xiforc
+        // Should return Forced at xiforc
         match result {
-            TransitionResult::ForcedTransition { location } => {
-                assert_relative_eq!(location.xt, xiforc, epsilon = 1e-10);
-                assert_relative_eq!(location.xt_xf, 1.0, epsilon = 1e-10);
+            TransitionCheck::Forced { transition: location } => {
+                assert_relative_eq!(location.xi_transition, xiforc, epsilon = 1e-10);
+                assert_relative_eq!(location.xi_transition_d_x_trip, 1.0, epsilon = 1e-10);
             }
-            TransitionResult::FreeTransition { location, .. } => {
+            TransitionCheck::Free {
+                transition: location, ..
+            } => {
                 // Free transition might occur first if amplification is high enough
                 // Check if it's before xiforc
-                if location.xt > xiforc {
-                    panic!("Expected forced transition at {}, got free at {}", xiforc, location.xt);
+                if location.xi_transition > xiforc {
+                    panic!(
+                        "Expected forced transition at {}, got free at {}",
+                        xiforc, location.xi_transition
+                    );
                 }
             }
-            TransitionResult::NoTransition { .. } => {
+            TransitionCheck::None { .. } => {
                 panic!("Expected ForcedTransition result, got NoTransition");
             }
         }

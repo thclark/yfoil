@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use yfoil::bl::system::dampl;
+use yfoil::bl::system::amplification_rate;
 use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb};
 
 const REL_TOL: f64 = 1e-12;
@@ -564,8 +564,8 @@ fn validate_dampl(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = dampl(f.input.hk, f.input.th, f.input.rt);
-        let (ax, ax_hk, ax_th, ax_rt) = (r.ax, r.ax_hk, r.ax_th, r.ax_rt);
+        let r = amplification_rate(f.input.hk, f.input.th, f.input.rt);
+        let (ax, ax_hk, ax_th, ax_rt) = (r.rate, r.rate_d_hk, r.rate_d_theta, r.rate_d_retheta);
 
         let outputs = vec![
             OutputComparison {

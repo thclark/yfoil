@@ -6,10 +6,10 @@
 //! calls first. `IDAMPV = IDAMP` is pinned at 0 (the envelope e^N `DAMPL` model).
 
 use crate::bl::blsolv::BlsolvInput;
-use crate::bl::blsys::{blsys, tesys, IntervalFlags};
+use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
 use crate::bl::mrchdu::mrchdu;
 use crate::bl::mrchue::mrchue;
-use crate::bl::system::{trchek, BLLocalSystem, FlowParameters, FlowRegime, TransitionResult};
+use crate::bl::system::{check_transition, FlowParameters, FlowRegime, IntervalSystem, TransitionCheck};
 use crate::geometry::seval;
 use crate::solver::blstate::BlState;
 use crate::solver::pointers::xifset;
@@ -178,7 +178,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
     let mut s1 = std::mem::take(&mut st.com1);
     let mut s2 = std::mem::take(&mut st.com2);
     let mut trloc = std::mem::take(&mut st.trloc);
-    let mut sys = BLLocalSystem::default();
+    let mut sys = IntervalSystem::default();
     let (mut ami, mut cti) = (0.0, 0.0);
     let mut trforc = false;
 
@@ -251,18 +251,21 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
 
             // check for transition and set TRAN, XT, etc. if found
             if tran {
-                match trchek(&s1, &s2, s1.ampl, amcrit, xiforc, &params) {
-                    TransitionResult::NoTransition { ampl2 } => {
+                match check_transition(&s1, &s2, s1.ampl, amcrit, xiforc, &params) {
+                    TransitionCheck::None { ampl2 } => {
                         ami = ampl2;
                         tran = false;
-                        trloc.xt = s2.xi;
+                        trloc.xi_transition = s2.xi;
                     }
-                    TransitionResult::FreeTransition { location, ampl2 } => {
+                    TransitionCheck::Free {
+                        transition: location,
+                        ampl2,
+                    } => {
                         ami = ampl2;
                         trforc = false;
                         trloc = location;
                     }
-                    TransitionResult::ForcedTransition { location } => {
+                    TransitionCheck::Forced { transition: location } => {
                         trforc = true;
                         trloc = location;
                     }
@@ -281,7 +284,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
                 let tte = st.thet[1][it1] + st.thet[2][it2];
                 let dte = st.dstr[1][it1] + st.dstr[2][it2] + st.ante;
                 let cte = (st.ctau[1][it1] * st.thet[1][it1] + st.ctau[2][it2] * st.thet[2][it2]) / tte;
-                tesys(&mut sys, &mut s2, cte, tte, dte, &params);
+                assemble_te_system(&mut sys, &mut s2, cte, tte, dte, &params);
 
                 tte_tte1 = 1.0;
                 tte_tte2 = 1.0;
@@ -308,8 +311,13 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
                 due1 = 0.0;
                 dds1 = dte_ute1 * (st.uedg[1][it1] - usav[1][it1]) + dte_ute2 * (st.uedg[2][it2] - usav[2][it2]);
             } else {
-                let flags = IntervalFlags { simi, tran, turb, wake };
-                blsys(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, &params);
+                let flags = IntervalFlags {
+                    similarity: simi,
+                    transition: tran,
+                    turbulent: turb,
+                    wake,
+                };
+                assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, &params);
             }
 
             // Save wall shear and equil. max shear coefficient for plotting output
@@ -328,8 +336,8 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
 
             // stuff BL system coefficients into main Jacobian matrix
             for k in 0..3 {
-                let (vs1, vs2) = (&sys.vs1[k], &sys.vs2[k]);
-                let vsx = sys.vsx[k];
+                let (vs1, vs2) = (&sys.jacobian_station1[k], &sys.jacobian_station2[k]);
+                let vsx = sys.residual_d_xi[k];
                 for jv in 1..=nsys {
                     vm[iv - 1][jv - 1][k] = vs1[2] * d1_m[jv]
                         + vs1[3] * u1_m[jv]
@@ -342,13 +350,13 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
                 va[iv - 1][k][0] = vs2[0];
                 va[iv - 1][k][1] = vs2[1];
                 if st.lalfa {
-                    vdel[iv - 1][k][1] = sys.vsr[k] * re_clmr + sys.vsm[k] * msq_clmr;
+                    vdel[iv - 1][k][1] = sys.residual_d_re[k] * re_clmr + sys.residual_d_machsqd[k] * msq_clmr;
                 } else {
                     vdel[iv - 1][k][1] = (vs1[3] * u1_a + vs1[2] * d1_a)
                         + (vs2[3] * u2_a + vs2[2] * d2_a)
                         + (vs1[4] + vs2[4] + vsx) * (xi_ule1 * ule1_a + xi_ule2 * ule2_a);
                 }
-                vdel[iv - 1][k][0] = sys.vsrez[k]
+                vdel[iv - 1][k][0] = sys.residual[k]
                     + (vs1[3] * due1 + vs1[2] * dds1)
                     + (vs2[3] * due2 + vs2[2] * dds2)
                     + (vs1[4] + vs2[4] + vsx) * (xi_ule1 * dule1 + xi_ule2 * dule2);
@@ -357,7 +365,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             if ibl == st.iblte[is] + 1 {
                 // redefine coefficients for TTE, DTE, etc
                 for k in 0..3 {
-                    let vs1 = &sys.vs1[k];
+                    let vs1 = &sys.jacobian_station1[k];
                     vz[k][0] = vs1[0] * cte_cte1;
                     vz[k][1] = vs1[0] * cte_tte1 + vs1[1] * tte_tte1;
                     vb[iv - 1][k][0] = vs1[0] * cte_cte2;
@@ -372,10 +380,14 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
                 // save transition location
                 st.itran[is] = ibl;
                 st.tforce[is] = trforc;
-                st.xssitr[is] = trloc.xt;
+                st.xssitr[is] = trloc.xi_transition;
 
                 // interpolate airfoil geometry to find transition x/c (for user output)
-                let str = if is == 1 { st.sst - trloc.xt } else { st.sst + trloc.xt };
+                let str = if is == 1 {
+                    st.sst - trloc.xi_transition
+                } else {
+                    st.sst + trloc.xi_transition
+                };
                 let chx = st.xte - st.xle;
                 let chy = st.yte - st.yle;
                 let chsq = chx * chx + chy * chy;
@@ -407,7 +419,7 @@ pub fn setbl(st: &mut BlState) -> SetblResult {
             dds1 = dds2;
 
             if ibl == st.itran[is] && s2.xi > s1.xi {
-                let frac = (trloc.xt - s1.xi) / (s2.xi - s1.xi);
+                let frac = (trloc.xi_transition - s1.xi) / (s2.xi - s1.xi);
                 st.tindex[is] = if is == 1 {
                     (st.ist as i64 - st.itran[is] as i64 + 3) as f64 - frac
                 } else {

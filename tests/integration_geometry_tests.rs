@@ -297,7 +297,7 @@ fn test_panel_method_cambered_lift() {
 // Boundary Layer Validation Tests
 // ============================================================================
 
-use yfoil::bl::system::dampl;
+use yfoil::bl::system::amplification_rate;
 use yfoil::bl::{cf_lam, hkin, hs_lam};
 
 /// Test Blasius flat plate solution for laminar boundary layer
@@ -369,7 +369,7 @@ fn test_laminar_amplification_off_below_critical() {
     let theta = 0.001; // Small momentum thickness
 
     // At low Re_θ (below ~200 for Blasius)
-    let ax = dampl(hk_blasius, theta, 100.0).ax;
+    let ax = amplification_rate(hk_blasius, theta, 100.0).rate;
     assert_eq!(ax, 0.0, "Amplification should be 0 below critical Re_θ");
 }
 
@@ -380,7 +380,7 @@ fn test_laminar_amplification_on_above_critical() {
     let theta = 0.001;
 
     // At high Re_θ (well above critical)
-    let ax = dampl(hk_blasius, theta, 5000.0).ax;
+    let ax = amplification_rate(hk_blasius, theta, 5000.0).rate;
     assert!(ax > 0.0, "Amplification should be positive above critical Re_θ");
 }
 

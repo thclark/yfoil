@@ -415,7 +415,7 @@ const MARK_R: f64 = 4.5;
 enum MarkKind {
     Stagnation,
     Transition,
-    ForcedTransition,
+    Forced,
     Separation,
     Reattachment,
 }
@@ -424,7 +424,7 @@ impl MarkKind {
     const ALL: [MarkKind; 5] = [
         MarkKind::Stagnation,
         MarkKind::Transition,
-        MarkKind::ForcedTransition,
+        MarkKind::Forced,
         MarkKind::Separation,
         MarkKind::Reattachment,
     ];
@@ -433,7 +433,7 @@ impl MarkKind {
         match self {
             MarkKind::Stagnation => MarkerShape::Circle,
             MarkKind::Transition => MarkerShape::Square,
-            MarkKind::ForcedTransition => MarkerShape::Diamond,
+            MarkKind::Forced => MarkerShape::Diamond,
             MarkKind::Separation => MarkerShape::Triangle,
             MarkKind::Reattachment => MarkerShape::TriangleDown,
         }
@@ -443,7 +443,7 @@ impl MarkKind {
         match self {
             MarkKind::Stagnation => "stagnation",
             MarkKind::Transition => "transition",
-            MarkKind::ForcedTransition => "forced transition",
+            MarkKind::Forced => "forced transition",
             MarkKind::Separation => "separation",
             MarkKind::Reattachment => "reattachment",
         }
@@ -693,7 +693,7 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
             if config.markers.transition {
                 for (is, m) in [1, 2].into_iter().zip(&bl.transition) {
                     let kind = if m.forced {
-                        MarkKind::ForcedTransition
+                        MarkKind::Forced
                     } else {
                         MarkKind::Transition
                     };

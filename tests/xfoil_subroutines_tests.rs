@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use yfoil::bl::system::dampl;
+use yfoil::bl::system::amplification_rate;
 use yfoil::bl::system::{FlowParameters, FlowRegime, StationState};
 use yfoil::bl::{cf_lam, cf_turb, di_lam, hkin, hs_lam, hs_turb};
 
@@ -611,8 +611,8 @@ fn test_dampl_all_fixtures() {
     let mut failures = Vec::new();
 
     for (i, fixture) in fixtures.iter().enumerate() {
-        let r = dampl(fixture.input.hk, fixture.input.th, fixture.input.rt);
-        let (ax, ax_hk, ax_th, ax_rt) = (r.ax, r.ax_hk, r.ax_th, r.ax_rt);
+        let r = amplification_rate(fixture.input.hk, fixture.input.th, fixture.input.rt);
+        let (ax, ax_hk, ax_th, ax_rt) = (r.rate, r.rate_d_hk, r.rate_d_theta, r.rate_d_retheta);
 
         let err_ax = relative_error(fixture.output.ax, ax);
         let err_ax_hk = relative_error(fixture.output.ax_hk, ax_hk);
