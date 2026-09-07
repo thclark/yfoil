@@ -1,83 +1,83 @@
 //! Velocity layer: QISET, UICALC, UECALC, QVFUE, GAMQV, UESET, DSSET (xpanel.f).
-//! Line-for-line translations on the 1-based `BlState`.
+//! Line-for-line translations on the 1-based `SolverState`.
 
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 
 /// QISET: inviscid panel tangential velocity for the current alpha from the alpha=0,90 solutions.
-pub fn qiset(st: &mut BlState, alfa: f64) {
+pub fn qiset(st: &mut SolverState, alfa: f64) {
     let cosa = alfa.cos();
     let sina = alfa.sin();
-    for i in 1..=(st.n + st.nw) {
-        st.qinv[i] = cosa * st.qinvu[1][i] + sina * st.qinvu[2][i];
-        st.qinv_a[i] = -sina * st.qinvu[1][i] + cosa * st.qinvu[2][i];
+    for i in 1..=(st.n_foil_nodes + st.n_wake_nodes) {
+        st.q_inviscid[i] = cosa * st.q_inviscid_basis[1][i] + sina * st.q_inviscid_basis[2][i];
+        st.q_inviscid_d_alpha[i] = -sina * st.q_inviscid_basis[1][i] + cosa * st.q_inviscid_basis[2][i];
     }
 }
 
 /// UICALC: inviscid Ue from panel inviscid tangential velocity.
-pub fn uicalc(st: &mut BlState) {
+pub fn uicalc(st: &mut SolverState) {
     for is in 1..=2 {
-        st.uinv[is][1] = 0.0;
-        st.uinv_a[is][1] = 0.0;
-        for ibl in 2..=st.nbl[is] {
-            let i = st.ipan[is][ibl];
-            st.uinv[is][ibl] = st.vti[is][ibl] * st.qinv[i];
-            st.uinv_a[is][ibl] = st.vti[is][ibl] * st.qinv_a[i];
+        st.ue_inviscid[is][1] = 0.0;
+        st.ue_inviscid_d_alpha[is][1] = 0.0;
+        for ibl in 2..=st.n_stations[is] {
+            let i = st.i_node[is][ibl];
+            st.ue_inviscid[is][ibl] = st.velocity_sign[is][ibl] * st.q_inviscid[i];
+            st.ue_inviscid_d_alpha[is][ibl] = st.velocity_sign[is][ibl] * st.q_inviscid_d_alpha[i];
         }
     }
 }
 
 /// UECALC: viscous Ue from panel viscous tangential velocity.
-pub fn uecalc(st: &mut BlState) {
+pub fn uecalc(st: &mut SolverState) {
     for is in 1..=2 {
-        st.uedg[is][1] = 0.0;
-        for ibl in 2..=st.nbl[is] {
-            let i = st.ipan[is][ibl];
-            st.uedg[is][ibl] = st.vti[is][ibl] * st.qvis[i];
+        st.ue[is][1] = 0.0;
+        for ibl in 2..=st.n_stations[is] {
+            let i = st.i_node[is][ibl];
+            st.ue[is][ibl] = st.velocity_sign[is][ibl] * st.q_viscous[i];
         }
     }
 }
 
 /// QVFUE: panel viscous tangential velocity from viscous Ue.
-pub fn qvfue(st: &mut BlState) {
+pub fn qvfue(st: &mut SolverState) {
     for is in 1..=2 {
-        for ibl in 2..=st.nbl[is] {
-            let i = st.ipan[is][ibl];
-            st.qvis[i] = st.vti[is][ibl] * st.uedg[is][ibl];
+        for ibl in 2..=st.n_stations[is] {
+            let i = st.i_node[is][ibl];
+            st.q_viscous[i] = st.velocity_sign[is][ibl] * st.ue[is][ibl];
         }
     }
 }
 
 /// GAMQV: GAM from QVIS (airfoil nodes only), GAM_A from QINV_A.
-pub fn gamqv(st: &mut BlState) {
-    for i in 1..=st.n {
-        st.gam[i] = st.qvis[i];
-        st.gam_a[i] = st.qinv_a[i];
+pub fn gamqv(st: &mut SolverState) {
+    for i in 1..=st.n_foil_nodes {
+        st.gamma[i] = st.q_viscous[i];
+        st.gamma_d_alpha[i] = st.q_inviscid_d_alpha[i];
     }
 }
 
 /// UESET: Ue from inviscid Ue plus all source (mass defect) influence through `st.dij`.
-pub fn ueset(st: &mut BlState) {
+pub fn ueset(st: &mut SolverState) {
     for is in 1..=2 {
-        for ibl in 2..=st.nbl[is] {
-            let i = st.ipan[is][ibl];
+        for ibl in 2..=st.n_stations[is] {
+            let i = st.i_node[is][ibl];
             let mut dui = 0.0;
             for js in 1..=2 {
-                for jbl in 2..=st.nbl[js] {
-                    let j = st.ipan[js][jbl];
-                    let ue_m = -st.vti[is][ibl] * st.vti[js][jbl] * st.dij[i][j];
-                    dui += ue_m * st.mass[js][jbl];
+                for jbl in 2..=st.n_stations[js] {
+                    let j = st.i_node[js][jbl];
+                    let ue_m = -st.velocity_sign[is][ibl] * st.velocity_sign[js][jbl] * st.dij[i][j];
+                    dui += ue_m * st.mass_defect[js][jbl];
                 }
             }
-            st.uedg[is][ibl] = st.uinv[is][ibl] + dui;
+            st.ue[is][ibl] = st.ue_inviscid[is][ibl] + dui;
         }
     }
 }
 
 /// DSSET: displacement thickness from mass defect and Ue.
-pub fn dsset(st: &mut BlState) {
+pub fn dsset(st: &mut SolverState) {
     for is in 1..=2 {
-        for ibl in 2..=st.nbl[is] {
-            st.dstr[is][ibl] = st.mass[is][ibl] / st.uedg[is][ibl];
+        for ibl in 2..=st.n_stations[is] {
+            st.dstar[is][ibl] = st.mass_defect[is][ibl] / st.ue[is][ibl];
         }
     }
 }
@@ -87,10 +87,10 @@ mod tests {
     use super::*;
     use crate::solver::pointers::{iblpan, iblsys};
 
-    fn small_state() -> BlState {
+    fn small_state() -> SolverState {
         let (n, nw) = (12, 4);
-        let mut st = BlState::empty(n, nw);
-        st.ist = 6;
+        let mut st = SolverState::empty(n, nw);
+        st.i_stagnation_node = 6;
         iblpan(&mut st);
         iblsys(&mut st);
         st
@@ -101,20 +101,20 @@ mod tests {
     fn qvfue_uecalc_round_trip_is_identity() {
         let mut st = small_state();
         for is in 1..=2 {
-            for ibl in 2..=st.nbl[is] {
-                st.uedg[is][ibl] = 0.1 * ibl as f64 + is as f64;
+            for ibl in 2..=st.n_stations[is] {
+                st.ue[is][ibl] = 0.1 * ibl as f64 + is as f64;
             }
         }
-        let before = st.uedg.clone();
+        let before = st.ue.clone();
         qvfue(&mut st);
         gamqv(&mut st);
         uecalc(&mut st);
         for is in 1..=2 {
-            for ibl in 2..=st.nbl[is] {
-                assert_eq!(st.uedg[is][ibl].to_bits(), before[is][ibl].to_bits());
-                let i = st.ipan[is][ibl];
-                if i <= st.n {
-                    assert_eq!(st.gam[i].to_bits(), st.qvis[i].to_bits());
+            for ibl in 2..=st.n_stations[is] {
+                assert_eq!(st.ue[is][ibl].to_bits(), before[is][ibl].to_bits());
+                let i = st.i_node[is][ibl];
+                if i <= st.n_foil_nodes {
+                    assert_eq!(st.gamma[i].to_bits(), st.q_viscous[i].to_bits());
                 }
             }
         }
@@ -124,22 +124,22 @@ mod tests {
     #[test]
     fn ueset_and_dsset_degenerate_cases() {
         let mut st = small_state();
-        let np = st.n + st.nw;
+        let np = st.n_foil_nodes + st.n_wake_nodes;
         st.dij = vec![vec![0.0; np + 1]; np + 1];
         for is in 1..=2 {
-            for ibl in 2..=st.nbl[is] {
-                st.uinv[is][ibl] = 1.0 + 0.01 * ibl as f64;
-                st.mass[is][ibl] = 0.5 * ibl as f64;
+            for ibl in 2..=st.n_stations[is] {
+                st.ue_inviscid[is][ibl] = 1.0 + 0.01 * ibl as f64;
+                st.mass_defect[is][ibl] = 0.5 * ibl as f64;
             }
         }
         ueset(&mut st);
         dsset(&mut st);
         for is in 1..=2 {
-            for ibl in 2..=st.nbl[is] {
-                assert_eq!(st.uedg[is][ibl].to_bits(), st.uinv[is][ibl].to_bits());
+            for ibl in 2..=st.n_stations[is] {
+                assert_eq!(st.ue[is][ibl].to_bits(), st.ue_inviscid[is][ibl].to_bits());
                 assert_eq!(
-                    st.dstr[is][ibl].to_bits(),
-                    (st.mass[is][ibl] / st.uedg[is][ibl]).to_bits()
+                    st.dstar[is][ibl].to_bits(),
+                    (st.mass_defect[is][ibl] / st.ue[is][ibl]).to_bits()
                 );
             }
         }

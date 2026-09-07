@@ -1,11 +1,11 @@
 //! MRCHUE (xbl.f): march the BLs and wake in direct mode using the UEDG array, switching to an
 //! inverse (prescribed-Hk) step where the direct step would separate. Line-for-line on
-//! `BlState`, with an optional trace at the same points as the reference instrumentation.
+//! `SolverState`, with an optional trace at the same points as the reference instrumentation.
 
 use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
 use crate::bl::gauss::gauss_solve_4x4;
 use crate::bl::system::{check_transition, limit_dstar, FlowParameters, IntervalSystem, TransitionCheck};
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 use crate::solver::pointers::xifset;
 
 /// One Newton iteration of one station, as the reference trace records it.
@@ -46,7 +46,12 @@ pub struct MrchueTrace {
 
 /// MRCHUE. Requires the pointer layer (XSSI, IPAN, IBLTE, NBL, WGAP), UEDG initialised
 /// (UINV on the first call), ANTE, XSTRIP and the transition thresholds.
-pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], mut trace: Option<&mut MrchueTrace>) {
+pub fn march_direct(
+    st: &mut SolverState,
+    params: &FlowParameters,
+    acrit: [f64; 3],
+    mut trace: Option<&mut MrchueTrace>,
+) {
     // shape parameters for separation criteria
     let hlmax = 3.8;
     let htmax = 2.5;
@@ -54,9 +59,9 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
     // COM1/COM2 and XT are COMMON in XFOIL: they persist across sides (the side-2 similarity
     // station's BLSYS copies COM2 into COM1 before anything reads it, so this is trace-faithful
     // rather than algorithmic).
-    let mut s1 = std::mem::take(&mut st.com1);
-    let mut s2 = std::mem::take(&mut st.com2);
-    let mut trloc = std::mem::take(&mut st.trloc);
+    let mut s1 = std::mem::take(&mut st.station1);
+    let mut s2 = std::mem::take(&mut st.station2);
+    let mut trloc = std::mem::take(&mut st.transition);
     for is in 1..=2 {
         let amcrit = acrit[is];
 
@@ -65,8 +70,8 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
 
         // initialize similarity station with Thwaites' formula
         let ibl0 = 2;
-        let xsi0 = st.xssi[is][ibl0];
-        let uei0 = st.uedg[is][ibl0];
+        let xsi0 = st.xi[is][ibl0];
+        let uei0 = st.ue[is][ibl0];
         let bule = 1.0_f64;
         let ucon = uei0 / xsi0.powf(bule);
         let tsq = 0.45 / (ucon * (5.0 * bule + 1.0) * params.re) * xsi0.powf(1.0 - bule);
@@ -79,7 +84,7 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
 
         let mut tran = false;
         let mut turb = false;
-        st.itran[is] = st.iblte[is];
+        st.i_transition_station[is] = st.i_te_station[is];
 
         let mut sys = IntervalSystem::default();
         let mut trforc = false;
@@ -87,15 +92,19 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
         let (mut cte, mut tte, mut dte) = (0.0, 0.0, 0.0);
 
         // march downstream
-        for ibl in 2..=st.nbl[is] {
+        for ibl in 2..=st.n_stations[is] {
             let ibm = ibl - 1;
             let simi = ibl == 2;
-            let wake = ibl > st.iblte[is];
+            let wake = ibl > st.i_te_station[is];
 
             // prescribed quantities
-            let xsi = st.xssi[is][ibl];
-            let mut uei = st.uedg[is][ibl];
-            let dswaki = if wake { st.wgap[ibl - st.iblte[is]] } else { 0.0 };
+            let xsi = st.xi[is][ibl];
+            let mut uei = st.ue[is][ibl];
+            let dswaki = if wake {
+                st.wake_gap[ibl - st.i_te_station[is]]
+            } else {
+                0.0
+            };
 
             let mut direct = true;
             let mut htarg = 0.0;
@@ -109,7 +118,11 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                 s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, params);
                 s2.set_kinematic_variables(params);
                 // the reference trace records AMPL1/AMPL2/XT/TRAN/ITRAN here, before TRCHEK
-                let pre = ([s1.ampl, s2.ampl, trloc.xi_transition, amcrit], tran, st.itran[is]);
+                let pre = (
+                    [s1.ampl, s2.ampl, trloc.xi_transition, amcrit],
+                    tran,
+                    st.i_transition_station[is],
+                );
 
                 // check for transition and set appropriate flags and things
                 if !simi && !turb {
@@ -118,7 +131,7 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                             ami = ampl2;
                             tran = false;
                             trloc.xi_transition = s2.xi; // TRCHEK2 leaves XT = X2 (and the XT_* as they were)
-                            st.itran[is] = ibl + 2;
+                            st.i_transition_station[is] = ibl + 2;
                         }
                         TransitionCheck::Free {
                             transition: location,
@@ -128,7 +141,7 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                             tran = true;
                             trforc = false;
                             trloc = location;
-                            st.itran[is] = ibl;
+                            st.i_transition_station[is] = ibl;
                             if cti <= 0.0 {
                                 cti = 0.03;
                                 s2.sqrtctau = cti;
@@ -138,7 +151,7 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                             tran = true;
                             trforc = true;
                             trloc = location;
-                            st.itran[is] = ibl;
+                            st.i_transition_station[is] = ibl;
                             if cti <= 0.0 {
                                 cti = 0.03;
                                 s2.sqrtctau = cti;
@@ -154,11 +167,11 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                     turbulent: turb,
                     wake,
                 };
-                if ibl == st.iblte[is] + 1 {
-                    tte = st.thet[1][st.iblte[1]] + st.thet[2][st.iblte[2]];
-                    dte = st.dstr[1][st.iblte[1]] + st.dstr[2][st.iblte[2]] + st.ante;
-                    cte = (st.ctau[1][st.iblte[1]] * st.thet[1][st.iblte[1]]
-                        + st.ctau[2][st.iblte[2]] * st.thet[2][st.iblte[2]])
+                if ibl == st.i_te_station[is] + 1 {
+                    tte = st.theta[1][st.i_te_station[1]] + st.theta[2][st.i_te_station[2]];
+                    dte = st.dstar[1][st.i_te_station[1]] + st.dstar[2][st.i_te_station[2]] + st.te_thickness_normal;
+                    cte = (st.sqrtctau[1][st.i_te_station[1]] * st.theta[1][st.i_te_station[1]]
+                        + st.sqrtctau[2][st.i_te_station[2]] * st.theta[2][st.i_te_station[2]])
                         / tte;
                     assemble_te_system(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
@@ -218,16 +231,16 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                 if direct {
                     // determine max changes and underrelax if necessary
                     dmax = (r[1] / thi).abs().max((r[2] / dsi).abs());
-                    if ibl < st.itran[is] {
+                    if ibl < st.i_transition_station[is] {
                         dmax = dmax.max((r[0] / 10.0).abs());
                     }
-                    if ibl >= st.itran[is] {
+                    if ibl >= st.i_transition_station[is] {
                         dmax = dmax.max((r[0] / cti).abs());
                     }
                     rlx = if dmax > 0.3 { 0.3 / dmax } else { 1.0 };
 
                     // see if direct mode is not applicable
-                    if ibl != st.iblte[is] + 1 {
+                    if ibl != st.i_te_station[is] + 1 {
                         // calculate resulting kinematic shape parameter Hk
                         let msq = uei * uei * params.h_stagnation_inv
                             / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
@@ -235,24 +248,32 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                         let (hktest, _, _) = crate::bl::hkin(htest, msq);
 
                         // decide whether to do direct or inverse problem based on Hk
-                        let hmax = if ibl < st.itran[is] { hlmax } else { htmax };
+                        let hmax = if ibl < st.i_transition_station[is] {
+                            hlmax
+                        } else {
+                            htmax
+                        };
                         direct = hktest < hmax;
                     }
 
                     if direct {
                         // update as usual
-                        if ibl >= st.itran[is] {
+                        if ibl >= st.i_transition_station[is] {
                             cti += rlx * r[0];
                         }
                         thi += rlx * r[1];
                         dsi += rlx * r[2];
                     } else {
                         // set prescribed Hk for inverse calculation at the current station
-                        let hmax = if ibl < st.itran[is] { hlmax } else { htmax };
-                        htarg = if ibl < st.itran[is] {
+                        let hmax = if ibl < st.i_transition_station[is] {
+                            hlmax
+                        } else {
+                            htmax
+                        };
+                        htarg = if ibl < st.i_transition_station[is] {
                             // laminar case: relatively slow increase in Hk downstream
                             s1.hk + 0.03 * (s2.xi - s1.xi) / s1.theta
-                        } else if ibl == st.itran[is] {
+                        } else if ibl == st.i_transition_station[is] {
                             // transition interval: weighted laminar and turbulent case
                             s1.hk
                                 + (0.03 * (trloc.xi_transition - s1.xi) - 0.15 * (s2.xi - trloc.xi_transition))
@@ -285,12 +306,12 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                 } else {
                     // added Ue clamp   MD  3 Apr 03
                     dmax = (r[1] / thi).abs().max((r[2] / dsi).abs()).max((r[3] / uei).abs());
-                    if ibl >= st.itran[is] {
+                    if ibl >= st.i_transition_station[is] {
                         dmax = dmax.max((r[0] / cti).abs());
                     }
                     rlx = if dmax > 0.3 { 0.3 / dmax } else { 1.0 };
                     // update variables
-                    if ibl >= st.itran[is] {
+                    if ibl >= st.i_transition_station[is] {
                         cti += rlx * r[0];
                     }
                     thi += rlx * r[1];
@@ -299,11 +320,11 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                 }
 
                 // eliminate absurd transients
-                if ibl >= st.itran[is] {
+                if ibl >= st.i_transition_station[is] {
                     cti = cti.min(0.30);
                     cti = cti.max(0.0000001);
                 }
-                let hklim = if ibl <= st.iblte[is] { 1.02 } else { 1.00005 };
+                let hklim = if ibl <= st.i_te_station[is] { 1.02 } else { 1.00005 };
                 let msq = uei * uei * params.h_stagnation_inv
                     / (params.gamma_gas_m1 * (1.0 - 0.5 * uei * uei * params.h_stagnation_inv));
                 let mut dsw = dsi - dswaki;
@@ -331,27 +352,27 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                 if dmax > 0.1 {
                     // the current solution is garbage --> extrapolate values instead
                     if ibl > 3 {
-                        if ibl <= st.iblte[is] {
-                            thi = st.thet[is][ibm] * (st.xssi[is][ibl] / st.xssi[is][ibm]).powf(0.5);
-                            dsi = st.dstr[is][ibm] * (st.xssi[is][ibl] / st.xssi[is][ibm]).powf(0.5);
-                        } else if ibl == st.iblte[is] + 1 {
+                        if ibl <= st.i_te_station[is] {
+                            thi = st.theta[is][ibm] * (st.xi[is][ibl] / st.xi[is][ibm]).powf(0.5);
+                            dsi = st.dstar[is][ibm] * (st.xi[is][ibl] / st.xi[is][ibm]).powf(0.5);
+                        } else if ibl == st.i_te_station[is] + 1 {
                             cti = cte;
                             thi = tte;
                             dsi = dte;
                         } else {
-                            thi = st.thet[is][ibm];
-                            let ratlen = (st.xssi[is][ibl] - st.xssi[is][ibm]) / (10.0 * st.dstr[is][ibm]);
-                            dsi = (st.dstr[is][ibm] + thi * ratlen) / (1.0 + ratlen);
+                            thi = st.theta[is][ibm];
+                            let ratlen = (st.xi[is][ibl] - st.xi[is][ibm]) / (10.0 * st.dstar[is][ibm]);
+                            dsi = (st.dstar[is][ibm] + thi * ratlen) / (1.0 + ratlen);
                         }
-                        if ibl == st.itran[is] {
+                        if ibl == st.i_transition_station[is] {
                             cti = 0.05;
                         }
-                        if ibl > st.itran[is] {
-                            cti = st.ctau[is][ibm];
+                        if ibl > st.i_transition_station[is] {
+                            cti = st.sqrtctau[is][ibm];
                         }
-                        uei = st.uedg[is][ibl];
-                        if ibl > 2 && ibl < st.nbl[is] {
-                            uei = 0.5 * (st.uedg[is][ibl - 1] + st.uedg[is][ibl + 1]);
+                        uei = st.ue[is][ibl];
+                        if ibl > 2 && ibl < st.n_stations[is] {
+                            uei = 0.5 * (st.ue[is][ibl - 1] + st.ue[is][ibl + 1]);
                         }
                     }
                 }
@@ -365,7 +386,7 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                             ami = ampl2;
                             tran = false;
                             trloc.xi_transition = s2.xi;
-                            st.itran[is] = ibl + 2;
+                            st.i_transition_station[is] = ibl + 2;
                         }
                         TransitionCheck::Free {
                             transition: location,
@@ -375,13 +396,13 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                             tran = true;
                             trforc = false;
                             trloc = location;
-                            st.itran[is] = ibl;
+                            st.i_transition_station[is] = ibl;
                         }
                         TransitionCheck::Forced { transition: location } => {
                             tran = true;
                             trforc = true;
                             trloc = location;
-                            st.itran[is] = ibl;
+                            st.i_transition_station[is] = ibl;
                         }
                     }
                     s2.ampl = ami;
@@ -389,7 +410,7 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
                 // set all other extrapolated values for current station (BLVAR/BLMID)
                 let ityp = if wake {
                     crate::bl::system::FlowRegime::Wake
-                } else if ibl < st.itran[is] {
+                } else if ibl < st.i_transition_station[is] {
                     crate::bl::system::FlowRegime::Laminar
                 } else {
                     crate::bl::system::FlowRegime::Turbulent
@@ -400,16 +421,16 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
             let _ = hk2_snapshot;
 
             // label 110: store primary variables
-            st.ctau[is][ibl] = if ibl < st.itran[is] { ami } else { cti };
-            st.thet[is][ibl] = thi;
-            st.dstr[is][ibl] = dsi;
-            st.uedg[is][ibl] = uei;
-            st.mass[is][ibl] = dsi * uei;
+            st.sqrtctau[is][ibl] = if ibl < st.i_transition_station[is] { ami } else { cti };
+            st.theta[is][ibl] = thi;
+            st.dstar[is][ibl] = dsi;
+            st.ue[is][ibl] = uei;
+            st.mass_defect[is][ibl] = dsi * uei;
             st.tau[is][ibl] = 0.5 * s2.rho * s2.ue * s2.ue * s2.cf;
-            st.dis[is][ibl] = s2.rho * s2.ue * s2.ue * s2.ue * s2.cdiss * s2.hstar * 0.5;
-            st.ctq[is][ibl] = s2.sqrtctaueq;
-            st.delt[is][ibl] = s2.delta;
-            st.tstr[is][ibl] = s2.hstar * s2.theta;
+            st.dissipation[is][ibl] = s2.rho * s2.ue * s2.ue * s2.ue * s2.cdiss * s2.hstar * 0.5;
+            st.sqrtctaueq[is][ibl] = s2.sqrtctaueq;
+            st.delta[is][ibl] = s2.delta;
+            st.thetastar[is][ibl] = s2.hstar * s2.theta;
 
             // set "1" variables to "2" variables for next streamwise station
             s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, params);
@@ -417,20 +438,20 @@ pub fn march_direct(st: &mut BlState, params: &FlowParameters, acrit: [f64; 3], 
             s1 = s2.clone();
 
             // turbulent intervals will follow transition interval or TE
-            if tran || ibl == st.iblte[is] {
+            if tran || ibl == st.i_te_station[is] {
                 turb = true;
                 // save transition location (TFORCE, XSSITR)
                 let _ = trforc;
             }
             tran = false;
 
-            if ibl == st.iblte[is] {
-                thi = st.thet[1][st.iblte[1]] + st.thet[2][st.iblte[2]];
-                dsi = st.dstr[1][st.iblte[1]] + st.dstr[2][st.iblte[2]] + st.ante;
+            if ibl == st.i_te_station[is] {
+                thi = st.theta[1][st.i_te_station[1]] + st.theta[2][st.i_te_station[2]];
+                dsi = st.dstar[1][st.i_te_station[1]] + st.dstar[2][st.i_te_station[2]] + st.te_thickness_normal;
             }
         }
     }
-    st.com1 = s1;
-    st.com2 = s2;
-    st.trloc = trloc;
+    st.station1 = s1;
+    st.station2 = s2;
+    st.transition = trloc;
 }

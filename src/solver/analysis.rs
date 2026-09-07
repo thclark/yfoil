@@ -1,10 +1,10 @@
-//! The OPER analysis driver on `BlState`: one persistent session per airfoil and flow
+//! The OPER analysis driver on `SolverState`: one persistent session per airfoil and flow
 //! specification, `alfa` = XFOIL's `ALFA` command (SPECAL, then VISCAL when viscous),
 //! `init` = XFOIL's `INIT`, and the polar sweep as CLAUDE.md prescribes it (0° → max,
 //! reinitialise, −step → min, stitched ascending).
 
 use crate::geometry::PaneledAirfoil;
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::specal::{alfa_command, aseq_point, cl_command};
 use crate::solver::viscal::{solve_viscous, IterationRecord};
@@ -79,7 +79,7 @@ pub struct OperatingPoint {
 /// in COMMON between OPER commands.
 #[derive(Debug, Clone)]
 pub struct Session {
-    pub st: BlState,
+    pub st: SolverState,
     pub sys: Option<InviscidSystem>,
     pub spec: FlowSpec,
 }
@@ -89,19 +89,19 @@ impl Session {
     pub fn new(airfoil: &PaneledAirfoil, spec: FlowSpec) -> Self {
         // NW = N/12 + 10*INT(WAKLEN)
         let nw = airfoil.n / 12 + 10 * (spec.waklen as usize);
-        let mut st = BlState::from_airfoil(airfoil, nw);
-        st.reinf1 = spec.re;
-        st.reinf = spec.re;
-        st.minf1 = spec.mach;
-        st.minf = spec.mach;
-        st.matyp = spec.matyp;
-        st.retyp = spec.retyp;
-        st.idamp = usize::from(spec.idamp);
-        st.acrit = [0.0, spec.ncrit, spec.ncrit];
-        st.vaccel = spec.vaccel;
-        st.xstrip = [0.0, spec.xstrip[0], spec.xstrip[1]];
-        st.lvisc = spec.re > 0.0;
-        st.lalfa = true;
+        let mut st = SolverState::from_foil(airfoil, nw);
+        st.re_cl1 = spec.re;
+        st.re = spec.re;
+        st.mach_cl1 = spec.mach;
+        st.mach = spec.mach;
+        st.mach_cl_dependence = spec.matyp;
+        st.re_cl_dependence = spec.retyp;
+        st.amplification_model = usize::from(spec.idamp);
+        st.ncrit = [0.0, spec.ncrit, spec.ncrit];
+        st.elimination_threshold = spec.vaccel;
+        st.x_trip = [0.0, spec.xstrip[0], spec.xstrip[1]];
+        st.viscous = spec.re > 0.0;
+        st.alpha_specified = true;
         st.qinf = 1.0;
         Self { st, sys: None, spec }
     }
@@ -109,10 +109,10 @@ impl Session {
     /// OPER `INIT`: BL initialisation flag toggled off so the next VISCAL re-marches with
     /// MRCHUE, and the pointer layer is rebuilt.
     pub fn init(&mut self) {
-        self.st.lblini = !self.st.lblini;
-        if !self.st.lblini {
+        self.st.bl_initialised = !self.st.bl_initialised;
+        if !self.st.bl_initialised {
             // 'BLs will be initialized on next point'
-            self.st.lipan = false;
+            self.st.pointers_built = false;
         }
     }
 
@@ -137,7 +137,7 @@ impl Session {
 
     fn run_viscal(&mut self, niter: usize) -> OperatingPoint {
         let mut trace = Vec::new();
-        let converged = if self.st.lvisc {
+        let converged = if self.st.viscous {
             solve_viscous(
                 &mut self.st,
                 self.sys.as_mut(),
@@ -150,16 +150,16 @@ impl Session {
         };
         let st = &self.st;
         OperatingPoint {
-            alpha: st.alfa,
+            alpha: st.alpha,
             cl: st.cl,
             cd: st.cd,
-            cdf: st.cdf,
-            cdp: st.cdp,
+            cdf: st.cd_friction,
+            cdp: st.cd_pressure,
             cm: st.cm,
-            cl_alf: st.cl_alf,
-            xtr_upper: st.xoctr[1],
-            xtr_lower: st.xoctr[2],
-            itran: st.itran,
+            cl_alf: st.cl_d_alpha,
+            xtr_upper: st.x_transition[1],
+            xtr_lower: st.x_transition[2],
+            itran: st.i_transition_station,
             converged,
             iterations: trace.len(),
             rmsbl: trace.last().map(|t| t.residual).unwrap_or(0.0),
@@ -286,7 +286,7 @@ pub fn compute_polar_with(
             observe(session, &p);
             let conv = p.converged;
             record(p, points, failed);
-            if session.st.lvisc && !conv {
+            if session.st.viscous && !conv {
                 iseqex += 1;
                 if iseqex >= config.nseqex {
                     // 'Sequence halted since previous N points did not converge'

@@ -43,48 +43,51 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     let st = &session.st;
 
     // geometry: airfoil nodes and the wake, as the solver holds them
-    assert_eq!(out.geometry.n(), st.n);
-    assert_eq!(out.geometry.x, st.x[1..=st.n]);
-    assert_eq!(out.geometry.nx, st.nx[1..=st.n]);
+    assert_eq!(out.geometry.n(), st.n_foil_nodes);
+    assert_eq!(out.geometry.x, st.x[1..=st.n_foil_nodes]);
+    assert_eq!(out.geometry.nx, st.normal_x[1..=st.n_foil_nodes]);
     let wake = out.geometry.wake.as_ref().expect("viscous point has a wake");
-    assert_eq!(wake.x.len(), st.nw);
-    assert_eq!(wake.x, st.x[st.n + 1..=st.n + st.nw]);
-    assert_eq!(wake.nx, st.nx[st.n + 1..=st.n + st.nw]);
+    assert_eq!(wake.x.len(), st.n_wake_nodes);
+    assert_eq!(wake.x, st.x[st.n_foil_nodes + 1..=st.n_foil_nodes + st.n_wake_nodes]);
+    assert_eq!(
+        wake.nx,
+        st.normal_x[st.n_foil_nodes + 1..=st.n_foil_nodes + st.n_wake_nodes]
+    );
 
     // stations: side 1 and 2 up to IBLTE, the wake after it, one entry per column
     let bl = out.boundary_layer.as_ref().expect("viscous point has a boundary layer");
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         side.check_lengths().unwrap();
     }
-    assert_eq!(bl.iblte, [st.iblte[1], st.iblte[2]]);
-    assert_eq!(bl.upper.len(), st.iblte[1] - 1);
-    assert_eq!(bl.lower.len(), st.iblte[2] - 1);
-    assert_eq!(bl.wake.len(), st.nw);
-    assert_eq!(bl.nw, st.nw);
-    assert_eq!(bl.itran, [st.itran[1], st.itran[2]]);
+    assert_eq!(bl.iblte, [st.i_te_station[1], st.i_te_station[2]]);
+    assert_eq!(bl.upper.len(), st.i_te_station[1] - 1);
+    assert_eq!(bl.lower.len(), st.i_te_station[2] - 1);
+    assert_eq!(bl.wake.len(), st.n_wake_nodes);
+    assert_eq!(bl.nw, st.n_wake_nodes);
+    assert_eq!(bl.itran, [st.i_transition_station[1], st.i_transition_station[2]]);
     assert_eq!(bl.upper.ibl[0], 2);
-    assert_eq!(*bl.wake.ibl.first().unwrap(), st.iblte[2] + 1);
+    assert_eq!(*bl.wake.ibl.first().unwrap(), st.i_te_station[2] + 1);
 
     // node pointers map onto the geometry bit-exactly (wake nodes onto the wake)
     for side in [&bl.upper, &bl.lower] {
         for (k, &node) in side.node.iter().enumerate() {
-            assert!(node >= 1 && node <= st.n);
+            assert!(node >= 1 && node <= st.n_foil_nodes);
             assert_eq!(side.x[k].to_bits(), out.geometry.x[node - 1].to_bits());
             assert_eq!(side.y[k].to_bits(), out.geometry.y[node - 1].to_bits());
         }
     }
     for (k, &node) in bl.wake.node.iter().enumerate() {
-        assert!(node > st.n);
-        assert_eq!(bl.wake.x[k].to_bits(), wake.x[node - st.n - 1].to_bits());
+        assert!(node > st.n_foil_nodes);
+        assert_eq!(bl.wake.x[k].to_bits(), wake.x[node - st.n_foil_nodes - 1].to_bits());
     }
 
     // primaries are the state's arrays verbatim
     for (k, &ibl) in bl.upper.ibl.iter().enumerate() {
-        assert_eq!(bl.upper.thet[k].to_bits(), st.thet[1][ibl].to_bits());
-        assert_eq!(bl.upper.dstr[k].to_bits(), st.dstr[1][ibl].to_bits());
-        assert_eq!(bl.upper.uedg[k].to_bits(), st.uedg[1][ibl].to_bits());
+        assert_eq!(bl.upper.thet[k].to_bits(), st.theta[1][ibl].to_bits());
+        assert_eq!(bl.upper.dstr[k].to_bits(), st.dstar[1][ibl].to_bits());
+        assert_eq!(bl.upper.uedg[k].to_bits(), st.ue[1][ibl].to_bits());
         assert_eq!(bl.upper.stored.tau[k].to_bits(), st.tau[1][ibl].to_bits());
-        assert_eq!(bl.upper.stored.tstr[k].to_bits(), st.tstr[1][ibl].to_bits());
+        assert_eq!(bl.upper.stored.tstr[k].to_bits(), st.thetastar[1][ibl].to_bits());
     }
 
     // M = 0: the Karman–Tsien transformation is the identity and Hk = H, bit for bit
@@ -153,10 +156,10 @@ fn markers_and_wake_split_follow_xfoil() {
     // transition: XOCTR is what the operating point reports; the point lies on the surface
     assert_eq!(bl.transition[0].x_c.to_bits(), out.result.xtr_upper.to_bits());
     assert_eq!(bl.transition[1].x_c.to_bits(), out.result.xtr_lower.to_bits());
-    assert_eq!(bl.transition[0].station, st.itran[1]);
+    assert_eq!(bl.transition[0].station, st.i_transition_station[1]);
     assert!(!bl.transition[0].forced);
-    assert_eq!(bl.transition[0].s, st.sst - st.xssitr[1]);
-    assert_eq!(bl.transition[1].s, st.sst + st.xssitr[2]);
+    assert_eq!(bl.transition[0].s, st.s_stagnation - st.xi_transition[1]);
+    assert_eq!(bl.transition[1].s, st.s_stagnation + st.xi_transition[2]);
     for t in &bl.transition {
         assert!(
             (t.x - t.x_c).abs() < 1e-3,
@@ -165,8 +168,8 @@ fn markers_and_wake_split_follow_xfoil() {
     }
 
     // stagnation near the LE, on the spline
-    assert_eq!(bl.stagnation.ist, st.ist);
-    assert_eq!(bl.stagnation.sst, st.sst);
+    assert_eq!(bl.stagnation.ist, st.i_stagnation_node);
+    assert_eq!(bl.stagnation.sst, st.s_stagnation);
     assert!(bl.stagnation.x.abs() < 0.01);
 
     // CPDISP's split recomputes from the emitted columns; TESYS closes it at convergence
@@ -232,7 +235,7 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
     let mut visited: Vec<f64> = Vec::new();
     let result = compute_polar_with(&airfoil, &config, &mut |session, p| {
         visited.push(p.alpha.to_degrees());
-        assert_eq!(session.st.alfa, p.alpha, "the session is in the point's state");
+        assert_eq!(session.st.alpha, p.alpha, "the session is in the point's state");
         records.push(AnalysisOutput::from_session(
             session,
             p,

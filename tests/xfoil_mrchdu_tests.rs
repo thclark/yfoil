@@ -20,18 +20,22 @@ fn fixture_path(name: &str) -> PathBuf {
 
 fn check_state_after(k: usize) {
     let (mut st, params, _) = fixtures::state_before_setbl_march(k);
-    let acrit = st.acrit;
+    let acrit = st.ncrit;
     let o = parse_bl_dump(&fixture_path(&format!("mrchdu_output_{k}.dat")));
     march_prescribed_dstar(&mut st, &params, acrit, None);
-    assert_eq!(st.itran[1..], [o.int("ITRAN1"), o.int("ITRAN2")], "call {k}: ITRAN");
     assert_eq!(
-        st.tforce[1..],
+        st.i_transition_station[1..],
+        [o.int("ITRAN1"), o.int("ITRAN2")],
+        "call {k}: ITRAN"
+    );
+    assert_eq!(
+        st.transition_forced[1..],
         [o.logical("TFORCE1"), o.logical("TFORCE2")],
         "call {k}: TFORCE"
     );
     for is in 1..=2 {
         assert_within(
-            st.xssitr[is],
+            st.xi_transition[is],
             o.real(&format!("XSSITR{is}")),
             TOL_SOLVER,
             1.0,
@@ -44,20 +48,20 @@ fn check_state_after(k: usize) {
     let mut worst = (0.0_f64, "", 0, 0);
     for is in 1..=2 {
         let nbl = o.nbl(is);
-        assert_eq!(nbl, st.nbl[is], "call {k}: NBL({is})");
+        assert_eq!(nbl, st.n_stations[is], "call {k}: NBL({is})");
         for ibl in 2..=nbl {
             let ours = [
-                st.xssi[is][ibl],
-                st.uedg[is][ibl],
-                st.thet[is][ibl],
-                st.dstr[is][ibl],
-                st.ctau[is][ibl],
-                st.mass[is][ibl],
+                st.xi[is][ibl],
+                st.ue[is][ibl],
+                st.theta[is][ibl],
+                st.dstar[is][ibl],
+                st.sqrtctau[is][ibl],
+                st.mass_defect[is][ibl],
                 st.tau[is][ibl],
-                st.dis[is][ibl],
-                st.ctq[is][ibl],
-                st.delt[is][ibl],
-                st.tstr[is][ibl],
+                st.dissipation[is][ibl],
+                st.sqrtctaueq[is][ibl],
+                st.delta[is][ibl],
+                st.thetastar[is][ibl],
             ];
             let theirs = |j: usize, m: usize| if m < 6 { o.bl[is][j][m] } else { o.blx[is][j][m - 6] };
             for (m, name) in names.iter().enumerate() {
@@ -78,7 +82,7 @@ fn check_state_after(k: usize) {
         worst.1,
         worst.3,
         worst.2,
-        &st.itran[1..]
+        &st.i_transition_station[1..]
     );
 }
 
@@ -118,7 +122,7 @@ fn chk(mism: &mut Vec<String>, ctx: &str, a: &[f64], b: &[f64], what: &str, floo
 #[test]
 fn test_mrchdu_newton_trace_matches_xfoil_iteration_by_iteration() {
     let (mut st, params, _) = fixtures::state_before_setbl_march(1);
-    let acrit = st.acrit;
+    let acrit = st.ncrit;
     let xf = parse_mrchdu_trace(&fixture_path("xfoil_mrchdu_trace.dat"));
     let mut tr = MrchduTrace::default();
     march_prescribed_dstar(&mut st, &params, acrit, Some(&mut tr));

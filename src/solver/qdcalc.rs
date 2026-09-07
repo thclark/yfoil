@@ -1,7 +1,7 @@
 //! PSWLIN and QDCALC (xpanel.f): wake-source streamfunction sensitivities and the full
 //! (N+NW)×(N+NW) source influence matrix DIJ = dQtan/dSig.
 
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::ludcmp::baksub;
 use crate::solver::psilin::{pi_consts, psilin};
@@ -17,9 +17,9 @@ pub struct Pswlin {
 
 /// PSWLIN(I, XI, YI, NXI, NYI, PSI, PSI_NI): streamfunction at node I due to the wake
 /// sources. Note the branch-cut correction is `- (0.5-0.5*SGN)*PI` here (PSILIN has `+`).
-pub fn pswlin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> Pswlin {
-    let n = st.n;
-    let nw = st.nw;
+pub fn pswlin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> Pswlin {
+    let n = st.n_foil_nodes;
+    let nw = st.n_wake_nodes;
     let np = n + nw;
     let (pi, _hopi, qopi) = pi_consts();
     let (x, y) = (&st.x, &st.y);
@@ -44,7 +44,7 @@ pub fn pswlin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> P
 
         let dso = ((x[jo] - x[jp]).powi(2) + (y[jo] - y[jp]).powi(2)).sqrt();
         let dsio = 1.0 / dso;
-        let apan = st.apanel[jo];
+        let apan = st.panel_angle[jo];
 
         let rx1 = xi - x[jo];
         let ry1 = yi - y[jo];
@@ -104,8 +104,8 @@ pub fn pswlin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> P
         let dsm = ((x[jp] - x[jm]).powi(2) + (y[jp] - y[jm]).powi(2)).sqrt();
         let dsim = 1.0 / dsm;
 
-        let ssum = (st.sig[jp] - st.sig[jo]) * dsio + (st.sig[jp] - st.sig[jm]) * dsim;
-        let sdif = (st.sig[jp] - st.sig[jo]) * dsio - (st.sig[jp] - st.sig[jm]) * dsim;
+        let ssum = (st.sigma[jp] - st.sigma[jo]) * dsio + (st.sigma[jp] - st.sigma[jm]) * dsim;
+        let sdif = (st.sigma[jp] - st.sigma[jo]) * dsio - (st.sigma[jp] - st.sigma[jm]) * dsim;
 
         out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -138,8 +138,8 @@ pub fn pswlin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> P
         let dsp = ((x[jq] - x[jo]).powi(2) + (y[jq] - y[jo]).powi(2)).sqrt();
         let dsip = 1.0 / dsp;
 
-        let ssum = (st.sig[jq] - st.sig[jo]) * dsip + (st.sig[jp] - st.sig[jo]) * dsio;
-        let sdif = (st.sig[jq] - st.sig[jo]) * dsip - (st.sig[jp] - st.sig[jo]) * dsio;
+        let ssum = (st.sigma[jq] - st.sigma[jo]) * dsip + (st.sigma[jp] - st.sigma[jo]) * dsio;
+        let sdif = (st.sigma[jq] - st.sigma[jo]) * dsip - (st.sigma[jp] - st.sigma[jo]) * dsio;
 
         out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -161,9 +161,9 @@ pub fn pswlin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> P
 
 /// QDCALC: source panel influence coefficient matrix for the current airfoil and wake
 /// geometry, stored 1-based in `st.dij[i][j]` for i, j in 1..=N+NW.
-pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
-    let n = st.n;
-    let nw = st.nw;
+pub fn qdcalc(st: &mut SolverState, sys: &mut InviscidSystem) {
+    let n = st.n_foil_nodes;
+    let nw = st.n_wake_nodes;
     let np = n + nw;
     // DIJ persists in COMMON: the airfoil block (1..N, 1..N) is computed once (LADIJ) and only the
     // wake rows/columns are refreshed here when the wake moves (LWDIJ)
@@ -190,7 +190,7 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
 
     // set up coefficient matrix of dPsi/dm on airfoil surface
     for i in 1..=n {
-        let p = pswlin(st, i, st.x[i], st.y[i], st.nx[i], st.ny[i]);
+        let p = pswlin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
         for j in (n + 1)..=np {
             sys.bij[i][j] = -p.dzdm[j];
         }
@@ -201,7 +201,7 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
         sys.bij[n + 1][j] = 0.0;
     }
     // sharp TE gamma extrapolation also has no source influence
-    if st.sharp {
+    if st.sharp_te {
         for j in (n + 1)..=np {
             sys.bij[n][j] = 0.0;
         }
@@ -228,7 +228,7 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
     for i in (n + 1)..=np {
         let iw = i - n;
         // airfoil contribution at wake panel node
-        let p = psilin(st, i, st.x[i], st.y[i], st.nx[i], st.ny[i], true);
+        let p = psilin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], true);
         for j in 1..=n {
             cij[iw][j] = p.dqdg[j];
         }
@@ -236,7 +236,7 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
             st.dij[i][j] = p.dqdm[j];
         }
         // wake contribution
-        let w = pswlin(st, i, st.x[i], st.y[i], st.nx[i], st.ny[i]);
+        let w = pswlin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i]);
         for j in (n + 1)..=np {
             st.dij[i][j] = w.dqdm[j];
         }
@@ -268,5 +268,5 @@ pub fn qdcalc(st: &mut BlState, sys: &mut InviscidSystem) {
         st.dij[n + 1][j] = st.dij[n][j];
     }
     // LWDIJ = .TRUE.
-    st.lwdij = true;
+    st.dij_wake_built = true;
 }

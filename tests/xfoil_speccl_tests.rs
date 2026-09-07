@@ -49,7 +49,7 @@ fn airfoil(case: &str) -> PaneledAirfoil {
 }
 
 /// Compare one converged point and its iteration history with the reference records.
-fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::BlState) {
+fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::SolverState) {
     let pt = header(&case_path(case, "viscal_points.dat"));
     let its = iters_call_1(&case_path(case, "viscal_iters_all.dat"));
 
@@ -99,8 +99,8 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::BlState) {
         ("CDP", p.cdp, 1.0),
         ("XOCTR1", p.xtr_upper, 1.0),
         ("XOCTR2", p.xtr_lower, 1.0),
-        ("MINF", st.minf, 1.0),
-        ("REINF", st.reinf, st.reinf),
+        ("MINF", st.mach, 1.0),
+        ("REINF", st.re, st.re),
     ] {
         assert_within(
             ours,
@@ -110,7 +110,7 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::BlState) {
             &format!("{case}: {name}"),
         );
     }
-    assert_eq!(st.ist, pt["IST"].parse::<usize>().unwrap(), "{case}: IST");
+    assert_eq!(st.i_stagnation_node, pt["IST"].parse::<usize>().unwrap(), "{case}: IST");
     assert_eq!(
         p.itran[1..],
         [
@@ -126,7 +126,7 @@ fn check(case: &str, p: &OperatingPoint, st: &yfoil::solver::blstate::BlState) {
         p.cl,
         p.cd,
         p.cm,
-        st.reinf,
+        st.re,
         p.xtr_upper,
         p.xtr_lower
     );
@@ -142,14 +142,14 @@ fn test_fixed_cl_point_matches_xfoil() {
     cl_command(&mut session.st, &mut session.sys, 0.3);
     let inv = header(&case_path(case, "viscal_inviscid.dat"));
     assert_within(
-        session.st.alfa,
+        session.st.alpha,
         inv["ALFA"].parse().unwrap(),
         TOL_SOLVER,
         1.0,
         "SPECCL alpha",
     );
     assert_within(session.st.cl, inv["CL"].parse().unwrap(), TOL_SOLVER, 1.0, "SPECCL CL");
-    assert!(!session.st.lalfa);
+    assert!(!session.st.alpha_specified);
 
     // the full CL command: SPECCL again (identical), then VISCAL with alpha as the unknown
     let p = session.cl(0.3);
@@ -170,10 +170,10 @@ fn test_matyp_retyp_2_point_matches_xfoil() {
     let p = session.alfa(2.0_f64.to_radians());
     // Re = Re1 / sqrt(CL) through MRCL, updated every iteration from the current CL
     assert_within(
-        session.st.reinf,
+        session.st.re,
         1.0e6 / p.cl.sqrt(),
         TOL_SOLVER,
-        session.st.reinf,
+        session.st.re,
         "REINF = REINF1/sqrt(CL)",
     );
     check(case, &p, &session.st);

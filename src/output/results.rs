@@ -183,7 +183,7 @@ impl AnalysisOutput {
         inviscid_only: bool,
     ) -> Self {
         let st = &session.st;
-        let boundary_layer = if st.lvisc && st.lblini {
+        let boundary_layer = if st.viscous && st.bl_initialised {
             Some(crate::output::BoundaryLayerOutput::from_state(st))
         } else {
             None

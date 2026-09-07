@@ -133,18 +133,22 @@ fn check_call(k: usize) {
     }
 
     // what SETBL writes besides the system
-    assert_eq!(st.itran[1..], [out.int("ITRAN1"), out.int("ITRAN2")], "call {k}: ITRAN");
     assert_eq!(
-        st.tforce[1..],
+        st.i_transition_station[1..],
+        [out.int("ITRAN1"), out.int("ITRAN2")],
+        "call {k}: ITRAN"
+    );
+    assert_eq!(
+        st.transition_forced[1..],
         [out.logical("TFORCE1"), out.logical("TFORCE2")],
         "call {k}: TFORCE"
     );
     for is in 1..=2 {
         for (name, ours) in [
-            ("XSSITR", st.xssitr[is]),
-            ("XOCTR", st.xoctr[is]),
-            ("YOCTR", st.yoctr[is]),
-            ("TINDEX", st.tindex[is]),
+            ("XSSITR", st.xi_transition[is]),
+            ("XOCTR", st.x_transition[is]),
+            ("YOCTR", st.y_transition[is]),
+            ("TINDEX", st.transition_node_fraction[is]),
             ("DULE", r.ue_le_mismatch[is]),
         ] {
             assert_within(
@@ -160,7 +164,7 @@ fn check_call(k: usize) {
     let mut w_st = 0.0_f64;
     for is in 1..=2 {
         let nbl = out.nbl(is);
-        assert_eq!(nbl, st.nbl[is], "call {k}: NBL({is})");
+        assert_eq!(nbl, st.n_stations[is], "call {k}: NBL({is})");
         let theirs = |j: usize, m: usize| {
             if m == 0 {
                 out.bl[is][j][1]
@@ -170,12 +174,12 @@ fn check_call(k: usize) {
         };
         for ibl in 2..=nbl {
             let ours = [
-                st.uedg[is][ibl],
+                st.ue[is][ibl],
                 st.tau[is][ibl],
-                st.dis[is][ibl],
-                st.ctq[is][ibl],
-                st.delt[is][ibl],
-                st.uslp[is][ibl],
+                st.dissipation[is][ibl],
+                st.sqrtctaueq[is][ibl],
+                st.delta[is][ibl],
+                st.us_plot_scale[is][ibl],
             ];
             for (m, name) in names.iter().enumerate() {
                 let (a, b) = (ours[m], theirs(ibl, m));
@@ -188,7 +192,7 @@ fn check_call(k: usize) {
     println!(
         "setbl call {k}: NSYS={} worst scaled errors VA {w_va:.2e} VB {w_vb:.2e} VDEL {w_vdel:.2e} VZ {w_vz:.2e} VM {w_vm:.2e} state {w_st:.2e}; ITRAN={:?}",
         xf.n_rows,
-        &st.itran[1..]
+        &st.i_transition_station[1..]
     );
 }
 

@@ -1,16 +1,16 @@
 //! UPDATE (xbl.f): adds the Newton deltas to the boundary layer variables, checks for
 //! excessive changes and under-relaxes if necessary, calculates the max and rms changes, and
 //! the change in the global variable "AC" (CL if LALFA, alpha otherwise). Line-for-line on
-//! `BlState`.
+//! `SolverState`.
 //!
 //! XFOIL aliases `UNEW/U_AC` onto `VA` and `QNEW/Q_AC` onto `VB` with EQUIVALENCE; here they
 //! are plain locals — BLSOLV's input was consumed by `blsolv`, so nothing can read VA/VB after
 //! the solve by construction.
 
 use crate::bl::system::limit_dstar;
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 
-/// What UPDATE reports besides the arrays it writes into `BlState`.
+/// What UPDATE reports besides the arrays it writes into `SolverState`.
 #[derive(Debug, Clone, Default)]
 pub struct UpdateSummary {
     pub relaxation: f64,
@@ -31,10 +31,10 @@ pub struct UpdateSummary {
 
 /// UPDATE. `vdel[iv-1][k][0..2]` is BLSOLV's solution (residual and AC-sensitivity columns);
 /// `minf_cl` is MINF_CL, d(MINF)/d(CL) from the last MRCL (0 for MATYP = 1).
-pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateSummary {
+pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateSummary {
     let pi = 4.0 * (1.0_f64).atan();
     let dtor = pi / 180.0;
-    let gamm1 = st.gamma - 1.0;
+    let gamm1 = st.gamma_gas - 1.0;
 
     // max allowable alpha changes per iteration
     let dalmax = 0.5 * dtor;
@@ -43,57 +43,61 @@ pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f6
     // max allowable CL change per iteration
     let dclmax = 0.5;
     let mut dclmin = -0.5;
-    if st.matyp != 1 {
+    if st.mach_cl_dependence != 1 {
         dclmin = (-0.5_f64).max(-0.9 * st.cl);
     }
 
-    let hstinv = gamm1 * ((st.minf / st.qinf) * (st.minf / st.qinf)) / (1.0 + 0.5 * gamm1 * (st.minf * st.minf));
+    let hstinv = gamm1 * ((st.mach / st.qinf) * (st.mach / st.qinf)) / (1.0 + 0.5 * gamm1 * (st.mach * st.mach));
 
-    let nmax = st.uedg[1].len().max(st.uedg[2].len());
+    let nmax = st.ue[1].len().max(st.ue[2].len());
     let mut unew: [Vec<f64>; 3] = [Vec::new(), vec![0.0; nmax], vec![0.0; nmax]];
     let mut u_ac: [Vec<f64>; 3] = [Vec::new(), vec![0.0; nmax], vec![0.0; nmax]];
 
     // calculate new Ue distribution assuming no under-relaxation
     // also set the sensitivity of Ue wrt to alpha or Re
     for is in 1..=2 {
-        for ibl in 2..=st.nbl[is] {
-            let i = st.ipan[is][ibl];
+        for ibl in 2..=st.n_stations[is] {
+            let i = st.i_node[is][ibl];
             let mut dui = 0.0;
             let mut dui_ac = 0.0;
             for js in 1..=2 {
-                for jbl in 2..=st.nbl[js] {
-                    let j = st.ipan[js][jbl];
-                    let jv = st.isys[js][jbl];
-                    let ue_m = -st.vti[is][ibl] * st.vti[js][jbl] * st.dij[i][j];
-                    dui += ue_m * (st.mass[js][jbl] + vdel[jv - 1][2][0]);
+                for jbl in 2..=st.n_stations[js] {
+                    let j = st.i_node[js][jbl];
+                    let jv = st.i_row[js][jbl];
+                    let ue_m = -st.velocity_sign[is][ibl] * st.velocity_sign[js][jbl] * st.dij[i][j];
+                    dui += ue_m * (st.mass_defect[js][jbl] + vdel[jv - 1][2][0]);
                     dui_ac += ue_m * (-vdel[jv - 1][2][1]);
                 }
             }
             // UINV depends on "AC" only if "AC" is alpha
-            let uinv_ac = if st.lalfa { 0.0 } else { st.uinv_a[is][ibl] };
-            unew[is][ibl] = st.uinv[is][ibl] + dui;
+            let uinv_ac = if st.alpha_specified {
+                0.0
+            } else {
+                st.ue_inviscid_d_alpha[is][ibl]
+            };
+            unew[is][ibl] = st.ue_inviscid[is][ibl] + dui;
             u_ac[is][ibl] = uinv_ac + dui_ac;
         }
     }
 
     // set new Qtan from new Ue with appropriate sign change
-    let n = st.n;
+    let n = st.n_foil_nodes;
     let mut qnew = vec![0.0; n + 2];
     let mut q_ac = vec![0.0; n + 2];
     for is in 1..=2 {
-        for ibl in 2..=st.iblte[is] {
-            let i = st.ipan[is][ibl];
-            qnew[i] = st.vti[is][ibl] * unew[is][ibl];
-            q_ac[i] = st.vti[is][ibl] * u_ac[is][ibl];
+        for ibl in 2..=st.i_te_station[is] {
+            let i = st.i_node[is][ibl];
+            qnew[i] = st.velocity_sign[is][ibl] * unew[is][ibl];
+            q_ac[i] = st.velocity_sign[is][ibl] * u_ac[is][ibl];
         }
     }
 
     // calculate new CL from this new Qtan
-    let sa = st.alfa.sin();
-    let ca = st.alfa.cos();
-    let beta = (1.0 - st.minf * st.minf).sqrt();
+    let sa = st.alpha.sin();
+    let ca = st.alpha.cos();
+    let beta = (1.0 - st.mach * st.mach).sqrt();
     let beta_msq = -0.5 / beta;
-    let bfac = 0.5 * (st.minf * st.minf) / (1.0 + beta);
+    let bfac = 0.5 * (st.mach * st.mach) / (1.0 + beta);
     let bfac_msq = 0.5 / (1.0 + beta) - bfac / (1.0 + beta) * beta_msq;
 
     let mut clnew = 0.0;
@@ -141,10 +145,10 @@ pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f6
     let mut rlx = 1.0;
 
     let dac;
-    if st.lalfa {
+    if st.alpha_specified {
         // alpha is prescribed: AC is CL
         // set change in Re to account for CL changing, since Re = Re(CL)
-        dac = (clnew - st.cl) / (1.0 - cl_ac - cl_ms * 2.0 * st.minf * minf_cl);
+        dac = (clnew - st.cl) / (1.0 - cl_ac - cl_ms * 2.0 * st.mach * minf_cl);
         // set under-relaxation factor if Re change is too large
         if rlx * dac > dclmax {
             rlx = dclmax / dac;
@@ -155,7 +159,7 @@ pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f6
     } else {
         // CL is prescribed: AC is alpha
         // set change in alpha to drive CL to prescribed value
-        dac = (clnew - st.clspec) / (0.0 - cl_ac - cl_a);
+        dac = (clnew - st.cl_specified) / (0.0 - cl_ac - cl_a);
         // set under-relaxation factor if alpha change is too large
         if rlx * dac > dalmax {
             rlx = dalmax / dac;
@@ -176,24 +180,24 @@ pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f6
 
     // calculate changes in BL variables and under-relaxation if needed
     for is in 1..=2 {
-        for ibl in 2..=st.nbl[is] {
-            let iv = st.isys[is][ibl];
+        for ibl in 2..=st.n_stations[is] {
+            let iv = st.i_row[is][ibl];
 
             // set changes without underrelaxation
             let dctau = vdel[iv - 1][0][0] - dac * vdel[iv - 1][0][1];
             let dthet = vdel[iv - 1][1][0] - dac * vdel[iv - 1][1][1];
             let dmass = vdel[iv - 1][2][0] - dac * vdel[iv - 1][2][1];
-            let duedg = unew[is][ibl] + dac * u_ac[is][ibl] - st.uedg[is][ibl];
-            let ddstr = (dmass - st.dstr[is][ibl] * duedg) / st.uedg[is][ibl];
+            let duedg = unew[is][ibl] + dac * u_ac[is][ibl] - st.ue[is][ibl];
+            let ddstr = (dmass - st.dstar[is][ibl] * duedg) / st.ue[is][ibl];
 
             // normalize changes
-            let dn1 = if ibl < st.itran[is] {
+            let dn1 = if ibl < st.i_transition_station[is] {
                 dctau / 10.0
             } else {
-                dctau / st.ctau[is][ibl]
+                dctau / st.sqrtctau[is][ibl]
             };
-            let dn2 = dthet / st.thet[is][ibl];
-            let dn3 = ddstr / st.dstr[is][ibl];
+            let dn2 = dthet / st.theta[is][ibl];
+            let dn3 = ddstr / st.dstar[is][ibl];
             let dn4 = duedg.abs() / 0.25;
 
             // accumulate for rms change
@@ -203,7 +207,7 @@ pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f6
             let rdn1 = rlx * dn1;
             if dn1.abs() > rmxbl.abs() {
                 rmxbl = dn1;
-                vmxbl = if ibl < st.itran[is] { 'n' } else { 'C' };
+                vmxbl = if ibl < st.i_transition_station[is] { 'n' } else { 'C' };
                 imxbl = ibl;
                 ismxbl = is;
             }
@@ -262,73 +266,73 @@ pub fn apply_newton_update(st: &mut BlState, vdel: &[[[f64; 2]; 3]], minf_cl: f6
     }
 
     // set true rms change
-    rmsbl = (rmsbl / (4.0 * ((st.nbl[1] + st.nbl[2]) as f64))).sqrt();
+    rmsbl = (rmsbl / (4.0 * ((st.n_stations[1] + st.n_stations[2]) as f64))).sqrt();
 
-    if st.lalfa {
+    if st.alpha_specified {
         // set underrelaxed change in Reynolds number from change in lift
         st.cl += rlx * dac;
     } else {
         // set underrelaxed change in alpha
-        st.alfa += rlx * dac;
+        st.alpha += rlx * dac;
     }
 
     // update BL variables with underrelaxed changes
     for is in 1..=2 {
-        for ibl in 2..=st.nbl[is] {
-            let iv = st.isys[is][ibl];
+        for ibl in 2..=st.n_stations[is] {
+            let iv = st.i_row[is][ibl];
             let dctau = vdel[iv - 1][0][0] - dac * vdel[iv - 1][0][1];
             let dthet = vdel[iv - 1][1][0] - dac * vdel[iv - 1][1][1];
             let dmass = vdel[iv - 1][2][0] - dac * vdel[iv - 1][2][1];
-            let duedg = unew[is][ibl] + dac * u_ac[is][ibl] - st.uedg[is][ibl];
-            let ddstr = (dmass - st.dstr[is][ibl] * duedg) / st.uedg[is][ibl];
+            let duedg = unew[is][ibl] + dac * u_ac[is][ibl] - st.ue[is][ibl];
+            let ddstr = (dmass - st.dstar[is][ibl] * duedg) / st.ue[is][ibl];
 
-            st.ctau[is][ibl] += rlx * dctau;
-            st.thet[is][ibl] += rlx * dthet;
-            st.dstr[is][ibl] += rlx * ddstr;
-            st.uedg[is][ibl] += rlx * duedg;
+            st.sqrtctau[is][ibl] += rlx * dctau;
+            st.theta[is][ibl] += rlx * dthet;
+            st.dstar[is][ibl] += rlx * ddstr;
+            st.ue[is][ibl] += rlx * duedg;
 
-            let dswaki = if ibl > st.iblte[is] {
-                st.wgap[ibl - st.iblte[is]]
+            let dswaki = if ibl > st.i_te_station[is] {
+                st.wake_gap[ibl - st.i_te_station[is]]
             } else {
                 0.0
             };
 
             // eliminate absurd transients
-            if ibl >= st.itran[is] {
-                st.ctau[is][ibl] = st.ctau[is][ibl].min(0.25);
+            if ibl >= st.i_transition_station[is] {
+                st.sqrtctau[is][ibl] = st.sqrtctau[is][ibl].min(0.25);
             }
-            let hklim = if ibl <= st.iblte[is] { 1.02 } else { 1.00005 };
-            let ue = st.uedg[is][ibl];
+            let hklim = if ibl <= st.i_te_station[is] { 1.02 } else { 1.00005 };
+            let ue = st.ue[is][ibl];
             let msq = ue * ue * hstinv / (gamm1 * (1.0 - 0.5 * ue * ue * hstinv));
-            let mut dsw = st.dstr[is][ibl] - dswaki;
-            limit_dstar(&mut dsw, st.thet[is][ibl], ue, msq, hklim);
-            st.dstr[is][ibl] = dsw + dswaki;
+            let mut dsw = st.dstar[is][ibl] - dswaki;
+            limit_dstar(&mut dsw, st.theta[is][ibl], ue, msq, hklim);
+            st.dstar[is][ibl] = dsw + dswaki;
 
             // set new mass defect (nonlinear update)
-            st.mass[is][ibl] = st.dstr[is][ibl] * st.uedg[is][ibl];
+            st.mass_defect[is][ibl] = st.dstar[is][ibl] * st.ue[is][ibl];
         }
 
         // make sure there are no "islands" of negative Ue
-        for ibl in 3..=st.iblte[is] {
-            if st.uedg[is][ibl - 1] > 0.0 && st.uedg[is][ibl] <= 0.0 {
-                st.uedg[is][ibl] = st.uedg[is][ibl - 1];
-                st.mass[is][ibl] = st.dstr[is][ibl] * st.uedg[is][ibl];
+        for ibl in 3..=st.i_te_station[is] {
+            if st.ue[is][ibl - 1] > 0.0 && st.ue[is][ibl] <= 0.0 {
+                st.ue[is][ibl] = st.ue[is][ibl - 1];
+                st.mass_defect[is][ibl] = st.dstar[is][ibl] * st.ue[is][ibl];
             }
         }
     }
 
     // equate upper wake arrays to lower wake arrays
-    for kbl in 1..=(st.nbl[2] - st.iblte[2]) {
-        let (i1, i2) = (st.iblte[1] + kbl, st.iblte[2] + kbl);
-        st.ctau[1][i1] = st.ctau[2][i2];
-        st.thet[1][i1] = st.thet[2][i2];
-        st.dstr[1][i1] = st.dstr[2][i2];
-        st.uedg[1][i1] = st.uedg[2][i2];
+    for kbl in 1..=(st.n_stations[2] - st.i_te_station[2]) {
+        let (i1, i2) = (st.i_te_station[1] + kbl, st.i_te_station[2] + kbl);
+        st.sqrtctau[1][i1] = st.sqrtctau[2][i2];
+        st.theta[1][i1] = st.theta[2][i2];
+        st.dstar[1][i1] = st.dstar[2][i2];
+        st.ue[1][i1] = st.ue[2][i2];
         st.tau[1][i1] = st.tau[2][i2];
-        st.dis[1][i1] = st.dis[2][i2];
-        st.ctq[1][i1] = st.ctq[2][i2];
-        st.delt[1][i1] = st.delt[2][i2];
-        st.tstr[1][i1] = st.tstr[2][i2];
+        st.dissipation[1][i1] = st.dissipation[2][i2];
+        st.sqrtctaueq[1][i1] = st.sqrtctaueq[2][i2];
+        st.delta[1][i1] = st.delta[2][i2];
+        st.thetastar[1][i1] = st.thetastar[2][i2];
     }
 
     UpdateSummary {

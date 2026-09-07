@@ -26,7 +26,7 @@ use std::str::FromStr;
 
 use crate::bl::system::{FlowParameters, FlowRegime, StationState};
 use crate::geometry::{seval, PaneledAirfoil};
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 
 // ============================================================================
 // Geometry
@@ -73,16 +73,16 @@ pub struct FoilGeometryOutput {
 
 impl FoilGeometryOutput {
     /// Airfoil nodes `1..=n` and, if `st.lwake`, wake nodes `n+1..=n+nw`.
-    pub fn from_state(st: &BlState) -> Self {
-        let n = st.n;
-        let nw = st.nw;
-        let wake = if st.lwake && nw > 0 {
+    pub fn from_state(st: &SolverState) -> Self {
+        let n = st.n_foil_nodes;
+        let nw = st.n_wake_nodes;
+        let wake = if st.wake_built && nw > 0 {
             Some(WakeGeometryOutput {
                 x: st.x[n + 1..=n + nw].to_vec(),
                 y: st.y[n + 1..=n + nw].to_vec(),
                 s: st.s[n + 1..=n + nw].to_vec(),
-                nx: st.nx[n + 1..=n + nw].to_vec(),
-                ny: st.ny[n + 1..=n + nw].to_vec(),
+                nx: st.normal_x[n + 1..=n + nw].to_vec(),
+                ny: st.normal_y[n + 1..=n + nw].to_vec(),
             })
         } else {
             None
@@ -91,23 +91,23 @@ impl FoilGeometryOutput {
             x: st.x[1..=n].to_vec(),
             y: st.y[1..=n].to_vec(),
             s: st.s[1..=n].to_vec(),
-            nx: st.nx[1..=n].to_vec(),
-            ny: st.ny[1..=n].to_vec(),
+            nx: st.normal_x[1..=n].to_vec(),
+            ny: st.normal_y[1..=n].to_vec(),
             chord: st.chord,
-            xle: st.xle,
-            yle: st.yle,
-            xte: st.xte,
-            yte: st.yte,
-            sle: st.sle,
-            ante: st.ante,
-            sharp_te: st.sharp,
+            xle: st.x_le,
+            yle: st.y_le,
+            xte: st.x_te,
+            yte: st.y_te,
+            sle: st.s_le,
+            ante: st.te_thickness_normal,
+            sharp_te: st.sharp_te,
             wake,
         }
     }
 
     /// Geometry only (no wake), for plotting panelings without a solve.
     pub fn from_paneled(airfoil: &PaneledAirfoil) -> Self {
-        Self::from_state(&BlState::from_airfoil(airfoil, 0))
+        Self::from_state(&SolverState::from_foil(airfoil, 0))
     }
 
     /// Number of airfoil nodes
@@ -504,13 +504,13 @@ struct Live {
 
 /// BLPRV → BLKIN → BLVAR on the converged primaries of station (is, ibl), with the flow type
 /// SETBL would use there (laminar ahead of ITRAN, turbulent from it, wake past IBLTE).
-fn live_closures(st: &BlState, params: &FlowParameters, is: usize, ibl: usize) -> Live {
-    let wake = ibl > st.iblte[is];
-    let turb = ibl >= st.itran[is];
-    let ctau = st.ctau[is][ibl];
+fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usize) -> Live {
+    let wake = ibl > st.i_te_station[is];
+    let turb = ibl >= st.i_transition_station[is];
+    let ctau = st.sqrtctau[is][ibl];
     let (ami, cti) = if turb { (0.0, ctau) } else { (ctau, 0.0) };
-    let uei = st.uedg[is][ibl];
-    let thi = st.thet[is][ibl];
+    let uei = st.ue[is][ibl];
+    let thi = st.theta[is][ibl];
     if thi == 0.0 || uei == 0.0 {
         // an unsolved station (DUMP prints H = H* = 1 there)
         return Live {
@@ -528,11 +528,15 @@ fn live_closures(st: &BlState, params: &FlowParameters, is: usize, ibl: usize) -
         };
     }
     // DSI = MDI/UEI, DSWAKI = WGAP(IW), as SETBL sets the "2" station
-    let dsi = st.mass[is][ibl] / uei;
-    let dswaki = if wake { st.wgap[ibl - st.iblte[is]] } else { 0.0 };
+    let dsi = st.mass_defect[is][ibl] / uei;
+    let dswaki = if wake {
+        st.wake_gap[ibl - st.i_te_station[is]]
+    } else {
+        0.0
+    };
 
     let mut s = StationState::default();
-    s.set_primary_variables(st.xssi[is][ibl], ami, cti, thi, dsi, dswaki, uei, params);
+    s.set_primary_variables(st.xi[is][ibl], ami, cti, thi, dsi, dswaki, uei, params);
     s.set_kinematic_variables(params);
     let (h, hk, rt, msq) = (s.h, s.hk, s.retheta, s.machsqd_edge);
     let flow = if wake {
@@ -563,7 +567,7 @@ fn live_closures(st: &BlState, params: &FlowParameters, is: usize, ibl: usize) -
 }
 
 fn side_output(
-    st: &BlState,
+    st: &SolverState,
     params: &FlowParameters,
     is: usize,
     stations: impl Iterator<Item = usize>,
@@ -571,19 +575,19 @@ fn side_output(
     let mut out = BlSideOutput::default();
     let qinf = st.qinf;
     for ibl in stations {
-        let i = st.ipan[is][ibl];
+        let i = st.i_node[is][ibl];
         let live = live_closures(st, params, is, ibl);
-        let thet = st.thet[is][ibl];
+        let thet = st.theta[is][ibl];
         out.ibl.push(ibl);
         out.node.push(i);
         out.x.push(st.x[i]);
         out.y.push(st.y[i]);
-        out.xssi.push(st.xssi[is][ibl]);
-        out.uedg.push(st.uedg[is][ibl]);
+        out.xssi.push(st.xi[is][ibl]);
+        out.uedg.push(st.ue[is][ibl]);
         out.thet.push(thet);
-        out.dstr.push(st.dstr[is][ibl]);
-        out.ctau.push(st.ctau[is][ibl]);
-        out.mass.push(st.mass[is][ibl]);
+        out.dstr.push(st.dstar[is][ibl]);
+        out.ctau.push(st.sqrtctau[is][ibl]);
+        out.mass.push(st.mass_defect[is][ibl]);
         out.ue.push(live.ue);
         out.h.push(live.h);
         out.hk.push(live.hk);
@@ -595,33 +599,33 @@ fn side_output(
         out.uslp.push(live.uslp);
         out.rt.push(live.rt);
         out.msq.push(live.msq);
-        out.cp.push(st.cpv[i]);
+        out.cp.push(st.cp_viscous[i]);
         let stored = &mut out.stored;
         stored.tau.push(st.tau[is][ibl]);
-        stored.dis.push(st.dis[is][ibl]);
-        stored.ctq.push(st.ctq[is][ibl]);
-        stored.delt.push(st.delt[is][ibl]);
-        stored.uslp.push(st.uslp[is][ibl]);
-        stored.tstr.push(st.tstr[is][ibl]);
+        stored.dis.push(st.dissipation[is][ibl]);
+        stored.ctq.push(st.sqrtctaueq[is][ibl]);
+        stored.delt.push(st.delta[is][ibl]);
+        stored.uslp.push(st.us_plot_scale[is][ibl]);
+        stored.tstr.push(st.thetastar[is][ibl]);
         // BLDUMP: IF(TH.EQ.0.0) HS = 1.0 ELSE HS = TS/TH
         stored
             .hs_dump
-            .push(if thet == 0.0 { 1.0 } else { st.tstr[is][ibl] / thet });
+            .push(if thet == 0.0 { 1.0 } else { st.thetastar[is][ibl] / thet });
         stored.cf_dump.push(st.tau[is][ibl] / (0.5 * qinf * qinf));
     }
     out
 }
 
 /// Position on the airfoil spline at arc length `s`
-fn spline_point(st: &BlState, s: f64) -> (f64, f64) {
-    let n = st.n;
-    let x = seval(s, &st.x[1..=n], &st.xp[1..=n], &st.s[1..=n]);
-    let y = seval(s, &st.y[1..=n], &st.yp[1..=n], &st.s[1..=n]);
+fn spline_point(st: &SolverState, s: f64) -> (f64, f64) {
+    let n = st.n_foil_nodes;
+    let x = seval(s, &st.x[1..=n], &st.dxds[1..=n], &st.s[1..=n]);
+    let y = seval(s, &st.y[1..=n], &st.dyds[1..=n], &st.s[1..=n]);
     (x, y)
 }
 
 /// Sign changes of the live `cf` along one side's surface stations, from the pair (2, 3) on
-fn separation_markers(st: &BlState, side: &BlSideOutput, is: usize) -> Vec<SeparationMarker> {
+fn separation_markers(st: &SolverState, side: &BlSideOutput, is: usize) -> Vec<SeparationMarker> {
     let mut out = Vec::new();
     for k in 1..side.len() {
         let (prev, cur) = (side.cf[k - 1], side.cf[k]);
@@ -651,31 +655,31 @@ fn separation_markers(st: &BlState, side: &BlSideOutput, is: usize) -> Vec<Separ
 impl BoundaryLayerOutput {
     /// Every station of a solved state. Requires the pointer layer and BL arrays (any state after
     /// a viscous VISCAL call, converged or not).
-    pub fn from_state(st: &BlState) -> Self {
-        let params = FlowParameters::new(st.minf, st.reinf, st.gamma);
-        let upper = side_output(st, &params, 1, 2..=st.iblte[1]);
-        let lower = side_output(st, &params, 2, 2..=st.iblte[2]);
-        let wake = side_output(st, &params, 2, st.iblte[2] + 1..=st.nbl[2]);
+    pub fn from_state(st: &SolverState) -> Self {
+        let params = FlowParameters::new(st.mach, st.re, st.gamma_gas);
+        let upper = side_output(st, &params, 1, 2..=st.i_te_station[1]);
+        let lower = side_output(st, &params, 2, 2..=st.i_te_station[2]);
+        let wake = side_output(st, &params, 2, st.i_te_station[2] + 1..=st.n_stations[2]);
 
-        let (sx, sy) = spline_point(st, st.sst);
+        let (sx, sy) = spline_point(st, st.s_stagnation);
         let stagnation = StagnationMarker {
-            ist: st.ist,
-            sst: st.sst,
+            ist: st.i_stagnation_node,
+            sst: st.s_stagnation,
             x: sx,
             y: sy,
         };
         let transition_marker = |is: usize| {
             let s = if is == 1 {
-                st.sst - st.xssitr[is]
+                st.s_stagnation - st.xi_transition[is]
             } else {
-                st.sst + st.xssitr[is]
+                st.s_stagnation + st.xi_transition[is]
             };
             let (x, y) = spline_point(st, s);
             TransitionMarker {
-                station: st.itran[is],
-                forced: st.tforce[is],
-                x_c: st.xoctr[is],
-                y_c: st.yoctr[is],
+                station: st.i_transition_station[is],
+                forced: st.transition_forced[is],
+                x_c: st.x_transition[is],
+                y_c: st.y_transition[is],
                 s,
                 x,
                 y,
@@ -687,11 +691,11 @@ impl BoundaryLayerOutput {
         derived_separation.extend(separation_markers(st, &lower, 2));
 
         // CPDISP: upper and lower wake Dstar fractions from the first wake point
-        let dstrte = st.dstr[2][st.iblte[2] + 1];
+        let dstrte = st.dstar[2][st.i_te_station[2] + 1];
         let wake_split = if dstrte != 0.0 {
             [
-                (st.dstr[1][st.iblte[1]] + 0.5 * st.ante) / dstrte,
-                (st.dstr[2][st.iblte[2]] + 0.5 * st.ante) / dstrte,
+                (st.dstar[1][st.i_te_station[1]] + 0.5 * st.te_thickness_normal) / dstrte,
+                (st.dstar[2][st.i_te_station[2]] + 0.5 * st.te_thickness_normal) / dstrte,
             ]
         } else {
             [0.5, 0.5]
@@ -701,11 +705,11 @@ impl BoundaryLayerOutput {
             upper,
             lower,
             wake,
-            iblte: [st.iblte[1], st.iblte[2]],
-            itran: [st.itran[1], st.itran[2]],
-            nw: st.nw,
+            iblte: [st.i_te_station[1], st.i_te_station[2]],
+            itran: [st.i_transition_station[1], st.i_transition_station[2]],
+            nw: st.n_wake_nodes,
             qinf: st.qinf,
-            ante: st.ante,
+            ante: st.te_thickness_normal,
             stagnation,
             transition,
             derived_separation,

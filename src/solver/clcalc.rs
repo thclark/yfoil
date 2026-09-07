@@ -1,14 +1,14 @@
-//! CPCALC, CLCALC, CDCALC (xfoil.f) and COMSET on `BlState`, line-for-line.
+//! CPCALC, CLCALC, CDCALC (xfoil.f) and COMSET on `SolverState`, line-for-line.
 
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 
 /// COMSET: Kármán–Tsien parameter TKLAM and its M² derivative for the current MINF.
 /// (CPSTAR/QSTAR, the sonic Cp and speed, are plotting quantities and are not kept.)
-pub fn comset(st: &mut BlState) {
-    let beta = (1.0 - st.minf * st.minf).sqrt();
+pub fn comset(st: &mut SolverState) {
+    let beta = (1.0 - st.mach * st.mach).sqrt();
     let beta_msq = -0.5 / beta;
-    st.tklam = (st.minf * st.minf) / ((1.0 + beta) * (1.0 + beta));
-    st.tkl_msq = 1.0 / ((1.0 + beta) * (1.0 + beta)) - 2.0 * st.tklam / (1.0 + beta) * beta_msq;
+    st.karman_tsien = (st.mach * st.mach) / ((1.0 + beta) * (1.0 + beta));
+    st.karman_tsien_d_machsqd = 1.0 / ((1.0 + beta) * (1.0 + beta)) - 2.0 * st.karman_tsien / (1.0 + beta) * beta_msq;
 }
 
 /// CPCALC: compressible Cp from speed, for `q[1..=n]` (1-based, slot 0 unused). Returns the
@@ -28,14 +28,14 @@ pub fn cpcalc(n: usize, q: &[f64], qinf: f64, minf: f64) -> Vec<f64> {
 
 /// CLCALC: integrates surface pressures from GAM to get CL, CM and CDP, and dCL/dalpha,
 /// dCL/dM² for the prescribed-CL routines. Uses the moment reference `st.xcmref/ycmref`.
-pub fn clcalc(st: &mut BlState) {
-    let n = st.n;
-    let (x, y, gam, gam_a) = (&st.x, &st.y, &st.gam, &st.gam_a);
-    let (xref, yref) = (st.xcmref, st.ycmref);
-    let (minf, qinf) = (st.minf, st.qinf);
+pub fn clcalc(st: &mut SolverState) {
+    let n = st.n_foil_nodes;
+    let (x, y, gam, gam_a) = (&st.x, &st.y, &st.gamma, &st.gamma_d_alpha);
+    let (xref, yref) = (st.cm_ref_x, st.cm_ref_y);
+    let (minf, qinf) = (st.mach, st.qinf);
 
-    let sa = st.alfa.sin();
-    let ca = st.alfa.cos();
+    let sa = st.alpha.sin();
+    let ca = st.alpha.cos();
 
     let beta = (1.0 - minf * minf).sqrt();
     let beta_msq = -0.5 / beta;
@@ -92,24 +92,24 @@ pub fn clcalc(st: &mut BlState) {
 
     st.cl = cl;
     st.cm = cm;
-    st.cdp = cdp;
-    st.cl_alf = cl_alf;
-    st.cl_msq = cl_msq;
+    st.cd_pressure = cdp;
+    st.cl_d_alpha = cl_alf;
+    st.cl_d_machsqd = cl_msq;
 }
 
 /// CDCALC: total CD from the wake end by the Squire–Young extrapolation (with the
 /// Kármán–Tsien correction) and the friction drag CDF from the surface TAU integral.
-pub fn cdcalc(st: &mut BlState) {
-    let sa = st.alfa.sin();
-    let ca = st.alfa.cos();
+pub fn cdcalc(st: &mut SolverState) {
+    let sa = st.alpha.sin();
+    let ca = st.alpha.cos();
 
-    if st.lvisc && st.lblini {
+    if st.viscous && st.bl_initialised {
         // set variables at the end of the wake
-        let nbl2 = st.nbl[2];
-        let thwake = st.thet[2][nbl2];
-        let urat = st.uedg[2][nbl2] / st.qinf;
-        let uewake = st.uedg[2][nbl2] * (1.0 - st.tklam) / (1.0 - st.tklam * (urat * urat));
-        let shwake = st.dstr[2][nbl2] / st.thet[2][nbl2];
+        let nbl2 = st.n_stations[2];
+        let thwake = st.theta[2][nbl2];
+        let urat = st.ue[2][nbl2] / st.qinf;
+        let uewake = st.ue[2][nbl2] * (1.0 - st.karman_tsien) / (1.0 - st.karman_tsien * (urat * urat));
+        let shwake = st.dstar[2][nbl2] / st.theta[2][nbl2];
 
         // extrapolate wake to downstream infinity using Squire-Young relation
         // (reduces errors of the wake not being long enough)
@@ -121,12 +121,12 @@ pub fn cdcalc(st: &mut BlState) {
     // calculate friction drag coefficient
     let mut cdf = 0.0;
     for is in 1..=2 {
-        for ibl in 3..=st.iblte[is] {
-            let i = st.ipan[is][ibl];
-            let im = st.ipan[is][ibl - 1];
+        for ibl in 3..=st.i_te_station[is] {
+            let i = st.i_node[is][ibl];
+            let im = st.i_node[is][ibl - 1];
             let dx = (st.x[i] - st.x[im]) * ca + (st.y[i] - st.y[im]) * sa;
             cdf += 0.5 * (st.tau[is][ibl] + st.tau[is][ibl - 1]) * dx * 2.0 / (st.qinf * st.qinf);
         }
     }
-    st.cdf = cdf;
+    st.cd_friction = cdf;
 }

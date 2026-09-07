@@ -13,7 +13,7 @@ use fixtures::pointers_fixtures::{parse_inviscid_gam, parse_pointers, parse_uinv
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_PURE};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
-use yfoil::solver::blstate::BlState;
+use yfoil::solver::blstate::SolverState;
 use yfoil::solver::xywake::{qwcalc, setexp, xywake};
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -21,36 +21,36 @@ fn fixture_path(name: &str) -> PathBuf {
 }
 
 fn state_at_first_viscal_call() -> (
-    BlState,
+    SolverState,
     fixtures::pointers_fixtures::PointersFixture,
     fixtures::pointers_fixtures::UinvFixture,
 ) {
     let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
     let u = parse_uinv(&fixture_path("xfoil_uinv.dat"), 1);
-    let mut st = BlState::empty(f.n, f.nw);
+    let mut st = SolverState::empty(f.n, f.nw);
     for i in 1..=f.n {
         st.x[i] = f.x[i];
         st.y[i] = f.y[i];
         st.s[i] = f.s[i];
-        st.nx[i] = f.nx[i];
-        st.ny[i] = f.ny[i];
-        st.apanel[i] = f.apanel[i];
+        st.normal_x[i] = f.nx[i];
+        st.normal_y[i] = f.ny[i];
+        st.panel_angle[i] = f.apanel[i];
     }
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = create_paneled_airfoil(&geom);
     for i in 1..=f.n {
-        st.xp[i] = af.xp[i - 1];
-        st.yp[i] = af.yp[i - 1];
+        st.dxds[i] = af.xp[i - 1];
+        st.dyds[i] = af.yp[i - 1];
     }
     st.chord = f.chord;
-    st.ante = f.ante;
-    st.aste = f.aste;
-    st.dste = f.dste;
-    st.sharp = f.sharp;
-    st.gam = parse_inviscid_gam(&fixture_path("xfoil_inviscid.dat"));
-    st.qinvu[1] = u.qinvu1.clone();
-    st.qinvu[2] = u.qinvu2.clone();
-    st.alfa = u.alfa;
+    st.te_thickness_normal = f.ante;
+    st.te_thickness_parallel = f.aste;
+    st.te_gap = f.dste;
+    st.sharp_te = f.sharp;
+    st.gamma = parse_inviscid_gam(&fixture_path("xfoil_inviscid.dat"));
+    st.q_inviscid_basis[1] = u.qinvu1.clone();
+    st.q_inviscid_basis[2] = u.qinvu2.clone();
+    st.alpha = u.alfa;
     st.qinf = 1.0;
     (st, f, u)
 }
@@ -78,11 +78,11 @@ fn test_xywake_matches_xfoil_wake_nodes() {
         assert_within(st.x[i], f.x[i], TOL_PURE, 1.0, &format!("X({i})"));
         assert_within(st.y[i], f.y[i], TOL_PURE, 1.0, &format!("Y({i})"));
         assert_within(st.s[i], f.s[i], TOL_PURE, 1.0, &format!("S({i})"));
-        assert_within(st.nx[i], f.nx[i], TOL_PURE, 1.0, &format!("NX({i})"));
-        assert_within(st.ny[i], f.ny[i], TOL_PURE, 1.0, &format!("NY({i})"));
+        assert_within(st.normal_x[i], f.nx[i], TOL_PURE, 1.0, &format!("NX({i})"));
+        assert_within(st.normal_y[i], f.ny[i], TOL_PURE, 1.0, &format!("NY({i})"));
         // APANEL is not set at the last wake node (XYWAKE exits the loop before it)
         if iw < f.nw {
-            assert_within(st.apanel[i], f.apanel[i], TOL_PURE, 1.0, &format!("APANEL({i})"));
+            assert_within(st.panel_angle[i], f.apanel[i], TOL_PURE, 1.0, &format!("APANEL({i})"));
         }
     }
     println!("xywake: {} wake nodes within {TOL_PURE:.0e} of XFOIL", f.nw);
@@ -94,7 +94,19 @@ fn test_qwcalc_matches_xfoil_wake_qinvu() {
     xywake(&mut st, 1.0);
     qwcalc(&mut st);
     for i in (f.n + 1)..=(f.n + f.nw) {
-        assert_within(st.qinvu[1][i], u.qinvu1[i], TOL_PURE, 1.0, &format!("QINVU({i},1)"));
-        assert_within(st.qinvu[2][i], u.qinvu2[i], TOL_PURE, 1.0, &format!("QINVU({i},2)"));
+        assert_within(
+            st.q_inviscid_basis[1][i],
+            u.qinvu1[i],
+            TOL_PURE,
+            1.0,
+            &format!("QINVU({i},1)"),
+        );
+        assert_within(
+            st.q_inviscid_basis[2][i],
+            u.qinvu2[i],
+            TOL_PURE,
+            1.0,
+            &format!("QINVU({i},2)"),
+        );
     }
 }

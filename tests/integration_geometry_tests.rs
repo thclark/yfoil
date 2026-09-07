@@ -232,7 +232,7 @@ fn test_thickness_values() {
 // ============================================================================
 
 use yfoil::solver::analysis::{analyze, FlowSpec, Session};
-use yfoil::solver::blstate::BlState;
+use yfoil::solver::blstate::SolverState;
 use yfoil::solver::ggcalc::ggcalc;
 use yfoil::solver::specal::specal;
 
@@ -425,7 +425,7 @@ fn test_blunt_te_reasonable_results() {
         },
     );
     let coeffs = session.alfa(0.0);
-    let vel: Vec<f64> = session.st.qinv[1..=airfoil.n].to_vec();
+    let vel: Vec<f64> = session.st.q_inviscid[1..=airfoil.n].to_vec();
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(
@@ -498,10 +498,13 @@ fn test_te_type_lift_slope_comparison() {
 fn test_kutta_condition_both_te_types() {
     // GGCALC's Kutta row: GAMU(1) + GAMU(N) = 0 for both the alpha = 0 and alpha = 90 solutions
     let kutta = |airfoil: &yfoil::geometry::PaneledAirfoil| -> (f64, f64) {
-        let mut st = BlState::from_airfoil(airfoil, airfoil.n / 12 + 10);
+        let mut st = SolverState::from_foil(airfoil, airfoil.n / 12 + 10);
         ggcalc(&mut st);
         let n = airfoil.n;
-        (st.qinvu[1][1] + st.qinvu[1][n], st.qinvu[2][1] + st.qinvu[2][n])
+        (
+            st.q_inviscid_basis[1][1] + st.q_inviscid_basis[1][n],
+            st.q_inviscid_basis[2][1] + st.q_inviscid_basis[2][n],
+        )
     };
 
     // Sharp TE
@@ -531,13 +534,13 @@ fn test_sharp_te_smooth_gamma() {
     // approaching the TE from both sides agree (the sharp-TE bisector row of GGCALC)
     let geom = naca_4digit("0012", 160).unwrap().sharpen();
     let airfoil = create_paneled_airfoil(&geom);
-    let mut st = BlState::from_airfoil(&airfoil, airfoil.n / 12 + 10);
+    let mut st = SolverState::from_foil(&airfoil, airfoil.n / 12 + 10);
     let mut sys = None;
-    st.alfa = 0.0;
+    st.alpha = 0.0;
     st.qinf = 1.0;
     specal(&mut st, &mut sys);
     let n = airfoil.n;
-    let gam = &st.gam;
+    let gam = &st.gamma;
     assert!(gam[1].abs() < 2.0, "Upper TE gamma {} should be small", gam[1]);
     assert!(gam[n].abs() < 2.0, "Lower TE gamma {} should be small", gam[n]);
     // XFOIL's GAM is antisymmetric on a symmetric section at α = 0 (GAM(I) = −GAM(N+1−I)), so

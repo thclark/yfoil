@@ -9,7 +9,7 @@ use mrchue_fixtures::parse_bl_state;
 use pointers_fixtures::{parse_dij, parse_pointers, parse_uinv};
 use yfoil::bl::mrchue::march_direct;
 use yfoil::bl::system::FlowParameters;
-use yfoil::solver::blstate::BlState;
+use yfoil::solver::blstate::SolverState;
 
 pub mod blsolv_fixtures;
 pub mod mrchdu_fixtures;
@@ -288,37 +288,37 @@ pub const REF_CASE: &str = "tests/fixtures/xfoil/naca0012_n60_a2_re1e6";
 /// XFOIL's complete state at the start of MRCHUE on the reference case: the pointer layer,
 /// UEDG = UINV, and the BL parameters SETBL derives (asserted bitwise against the dump).
 #[allow(dead_code)]
-pub fn state_before_mrchue() -> (BlState, FlowParameters, [f64; 3]) {
+pub fn state_before_mrchue() -> (SolverState, FlowParameters, [f64; 3]) {
     let f = parse_pointers(&require_fixture(&format!("{}/{}", REF_CASE, "xfoil_pointers.dat")), 1);
     let u = parse_uinv(&require_fixture(&format!("{}/{}", REF_CASE, "xfoil_uinv.dat")), 1);
     let d = parse_bl_state(&require_fixture(&format!("{}/{}", REF_CASE, "mrchdu_input_1.dat")));
-    let mut st = BlState::empty(f.n, f.nw);
+    let mut st = SolverState::empty(f.n, f.nw);
     st.x = f.x.clone();
     st.y = f.y.clone();
     st.s = f.s.clone();
-    st.ist = f.ist;
-    st.sst = f.sst;
-    st.nbl = f.nbl;
-    st.iblte = f.iblte;
-    st.ipan = f.ipan.clone();
-    st.vti = f.vti.clone();
-    st.isys = f.isys.clone();
-    st.xssi = f.xssi.clone();
-    st.wgap = f.wgap.clone();
-    st.ante = f.ante;
-    st.aste = f.aste;
-    st.dste = f.dste;
-    st.sharp = f.sharp;
+    st.i_stagnation_node = f.ist;
+    st.s_stagnation = f.sst;
+    st.n_stations = f.nbl;
+    st.i_te_station = f.iblte;
+    st.i_node = f.ipan.clone();
+    st.velocity_sign = f.vti.clone();
+    st.i_row = f.isys.clone();
+    st.xi = f.xssi.clone();
+    st.wake_gap = f.wgap.clone();
+    st.te_thickness_normal = f.ante;
+    st.te_thickness_parallel = f.aste;
+    st.te_gap = f.dste;
+    st.sharp_te = f.sharp;
     st.chord = f.chord;
-    st.sle = f.sle;
-    st.xle = f.xle;
-    st.yle = f.yle;
-    st.xte = f.xte;
-    st.yte = f.yte;
+    st.s_le = f.sle;
+    st.x_le = f.xle;
+    st.y_le = f.yle;
+    st.x_te = f.xte;
+    st.y_te = f.yte;
     for is in 1..=2 {
         for ibl in 1..=f.nbl[is] {
-            st.uinv[is][ibl] = u.uinv[is][ibl];
-            st.uedg[is][ibl] = u.uinv[is][ibl];
+            st.ue_inviscid[is][ibl] = u.uinv[is][ibl];
+            st.ue[is][ibl] = u.uinv[is][ibl];
         }
     }
     let params = FlowParameters::new(d.minf, d.reinf, 1.4);
@@ -335,7 +335,7 @@ pub fn state_before_mrchue() -> (BlState, FlowParameters, [f64; 3]) {
 /// the SETBL control flags. On call 1 the COMMON state (COM1/COM2/XT) is what MRCHUE left
 /// behind, obtained by replaying MRCHUE from its own gated input.
 #[allow(dead_code)]
-pub fn state_before_setbl_march(k: usize) -> (BlState, FlowParameters, BlDump) {
+pub fn state_before_setbl_march(k: usize) -> (SolverState, FlowParameters, BlDump) {
     let fx = |name: &str| require_fixture(&format!("{}/{}", REF_CASE, name));
     let f = parse_pointers(&fx("xfoil_pointers.dat"), 1);
     let u = parse_uinv(&fx("xfoil_uinv.dat"), 1);
@@ -352,71 +352,71 @@ pub fn state_before_setbl_march(k: usize) -> (BlState, FlowParameters, BlDump) {
         [f.iblte[1], f.iblte[2]],
         "call {k}: IBLTE"
     );
-    let mut st = BlState::empty(f.n, f.nw);
+    let mut st = SolverState::empty(f.n, f.nw);
     st.x = f.x.clone();
     st.y = f.y.clone();
     st.s = f.s.clone();
     // XP/YP are not dumped; they are SEGSPL of the dumped X/Y/S (identical construction to
-    // create_paneled_airfoil / BlState::from_airfoil)
+    // create_paneled_airfoil / SolverState::from_foil)
     {
         let n = f.n;
         let xp = yfoil::geometry::spline(&f.x[1..=n], &f.s[1..=n]);
         let yp = yfoil::geometry::spline(&f.y[1..=n], &f.s[1..=n]);
-        st.xp[1..=n].copy_from_slice(&xp);
-        st.yp[1..=n].copy_from_slice(&yp);
+        st.dxds[1..=n].copy_from_slice(&xp);
+        st.dyds[1..=n].copy_from_slice(&yp);
     }
-    st.nx = f.nx.clone();
-    st.ny = f.ny.clone();
-    st.apanel = f.apanel.clone();
-    st.nbl = f.nbl;
-    st.iblte = f.iblte;
-    st.nsys = f.nsys;
-    st.ipan = f.ipan.clone();
-    st.vti = f.vti.clone();
-    st.isys = f.isys.clone();
-    st.wgap = f.wgap.clone();
-    st.ante = f.ante;
-    st.aste = f.aste;
-    st.dste = f.dste;
-    st.sharp = f.sharp;
+    st.normal_x = f.nx.clone();
+    st.normal_y = f.ny.clone();
+    st.panel_angle = f.apanel.clone();
+    st.n_stations = f.nbl;
+    st.i_te_station = f.iblte;
+    st.n_rows = f.nsys;
+    st.i_node = f.ipan.clone();
+    st.velocity_sign = f.vti.clone();
+    st.i_row = f.isys.clone();
+    st.wake_gap = f.wgap.clone();
+    st.te_thickness_normal = f.ante;
+    st.te_thickness_parallel = f.aste;
+    st.te_gap = f.dste;
+    st.sharp_te = f.sharp;
     st.chord = f.chord;
-    st.sle = f.sle;
-    st.xle = f.xle;
-    st.yle = f.yle;
-    st.xte = f.xte;
-    st.yte = f.yte;
+    st.s_le = f.sle;
+    st.x_le = f.xle;
+    st.y_le = f.yle;
+    st.x_te = f.xte;
+    st.y_te = f.yte;
     st.dij = dij;
     // this iteration's stagnation point
-    st.ist = d.int("IST");
-    st.sst = d.real("SST");
-    st.sst_go = d.real("SST_GO");
-    st.sst_gp = d.real("SST_GP");
+    st.i_stagnation_node = d.int("IST");
+    st.s_stagnation = d.real("SST");
+    st.s_stagnation_d_gamma_node0 = d.real("SST_GO");
+    st.s_stagnation_d_gamma_node1 = d.real("SST_GP");
     // SETBL controls
-    st.lalfa = d.logical("LALFA");
-    st.matyp = d.int("MATYP");
-    st.retyp = d.int("RETYP");
-    st.minf1 = d.real("MINF");
-    st.reinf1 = d.real("REINF");
+    st.alpha_specified = d.logical("LALFA");
+    st.mach_cl_dependence = d.int("MATYP");
+    st.re_cl_dependence = d.int("RETYP");
+    st.mach_cl1 = d.real("MINF");
+    st.re_cl1 = d.real("REINF");
     st.cl = d.real("CLMR");
-    st.clspec = d.real("CLMR");
+    st.cl_specified = d.real("CLMR");
     st.qinf = d.real("QINF");
-    st.alfa = u.alfa;
-    st.vaccel = d.real("VACCEL");
-    st.acrit = [0.0, d.real("ACRIT1"), d.real("ACRIT2")];
-    st.xstrip = [0.0, d.real("XSTRIP1"), d.real("XSTRIP2")];
-    st.itran = [0, d.int("ITRAN1"), d.int("ITRAN2")];
-    st.lblini = true;
+    st.alpha = u.alfa;
+    st.elimination_threshold = d.real("VACCEL");
+    st.ncrit = [0.0, d.real("ACRIT1"), d.real("ACRIT2")];
+    st.x_trip = [0.0, d.real("XSTRIP1"), d.real("XSTRIP2")];
+    st.i_transition_station = [0, d.int("ITRAN1"), d.int("ITRAN2")];
+    st.bl_initialised = true;
     for is in 1..=2 {
         for ibl in 1..=f.nbl[is] {
             let r = d.bl[is][ibl];
-            st.xssi[is][ibl] = r[0];
-            st.uedg[is][ibl] = r[1];
-            st.thet[is][ibl] = r[2];
-            st.dstr[is][ibl] = r[3];
-            st.ctau[is][ibl] = r[4];
-            st.mass[is][ibl] = r[5];
-            st.uinv[is][ibl] = u.uinv[is][ibl];
-            st.uinv_a[is][ibl] = u.uinv_a[is][ibl];
+            st.xi[is][ibl] = r[0];
+            st.ue[is][ibl] = r[1];
+            st.theta[is][ibl] = r[2];
+            st.dstar[is][ibl] = r[3];
+            st.sqrtctau[is][ibl] = r[4];
+            st.mass_defect[is][ibl] = r[5];
+            st.ue_inviscid[is][ibl] = u.uinv[is][ibl];
+            st.ue_inviscid_d_alpha[is][ibl] = u.uinv_a[is][ibl];
             // STMOVE recomputes XSSI every VISCAL iteration (SST moves); the pointer dump is
             // from the first IBLSYS call, so only call 1 can be checked against it.
             if k == 1 {
@@ -431,9 +431,9 @@ pub fn state_before_setbl_march(k: usize) -> (BlState, FlowParameters, BlDump) {
     if k == 1 {
         let (mut pre, p2, a2) = state_before_mrchue();
         march_direct(&mut pre, &p2, a2, None);
-        st.com1 = pre.com1;
-        st.com2 = pre.com2;
-        st.trloc = pre.trloc.clone();
+        st.station1 = pre.station1;
+        st.station2 = pre.station2;
+        st.transition = pre.transition.clone();
     }
     (st, params, d)
 }

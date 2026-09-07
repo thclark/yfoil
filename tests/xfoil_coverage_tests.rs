@@ -138,47 +138,47 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     yfoil::solver::specal::alfa_command(&mut session.st, &mut session.sys, alpha_deg.to_radians());
     solve_viscous(&mut session.st, session.sys.as_mut(), 0, 1.0, None);
     let st = &mut session.st;
-    st.lblini = true;
-    st.ist = d.int("IST");
-    st.sst = d.real("SST");
-    st.sst_go = d.real("SST_GO");
-    st.sst_gp = d.real("SST_GP");
+    st.bl_initialised = true;
+    st.i_stagnation_node = d.int("IST");
+    st.s_stagnation = d.real("SST");
+    st.s_stagnation_d_gamma_node0 = d.real("SST_GO");
+    st.s_stagnation_d_gamma_node1 = d.real("SST_GP");
     iblpan(st);
     xicalc(st);
     iblsys(st);
     uicalc(st);
     assert_eq!(
         [d.int("NBL1"), d.int("NBL2")],
-        [st.nbl[1], st.nbl[2]],
+        [st.n_stations[1], st.n_stations[2]],
         "NBL from the dumped IST"
     );
-    st.itran = [0, d.int("ITRAN1"), d.int("ITRAN2")];
+    st.i_transition_station = [0, d.int("ITRAN1"), d.int("ITRAN2")];
     st.cl = d.real("CLMR");
-    st.minf_cl = 0.0;
+    st.mach_d_cl = 0.0;
     comset(st);
     for is in 1..=2 {
-        for ibl in 1..=st.nbl[is] {
+        for ibl in 1..=st.n_stations[is] {
             let r = d.bl[is][ibl];
             assert_within(
-                st.xssi[is][ibl],
+                st.xi[is][ibl],
                 r[0],
                 TOL_SOLVER,
                 1.0,
                 &format!("XSSI({ibl},{is}) rebuilt from IST/SST"),
             );
-            st.xssi[is][ibl] = r[0];
-            st.uedg[is][ibl] = r[1];
-            st.thet[is][ibl] = r[2];
-            st.dstr[is][ibl] = r[3];
-            st.ctau[is][ibl] = r[4];
-            st.mass[is][ibl] = r[5];
+            st.xi[is][ibl] = r[0];
+            st.ue[is][ibl] = r[1];
+            st.theta[is][ibl] = r[2];
+            st.dstar[is][ibl] = r[3];
+            st.sqrtctau[is][ibl] = r[4];
+            st.mass_defect[is][ibl] = r[5];
         }
     }
 
     // one iteration
     let r = assemble_newton_system(st);
     let sol = solve_newton_system(r.newton);
-    let u = apply_newton_update(st, &sol.deltas, st.minf_cl);
+    let u = apply_newton_update(st, &sol.deltas, st.mach_d_cl);
 
     // the reference's own 1-ULP spread of this iteration's values bounds what one step can be
     // expected to reproduce (the replay's only foreign input is YFoil's DIJ, ~5e-11)
@@ -232,11 +232,11 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
         let nrows = o.nbl(is);
         for ibl in 2..=nrows {
             let ours = [
-                st.uedg[is][ibl],
-                st.thet[is][ibl],
-                st.dstr[is][ibl],
-                st.ctau[is][ibl],
-                st.mass[is][ibl],
+                st.ue[is][ibl],
+                st.theta[is][ibl],
+                st.dstar[is][ibl],
+                st.sqrtctau[is][ibl],
+                st.mass_defect[is][ibl],
             ];
             for (m, name) in names.iter().enumerate() {
                 let b = o.bl[is][ibl][m + 1];

@@ -38,7 +38,7 @@ fn check_call(k: usize) {
         ("CL_MS", u.cl_d_machsqd),
         ("CL_AC", u.cl_d_free),
         ("CL", st.cl),
-        ("ALFA", st.alfa),
+        ("ALFA", st.alpha),
     ] {
         assert_within(ours, o.real(name), TOL_SOLVER, 1.0, &format!("call {k}: {name}"));
     }
@@ -67,16 +67,16 @@ fn check_call(k: usize) {
         };
         for ibl in 2..=nrows {
             let ours = [
-                st.uedg[is][ibl],
-                st.thet[is][ibl],
-                st.dstr[is][ibl],
-                st.ctau[is][ibl],
-                st.mass[is][ibl],
+                st.ue[is][ibl],
+                st.theta[is][ibl],
+                st.dstar[is][ibl],
+                st.sqrtctau[is][ibl],
+                st.mass_defect[is][ibl],
                 st.tau[is][ibl],
-                st.dis[is][ibl],
-                st.ctq[is][ibl],
-                st.delt[is][ibl],
-                st.tstr[is][ibl],
+                st.dissipation[is][ibl],
+                st.sqrtctaueq[is][ibl],
+                st.delta[is][ibl],
+                st.thetastar[is][ibl],
             ];
             for (m, name) in names.iter().enumerate() {
                 let (a, b) = (ours[m], theirs(ibl, m));

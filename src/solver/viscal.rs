@@ -1,10 +1,10 @@
-//! VISCAL (xoper.f): converges the viscous operating point. Line-for-line on `BlState`:
+//! VISCAL (xoper.f): converges the viscous operating point. Line-for-line on `SolverState`:
 //! the prologue (XYWAKE, QWCALC, QISET, STFIND/IBLPAN/XICALC/IBLSYS, UICALC, QDCALC) and the
 //! Newton loop SETBL → BLSOLV → UPDATE → (MRCL+COMSET | QISET+UICALC) → QVFUE → GAMQV →
 //! STMOVE → CLCALC → CDCALC, converging on RMSBL < EPS1.
 
 use crate::bl::blsolv::solve_newton_system;
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 use crate::solver::clcalc::{cdcalc, clcalc, comset, cpcalc};
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::pointers::{iblpan, iblsys, stfind, stmove, xicalc};
@@ -49,14 +49,14 @@ pub struct IterationRecord {
 /// influence matrix does not exist yet; `waklen` is WAKLEN (1.0 in XFOIL). Returns whether the
 /// point converged; `st.lvconv/avisc/mvisc` are set as XFOIL sets them.
 pub fn solve_viscous(
-    st: &mut BlState,
+    st: &mut SolverState,
     mut sys: Option<&mut InviscidSystem>,
     niter: usize,
     waklen: f64,
     mut trace: Option<&mut Vec<IterationRecord>>,
 ) -> bool {
     // calculate wake trajectory from current inviscid solution if necessary
-    if !st.lwake {
+    if !st.wake_built {
         xywake(st, waklen);
     }
 
@@ -64,10 +64,10 @@ pub fn solve_viscous(
     qwcalc(st);
 
     // set velocities on airfoil and wake for initial alpha
-    qiset(st, st.alfa);
+    qiset(st, st.alpha);
 
-    if !st.lipan {
-        if st.lblini {
+    if !st.pointers_built {
+        if st.bl_initialised {
             gamqv(st);
         }
         // locate stagnation point arc length position and panel index
@@ -83,24 +83,24 @@ pub fn solve_viscous(
     // set inviscid BL edge velocity UINV from QINV
     uicalc(st);
 
-    if !st.lblini {
+    if !st.bl_initialised {
         // set initial Ue from inviscid Ue
         for is in 1..=2 {
-            for ibl in 1..=st.nbl[is] {
-                st.uedg[is][ibl] = st.uinv[is][ibl];
+            for ibl in 1..=st.n_stations[is] {
+                st.ue[is][ibl] = st.ue_inviscid[is][ibl];
             }
         }
     }
 
-    if st.lvconv {
+    if st.converged {
         // set correct CL if converged point exists
         qvfue(st);
-        let nt = st.n + st.nw;
-        if st.lvisc {
-            st.cpv = cpcalc(nt, &st.qvis, st.qinf, st.minf);
-            st.cpi = cpcalc(nt, &st.qinv, st.qinf, st.minf);
+        let nt = st.n_foil_nodes + st.n_wake_nodes;
+        if st.viscous {
+            st.cp_viscous = cpcalc(nt, &st.q_viscous, st.qinf, st.mach);
+            st.cp_inviscid = cpcalc(nt, &st.q_inviscid, st.qinf, st.mach);
         } else {
-            st.cpi = cpcalc(st.n, &st.qinv, st.qinf, st.minf);
+            st.cp_inviscid = cpcalc(st.n_foil_nodes, &st.q_inviscid, st.qinf, st.mach);
         }
         gamqv(st);
         clcalc(st);
@@ -109,7 +109,7 @@ pub fn solve_viscous(
 
     // set up source influence matrix if it doesn't exist
     let ladij = sys.as_ref().map(|s| s.ladij).unwrap_or(true);
-    if !st.lwdij || !ladij {
+    if !st.dij_wake_built || !ladij {
         let s = sys
             .as_mut()
             .expect("VISCAL: the source influence matrix does not exist and no inviscid system was given");
@@ -124,17 +124,17 @@ pub fn solve_viscous(
         // solve Newton system with custom solver
         let sol = solve_newton_system(r.newton);
         // update BL variables
-        let u = apply_newton_update(st, &sol.deltas, st.minf_cl);
+        let u = apply_newton_update(st, &sol.deltas, st.mach_d_cl);
 
-        if st.lalfa {
+        if st.alpha_specified {
             // set new freestream Mach, Re from new CL
             let (m_cl, re_cl) = set_mach_re_from_cl(st, st.cl);
-            st.minf_cl = m_cl;
-            st.reinf_cl = re_cl;
+            st.mach_d_cl = m_cl;
+            st.re_d_cl = re_cl;
             comset(st);
         } else {
             // set new inviscid speeds QINV and UINV for new alpha
-            qiset(st, st.alfa);
+            qiset(st, st.alpha);
             uicalc(st);
         }
 
@@ -159,35 +159,35 @@ pub fn solve_viscous(
                 i_residual_max_station: u.i_residual_max_station,
                 residual_max_side: u.residual_max_side,
                 relaxation: u.relaxation,
-                alpha: st.alfa,
-                mach: st.minf,
-                re: st.reinf,
+                alpha: st.alpha,
+                mach: st.mach,
+                re: st.re,
                 cl: st.cl,
                 cm: st.cm,
                 cd: st.cd,
-                cd_friction: st.cdf,
-                cd_pressure: st.cdp,
-                cl_d_alpha: st.cl_alf,
-                cl_d_machsqd: st.cl_msq,
-                i_stagnation_node: st.ist,
-                s_stagnation: st.sst,
-                i_transition_station: st.itran,
-                x_transition: st.xoctr,
+                cd_friction: st.cd_friction,
+                cd_pressure: st.cd_pressure,
+                cl_d_alpha: st.cl_d_alpha,
+                cl_d_machsqd: st.cl_d_machsqd,
+                i_stagnation_node: st.i_stagnation_node,
+                s_stagnation: st.s_stagnation,
+                i_transition_station: st.i_transition_station,
+                x_transition: st.x_transition,
                 converged: conv,
             });
         }
         if conv {
-            st.lvconv = true;
-            st.avisc = st.alfa;
-            st.mvisc = st.minf;
+            st.converged = true;
+            st.alpha_converged = st.alpha;
+            st.mach_converged = st.mach;
             converged = true;
             break;
         }
     }
     // 'VISCAL:  Convergence failed' if the loop ran out
 
-    let nt = st.n + st.nw;
-    st.cpi = cpcalc(nt, &st.qinv, st.qinf, st.minf);
-    st.cpv = cpcalc(nt, &st.qvis, st.qinf, st.minf);
+    let nt = st.n_foil_nodes + st.n_wake_nodes;
+    st.cp_inviscid = cpcalc(nt, &st.q_inviscid, st.qinf, st.mach);
+    st.cp_viscous = cpcalc(nt, &st.q_viscous, st.qinf, st.mach);
     converged
 }

@@ -23,7 +23,7 @@ use super::tolerances::{FLOOR_FACTOR, STRADDLE_FLOOR, TOL_SOLVER, TOL_TRANSIENT}
 use std::collections::HashMap;
 use std::path::Path;
 use yfoil::solver::analysis::OperatingPoint;
-use yfoil::solver::blstate::BlState;
+use yfoil::solver::blstate::SolverState;
 
 #[derive(Debug, Clone, Default)]
 pub struct CallFloor {
@@ -155,7 +155,7 @@ fn assert_value(a: f64, b: f64, tol: f64, scale: f64, floor: f64, what: &str) {
 
 /// Compare VISCAL call `k` (1-based) of the reference with a `Session` result.
 /// `transient_tol` is the base tolerance for the per-iteration values.
-pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, transient_tol: f64) -> Outcome {
+pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &SolverState, transient_tol: f64) -> Outcome {
     let x = &rec.points[k - 1];
     let ctx = format!("call {k} (alpha {:.3}°)", p.alpha.to_degrees());
     assert_eq!(k, x["CALL"].parse::<usize>().unwrap());
@@ -307,8 +307,8 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
         ("CDP", p.cdp, 1.0),
         ("XOCTR1", p.xtr_upper, 1.0),
         ("XOCTR2", p.xtr_lower, 1.0),
-        ("MINF", st.minf, 1.0),
-        ("REINF", st.reinf, st.reinf),
+        ("MINF", st.mach, 1.0),
+        ("REINF", st.re, st.re),
     ] {
         assert_value(
             ours,
@@ -319,7 +319,7 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
             &format!("{ctx}: {name}"),
         );
     }
-    assert_eq!(st.ist, x["IST"].parse::<usize>().unwrap(), "{ctx}: IST");
+    assert_eq!(st.i_stagnation_node, x["IST"].parse::<usize>().unwrap(), "{ctx}: IST");
     assert_eq!(
         p.itran[1..],
         [
@@ -330,7 +330,7 @@ pub fn check_call(rec: &Records, k: usize, p: &OperatingPoint, st: &BlState, tra
     );
     println!(
         "{ctx}: {:2} iterations, converged={} CL {:.8} CD {:.8} CM {:+.8} XTR {:.5}/{:.5} Re {:.0} M {:.3} — match (worst diff/floor {:.2})",
-        p.iterations, p.converged, p.cl, p.cd, p.cm, p.xtr_upper, p.xtr_lower, st.reinf, st.minf, worst_ratio
+        p.iterations, p.converged, p.cl, p.cd, p.cm, p.xtr_upper, p.xtr_lower, st.re, st.mach, worst_ratio
     );
     Outcome::Match
 }

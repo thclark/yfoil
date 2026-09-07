@@ -1,7 +1,7 @@
 //! XYWAKE and QWCALC (xpanel.f) and SETEXP (xutils.f): wake node coordinates traced along
 //! streamlines of the current solution, and the alpha = 0, 90 tangential velocities on it.
 
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 use crate::solver::psilin::psilin;
 
 /// SETEXP: geometrically stretched array S(1..=nn) with S(1) = 0, S(2)-S(1) = ds1, S(nn) = smax.
@@ -63,9 +63,9 @@ pub fn setexp(ds1: f64, smax: f64, nn: usize) -> Vec<f64> {
 /// XYWAKE: sets wake node coordinates X/Y/S, normals NX/NY and panel angles APANEL for
 /// nodes n+1..=n+nw from the current GAM (and SIG, though SIGLIN is off here) distribution.
 /// `waklen` is XFOIL's WAKLEN (chords). Requires `st.nw == n/12 + 10*INT(WAKLEN)`.
-pub fn xywake(st: &mut BlState, waklen: f64) {
-    let n = st.n;
-    let nw = st.nw;
+pub fn xywake(st: &mut SolverState, waklen: f64) {
+    let n = st.n_foil_nodes;
+    let nw = st.n_wake_nodes;
     debug_assert_eq!(nw, n / 12 + 10 * (waklen as usize), "NW must follow XYWAKE's formula");
 
     let ds1 = 0.5 * (st.s[2] - st.s[1] + st.s[n] - st.s[n - 1]);
@@ -76,13 +76,13 @@ pub fn xywake(st: &mut BlState, waklen: f64) {
 
     // set first wake point a tiny distance behind TE
     let i = n + 1;
-    let sx = 0.5 * (st.yp[n] - st.yp[1]);
-    let sy = 0.5 * (st.xp[1] - st.xp[n]);
+    let sx = 0.5 * (st.dyds[n] - st.dyds[1]);
+    let sy = 0.5 * (st.dxds[1] - st.dxds[n]);
     let smod = (sx * sx + sy * sy).sqrt();
-    st.nx[i] = sx / smod;
-    st.ny[i] = sy / smod;
-    st.x[i] = xte - 0.0001 * st.ny[i];
-    st.y[i] = yte + 0.0001 * st.nx[i];
+    st.normal_x[i] = sx / smod;
+    st.normal_y[i] = sy / smod;
+    st.x[i] = xte - 0.0001 * st.normal_y[i];
+    st.y[i] = yte + 0.0001 * st.normal_x[i];
     st.s[i] = st.s[n];
 
     // calculate streamfunction gradient components at first point
@@ -90,19 +90,19 @@ pub fn xywake(st: &mut BlState, waklen: f64) {
     let psi_y = psilin(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_ni;
 
     // set unit vector normal to wake at first point
-    st.nx[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
-    st.ny[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
+    st.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
+    st.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
 
     // set angle of wake panel normal
-    st.apanel[i] = psi_y.atan2(psi_x);
+    st.panel_angle[i] = psi_y.atan2(psi_x);
 
     // set rest of wake points
     for i in (n + 2)..=(n + nw) {
         let ds = snew[i - n] - snew[i - n - 1];
 
         // set new point DS downstream of last point
-        st.x[i] = st.x[i - 1] - ds * st.ny[i];
-        st.y[i] = st.y[i - 1] + ds * st.nx[i];
+        st.x[i] = st.x[i - 1] - ds * st.normal_y[i];
+        st.y[i] = st.y[i - 1] + ds * st.normal_x[i];
         st.s[i] = st.s[i - 1] + ds;
 
         if i == n + nw {
@@ -113,29 +113,29 @@ pub fn xywake(st: &mut BlState, waklen: f64) {
         let psi_x = psilin(st, i, st.x[i], st.y[i], 1.0, 0.0, false).psi_ni;
         let psi_y = psilin(st, i, st.x[i], st.y[i], 0.0, 1.0, false).psi_ni;
 
-        st.nx[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
-        st.ny[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
+        st.normal_x[i + 1] = -psi_x / (psi_x * psi_x + psi_y * psi_y).sqrt();
+        st.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
 
         // set angle of wake panel normal
-        st.apanel[i] = psi_y.atan2(psi_x);
+        st.panel_angle[i] = psi_y.atan2(psi_x);
     }
     // LWAKE = .TRUE., AWAKE = ALFA, LWDIJ = .FALSE. (new wake geometry invalidates the wake DIJ)
-    st.lwake = true;
-    st.awake = st.alfa;
-    st.lwdij = false;
+    st.wake_built = true;
+    st.alpha_wake = st.alpha;
+    st.dij_wake_built = false;
 }
 
 /// QWCALC: inviscid tangential velocity for alpha = 0, 90 on the wake due to freestream and
 /// airfoil surface vorticity.
-pub fn qwcalc(st: &mut BlState) {
-    let n = st.n;
+pub fn qwcalc(st: &mut SolverState) {
+    let n = st.n_foil_nodes;
     // first wake point (same as TE)
-    st.qinvu[1][n + 1] = st.qinvu[1][n];
-    st.qinvu[2][n + 1] = st.qinvu[2][n];
+    st.q_inviscid_basis[1][n + 1] = st.q_inviscid_basis[1][n];
+    st.q_inviscid_basis[2][n + 1] = st.q_inviscid_basis[2][n];
     // rest of wake
-    for i in (n + 2)..=(n + st.nw) {
-        let p = psilin(st, i, st.x[i], st.y[i], st.nx[i], st.ny[i], false);
-        st.qinvu[1][i] = p.qtan1;
-        st.qinvu[2][i] = p.qtan2;
+    for i in (n + 2)..=(n + st.n_wake_nodes) {
+        let p = psilin(st, i, st.x[i], st.y[i], st.normal_x[i], st.normal_y[i], false);
+        st.q_inviscid_basis[1][i] = p.qtan1;
+        st.q_inviscid_basis[2][i] = p.qtan2;
     }
 }

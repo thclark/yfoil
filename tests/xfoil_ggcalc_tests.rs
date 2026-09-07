@@ -14,7 +14,7 @@ use fixtures::pointers_fixtures::{parse_dij, parse_pointers, parse_uinv};
 use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_LINALG, TOL_PURE, TOL_SOLVER};
 use yfoil::geometry::{create_paneled_airfoil, read_geometry_from_file};
-use yfoil::solver::blstate::BlState;
+use yfoil::solver::blstate::SolverState;
 use yfoil::solver::ggcalc::{ggcalc, InviscidSystem};
 use yfoil::solver::qdcalc::qdcalc;
 use yfoil::solver::velocity::qiset;
@@ -25,18 +25,18 @@ fn fixture_path(name: &str) -> PathBuf {
 }
 
 /// GGCALC on YFoil's geometry, then the alpha superposition of SPECAL.
-fn prologue_to_specal() -> (BlState, InviscidSystem, fixtures::pointers_fixtures::UinvFixture) {
+fn prologue_to_specal() -> (SolverState, InviscidSystem, fixtures::pointers_fixtures::UinvFixture) {
     let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
     let u = parse_uinv(&fixture_path("xfoil_uinv.dat"), 1);
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = create_paneled_airfoil(&geom);
-    let mut st = BlState::from_airfoil(&af, f.nw);
+    let mut st = SolverState::from_foil(&af, f.nw);
     let sys = ggcalc(&mut st);
-    st.alfa = u.alfa;
+    st.alpha = u.alfa;
     qiset(&mut st, u.alfa);
     // SPECAL: GAM(I) = COSA*GAMU(I,1) + SINA*GAMU(I,2)  (= QINV on the airfoil)
-    for i in 1..=st.n {
-        st.gam[i] = st.qinv[i];
+    for i in 1..=st.n_foil_nodes {
+        st.gamma[i] = st.q_inviscid[i];
     }
     (st, sys, u)
 }
@@ -45,20 +45,32 @@ fn prologue_to_specal() -> (BlState, InviscidSystem, fixtures::pointers_fixtures
 fn test_ggcalc_matches_xfoil_qinvu() {
     let (st, _, u) = prologue_to_specal();
     let mut worst = 0.0_f64;
-    for i in 1..=st.n {
-        assert_within(st.qinvu[1][i], u.qinvu1[i], TOL_LINALG, 1.0, &format!("QINVU({i},1)"));
-        assert_within(st.qinvu[2][i], u.qinvu2[i], TOL_LINALG, 1.0, &format!("QINVU({i},2)"));
+    for i in 1..=st.n_foil_nodes {
+        assert_within(
+            st.q_inviscid_basis[1][i],
+            u.qinvu1[i],
+            TOL_LINALG,
+            1.0,
+            &format!("QINVU({i},1)"),
+        );
+        assert_within(
+            st.q_inviscid_basis[2][i],
+            u.qinvu2[i],
+            TOL_LINALG,
+            1.0,
+            &format!("QINVU({i},2)"),
+        );
         worst = worst
-            .max((st.qinvu[1][i] - u.qinvu1[i]).abs())
-            .max((st.qinvu[2][i] - u.qinvu2[i]).abs());
+            .max((st.q_inviscid_basis[1][i] - u.qinvu1[i]).abs())
+            .max((st.q_inviscid_basis[2][i] - u.qinvu2[i]).abs());
     }
     println!("ggcalc: airfoil QINVU within {TOL_LINALG:.0e} (worst abs diff {worst:.2e})");
 }
 
 /// Compare a DIJ against the reference with the row-scaled metric; returns the worst scaled error.
-fn check_dij(st: &BlState, tol: f64, what: &str) -> (f64, usize, usize) {
+fn check_dij(st: &SolverState, tol: f64, what: &str) -> (f64, usize, usize) {
     let (n, nw, xd) = parse_dij(&fixture_path("xfoil_dij.dat"));
-    assert_eq!((n, nw), (st.n, st.nw));
+    assert_eq!((n, nw), (st.n_foil_nodes, st.n_wake_nodes));
     let np = n + nw;
     let mut worst = (0.0_f64, 0usize, 0usize);
     for i in 1..=np {
@@ -99,15 +111,15 @@ fn check_dij(st: &BlState, tol: f64, what: &str) -> (f64, usize, usize) {
 fn test_qdcalc_matches_xfoil_dij_given_xfoil_wake() {
     let (mut st, mut sys, u) = prologue_to_specal();
     let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
-    for i in (st.n + 1)..=(st.n + st.nw) {
+    for i in (st.n_foil_nodes + 1)..=(st.n_foil_nodes + st.n_wake_nodes) {
         st.x[i] = f.x[i];
         st.y[i] = f.y[i];
         st.s[i] = f.s[i];
-        st.nx[i] = f.nx[i];
-        st.ny[i] = f.ny[i];
-        st.apanel[i] = f.apanel[i];
-        st.qinvu[1][i] = u.qinvu1[i];
-        st.qinvu[2][i] = u.qinvu2[i];
+        st.normal_x[i] = f.nx[i];
+        st.normal_y[i] = f.ny[i];
+        st.panel_angle[i] = f.apanel[i];
+        st.q_inviscid_basis[1][i] = u.qinvu1[i];
+        st.q_inviscid_basis[2][i] = u.qinvu2[i];
     }
     qdcalc(&mut st, &mut sys);
     check_dij(&st, TOL_LINALG, "qdcalc (XFOIL wake)");
@@ -122,9 +134,9 @@ fn test_prologue_dij_from_yfoil_geometry() {
     let (mut st, mut sys, u) = prologue_to_specal();
     xywake(&mut st, 1.0);
     qwcalc(&mut st);
-    for i in (st.n + 1)..=(st.n + st.nw) {
+    for i in (st.n_foil_nodes + 1)..=(st.n_foil_nodes + st.n_wake_nodes) {
         assert_within(
-            st.qinvu[1][i],
+            st.q_inviscid_basis[1][i],
             u.qinvu1[i],
             TOL_PURE,
             1.0,

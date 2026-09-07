@@ -26,18 +26,18 @@ fn test_mrchue_reproduces_xfoil_state_after_first_march() {
     let (mut st, params, acrit) = state_before_mrchue();
     let d = parse_bl_state(&fixture_path("mrchdu_input_1.dat"));
     march_direct(&mut st, &params, acrit, None);
-    assert_eq!(st.itran[1..], d.itran[1..], "ITRAN");
+    assert_eq!(st.i_transition_station[1..], d.itran[1..], "ITRAN");
     let names = ["XSSI", "UEDG", "THET", "DSTR", "CTAU", "MASS"];
     let mut worst = (0.0_f64, "", 0, 0);
     for is in 1..=2 {
         for ibl in 2..=d.nbl[is] {
             let ours = [
-                st.xssi[is][ibl],
-                st.uedg[is][ibl],
-                st.thet[is][ibl],
-                st.dstr[is][ibl],
-                st.ctau[is][ibl],
-                st.mass[is][ibl],
+                st.xi[is][ibl],
+                st.ue[is][ibl],
+                st.theta[is][ibl],
+                st.dstar[is][ibl],
+                st.sqrtctau[is][ibl],
+                st.mass_defect[is][ibl],
             ];
             for (k, name) in names.iter().enumerate() {
                 let (a, b) = (ours[k], d.bl[is][ibl][k]);
@@ -57,7 +57,7 @@ fn test_mrchue_reproduces_xfoil_state_after_first_march() {
         worst.1,
         worst.3,
         worst.2,
-        &st.itran[1..]
+        &st.i_transition_station[1..]
     );
 }
 

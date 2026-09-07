@@ -402,8 +402,8 @@ fn main() {
                 // Write JSON output if requested
                 if let Some(ref path) = output {
                     let n = airfoil.n;
-                    let velocity: Vec<f64> = session.st.qinv[1..=n].to_vec();
-                    let cp: Vec<f64> = session.st.cpi[1..=n].to_vec();
+                    let velocity: Vec<f64> = session.st.q_inviscid[1..=n].to_vec();
+                    let cp: Vec<f64> = session.st.cp_inviscid[1..=n].to_vec();
                     let result = InviscidAnalysisOutput::new(
                         &airfoil,
                         &velocity,

@@ -6,7 +6,7 @@
 //! Not translated: the GEOLIN branch (geometric sensitivities for inverse design: DZDN,
 //! Z_QDOF*) and the LIMAGE ground-image branch — neither is reachable in analysis mode.
 
-use crate::solver::blstate::BlState;
+use crate::solver::blstate::SolverState;
 
 /// Everything PSILIN leaves in COMMON that analysis mode reads.
 #[derive(Debug, Clone)]
@@ -34,18 +34,18 @@ pub fn pi_consts() -> (f64, f64, f64) {
 /// PSILIN(I, XI, YI, NXI, NYI, PSI, PSI_NI, GEOLIN=.FALSE., SIGLIN).
 /// `i` is the 1-based node index the point belongs to (airfoil 1..=n, wake n+1..=n+nw);
 /// it only affects the self-influence skips and the arctan reflection flag.
-pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, siglin: bool) -> Psilin {
-    let n = st.n;
+pub fn psilin(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, siglin: bool) -> Psilin {
+    let n = st.n_foil_nodes;
     let (pi, hopi, qopi) = pi_consts();
     let (x, y, s) = (&st.x, &st.y, &st.s);
-    let gamu1 = &st.qinvu[1];
-    let gamu2 = &st.qinvu[2];
+    let gamu1 = &st.q_inviscid_basis[1];
+    let gamu2 = &st.q_inviscid_basis[2];
 
     // distance tolerance for determining if two points are the same
     let seps = (s[n] - s[1]) * 1.0e-5;
     let io = i;
-    let cosa = st.alfa.cos();
-    let sina = st.alfa.sin();
+    let cosa = st.alpha.cos();
+    let sina = st.alpha.sin();
 
     let mut out = Psilin {
         psi: 0.0,
@@ -61,10 +61,10 @@ pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, sigl
         dqdm: vec![0.0; n + 1],
     };
 
-    let (scs, sds) = if st.sharp {
+    let (scs, sds) = if st.sharp_te {
         (1.0, 0.0)
     } else {
-        (st.ante / st.dste, st.aste / st.dste)
+        (st.te_thickness_normal / st.te_gap, st.te_thickness_parallel / st.te_gap)
     };
 
     // carried out of the loop for the TE panel (labels 11/12)
@@ -98,7 +98,7 @@ pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, sigl
             continue;
         }
         let dsio = 1.0 / dso;
-        apan = st.apanel[jo];
+        apan = st.panel_angle[jo];
 
         let rx1 = xi - x[jo];
         let ry1 = yi - y[jo];
@@ -169,8 +169,8 @@ pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, sigl
             let dsm = ((x[jp] - x[jm]).powi(2) + (y[jp] - y[jm]).powi(2)).sqrt();
             let dsim = 1.0 / dsm;
 
-            let ssum = (st.sig[jp] - st.sig[jo]) * dsio + (st.sig[jp] - st.sig[jm]) * dsim;
-            let sdif = (st.sig[jp] - st.sig[jo]) * dsio - (st.sig[jp] - st.sig[jm]) * dsim;
+            let ssum = (st.sigma[jp] - st.sigma[jo]) * dsio + (st.sigma[jp] - st.sigma[jm]) * dsim;
+            let sdif = (st.sigma[jp] - st.sigma[jo]) * dsio - (st.sigma[jp] - st.sigma[jm]) * dsim;
 
             out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -205,8 +205,8 @@ pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, sigl
             let dsp = ((x[jq] - x[jo]).powi(2) + (y[jq] - y[jo]).powi(2)).sqrt();
             let dsip = 1.0 / dsp;
 
-            let ssum = (st.sig[jq] - st.sig[jo]) * dsip + (st.sig[jp] - st.sig[jo]) * dsio;
-            let sdif = (st.sig[jq] - st.sig[jo]) * dsip - (st.sig[jp] - st.sig[jo]) * dsio;
+            let ssum = (st.sigma[jq] - st.sigma[jo]) * dsip + (st.sigma[jp] - st.sigma[jo]) * dsio;
+            let sdif = (st.sigma[jq] - st.sigma[jo]) * dsip - (st.sigma[jp] - st.sigma[jo]) * dsio;
 
             out.psi += qopi * (psum * ssum + pdif * sdif);
 
@@ -244,8 +244,8 @@ pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, sigl
         let gdif1 = gamu1[jp] - gamu1[jo];
         let gdif2 = gamu2[jp] - gamu2[jo];
 
-        let gsum = st.gam[jp] + st.gam[jo];
-        let gdif = st.gam[jp] - st.gam[jo];
+        let gsum = st.gamma[jp] + st.gamma[jo];
+        let gdif = st.gamma[jp] - st.gamma[jo];
 
         out.psi += qopi * (psis * gsum + psid * gdif);
 
@@ -285,8 +285,8 @@ pub fn psilin(st: &BlState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64, sigl
         let gamte1 = -0.5 * sds * (gamu1[jp] - gamu1[jo]);
         let gamte2 = -0.5 * sds * (gamu2[jp] - gamu2[jo]);
 
-        let sigte = 0.5 * scs * (st.gam[jp] - st.gam[jo]);
-        let gamte = -0.5 * sds * (st.gam[jp] - st.gam[jo]);
+        let sigte = 0.5 * scs * (st.gamma[jp] - st.gamma[jo]);
+        let gamte = -0.5 * sds * (st.gamma[jp] - st.gamma[jo]);
 
         // TE panel contribution to Psi
         out.psi += hopi * (psig * sigte + pgam * gamte);

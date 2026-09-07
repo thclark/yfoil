@@ -58,7 +58,7 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
     ] {
         assert_within(ours, fin.real(name), TOL_SOLVER, 1.0, &format!("end-to-end: {name}"));
     }
-    assert_eq!(session.st.ist, fin.int("IST"), "IST");
+    assert_eq!(session.st.i_stagnation_node, fin.int("IST"), "IST");
     assert_eq!(p.itran[1..], [fin.int("ITRAN1"), fin.int("ITRAN2")], "ITRAN");
 
     // per-iteration RMSBL/RLX/CL/CD
@@ -108,14 +108,14 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
         let i: usize = idx.trim().parse().unwrap();
         let v: Vec<f64> = vals.split_whitespace().map(|t| t.parse().unwrap()).collect();
         assert_within(
-            session.st.cpi[i],
+            session.st.cp_inviscid[i],
             v[0],
             TOL_SOLVER,
             1.0,
             &format!("end-to-end: CPI({i})"),
         );
         assert_within(
-            session.st.cpv[i],
+            session.st.cp_viscous[i],
             v[1],
             TOL_SOLVER,
             1.0,
@@ -123,7 +123,7 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
         );
         nodes += 1;
     }
-    assert_eq!(nodes, session.st.n + session.st.nw);
+    assert_eq!(nodes, session.st.n_foil_nodes + session.st.n_wake_nodes);
 
     println!(
         "end-to-end alpha=2: {} iterations, CL {:.10} CD {:.10} CM {:.10} XTR {:.6}/{:.6} — all within {TOL_SOLVER:.0e} of XFOIL",
