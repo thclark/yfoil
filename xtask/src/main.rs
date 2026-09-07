@@ -476,8 +476,8 @@ fn fixtures(flags: &[String]) {
 fn check_handoff(work: &Path) -> Result<usize, String> {
     #[derive(Deserialize)]
     struct Geom {
-        x_c: Vec<f64>,
-        y_c: Vec<f64>,
+        x: Vec<f64>,
+        y: Vec<f64>,
     }
     let g: Geom = serde_json::from_str(&fs::read_to_string(work.join("panels.json")).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
@@ -491,20 +491,20 @@ fn check_handoff(work: &Path) -> Result<usize, String> {
         }
         let i: usize = p[0].parse().unwrap();
         let (x, y): (f64, f64) = (p[1].parse().map_err(|_| "bad x")?, p[2].parse().map_err(|_| "bad y")?);
-        if i == 0 || i > g.x_c.len() {
+        if i == 0 || i > g.x.len() {
             return Err(format!("node index {i} out of range"));
         }
-        if x.to_bits() != g.x_c[i - 1].to_bits() || y.to_bits() != g.y_c[i - 1].to_bits() {
+        if x.to_bits() != g.x[i - 1].to_bits() || y.to_bits() != g.y[i - 1].to_bits() {
             return Err(format!(
                 "node {i}: xfoil=({x:e},{y:e}) yfoil=({:e},{:e})",
-                g.x_c[i - 1],
-                g.y_c[i - 1]
+                g.x[i - 1],
+                g.y[i - 1]
             ));
         }
         n += 1;
     }
-    if n != g.x_c.len() {
-        return Err(format!("xfoil dumped {n} nodes, yfoil has {}", g.x_c.len()));
+    if n != g.x.len() {
+        return Err(format!("xfoil dumped {n} nodes, yfoil has {}", g.x.len()));
     }
     Ok(n)
 }
