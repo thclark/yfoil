@@ -71,7 +71,7 @@ pub fn march_prescribed_dstar(
     // MRCHDU locals never re-initialised per side: all persist across sides and stations.
     let mut s1 = std::mem::take(&mut state.station1);
     let mut s2 = std::mem::take(&mut state.station2);
-    let mut trloc = std::mem::take(&mut state.transition);
+    let mut transition = std::mem::take(&mut state.transition);
     let mut ami = 0.0;
     let (mut sens, mut sennew) = (0.0, 0.0);
     let (mut ueref, mut hkref) = (0.0, 0.0);
@@ -141,7 +141,7 @@ pub fn march_prescribed_dstar(
                 s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, params);
                 s2.set_kinematic_variables(params);
                 let pre = (
-                    [s1.ampl, s2.ampl, trloc.xi_transition, amcrit],
+                    [s1.ampl, s2.ampl, transition.xi_transition, amcrit],
                     tran,
                     state.i_transition_station[side],
                 );
@@ -152,23 +152,23 @@ pub fn march_prescribed_dstar(
                         TransitionCheck::None { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            trloc.xi_transition = s2.xi;
+                            transition.xi_transition = s2.xi;
                             state.i_transition_station[side] = i_station + 2;
                         }
                         TransitionCheck::Free {
-                            transition: location,
+                            transition: found,
                             ampl2,
                         } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                         }
-                        TransitionCheck::Forced { transition: location } => {
+                        TransitionCheck::Forced { transition: found } => {
                             tran = true;
                             trforc = true;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                         }
                     }
@@ -191,7 +191,7 @@ pub fn march_prescribed_dstar(
                         / tte;
                     assemble_te_system(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
-                    assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, params);
+                    assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&transition), amcrit, params);
                 }
 
                 let mut rec = MrchduIter {
@@ -394,23 +394,23 @@ pub fn march_prescribed_dstar(
                         TransitionCheck::None { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            trloc.xi_transition = s2.xi;
+                            transition.xi_transition = s2.xi;
                             state.i_transition_station[side] = i_station + 2;
                         }
                         TransitionCheck::Free {
-                            transition: location,
+                            transition: found,
                             ampl2,
                         } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                         }
-                        TransitionCheck::Forced { transition: location } => {
+                        TransitionCheck::Forced { transition: found } => {
                             tran = true;
                             trforc = true;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                         }
                     }
@@ -459,12 +459,12 @@ pub fn march_prescribed_dstar(
                 turb = true;
                 // save transition location
                 state.transition_forced[side] = trforc;
-                state.xi_transition[side] = trloc.xi_transition;
+                state.xi_transition[side] = transition.xi_transition;
             }
             tran = false;
         }
     }
     state.station1 = s1;
     state.station2 = s2;
-    state.transition = trloc;
+    state.transition = transition;
 }

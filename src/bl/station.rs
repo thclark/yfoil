@@ -971,7 +971,7 @@ mod tests {
         state.dstar = 0.005;
         state.sqrtctau = 3.0; // Amplification for laminar
 
-        // Set the derivatives (simplified - zero for test)
+        // Derivatives are zero for this test
         state.hk_d_ue = 0.0;
         state.hk_d_theta = -1250.0;
         state.hk_d_dstar = 500.0;
@@ -1026,7 +1026,7 @@ mod tests {
         state.dstar = 0.007;
         state.sqrtctau = 0.015;
 
-        // Set derivatives (simplified)
+        // Derivatives are zero for this test
         state.hk_d_ue = 0.0;
         state.hk_d_theta = -280.0;
         state.hk_d_dstar = 200.0;

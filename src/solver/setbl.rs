@@ -179,7 +179,7 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
     // COM1/COM2 and the XT sensitivities are COMMON
     let mut s1 = std::mem::take(&mut state.station1);
     let mut s2 = std::mem::take(&mut state.station2);
-    let mut trloc = std::mem::take(&mut state.transition);
+    let mut transition = std::mem::take(&mut state.transition);
     let mut sys = IntervalSystem::default();
     let (mut ami, mut cti) = (0.0, 0.0);
     let mut trforc = false;
@@ -263,19 +263,19 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
                     TransitionCheck::None { ampl2 } => {
                         ami = ampl2;
                         tran = false;
-                        trloc.xi_transition = s2.xi;
+                        transition.xi_transition = s2.xi;
                     }
                     TransitionCheck::Free {
-                        transition: location,
+                        transition: found,
                         ampl2,
                     } => {
                         ami = ampl2;
                         trforc = false;
-                        trloc = location;
+                        transition = found;
                     }
-                    TransitionCheck::Forced { transition: location } => {
+                    TransitionCheck::Forced { transition: found } => {
                         trforc = true;
-                        trloc = location;
+                        transition = found;
                     }
                 }
                 s2.ampl = ami;
@@ -326,7 +326,7 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
                     turbulent: turb,
                     wake,
                 };
-                assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, &params);
+                assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&transition), amcrit, &params);
             }
 
             // Save wall shear and equil. max shear coefficient for plotting output
@@ -389,13 +389,13 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
                 // save transition location
                 state.i_transition_station[side] = i_station;
                 state.transition_forced[side] = trforc;
-                state.xi_transition[side] = trloc.xi_transition;
+                state.xi_transition[side] = transition.xi_transition;
 
                 // interpolate airfoil geometry to find transition x/c (for user output)
                 let str = if side == 1 {
-                    state.s_stagnation - trloc.xi_transition
+                    state.s_stagnation - transition.xi_transition
                 } else {
-                    state.s_stagnation + trloc.xi_transition
+                    state.s_stagnation + transition.xi_transition
                 };
                 let chx = state.x_te - state.x_le;
                 let chy = state.y_te - state.y_le;
@@ -428,7 +428,7 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
             dds1 = dds2;
 
             if i_station == state.i_transition_station[side] && s2.xi > s1.xi {
-                let frac = (trloc.xi_transition - s1.xi) / (s2.xi - s1.xi);
+                let frac = (transition.xi_transition - s1.xi) / (s2.xi - s1.xi);
                 state.transition_node_fraction[side] = if side == 1 {
                     (state.i_stagnation_node as i64 - state.i_transition_station[side] as i64 + 3) as f64 - frac
                 } else {
@@ -444,7 +444,7 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
 
     state.station1 = s1;
     state.station2 = s2;
-    state.transition = trloc;
+    state.transition = transition;
 
     let sys = NewtonSystem {
         n_rows: nsys,

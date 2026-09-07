@@ -1089,7 +1089,7 @@ mod tests {
         s2.retheta_d_machsqd = 0.0;
         s2.retheta_d_re = 0.0;
 
-        // Create CFM (simplified average)
+        // Midpoint Cf: the plain average of the two stations
         let mut cfm = MidpointCf::default();
         cfm.cf = 0.5 * (s1.cf + s2.cf);
         cfm.cf_d_re = 0.5 * (s1.cf_d_re + s2.cf_d_re);

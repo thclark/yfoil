@@ -255,12 +255,12 @@ pub fn check_transition(
 
     if trforc {
         // if forced transition, then XT is prescribed
-        let location = Transition {
+        let transition = Transition {
             xi_transition: xiforc,
             xi_transition_d_x_trip: 1.0,
             ..Default::default()
         };
-        return TransitionCheck::Forced { transition: location };
+        return TransitionCheck::Forced { transition };
     }
 
     // free transition ... set sensitivities of XT
@@ -358,7 +358,7 @@ pub fn check_transition(
     let z_re = z_ax * ax_re;
 
     // set sensitivities of XT, with RES being stationary for A2 constraint
-    let location = Transition {
+    let transition = Transition {
         xi_transition: xt,
         xi_transition_d_ampl_station1: xt_a1 - (xt_a2 / z_a2) * z_a1,
         xi_transition_d_theta_station1: -(xt_a2 / z_a2) * z_t1,
@@ -373,10 +373,7 @@ pub fn check_transition(
         xi_transition_d_re: -(xt_a2 / z_a2) * z_re,
         xi_transition_d_x_trip: 0.0,
     };
-    TransitionCheck::Free {
-        transition: location,
-        ampl2,
-    }
+    TransitionCheck::Free { transition, ampl2 }
 }
 
 // ============================================================================
@@ -1049,13 +1046,10 @@ mod tests {
 
         // Should return Free
         match result {
-            TransitionCheck::Free {
-                transition: location,
-                ampl2,
-            } => {
+            TransitionCheck::Free { transition, ampl2 } => {
                 // Transition should occur between X1 and X2
                 assert!(
-                    location.xi_transition >= s1.xi && location.xi_transition <= s2.xi,
+                    transition.xi_transition >= s1.xi && transition.xi_transition <= s2.xi,
                     "Transition location should be within interval"
                 );
                 // ampl2 should equal Ncrit
@@ -1106,19 +1100,17 @@ mod tests {
 
         // Should return Forced at xiforc
         match result {
-            TransitionCheck::Forced { transition: location } => {
-                assert_relative_eq!(location.xi_transition, xiforc, epsilon = 1e-10);
-                assert_relative_eq!(location.xi_transition_d_x_trip, 1.0, epsilon = 1e-10);
+            TransitionCheck::Forced { transition } => {
+                assert_relative_eq!(transition.xi_transition, xiforc, epsilon = 1e-10);
+                assert_relative_eq!(transition.xi_transition_d_x_trip, 1.0, epsilon = 1e-10);
             }
-            TransitionCheck::Free {
-                transition: location, ..
-            } => {
+            TransitionCheck::Free { transition, .. } => {
                 // Free transition might occur first if amplification is high enough
                 // Check if it's before xiforc
-                if location.xi_transition > xiforc {
+                if transition.xi_transition > xiforc {
                     panic!(
                         "Expected forced transition at {}, got free at {}",
-                        xiforc, location.xi_transition
+                        xiforc, transition.xi_transition
                     );
                 }
             }

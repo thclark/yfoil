@@ -62,7 +62,7 @@ pub fn march_direct(
     // rather than algorithmic).
     let mut s1 = std::mem::take(&mut state.station1);
     let mut s2 = std::mem::take(&mut state.station2);
-    let mut trloc = std::mem::take(&mut state.transition);
+    let mut transition = std::mem::take(&mut state.transition);
     for side in 1..=2 {
         let amcrit = acrit[side];
 
@@ -120,7 +120,7 @@ pub fn march_direct(
                 s2.set_kinematic_variables(params);
                 // the reference trace records AMPL1/AMPL2/XT/TRAN/ITRAN here, before TRCHEK
                 let pre = (
-                    [s1.ampl, s2.ampl, trloc.xi_transition, amcrit],
+                    [s1.ampl, s2.ampl, transition.xi_transition, amcrit],
                     tran,
                     state.i_transition_station[side],
                 );
@@ -131,27 +131,27 @@ pub fn march_direct(
                         TransitionCheck::None { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            trloc.xi_transition = s2.xi; // TRCHEK2 leaves XT = X2 (and the XT_* as they were)
+                            transition.xi_transition = s2.xi; // TRCHEK2 leaves XT = X2 (and the XT_* as they were)
                             state.i_transition_station[side] = i_station + 2;
                         }
                         TransitionCheck::Free {
-                            transition: location,
+                            transition: found,
                             ampl2,
                         } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                             if cti <= 0.0 {
                                 cti = 0.03;
                                 s2.sqrtctau = cti;
                             }
                         }
-                        TransitionCheck::Forced { transition: location } => {
+                        TransitionCheck::Forced { transition: found } => {
                             tran = true;
                             trforc = true;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                             if cti <= 0.0 {
                                 cti = 0.03;
@@ -178,7 +178,7 @@ pub fn march_direct(
                         / tte;
                     assemble_te_system(&mut sys, &mut s2, cte, tte, dte, params);
                 } else {
-                    assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&trloc), amcrit, params);
+                    assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&transition), amcrit, params);
                 }
                 hk2_snapshot = s2.hk;
 
@@ -279,7 +279,8 @@ pub fn march_direct(
                         } else if i_station == state.i_transition_station[side] {
                             // transition interval: weighted laminar and turbulent case
                             s1.hk
-                                + (0.03 * (trloc.xi_transition - s1.xi) - 0.15 * (s2.xi - trloc.xi_transition))
+                                + (0.03 * (transition.xi_transition - s1.xi)
+                                    - 0.15 * (s2.xi - transition.xi_transition))
                                     / s1.theta
                         } else if wake {
                             // turbulent wake case: asymptotic wake behavior with approximate Backward Euler
@@ -393,23 +394,23 @@ pub fn march_direct(
                         TransitionCheck::None { ampl2 } => {
                             ami = ampl2;
                             tran = false;
-                            trloc.xi_transition = s2.xi;
+                            transition.xi_transition = s2.xi;
                             state.i_transition_station[side] = i_station + 2;
                         }
                         TransitionCheck::Free {
-                            transition: location,
+                            transition: found,
                             ampl2,
                         } => {
                             ami = ampl2;
                             tran = true;
                             trforc = false;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                         }
-                        TransitionCheck::Forced { transition: location } => {
+                        TransitionCheck::Forced { transition: found } => {
                             tran = true;
                             trforc = true;
-                            trloc = location;
+                            transition = found;
                             state.i_transition_station[side] = i_station;
                         }
                     }
@@ -467,5 +468,5 @@ pub fn march_direct(
     }
     state.station1 = s1;
     state.station2 = s2;
-    state.transition = trloc;
+    state.transition = transition;
 }
