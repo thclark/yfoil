@@ -7,11 +7,13 @@
 
 use crate::geometry::panel::solve_tridiagonal;
 
+/// Translates XFOIL's `SPLIND`.
+///
 /// Compute cubic spline coefficients for data points
 ///
-/// Given data points (s[i], x[i]), computes the spline derivative coefficients
-/// xp[i] = dx/ds at each point using natural boundary conditions (zero second
-/// derivative at endpoints).
+/// Given data points `(s[i], x[i])`, computes the spline derivative coefficients
+/// `xp[i] = dx/ds` at each point with XFOIL's zero-third-derivative end conditions
+/// (`SPLIND` with `XS1 = XS2 = -999`, as `SEGSPL` calls it).
 ///
 /// # Arguments
 /// * `x` - Data values
@@ -22,6 +24,7 @@ use crate::geometry::panel::solve_tridiagonal;
 ///
 /// # Panics
 /// Panics if `x` and `s` have different lengths or fewer than 2 points
+#[doc(alias = "SPLIND")]
 pub fn spline_derivatives(x: &[f64], s: &[f64]) -> Vec<f64> {
     let n = x.len();
     assert_eq!(n, s.len(), "x and s must have same length");
@@ -69,6 +72,8 @@ pub fn spline_derivatives(x: &[f64], s: &[f64]) -> Vec<f64> {
     d
 }
 
+/// Translates XFOIL's `SEVAL`.
+///
 /// Evaluate spline at parameter value
 ///
 /// # Arguments
@@ -79,6 +84,7 @@ pub fn spline_derivatives(x: &[f64], s: &[f64]) -> Vec<f64> {
 ///
 /// # Returns
 /// Interpolated value at `ss`
+#[doc(alias = "SEVAL")]
 pub fn spline_value(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
 
@@ -101,10 +107,13 @@ pub fn spline_value(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     h00 * x[i] + h10 * ds * xp[i] + h01 * x[i + 1] + h11 * ds * xp[i + 1]
 }
 
+/// Translates XFOIL's `DEVAL`.
+///
 /// Evaluate first derivative of spline at parameter value
 ///
 /// # Returns
 /// dx/ds at `ss`
+#[doc(alias = "DEVAL")]
 pub fn spline_slope(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
 
@@ -124,10 +133,13 @@ pub fn spline_slope(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     dh00 * x[i] + dh10 * xp[i] + dh01 * x[i + 1] + dh11 * xp[i + 1]
 }
 
+/// Translates XFOIL's `D2VAL`.
+///
 /// Evaluate second derivative of spline at parameter value
 ///
 /// # Returns
 /// d²x/ds² at `ss`
+#[doc(alias = "D2VAL")]
 pub fn spline_second_derivative(ss: f64, x: &[f64], xp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
 

@@ -11,6 +11,7 @@ pub struct LuFactors {
 }
 
 /// LUDCMP: factor `a` (1-based, n×n, modified in place) into LU form.
+#[doc(alias = "LUDCMP")]
 pub fn lu_decompose(n: usize, mut a: Vec<Vec<f64>>) -> LuFactors {
     let mut vv = vec![0.0; n + 1];
     let mut indx = vec![0usize; n + 1];
@@ -68,6 +69,7 @@ pub fn lu_decompose(n: usize, mut a: Vec<Vec<f64>>) -> LuFactors {
 }
 
 /// BAKSUB: solve L·U·x = b in place (`b` is 1-based, length n+1).
+#[doc(alias = "BAKSUB")]
 pub fn lu_back_substitute(lu: &LuFactors, b: &mut [f64]) {
     let n = lu.n;
     let a = &lu.lu;

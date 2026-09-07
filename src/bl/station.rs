@@ -6,6 +6,8 @@ use super::closure::{
 };
 use super::params::*;
 
+/// Mirrors XFOIL's `COM1`, `COM2`, `V_VAR1`, `V_VAR2`.
+///
 /// BL station state variables (from XFOIL's V_VAR1/V_VAR2)
 ///
 /// This holds all primary and derived variables at a single BL station,
@@ -14,6 +16,10 @@ use super::params::*;
 /// The naming follows XFOIL conventions where derivatives are denoted by
 /// suffixes like _u (w.r.t. U), _t (w.r.t. θ), _d (w.r.t. δ*), etc.
 #[derive(Debug, Clone, Default)]
+#[doc(alias = "COM1")]
+#[doc(alias = "COM2")]
+#[doc(alias = "V_VAR1")]
+#[doc(alias = "V_VAR2")]
 pub struct StationState {
     // ========================================================================
     // Primary variables (set by blprv)
@@ -157,6 +163,7 @@ impl StationState {
     /// * `dswaki` - Wake gap contribution
     /// * `uei` - Edge velocity (incompressible)
     /// * `params` - Global BL parameters
+    #[doc(alias = "BLPRV")]
     pub fn set_primary_variables(
         &mut self,
         xsi: f64,
@@ -202,6 +209,7 @@ impl StationState {
     ///
     /// # Arguments
     /// * `params` - Global BL parameters
+    #[doc(alias = "BLKIN")]
     pub fn set_kinematic_variables(&mut self, params: &FlowParameters) {
         let u = self.ue;
         let t = self.theta;
@@ -284,6 +292,7 @@ impl StationState {
     /// # Arguments
     /// * `flow_type` - Type of BL flow (Laminar, Turbulent, or Wake)
     /// * `params` - Global BL parameters
+    #[doc(alias = "BLVAR")]
     pub fn set_closure_variables(&mut self, flow_type: FlowRegime, _params: &FlowParameters) {
         let hk = self.hk;
         let rt = self.retheta;
@@ -614,11 +623,14 @@ impl StationState {
 // Midpoint Skin Friction (BLMID)
 // ============================================================================
 
+/// Mirrors XFOIL's `CFM`.
+///
 /// Midpoint skin friction result (from XFOIL's BLMID)
 ///
 /// This holds the skin friction coefficient at the midpoint between two
 /// stations, along with its derivatives.
 #[derive(Debug, Clone, Default)]
+#[doc(alias = "CFM")]
 pub struct MidpointCf {
     /// Midpoint skin friction coefficient
     pub cf: f64,
@@ -650,6 +662,7 @@ impl MidpointCf {
     /// * `s2` - Station 2 state
     /// * `flow_type` - Type of BL flow
     /// * `is_similarity` - True if this is a similarity station (copy s2→s1)
+    #[doc(alias = "BLMID")]
     pub fn compute(s1: &StationState, s2: &StationState, flow_type: FlowRegime, is_similarity: bool) -> Self {
         let mut result = Self::default();
 
@@ -765,6 +778,7 @@ impl MidpointCf {
 /// * `uedg` - Edge velocity
 /// * `msq` - Edge Mach number squared
 /// * `hklim` - Minimum kinematic shape factor
+#[doc(alias = "DSLIM")]
 pub fn limit_dstar(dstr: &mut f64, thet: f64, _uedg: f64, msq: f64, hklim: f64) {
     let h = *dstr / thet;
     let (hk, hk_h, _hk_m) = hk_from_h(h, msq);

@@ -13,6 +13,7 @@ use crate::solver::velocity::set_q_inviscid;
 /// OPER's `ALFA` command: sets LALFA, ALFA (radians) and QINF = 1, runs SPECAL, then
 /// invalidates the wake and the converged flag when alpha or Mach moved by more than 1e-5
 /// (in exactly XFOIL's order: SPECAL first, then the tests).
+#[doc(alias = "ALFA")]
 pub fn alpha_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: f64) {
     st.alpha_specified = true;
     st.alpha = alfa;
@@ -32,6 +33,7 @@ pub fn alpha_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alf
 /// One point of OPER's `ASEQ`: sets ALFA, invalidates the wake/converged flags (ASEQ tests
 /// them *before* SPECAL, the ALFA command after — the numbers do not depend on the order), then
 /// SPECAL. The caller runs VISCAL with ITMAX + 5, as ASEQ does.
+#[doc(alias = "ASEQ")]
 pub fn sequence_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, alfa: f64) {
     st.alpha = alfa;
     if (st.alpha - st.alpha_wake).abs() > 1.0e-5 {
@@ -48,6 +50,7 @@ pub fn sequence_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, 
 
 /// SPECAL. `sys` holds the inviscid system (GGCALC's AIJ factors, BIJ, GAMU in `st.qinvu`);
 /// it is built here when absent (LGAMU/LQAIJ false).
+#[doc(alias = "SPECAL")]
 pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
@@ -128,6 +131,7 @@ pub fn solve_inviscid_at_alpha(st: &mut SolverState, sys: &mut Option<InviscidSy
 
 /// SPECCL: converges to the specified inviscid CL by Newton iteration on alpha (20 iterations,
 /// |DALFA| ≤ 1e-6), with MINF/REINF set from CLSPEC by MRCL and held fixed.
+#[doc(alias = "SPECCL")]
 pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSystem>) {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
@@ -186,6 +190,7 @@ pub fn solve_inviscid_at_cl(st: &mut SolverState, sys: &mut Option<InviscidSyste
 
 /// OPER's `CL` command: LALFA false, ALFA reset to 0 as the Newton initial guess, QINF = 1,
 /// SPECCL, then the wake/converged invalidations.
+#[doc(alias = "CL")]
 pub fn cl_command(st: &mut SolverState, sys: &mut Option<InviscidSystem>, clspec: f64) {
     st.cl_specified = clspec;
     st.alpha_specified = false;

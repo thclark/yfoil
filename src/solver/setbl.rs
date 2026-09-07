@@ -35,6 +35,7 @@ pub struct AssembledSystem {
 
 /// MRCL: sets the actual Mach and Reynolds numbers from the unit-CL values and the specified
 /// CLS according to MATYP/RETYP. Returns (M_CLS, R_CLS).
+#[doc(alias = "MRCL")]
 pub fn set_mach_re_from_cl(st: &mut SolverState, cls: f64) -> (f64, f64) {
     let cla = cls.max(0.000001);
     // XFOIL's 'MRCL: Illegal Re(CL) / Mach(CL) dependence trigger. Setting fixed ...' branches
@@ -87,6 +88,7 @@ pub fn set_mach_re_from_cl(st: &mut SolverState, cls: f64) -> (f64, f64) {
 /// and the control fields (`lalfa`, `cl`/`clspec`, `matyp`/`retyp`, `minf1`/`reinf1`, `acrit`,
 /// `vaccel`). Writes TAU/DIS/CTQ/DELT/USLP, ITRAN/XSSITR/TFORCE, XOCTR/YOCTR/TINDEX and leaves
 /// UEDG holding the *marched* Ue (USAV = UINV + DIJ·MASS is the mismatch reference).
+#[doc(alias = "SETBL")]
 pub fn assemble_newton_system(st: &mut SolverState) -> AssembledSystem {
     // set the CL used to define Mach, Reynolds numbers
     let clmr = if st.alpha_specified { st.cl } else { st.cl_specified };

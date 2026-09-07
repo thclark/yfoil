@@ -55,6 +55,7 @@ pub struct MrchduTrace {
 /// MRCHDU. Requires the pointer layer (XSSI, IBLTE, NBL, WGAP), the current
 /// UEDG/THET/DSTR/CTAU, ITRAN from the previous march, ANTE, XSTRIP and the transition
 /// thresholds. Updates THET/DSTR/CTAU/UEDG/MASS/TAU/DIS/CTQ/DELT/TSTR, ITRAN, XSSITR and TFORCE.
+#[doc(alias = "MRCHDU")]
 pub fn march_prescribed_dstar(
     st: &mut SolverState,
     params: &FlowParameters,

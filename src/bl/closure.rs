@@ -39,11 +39,14 @@ impl Closure {
 // Shape Factor Conversions
 // ============================================================================
 
+/// Translates XFOIL's `HKIN`.
+///
 /// Calculate kinematic shape factor Hk from H and Mach number
 ///
 /// Hk = (H - 0.29*M²) / (1 + 0.113*M²)
 ///
 /// This accounts for compressibility effects (from Whitfield)
+#[doc(alias = "HKIN")]
 pub fn hk_from_h(h: f64, msq: f64) -> (f64, f64, f64) {
     let denom = 1.0 + 0.113 * msq;
     let hk = (h - 0.29 * msq) / denom;
@@ -56,12 +59,15 @@ pub fn hk_from_h(h: f64, msq: f64) -> (f64, f64, f64) {
 // Laminar Closure Relations
 // ============================================================================
 
+/// Translates XFOIL's `CFL`.
+///
 /// Laminar skin friction coefficient Cf (from Falkner-Skan)
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
+#[doc(alias = "CFL")]
 pub fn cf_laminar(hk: f64, rt: f64, _msq: f64) -> Closure {
     let (cf, cf_hk) = if hk < 5.5 {
         let tmp = (5.5 - hk).powi(3) / (hk + 1.0);
@@ -85,12 +91,15 @@ pub fn cf_laminar(hk: f64, rt: f64, _msq: f64) -> Closure {
     }
 }
 
+/// Translates XFOIL's `HSL`.
+///
 /// Laminar energy shape factor H* correlation
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number (not used in laminar)
 /// * `msq` - Mach number squared (not used in laminar)
+#[doc(alias = "HSL")]
 pub fn hstar_laminar(hk: f64, _rt: f64, _msq: f64) -> Closure {
     let (hs, hs_hk) = if hk < 4.35 {
         let tmp = hk - 4.35;
@@ -115,11 +124,14 @@ pub fn hstar_laminar(hk: f64, _rt: f64, _msq: f64) -> Closure {
     }
 }
 
+/// Translates XFOIL's `DIL`.
+///
 /// Laminar dissipation coefficient 2*CD/H* (from Falkner-Skan)
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
+#[doc(alias = "DIL")]
 pub fn cdiss_laminar(hk: f64, rt: f64) -> Closure {
     let (di, di_hk) = if hk < 4.0 {
         let di = (0.00205 * (4.0 - hk).powf(5.5) + 0.207) / rt;
@@ -147,6 +159,8 @@ pub fn cdiss_laminar(hk: f64, rt: f64) -> Closure {
 // Turbulent Closure Relations
 // ============================================================================
 
+/// Translates XFOIL's `CFT`.
+///
 /// Turbulent skin friction coefficient Cf (Coles correlation)
 ///
 /// # Arguments
@@ -154,6 +168,7 @@ pub fn cdiss_laminar(hk: f64, rt: f64) -> Closure {
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
 /// * `cffac` - Skin friction factor (typically 1.0)
+#[doc(alias = "CFT")]
 pub fn cf_turbulent(hk: f64, rt: f64, msq: f64, cffac: f64) -> Closure {
     const GAM: f64 = 1.4;
     let gm1 = GAM - 1.0;
@@ -180,12 +195,15 @@ pub fn cf_turbulent(hk: f64, rt: f64, msq: f64, cffac: f64) -> Closure {
     }
 }
 
+/// Translates XFOIL's `HST`.
+///
 /// Turbulent energy shape factor H* correlation
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
+#[doc(alias = "HST")]
 pub fn hstar_turbulent(hk: f64, rt: f64, msq: f64) -> Closure {
     const HSMIN: f64 = 1.5;
     const DHSINF: f64 = 0.015;
@@ -242,7 +260,10 @@ pub fn hstar_turbulent(hk: f64, rt: f64, msq: f64) -> Closure {
     }
 }
 
+/// Translates XFOIL's `HCT`.
+///
 /// Density shape parameter (from Whitfield)
+#[doc(alias = "HCT")]
 pub fn hstarstar(hk: f64, msq: f64) -> (f64, f64, f64) {
     let hc = msq * (0.064 / (hk - 0.8) + 0.251);
     let hc_hk = msq * (-0.064 / (hk - 0.8).powi(2));

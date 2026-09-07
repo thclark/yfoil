@@ -9,9 +9,12 @@ use super::transition::{interval_amplification_rate, Transition};
 // Local BL Equation Coefficients
 // ============================================================================
 
+/// Translates XFOIL's `BLDIF`.
+///
 /// Upwinding parameter calculation
 ///
 /// Returns (upw, upw_u1, upw_t1, upw_d1, upw_u2, upw_t2, upw_d2, upw_ms)
+#[doc(alias = "BLDIF")]
 fn upwinding(s1: &StationState, s2: &StationState, is_wake: bool) -> Upwinding {
     let hk1 = s1.hk;
     let hk2 = s2.hk;
@@ -67,10 +70,13 @@ struct Upwinding {
     weight_d_machsqd: f64,
 }
 
+/// Mirrors XFOIL's `V_SYS`.
+///
 /// Local BL equation coefficients (from XFOIL's V_SYS)
 ///
 /// These are the Jacobian entries for a single station pair (1→2).
 #[derive(Debug, Clone, Default)]
+#[doc(alias = "V_SYS")]
 pub struct IntervalSystem {
     /// Jacobian w.r.t. previous station: VS1(4,5)
     /// Rows: 4 equations (momentum, shape, lag, auxiliary)
@@ -108,6 +114,7 @@ impl IntervalSystem {
     /// * `cfm` - Midpoint skin friction
     /// * `flow_type` - Type of BL flow
     /// * `is_similarity` - True if station 2 is a similarity station (LE)
+    #[doc(alias = "BLDIF")]
     pub fn assemble_interval_equations(
         &mut self,
         s1: &StationState,
@@ -216,6 +223,7 @@ impl IntervalSystem {
     }
 
     /// BLDIF (xblsys.f) "turbulent part --> set shear lag equation" (row 1), line for line.
+    #[doc(alias = "BLDIF")]
     fn shear_lag_equation(&mut self, s1: &StationState, s2: &StationState, upw: &Upwinding, flow_type: FlowRegime) {
         let u = upw.weight;
         let sa = (1.0 - u) * s1.sqrtctau + u * s2.sqrtctau;
@@ -359,7 +367,10 @@ impl IntervalSystem {
         self.residual[0] = -rezc;
     }
 
+    /// Translates XFOIL's `BLDIF`.
+    ///
     /// Set up the momentum integral equation (row 2)
+    #[doc(alias = "BLDIF")]
     fn momentum_equation(
         &mut self,
         s1: &StationState,
@@ -441,7 +452,10 @@ impl IntervalSystem {
         self.residual[1] = -rezt;
     }
 
+    /// Translates XFOIL's `BLDIF`.
+    ///
     /// Set up the shape parameter equation (row 3)
+    #[doc(alias = "BLDIF")]
     fn shape_equation(
         &mut self,
         s1: &StationState,
@@ -561,6 +575,8 @@ impl IntervalSystem {
         self.residual[2] = -rezh;
     }
 
+    /// Translates XFOIL's `TRDIF`.
+    ///
     /// Set up Newton system for transition interval (TRDIF equivalent)
     ///
     /// Handles intervals that span laminar-turbulent transition by:
@@ -575,6 +591,7 @@ impl IntervalSystem {
     /// * `acrit` - Critical amplification factor
     /// * `params` - Global BL parameters
     #[allow(clippy::too_many_lines)]
+    #[doc(alias = "TRDIF")]
     pub fn assemble_transition_equations(
         &mut self,
         s1: &StationState,

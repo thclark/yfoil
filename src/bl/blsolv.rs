@@ -23,20 +23,27 @@
 //! - R: 3x1 residual vectors
 //! - S: 3x1 Re influence vectors
 
+/// Mirrors XFOIL's `VA`, `VB`, `VM`, `VZ`, `VDEL`.
+///
 /// Input matrices for BLSOLV
 #[derive(Debug, Clone)]
+#[doc(alias = "VA")]
+#[doc(alias = "VB")]
+#[doc(alias = "VM")]
+#[doc(alias = "VZ")]
+#[doc(alias = "VDEL")]
 pub struct NewtonSystem {
     /// Number of BL stations
     pub n_rows: usize,
-    /// Diagonal blocks VA[iv][k][l] - 3 equations, 2 columns
+    /// Diagonal blocks `VA[iv][k][l]` - 3 equations, 2 columns
     pub diagonal: Vec<[[f64; 2]; 3]>,
-    /// Sub-diagonal blocks VB[iv][k][l]
+    /// Sub-diagonal blocks `VB[iv][k][l]`
     pub subdiagonal: Vec<[[f64; 2]; 3]>,
-    /// RHS/solution VDEL[iv][k][l] - column 0 is residual, column 1 is Re sensitivity
+    /// RHS/solution `VDEL[iv][k][l]` - column 0 is residual, column 1 is Re sensitivity
     pub rhs: Vec<[[f64; 2]; 3]>,
-    /// Mass defect coupling VM[iv][j][k] - coupling from station j to station iv, equation k
+    /// Mass defect coupling `VM[iv][j][k]` - coupling from station j to station iv, equation k
     pub mass_influence: Vec<Vec<[f64; 3]>>,
-    /// TE coupling block VZ[k][l] (optional, only used at trailing edge)
+    /// TE coupling block `VZ[k][l]` (optional, only used at trailing edge)
     pub te_block: [[f64; 2]; 3],
     /// Index where upper surface ends at TE (0-based)
     pub i_te_row_upper: Option<usize>,
@@ -87,7 +94,7 @@ impl BlsolvTrace {
     }
 }
 
-/// The Newton deltas produced by [`blsolv`].
+/// The Newton deltas produced by [`solve_newton_system`].
 ///
 /// This is a separate type on purpose: XFOIL's UPDATE aliases `UNEW` onto `VA` and `QNEW`
 /// onto `VB` via EQUIVALENCE (xbl.f), so after BLSOLV the factored VA/VB/VM blocks are dead.
@@ -96,7 +103,7 @@ impl BlsolvTrace {
 pub struct NewtonDeltas {
     /// Number of system rows
     pub n_rows: usize,
-    /// VDEL[iv][k][l]: column 0 is the Newton delta, column 1 the Re/alpha sensitivity
+    /// `VDEL[iv][k][l]`: column 0 is the Newton delta, column 1 the Re/alpha sensitivity
     pub deltas: Vec<[[f64; 2]; 3]>,
 }
 
@@ -106,6 +113,7 @@ pub struct NewtonDeltas {
 /// performs block Gaussian elimination with special handling for the dense mass defect
 /// coupling (VM matrix). Verified bit-identical to XFOIL on the tracked reference fixture
 /// (all three calls, both columns) — see tests/xfoil_blsolv_tests.rs.
+#[doc(alias = "BLSOLV")]
 pub fn solve_newton_system(input: NewtonSystem) -> NewtonDeltas {
     solve_newton_system_traced(input, None)
 }

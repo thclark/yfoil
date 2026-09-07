@@ -34,6 +34,7 @@ pub fn pi_consts() -> (f64, f64, f64) {
 /// PSILIN(I, XI, YI, NXI, NYI, PSI, PSI_NI, GEOLIN=.FALSE., SIGLIN).
 /// `i` is the 1-based node index the point belongs to (airfoil 1..=n, wake n+1..=n+nw);
 /// it only affects the self-influence skips and the arctan reflection flag.
+#[doc(alias = "PSILIN")]
 pub fn panel_influence(
     st: &SolverState,
     i: usize,

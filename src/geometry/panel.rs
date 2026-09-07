@@ -40,6 +40,7 @@ impl Default for PaneConfig {
 /// corner (doubled-point) paths. The returned geometry is the N node coordinates; SCALC,
 /// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `panel_foil` exactly as
 /// PANGEN's tail does.
+#[doc(alias = "PANGEN")]
 pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
     let nb = geometry.x.len();
     if nb < 2 {
@@ -413,6 +414,7 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneC
 }
 
 /// SCALC: arc length array of a 2-D point array.
+#[doc(alias = "SCALC")]
 pub fn arc_coordinate(x: &[f64], y: &[f64]) -> Vec<f64> {
     let mut s = vec![0.0; x.len()];
     for i in 1..x.len() {
@@ -425,6 +427,7 @@ pub fn arc_coordinate(x: &[f64], y: &[f64]) -> Vec<f64> {
 
 /// SEGSPL: splines X(S) like SPLINE but allows derivative discontinuities at segment joints,
 /// defined by identical successive S values.
+#[doc(alias = "SEGSPL")]
 pub fn spline_segmented(x: &[f64], s: &[f64]) -> Vec<f64> {
     let n = x.len();
     assert!(s[0] != s[1], "SEGSPL:  First input point duplicated");
@@ -444,6 +447,7 @@ pub fn spline_segmented(x: &[f64], s: &[f64]) -> Vec<f64> {
 }
 
 /// CURV: curvature of the splined 2-D curve at S = SS, evaluated from the spline's own cubic.
+#[doc(alias = "CURV")]
 pub fn curvature(ss: f64, x: &[f64], xs: &[f64], y: &[f64], ys: &[f64], s: &[f64]) -> f64 {
     let n = s.len();
     let mut ilow = 0usize;
@@ -473,6 +477,7 @@ pub fn curvature(ss: f64, x: &[f64], xs: &[f64], y: &[f64], ys: &[f64], s: &[f64
 
 /// LEFIND: the leading-edge spline parameter SLE where the surface tangent is normal to the
 /// chord line from the TE point.
+#[doc(alias = "LEFIND")]
 pub fn find_le(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
     let n = x.len();
     // convergence tolerance
@@ -524,6 +529,7 @@ pub fn find_le(x: &[f64], xp: &[f64], y: &[f64], yp: &[f64], s: &[f64]) -> f64 {
 
 /// TRISOL: solves the tri-diagonal system with main diagonal `a`, lower `b`, upper `c` and
 /// right-hand side `d`; `d` is replaced by the solution, `a` and `c` are destroyed.
+#[doc(alias = "TRISOL")]
 pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64]) {
     let kk = a.len();
     for k in 1..kk {
@@ -630,6 +636,8 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
     }
 }
 
+/// Translates XFOIL's `SCALC`, `SEGSPL`, `LEFIND`, `TECALC`, `NCALC`, `APCALC`.
+///
 /// Create a PanelledFoil from raw geometry
 ///
 /// Computes all derived quantities needed for aerodynamic analysis:
@@ -638,6 +646,12 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
 /// - Normal vectors
 /// - Panel angles
 /// - Leading edge location
+#[doc(alias = "SCALC")]
+#[doc(alias = "SEGSPL")]
+#[doc(alias = "LEFIND")]
+#[doc(alias = "TECALC")]
+#[doc(alias = "NCALC")]
+#[doc(alias = "APCALC")]
 pub fn panel_foil(geometry: &Geometry) -> PanelledFoil {
     let n = geometry.x.len();
     let x = geometry.x.clone();
@@ -691,6 +705,7 @@ pub fn panel_foil(geometry: &Geometry) -> PanelledFoil {
 
 /// NCALC (xpanel.f): unit normal vector components at airfoil panel nodes, from the spline
 /// derivative arrays (SEGSPL output), with corner-point averaging where S(I) == S(I+1).
+#[doc(alias = "NCALC")]
 fn node_normals(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
     let n = xp.len();
     let mut xn = vec![0.0; n];
@@ -734,6 +749,7 @@ fn node_normals(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
 
 /// APCALC (xpanel.f): angle of each airfoil panel (panel `i` runs from node `i` to `i+1`;
 /// the TE panel `n-1` closes from node `n-1` back to node 0).
+#[doc(alias = "APCALC")]
 fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64> {
     let n = x.len();
     let pi = 4.0 * (1.0_f64).atan();

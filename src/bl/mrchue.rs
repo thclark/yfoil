@@ -46,6 +46,7 @@ pub struct MrchueTrace {
 
 /// MRCHUE. Requires the pointer layer (XSSI, IPAN, IBLTE, NBL, WGAP), UEDG initialised
 /// (UINV on the first call), ANTE, XSTRIP and the transition thresholds.
+#[doc(alias = "MRCHUE")]
 pub fn march_direct(
     st: &mut SolverState,
     params: &FlowParameters,

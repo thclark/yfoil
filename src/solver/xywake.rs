@@ -7,6 +7,7 @@ use crate::solver::psilin::panel_influence;
 /// SETEXP: geometrically stretched array S(1..=nn) with S(1) = 0, S(2)-S(1) = ds1, S(nn) = smax.
 /// Ported character for character: the ratio is found by Newton iteration to |dRatio| < 1e-5
 /// — that tolerance is load-bearing for wake node positions (plan stage S3).
+#[doc(alias = "SETEXP")]
 pub fn exponential_spacing(ds1: f64, smax: f64, nn: usize) -> Vec<f64> {
     let sigma = smax / ds1;
     let nex = nn - 1;
@@ -63,6 +64,7 @@ pub fn exponential_spacing(ds1: f64, smax: f64, nn: usize) -> Vec<f64> {
 /// XYWAKE: sets wake node coordinates X/Y/S, normals NX/NY and panel angles APANEL for
 /// nodes n+1..=n+nw from the current GAM (and SIG, though SIGLIN is off here) distribution.
 /// `waklen` is XFOIL's WAKLEN (chords). Requires `st.nw == n/12 + 10*INT(WAKLEN)`.
+#[doc(alias = "XYWAKE")]
 pub fn build_wake(st: &mut SolverState, waklen: f64) {
     let n = st.n_foil_nodes;
     let nw = st.n_wake_nodes;
@@ -127,6 +129,7 @@ pub fn build_wake(st: &mut SolverState, waklen: f64) {
 
 /// QWCALC: inviscid tangential velocity for alpha = 0, 90 on the wake due to freestream and
 /// airfoil surface vorticity.
+#[doc(alias = "QWCALC")]
 pub fn set_wake_q_basis(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     // first wake point (same as TE)

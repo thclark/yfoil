@@ -117,6 +117,7 @@ impl Session {
 
     /// OPER `INIT`: BL initialisation flag toggled off so the next VISCAL re-marches with
     /// MRCHUE, and the pointer layer is rebuilt.
+    #[doc(alias = "INIT")]
     pub fn init(&mut self) {
         self.state.bl_initialised = !self.state.bl_initialised;
         if !self.state.bl_initialised {
@@ -126,6 +127,7 @@ impl Session {
     }
 
     /// OPER `ALFA`: SPECAL for the new angle, then VISCAL(ITMAX) when viscous.
+    #[doc(alias = "ALFA")]
     pub fn alpha(&mut self, alpha: f64) -> PointResult {
         alpha_command(&mut self.state, &mut self.inviscid, alpha);
         self.solve_point(self.conditions.max_iterations)
@@ -139,6 +141,7 @@ impl Session {
     }
 
     /// One point of OPER `ASEQ`: SPECAL for the new angle, then VISCAL(ITMAX + 5) when viscous.
+    #[doc(alias = "ASEQ")]
     pub fn sequence_point(&mut self, alpha: f64) -> PointResult {
         sequence_command(&mut self.state, &mut self.inviscid, alpha);
         self.solve_point(self.conditions.max_iterations + 5)
@@ -177,7 +180,10 @@ impl Session {
     }
 }
 
+/// Translates XFOIL's `ALFA`.
+///
 /// Single operating point from scratch (fresh session).
+#[doc(alias = "ALFA")]
 pub fn analyse(airfoil: &PanelledFoil, alpha: f64, spec: &FlowConditions) -> PointResult {
     Session::new(airfoil, spec.clone()).alpha(alpha)
 }

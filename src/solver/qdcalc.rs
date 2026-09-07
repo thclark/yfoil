@@ -17,6 +17,7 @@ pub struct WakeSourceInfluence {
 
 /// PSWLIN(I, XI, YI, NXI, NYI, PSI, PSI_NI): streamfunction at node I due to the wake
 /// sources. Note the branch-cut correction is `- (0.5-0.5*SGN)*PI` here (PSILIN has `+`).
+#[doc(alias = "PSWLIN")]
 pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: f64, nyi: f64) -> WakeSourceInfluence {
     let n = st.n_foil_nodes;
     let nw = st.n_wake_nodes;
@@ -161,6 +162,7 @@ pub fn wake_source_influence(st: &SolverState, i: usize, xi: f64, yi: f64, nxi: 
 
 /// QDCALC: source panel influence coefficient matrix for the current airfoil and wake
 /// geometry, stored 1-based in `st.dij[i][j]` for i, j in 1..=N+NW.
+#[doc(alias = "QDCALC")]
 pub fn build_dij(st: &mut SolverState, sys: &mut InviscidSystem) {
     let n = st.n_foil_nodes;
     let nw = st.n_wake_nodes;

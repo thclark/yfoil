@@ -14,10 +14,12 @@
 //! let geometry = read_geometry_from_file("airfoil.json")?;
 //! ```
 
+#![deny(rustdoc::broken_intra_doc_links)]
+#![forbid(unsafe_code)]
+
 pub mod error;
 pub mod geometry;
 
-// Placeholder modules (to be implemented)
 pub mod bl;
 pub mod output;
 pub mod solver;

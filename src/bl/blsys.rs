@@ -4,8 +4,11 @@
 
 use crate::bl::system::{FlowParameters, FlowRegime, IntervalSystem, MidpointCf, StationState, Transition};
 
+/// Mirrors XFOIL's `V_INT`.
+///
 /// XFOIL's interval flags (XBL.INC): SIMI, TRAN, TURB, WAKE.
 #[derive(Debug, Clone, Copy, Default)]
+#[doc(alias = "V_INT")]
 pub struct IntervalFlags {
     pub similarity: bool,
     pub transition: bool,
@@ -15,6 +18,7 @@ pub struct IntervalFlags {
 
 /// BLSYS. `s1` is mutable because at the similarity station XFOIL copies COM1 = COM2.
 /// `trans` must be `Some` when `flags.tran`.
+#[doc(alias = "BLSYS")]
 pub fn assemble_interval_system(
     sys: &mut IntervalSystem,
     s1: &mut StationState,
@@ -111,6 +115,7 @@ pub fn assemble_interval_system(
 
 /// TESYS(CTE, TTE, DTE): the "dummy" system between the airfoil TE point and the first wake
 /// point. Calls BLVAR(3) first, as XFOIL does; no Uei conversion is applied.
+#[doc(alias = "TESYS")]
 pub fn assemble_te_system(
     sys: &mut IntervalSystem,
     s2: &mut StationState,

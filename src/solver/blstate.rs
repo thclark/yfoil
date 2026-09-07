@@ -11,8 +11,12 @@
 use crate::bl::system::{AmplificationModel, MachClDependence, ReClDependence, StationState, Transition};
 use crate::geometry::PanelledFoil;
 
+/// Mirrors XFOIL's `XFOIL.INC`, `XBL.INC`.
+///
 /// BL and panel state (see module docs for indexing).
 #[derive(Debug, Clone)]
+#[doc(alias = "XFOIL.INC")]
+#[doc(alias = "XBL.INC")]
 pub struct SolverState {
     /// Number of airfoil panel nodes (N)
     pub n_foil_nodes: usize,

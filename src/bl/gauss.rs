@@ -29,6 +29,7 @@
 /// gauss_solve(&mut z, &mut r);
 /// // r now contains solution: [1.6, 1.8]
 /// ```
+#[doc(alias = "GAUSS")]
 pub fn gauss_solve<const N: usize>(z: &mut [[f64; N]; N], r: &mut [f64; N]) {
     // Forward elimination with partial pivoting
     for np in 0..N - 1 {
@@ -79,11 +80,14 @@ pub fn gauss_solve<const N: usize>(z: &mut [[f64; N]; N], r: &mut [f64; N]) {
     }
 }
 
+/// Translates XFOIL's `GAUSS`.
+///
 /// Solve a 4x4 linear system (MRCHDU's Newton system)
 ///
 /// Specialized version for the 4x4 system used in MRCHDU.
 /// Variables are: dCtau/dAmpl, dTheta, dDstar, dUe
 #[inline]
+#[doc(alias = "GAUSS")]
 pub fn gauss_solve_4x4(z: &mut [[f64; 4]; 4], r: &mut [f64; 4]) {
     gauss_solve(z, r);
 }

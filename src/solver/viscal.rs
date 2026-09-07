@@ -50,6 +50,7 @@ pub struct IterationRecord {
 /// VISCAL. `sys` is the inviscid system (AIJ factors and BIJ) QDCALC needs when the source
 /// influence matrix does not exist yet; `waklen` is WAKLEN (1.0 in XFOIL). Returns whether the
 /// point converged; `st.lvconv/avisc/mvisc` are set as XFOIL sets them.
+#[doc(alias = "VISCAL")]
 pub fn solve_viscous(
     st: &mut SolverState,
     mut sys: Option<&mut InviscidSystem>,

@@ -7,6 +7,7 @@ use crate::geometry::{spline_derivatives, spline_slope, spline_value};
 use crate::solver::blstate::SolverState;
 
 /// TECALC (xfoil.f): TE gap areas and the sharp-TE flag.
+#[doc(alias = "TECALC")]
 pub fn set_te_thickness(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     // set TE base vector and TE bisector components
@@ -24,6 +25,7 @@ pub fn set_te_thickness(st: &mut SolverState) {
 
 /// STFIND (xpanel.f): stagnation point arc length SST, panel index IST, and the
 /// sensitivities SST_GO = dSST/dGAM(IST), SST_GP = dSST/dGAM(IST+1).
+#[doc(alias = "STFIND")]
 pub fn find_stagnation(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     let mut i = n / 2; // fallback if no sign change is found ("Stagnation point not found")
@@ -57,6 +59,7 @@ pub fn find_stagnation(st: &mut SolverState) {
 }
 
 /// IBLPAN (xpanel.f): BL station -> panel node pointers IPAN, the VTI sign, IBLTE and NBL.
+#[doc(alias = "IBLPAN")]
 pub fn map_stations_to_nodes(st: &mut SolverState) {
     let (n, nw, ist) = (st.n_foil_nodes, st.n_wake_nodes, st.i_stagnation_node);
 
@@ -101,6 +104,7 @@ pub fn map_stations_to_nodes(st: &mut SolverState) {
 
 /// XICALC (xpanel.f): BL arc length XSSI on each side and along the wake, and the TE
 /// "dead air" gap array WGAP.
+#[doc(alias = "XICALC")]
 pub fn set_station_xi(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     let xfeps = 1.0e-7;
@@ -171,6 +175,7 @@ pub fn set_station_xi(st: &mut SolverState) {
 }
 
 /// IBLSYS (xbl.f): Newton-system row number ISYS for each BL station, and NSYS.
+#[doc(alias = "IBLSYS")]
 pub fn map_stations_to_rows(st: &mut SolverState) {
     let mut iv = 0;
     for is in 1..=2 {
@@ -184,6 +189,7 @@ pub fn map_stations_to_rows(st: &mut SolverState) {
 
 /// SINVRT (spline.f): inverse spline S(X) by Newton iteration from the initial guess `si`.
 /// Returns the input value if 10 iterations do not converge (XFOIL prints a warning).
+#[doc(alias = "SINVRT")]
 pub fn s_at_x(mut si: f64, xi: f64, x: &[f64], xs: &[f64], s: &[f64]) -> f64 {
     let n = s.len();
     let sisav = si;
@@ -200,6 +206,7 @@ pub fn s_at_x(mut si: f64, xi: f64, x: &[f64], xs: &[f64], s: &[f64]) -> f64 {
 }
 
 /// XIFSET (xbl.f): forced-transition BL coordinate XIFORC for side `is`.
+#[doc(alias = "XIFSET")]
 pub fn xi_trip(st: &SolverState, is: usize) -> f64 {
     if st.x_trip[is] >= 1.0 {
         return st.xi[is][st.i_te_station[is]];
@@ -242,6 +249,7 @@ pub fn xi_trip(st: &SolverState, is: usize) -> f64 {
 /// STMOVE: moves the stagnation point location to a new panel. Re-runs STFIND on the current
 /// GAM; if IST is unchanged only XICALC is redone, otherwise the pointer layer is rebuilt and
 /// the BL arrays and ITRAN are shifted by IDIF. Always refreshes MASS = DSTR*UEDG.
+#[doc(alias = "STMOVE")]
 pub fn move_stagnation(st: &mut SolverState) {
     // locate new stagnation point arc length SST from GAM distribution
     let istold = st.i_stagnation_node;

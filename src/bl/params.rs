@@ -120,11 +120,14 @@ pub enum FlowRegime {
 // Global BL Parameters
 // ============================================================================
 
+/// Mirrors XFOIL's `V_VAR`.
+///
 /// Global BL parameters (from XFOIL's V_VAR common block)
 ///
 /// These parameters are constant throughout the BL calculation for a given
 /// flow condition (Mach, Reynolds number).
 #[derive(Debug, Clone)]
+#[doc(alias = "V_VAR")]
 pub struct FlowParameters {
     /// IDAMPV: amplification model selected in SETBL from IDAMP
     pub amplification_model: AmplificationModel,

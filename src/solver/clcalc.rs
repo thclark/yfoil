@@ -4,6 +4,7 @@ use crate::solver::blstate::SolverState;
 
 /// COMSET: Kármán–Tsien parameter TKLAM and its M² derivative for the current MINF.
 /// (CPSTAR/QSTAR, the sonic Cp and speed, are plotting quantities and are not kept.)
+#[doc(alias = "COMSET")]
 pub fn set_compressibility(st: &mut SolverState) {
     let beta = (1.0 - st.mach * st.mach).sqrt();
     let beta_msq = -0.5 / beta;
@@ -14,6 +15,7 @@ pub fn set_compressibility(st: &mut SolverState) {
 /// CPCALC: compressible Cp from speed, for `q[1..=n]` (1-based, slot 0 unused). Returns the
 /// Cp array in the same layout. (XFOIL only warns when the Kármán–Tsien denominator goes
 /// non-positive; the values are still those it computes.)
+#[doc(alias = "CPCALC")]
 pub fn compute_cp(n: usize, q: &[f64], qinf: f64, minf: f64) -> Vec<f64> {
     let beta = (1.0 - minf * minf).sqrt();
     let bfac = 0.5 * (minf * minf) / (1.0 + beta);
@@ -28,6 +30,7 @@ pub fn compute_cp(n: usize, q: &[f64], qinf: f64, minf: f64) -> Vec<f64> {
 
 /// CLCALC: integrates surface pressures from GAM to get CL, CM and CDP, and dCL/dalpha,
 /// dCL/dM² for the prescribed-CL routines. Uses the moment reference `st.xcmref/ycmref`.
+#[doc(alias = "CLCALC")]
 pub fn compute_cl_cm(st: &mut SolverState) {
     let n = st.n_foil_nodes;
     let (x, y, gam, gam_a) = (&st.x, &st.y, &st.gamma, &st.gamma_d_alpha);
@@ -99,6 +102,7 @@ pub fn compute_cl_cm(st: &mut SolverState) {
 
 /// CDCALC: total CD from the wake end by the Squire–Young extrapolation (with the
 /// Kármán–Tsien correction) and the friction drag CDF from the surface TAU integral.
+#[doc(alias = "CDCALC")]
 pub fn compute_cd(st: &mut SolverState) {
     let sa = st.alpha.sin();
     let ca = st.alpha.cos();

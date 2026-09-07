@@ -60,6 +60,7 @@ pub struct UpdateSummary {
 
 /// UPDATE. `vdel[iv-1][k][0..2]` is BLSOLV's solution (residual and AC-sensitivity columns);
 /// `minf_cl` is MINF_CL, d(MINF)/d(CL) from the last MRCL (0 for MATYP = 1).
+#[doc(alias = "UPDATE")]
 pub fn apply_newton_update(st: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateSummary {
     let pi = 4.0 * (1.0_f64).atan();
     let dtor = pi / 180.0;

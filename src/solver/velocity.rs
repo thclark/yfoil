@@ -4,6 +4,7 @@
 use crate::solver::blstate::SolverState;
 
 /// QISET: inviscid panel tangential velocity for the current alpha from the alpha=0,90 solutions.
+#[doc(alias = "QISET")]
 pub fn set_q_inviscid(st: &mut SolverState, alfa: f64) {
     let cosa = alfa.cos();
     let sina = alfa.sin();
@@ -14,6 +15,7 @@ pub fn set_q_inviscid(st: &mut SolverState, alfa: f64) {
 }
 
 /// UICALC: inviscid Ue from panel inviscid tangential velocity.
+#[doc(alias = "UICALC")]
 pub fn set_ue_inviscid(st: &mut SolverState) {
     for is in 1..=2 {
         st.ue_inviscid[is][1] = 0.0;
@@ -27,6 +29,7 @@ pub fn set_ue_inviscid(st: &mut SolverState) {
 }
 
 /// UECALC: viscous Ue from panel viscous tangential velocity.
+#[doc(alias = "UECALC")]
 pub fn set_ue_from_q_viscous(st: &mut SolverState) {
     for is in 1..=2 {
         st.ue[is][1] = 0.0;
@@ -48,6 +51,7 @@ pub fn set_q_viscous_from_ue(st: &mut SolverState) {
 }
 
 /// GAMQV: GAM from QVIS (airfoil nodes only), GAM_A from QINV_A.
+#[doc(alias = "GAMQV")]
 pub fn set_gamma_from_q_viscous(st: &mut SolverState) {
     for i in 1..=st.n_foil_nodes {
         st.gamma[i] = st.q_viscous[i];
@@ -74,6 +78,7 @@ pub fn set_ue_with_sources(st: &mut SolverState) {
 }
 
 /// DSSET: displacement thickness from mass defect and Ue.
+#[doc(alias = "DSSET")]
 pub fn set_dstar_from_mass(st: &mut SolverState) {
     for is in 1..=2 {
         for ibl in 2..=st.n_stations[is] {

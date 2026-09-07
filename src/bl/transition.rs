@@ -8,11 +8,14 @@ use super::station::StationState;
 // Transition Location and Derivatives
 // ============================================================================
 
+/// Mirrors XFOIL's `V_VARA`.
+///
 /// Transition location and its derivatives
 ///
 /// Used by TRDIF to handle intervals containing laminar-turbulent transition.
 /// The transition location XT is where N(x) = Ncrit.
 #[derive(Debug, Clone, Default)]
+#[doc(alias = "V_VARA")]
 pub struct Transition {
     /// Transition x-location
     pub xi_transition: f64,
@@ -64,6 +67,8 @@ pub enum TransitionCheck {
     },
 }
 
+/// Translates XFOIL's `TRCHEK2`.
+///
 /// TRCHEK2 (xblsys.f): checks whether transition occurs in the interval X1..X2, solving the
 /// implicit second-order amplification equation for N2 by Newton iteration.
 ///
@@ -73,6 +78,7 @@ pub enum TransitionCheck {
 /// tests rather than returning early, and the returned `ampl2` is the iterated value (which
 /// may exceed Ncrit) — exactly what XFOIL leaves in `AMPL2`.
 #[allow(unused_assignments)] // loop-carried locals mirror the Fortran; the loop always runs
+#[doc(alias = "TRCHEK2")]
 pub fn check_transition(
     s1: &StationState,
     s2: &StationState,
@@ -403,6 +409,7 @@ pub struct AmplificationRate {
 ///
 /// # Returns
 /// Spatial amplification rate and derivatives
+#[doc(alias = "DAMPL")]
 pub fn amplification_rate(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     const DGR: f64 = 0.08; // Ramp width in log10(Rt)
 
@@ -471,6 +478,7 @@ pub fn amplification_rate(hk: f64, th: f64, rt: f64) -> AmplificationRate {
 /// DAMPL2 (xblsys.f): amplification rate for the *modified* envelope e^n method (Nov 1996) —
 /// the envelope rate of `amplification_rate`, blended for Hk > 3.5 with the Orr–Sommerfeld maximum
 /// amplification correlation for separated profiles. Selected by OPER `DAMP` (IDAMPV = 1).
+#[doc(alias = "DAMPL2")]
 pub fn amplification_rate_modified(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     const DGR: f64 = 0.08;
     const HK1: f64 = 3.5;
@@ -638,6 +646,7 @@ pub struct IntervalAmplificationRate {
 ///
 /// # Returns
 /// Averaged amplification rate and derivatives
+#[doc(alias = "AXSET")]
 pub fn interval_amplification_rate(
     hk1: f64,
     t1: f64,

@@ -16,6 +16,8 @@ pub enum Thickness {
     Vertical,
 }
 
+/// Translates XFOIL's `NACA4`.
+///
 /// Generate a NACA 4-digit airfoil
 ///
 /// # Arguments
@@ -31,6 +33,7 @@ pub enum Thickness {
 /// - First digit: maximum camber as percentage of chord
 /// - Second digit: position of maximum camber in tenths of chord
 /// - Last two digits: maximum thickness as percentage of chord
+#[doc(alias = "NACA4")]
 pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
     if thickness == Thickness::Vertical {
         let buffer = naca_4digit_vertical(designation)?;
@@ -123,6 +126,8 @@ pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
     })
 }
 
+/// Translates XFOIL's `NACA5`.
+///
 /// Generate a NACA 5-digit airfoil
 ///
 /// # Arguments
@@ -136,6 +141,7 @@ pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
 /// - Last two digits: maximum thickness as percentage of chord
 ///
 /// Common examples: 23012, 23015, 24112 (reflex)
+#[doc(alias = "NACA5")]
 pub fn naca_5digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
     if thickness == Thickness::Vertical {
         let buffer = naca_5digit_vertical(designation)?;
@@ -432,6 +438,7 @@ fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
 }
 
 /// `NACA4` as XFOIL runs it (vertical thickness, AN = 1.5 spacing, 2·NSIDE − 1 = 245 points).
+#[doc(alias = "NACA4")]
 pub fn naca_4digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
     if designation.len() != 4 || !designation.chars().all(|c| c.is_ascii_digit()) {
         return Err(NacaError::InvalidDesignation(
@@ -463,6 +470,7 @@ pub fn naca_4digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
 }
 
 /// `NACA5` as XFOIL runs it (210xx … 250xx camber lines by its M/C table, vertical thickness).
+#[doc(alias = "NACA5")]
 pub fn naca_5digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
     if designation.len() != 5 || !designation.chars().all(|c| c.is_ascii_digit()) {
         return Err(NacaError::InvalidDesignation(

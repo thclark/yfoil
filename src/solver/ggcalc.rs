@@ -17,6 +17,7 @@ pub struct InviscidSystem {
 }
 
 /// ATANC (xutils.f): ATAN2 with branch-cut checking against a previous angle.
+#[doc(alias = "ATANC")]
 pub fn continuous_atan2(y: f64, x: f64, thold: f64) -> f64 {
     let pi: f64 = "3.1415926535897932384".parse().unwrap();
     let tpi: f64 = "6.2831853071795864769".parse().unwrap();
@@ -27,6 +28,7 @@ pub fn continuous_atan2(y: f64, x: f64, thold: f64) -> f64 {
 }
 
 /// GGCALC. Sets `st.gam = 0`, `st.qinvu[1..=2][1..=n]`, and returns the factored system.
+#[doc(alias = "GGCALC")]
 pub fn build_inviscid_system(st: &mut SolverState) -> InviscidSystem {
     let n = st.n_foil_nodes;
     let np = n + st.n_wake_nodes;

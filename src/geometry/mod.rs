@@ -222,10 +222,10 @@
 //! # Key Functions
 //!
 //! - [`panel_foil`]: Convert raw geometry to analysis-ready form
-//! - [`naca_4digit`], [`naca_5digit`]: Generate NACA airfoil profiles
-//! - [`repanel_by_curvature`]: XFOIL's curvature-based PANE algorithm (default repaneling method)
-//! - [`repanel_cosine`]: Modified cosine spacing repaneling (alternative method)
-//! - [`spline`], [`seval`], [`deval`], [`d2val`]: Cubic spline interpolation
+//! - [`naca_4digit`], [`naca_5digit`]: generate NACA aerofoil profiles
+//! - [`repanel_by_curvature`]: XFOIL's curvature-based PANE algorithm (default repanelling method)
+//! - [`repanel_cosine`]: modified cosine spacing (alternative method)
+//! - [`spline_derivatives`], [`spline_value`], [`spline_slope`], [`spline_second_derivative`]: cubic spline interpolation
 
 mod airfoil;
 mod io;
