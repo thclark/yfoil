@@ -24,5 +24,7 @@ pub mod station;
 pub mod system;
 pub mod transition;
 
-pub use blsolv::*;
-pub use closure::*;
+pub use blsolv::{solve_newton_system, solve_newton_system_traced, BlsolvTrace, NewtonDeltas, NewtonSystem};
+pub use closure::{
+    cdiss_laminar, cdiss_wake, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent, hstarstar, Closure,
+};

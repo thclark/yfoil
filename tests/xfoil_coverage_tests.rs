@@ -44,7 +44,7 @@ fn run_case(case: &str, spec: FlowConditions, alphas_deg: &[f64]) -> Vec<Outcome
     let mut outcomes = Vec::new();
     for (i, a) in alphas_deg.iter().enumerate() {
         let p = session.alpha(a.to_radians());
-        outcomes.push(check_call(&rec, i + 1, &p, &session.state, transient_tol(i + 1)));
+        outcomes.push(check_call(&rec, i + 1, &p, session.state(), transient_tol(i + 1)));
     }
     outcomes
 }
@@ -136,9 +136,12 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
 
     // prologue only (wake, QINVU/QINV, pointers, UINV, DIJ) — then XFOIL's state at call k
     let mut session = Session::new(&airfoil, FlowConditions::default());
-    yfoil::solver::specal::alpha_command(&mut session.state, &mut session.inviscid, alpha_deg.to_radians());
-    solve_viscous(&mut session.state, session.inviscid.as_mut(), 0, 1.0, None);
-    let st = &mut session.state;
+    {
+        let (st, sys) = session.parts_mut();
+        yfoil::solver::specal::alpha_command(st, sys, alpha_deg.to_radians());
+        solve_viscous(st, sys.as_mut(), 0, 1.0, None);
+    }
+    let st = session.state_mut();
     st.bl_initialised = true;
     st.i_stagnation_node = d.int("IST");
     st.s_stagnation = d.real("SST");
@@ -289,9 +292,9 @@ fn test_cl_after_alpha_matches_xfoil() {
     assert_eq!(rec.points.len(), 2, "{case}: VISCAL call count");
     let mut session = Session::new(&airfoil, FlowConditions::default());
     let p = session.alpha(2.0_f64.to_radians());
-    let o1 = check_call(&rec, 1, &p, &session.state, transient_tol(1));
+    let o1 = check_call(&rec, 1, &p, session.state(), transient_tol(1));
     let p = session.cl(0.3);
-    let o2 = check_call(&rec, 2, &p, &session.state, transient_tol(2));
+    let o2 = check_call(&rec, 2, &p, session.state(), transient_tol(2));
     assert_eq!((o1, o2), (Outcome::Match, Outcome::Match));
 }
 

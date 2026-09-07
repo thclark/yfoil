@@ -426,7 +426,7 @@ fn test_blunt_te_reasonable_results() {
         },
     );
     let coeffs = session.alpha(0.0);
-    let vel: Vec<f64> = session.state.q_inviscid[1..=airfoil.n_foil_nodes].to_vec();
+    let vel: Vec<f64> = session.state().q_inviscid[1..=airfoil.n_foil_nodes].to_vec();
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(

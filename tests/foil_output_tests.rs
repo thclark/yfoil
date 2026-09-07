@@ -40,7 +40,7 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     let p = session.alpha(2.0_f64.to_radians());
     assert!(p.converged, "the reference case converges");
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
-    let st = &session.state;
+    let st = session.state();
 
     // geometry: airfoil nodes and the wake, as the solver holds them
     assert_eq!(out.geometry.n(), st.n_foil_nodes);
@@ -187,7 +187,7 @@ fn markers_and_wake_split_follow_xfoil() {
     let p = session.alpha(2.0_f64.to_radians());
     let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
     let bl = out.boundary_layer.as_ref().unwrap();
-    let st = &session.state;
+    let st = session.state();
 
     // transition: XOCTR is what the operating point reports; the point lies on the surface
     assert_eq!(
@@ -275,7 +275,7 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
     let mut visited: Vec<f64> = Vec::new();
     let result = compute_polar_with(&airfoil, &config, &mut |session, p| {
         visited.push(p.alpha.to_degrees());
-        assert_eq!(session.state.alpha, p.alpha, "the session is in the point's state");
+        assert_eq!(session.state().alpha, p.alpha, "the session is in the point's state");
         records.push(AnalysisOutput::from_session(session, p, "naca0012", false));
     });
     // 0, 1, 2 then (after INIT) -1, -2: the sweep order, every point once

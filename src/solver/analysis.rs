@@ -84,12 +84,43 @@ pub struct PointResult {
 /// in COMMON between OPER commands.
 #[derive(Debug, Clone)]
 pub struct Session {
-    pub state: SolverState,
-    pub inviscid: Option<InviscidSystem>,
-    pub conditions: FlowConditions,
+    state: SolverState,
+    inviscid: Option<InviscidSystem>,
+    conditions: FlowConditions,
 }
 
 impl Session {
+    /// The solver state (XFOIL's COMMON blocks) as the last command left it
+    pub fn state(&self) -> &SolverState {
+        &self.state
+    }
+
+    /// The flow conditions the session was opened with
+    pub fn conditions(&self) -> &FlowConditions {
+        &self.conditions
+    }
+
+    /// The inviscid system (AIJ factors, BIJ), once the first SPECAL/SPECCL has built it
+    pub fn inviscid(&self) -> Option<&InviscidSystem> {
+        self.inviscid.as_ref()
+    }
+
+    /// Mutable state, for driving the translated subroutines directly (fixture tests). The
+    /// OPER commands on `Session` keep XFOIL's flag set consistent; a caller of this does not.
+    pub fn state_mut(&mut self) -> &mut SolverState {
+        &mut self.state
+    }
+
+    /// Mutable inviscid-system slot, for the same purpose as [`Session::state_mut`]
+    pub fn inviscid_mut(&mut self) -> &mut Option<InviscidSystem> {
+        &mut self.inviscid
+    }
+
+    /// Both mutable parts at once, as the translated SPECAL/VISCAL signatures take them
+    pub fn parts_mut(&mut self) -> (&mut SolverState, &mut Option<InviscidSystem>) {
+        (&mut self.state, &mut self.inviscid)
+    }
+
     /// LOAD + OPER settings: geometry in, VISC/MACH/N/ITER/VACCEL/XTR pinned.
     pub fn new(airfoil: &PanelledFoil, spec: FlowConditions) -> Self {
         // NW = N/12 + 10*INT(WAKLEN)

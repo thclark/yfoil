@@ -24,4 +24,6 @@ pub mod velocity;
 pub mod viscal;
 pub mod xywake;
 
-pub use analysis::*;
+pub use analysis::{
+    analyse, compute_polar, compute_polar_with, FlowConditions, PointResult, PolarConfig, PolarResult, Session,
+};

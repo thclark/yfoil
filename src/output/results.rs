@@ -191,8 +191,8 @@ impl AnalysisOutput {
         foil_name: &str,
         include_lagged_closures: bool,
     ) -> Self {
-        let st = &session.state;
-        let viscous = session.conditions.re.is_some();
+        let st = session.state();
+        let viscous = session.conditions().re.is_some();
         let n = st.n_foil_nodes;
         let surface = if viscous {
             SurfaceDistributions {
@@ -215,7 +215,7 @@ impl AnalysisOutput {
         };
         Self {
             foil: foil_name.to_string(),
-            conditions: session.conditions.clone(),
+            conditions: session.conditions().clone(),
             results: PolarPoint::from_point(p, viscous),
             geometry: crate::output::FoilNodes::from_state(st),
             surface,

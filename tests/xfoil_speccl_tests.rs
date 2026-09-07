@@ -140,27 +140,28 @@ fn test_fixed_cl_point_matches_xfoil() {
     let mut session = Session::new(&af, FlowConditions::default());
 
     // SPECCL alone: the inviscid alpha for CL = 0.3 that VISCAL starts from
-    cl_command(&mut session.state, &mut session.inviscid, 0.3);
+    let (st, sys) = session.parts_mut();
+    cl_command(st, sys, 0.3);
     let inv = header(&case_path(case, "viscal_inviscid.dat"));
     assert_within(
-        session.state.alpha,
+        session.state().alpha,
         inv["ALFA"].parse().unwrap(),
         TOL_SOLVER,
         1.0,
         "SPECCL alpha",
     );
     assert_within(
-        session.state.cl,
+        session.state().cl,
         inv["CL"].parse().unwrap(),
         TOL_SOLVER,
         1.0,
         "SPECCL CL",
     );
-    assert!(!session.state.alpha_specified);
+    assert!(!session.state().alpha_specified);
 
     // the full CL command: SPECCL again (identical), then VISCAL with alpha as the unknown
     let p = session.cl(0.3);
-    check(case, &p, &session.state);
+    check(case, &p, session.state());
     assert_within(p.cl, 0.3, TOL_SOLVER, 1.0, "viscous CL meets CLSPEC");
 }
 
@@ -177,11 +178,11 @@ fn test_matyp_retyp_2_point_matches_xfoil() {
     let p = session.alpha(2.0_f64.to_radians());
     // Re = Re1 / sqrt(CL) through MRCL, updated every iteration from the current CL
     assert_within(
-        session.state.re,
+        session.state().re,
         1.0e6 / p.cl.sqrt(),
         TOL_SOLVER,
-        session.state.re,
+        session.state().re,
         "REINF = REINF1/sqrt(CL)",
     );
-    check(case, &p, &session.state);
+    check(case, &p, session.state());
 }

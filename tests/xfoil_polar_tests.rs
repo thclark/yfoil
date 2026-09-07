@@ -143,7 +143,7 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
     let mut session = Session::new(&airfoil, spec());
     let mut k = 0;
     let run = |session: &mut Session, alpha_deg: f64, aseq: bool, k: &mut usize| {
-        let entry_lblini = session.state.bl_initialised;
+        let entry_lblini = session.state().bl_initialised;
         let p = if aseq {
             session.sequence_point(alpha_deg.to_radians())
         } else {
@@ -163,7 +163,7 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
     // INIT / ALFA -1 / ASEQ -2 -5 -1
     session.init();
     assert!(
-        !session.state.bl_initialised && !session.state.pointers_built,
+        !session.state().bl_initialised && !session.state().pointers_built,
         "INIT clears LBLINI and LIPAN"
     );
     seq_points.push(run(&mut session, -1.0, false, &mut k));
