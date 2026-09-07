@@ -3,7 +3,7 @@
 # except for lines covered by ci/deviations-allowlist.txt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PATTERNS='disable_vm|disable_dij|disable_coupling|TEMPORARILY DISABLED|coupling_scale|causes divergence|tighter than XFOIL|simplified for stability|max_iter_debug|for stability'
+PATTERNS='disable_vm|disable_dij|disable_coupling|TEMPORARILY DISABLED|coupling_scale|causes divergence|tighter than XFOIL|simplified|max_iter_debug|for stability'
 hits=$(grep -rnE "$PATTERNS" src --include='*.rs' || true)
 fail=0
 while IFS= read -r line; do

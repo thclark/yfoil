@@ -205,14 +205,14 @@ GEOLIN (geometric sensitivities) is inverse-design only and also not translated.
 
 The `TYPE` command maps TYPE 3 to `MATYP = 1, RETYP = 3` (`xoper.f:357-366`); nothing ever sets
 `MATYP = 3`, so MRCL's third Mach branch (`xfoil.f:812, 817`) and SPECAL's `MINF_CLM = 0` branch
-(`xoper.f:2784`) are dead. YFoil's `FlowSpec { matyp: 1, retyp: 3 }` reproduces TYPE 3
+(`xoper.f:2784`) are dead. YFoil's `FlowConditions { mach_cl_dependence: Fixed, re_cl_dependence: InverseCl }` reproduces TYPE 3
 (`tests/xfoil_coverage_tests.rs:290`).
 
 ### 5.5 OPER `DAMP` is reachable and undocumented — Replicated
 
 `IDAMP` toggles the modified envelope method `DAMPL2` (`+0.1·exp(−20·HMI)` term). It is absent from the
 OPER menu text but reachable; the first coverage measurement found it untranslated and it is now
-ported and gated (`FlowSpec.idamp`, case `naca0012_n60_a2_re1e6_damp`).
+ported and gated (`FlowConditions.amplification_model`, case `naca0012_n60_a2_re1e6_damp`).
 
 ### 5.6 Structurally dead branches — Out of scope
 
