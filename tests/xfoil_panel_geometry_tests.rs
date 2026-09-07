@@ -232,7 +232,7 @@ fn test_naca_0012_pane_algorithm() {
     // Print near LE (around midpoint)
     let le_idx = fixture.n_panels / 2;
     println!("\n=== Near LE (idx {}-{}) ===", le_idx - 2, le_idx + 2);
-    for i in (le_idx - 2).max(0)..(le_idx + 3).min(fixture.n_panels) {
+    for i in le_idx.saturating_sub(2)..(le_idx + 3).min(fixture.n_panels) {
         let xfoil_x = fixture.coordinates[i].x;
         let pane_x = if i < paned_airfoil.n_foil_nodes {
             paned_airfoil.x[i]
