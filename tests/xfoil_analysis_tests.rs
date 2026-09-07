@@ -24,7 +24,7 @@ fn test_end_to_end_alpha_2_matches_xfoil_converged_point() {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = panel_foil(&geometry);
     let spec = FlowConditions {
-        re: 1.0e6,
+        re: Some(1.0e6),
         mach: 0.0,
         ncrit: 9.0,
         max_iterations: 20,

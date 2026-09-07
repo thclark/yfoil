@@ -90,7 +90,7 @@ fn test_low_re_laminar_separation_matches_xfoil() {
     let outcomes = run_case(
         "naca0012_n60_a4_re1e5",
         FlowConditions {
-            re: 1.0e5,
+            re: Some(1.0e5),
             ..FlowConditions::default()
         },
         &[4.0],

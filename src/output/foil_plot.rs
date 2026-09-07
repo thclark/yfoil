@@ -188,7 +188,7 @@ impl DesignPoint {
     pub fn from_analysis(label: impl Into<String>, output: AnalysisOutput) -> Self {
         Self {
             label: label.into(),
-            converged: output.results.converged,
+            converged: output.results.is_converged(),
             geometry: output.geometry,
             boundary_layer: output.boundary_layer,
         }
@@ -711,7 +711,7 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
                     } else {
                         MarkKind::Transition
                     };
-                    mark(m.x, m.y, kind, side_colour(is));
+                    mark(m.x_transition, m.y_transition, kind, side_colour(is));
                 }
             }
             if config.markers.separation {
@@ -909,35 +909,23 @@ mod tests {
                 }
                 s.xi.push(k as f64);
                 for col in [
-                    &mut s.ue,
-                    &mut s.theta,
-                    &mut s.dstar,
-                    &mut s.sqrtctau,
-                    &mut s.mass_defect,
-                    &mut s.ue_compressible,
-                    &mut s.h,
-                    &mut s.hk,
-                    &mut s.hstar,
-                    &mut s.cf,
-                    &mut s.cdiss,
-                    &mut s.delta,
-                    &mut s.sqrtctaueq,
-                    &mut s.us,
-                    &mut s.retheta,
-                    &mut s.machsqd_edge,
+                    &mut s.primaries.ue,
+                    &mut s.primaries.theta,
+                    &mut s.primaries.dstar,
+                    &mut s.primaries.sqrtctau,
+                    &mut s.primaries.mass_defect,
+                    &mut s.closures.ue_compressible,
+                    &mut s.closures.h,
+                    &mut s.closures.hk,
+                    &mut s.closures.hstar,
+                    &mut s.closures.cf,
+                    &mut s.closures.cdiss,
+                    &mut s.closures.delta,
+                    &mut s.closures.sqrtctaueq,
+                    &mut s.closures.us,
+                    &mut s.closures.retheta,
+                    &mut s.closures.machsqd_edge,
                     &mut s.cp,
-                ] {
-                    col.push(value);
-                }
-                for col in [
-                    &mut s.lagged_closures.tau,
-                    &mut s.lagged_closures.dissipation,
-                    &mut s.lagged_closures.sqrtctaueq,
-                    &mut s.lagged_closures.delta,
-                    &mut s.lagged_closures.us_plot_scale,
-                    &mut s.lagged_closures.thetastar,
-                    &mut s.lagged_closures.hstar_dump,
-                    &mut s.lagged_closures.cf_dump,
                 ] {
                     col.push(value);
                 }
@@ -967,8 +955,6 @@ mod tests {
                     x_transition: 0.3,
                     y_transition: 0.05,
                     s_transition: g.s_le - 0.3,
-                    x: 0.3,
-                    y: 0.05,
                 },
                 crate::output::TransitionMarker {
                     i_station: 3,
@@ -976,8 +962,6 @@ mod tests {
                     x_transition: 0.6,
                     y_transition: -0.04,
                     s_transition: g.s_le + 0.6,
-                    x: 0.6,
-                    y: -0.04,
                 },
             ],
             derived_separation: Vec::new(),

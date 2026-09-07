@@ -45,7 +45,7 @@ impl Case {
         ok(&["geometry", "naca", "0012", "-n", "60", "-o", c.p("n0012.json")]);
         ok(&["geometry", "naca", "0012", "-n", "40", "-o", c.p("n0012_40.json")]);
         ok(&[
-            "analyze",
+            "analyse",
             c.p("n0012.json"),
             "--alpha",
             "4",
@@ -55,7 +55,7 @@ impl Case {
             c.p("a4.json"),
         ]);
         ok(&[
-            "analyze",
+            "analyse",
             c.p("n0012.json"),
             "--alpha",
             "4",
@@ -212,7 +212,7 @@ fn analysis_inputs_draw_quantities_wake_and_markers() {
 
     // mismatched panels cannot be overlaid with quantities
     ok(&[
-        "analyze",
+        "analyse",
         c.p("n0012_40.json"),
         "--alpha",
         "4",

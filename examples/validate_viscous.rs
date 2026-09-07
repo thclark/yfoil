@@ -9,7 +9,7 @@ fn main() {
     let geometry = naca_4digit("0012", 160).expect("NACA 0012");
     let airfoil = panel_foil(&geometry);
     let spec = FlowConditions {
-        re: 1.0e6,
+        re: Some(1.0e6),
         mach: 0.0,
         ncrit: 9.0,
         max_iterations: 20,

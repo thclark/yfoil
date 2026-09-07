@@ -20,7 +20,7 @@ fn fixture_path(name: &str) -> PathBuf {
 
 fn spec() -> FlowConditions {
     FlowConditions {
-        re: 1.0e6,
+        re: Some(1.0e6),
         mach: 0.0,
         ncrit: 9.0,
         max_iterations: 20,
@@ -39,7 +39,7 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
     assert!(p.converged, "the reference case converges");
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
     let st = &session.state;
 
     // geometry: airfoil nodes and the wake, as the solver holds them
@@ -86,12 +86,15 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
 
     // primaries are the state's arrays verbatim
     for (k, &ibl) in bl.upper.i_station.iter().enumerate() {
-        assert_eq!(bl.upper.theta[k].to_bits(), st.theta[1][ibl].to_bits());
-        assert_eq!(bl.upper.dstar[k].to_bits(), st.dstar[1][ibl].to_bits());
-        assert_eq!(bl.upper.ue[k].to_bits(), st.ue[1][ibl].to_bits());
-        assert_eq!(bl.upper.lagged_closures.tau[k].to_bits(), st.tau[1][ibl].to_bits());
+        assert_eq!(bl.upper.primaries.theta[k].to_bits(), st.theta[1][ibl].to_bits());
+        assert_eq!(bl.upper.primaries.dstar[k].to_bits(), st.dstar[1][ibl].to_bits());
+        assert_eq!(bl.upper.primaries.ue[k].to_bits(), st.ue[1][ibl].to_bits());
         assert_eq!(
-            bl.upper.lagged_closures.thetastar[k].to_bits(),
+            bl.upper.lagged_closures.as_ref().unwrap().tau[k].to_bits(),
+            st.tau[1][ibl].to_bits()
+        );
+        assert_eq!(
+            bl.upper.lagged_closures.as_ref().unwrap().thetastar[k].to_bits(),
             st.thetastar[1][ibl].to_bits()
         );
     }
@@ -100,17 +103,28 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         for k in 0..side.len() {
             assert_eq!(
-                side.ue_compressible[k].to_bits(),
-                (side.ue[k] / bl.qinf).to_bits(),
+                side.closures.ue_compressible[k].to_bits(),
+                (side.primaries.ue[k] / bl.qinf).to_bits(),
                 "ue at M=0"
             );
-            assert_eq!(side.hk[k].to_bits(), side.h[k].to_bits(), "hk = h at M=0");
-            assert_eq!(side.machsqd_edge[k], 0.0);
+            assert_eq!(
+                side.closures.hk[k].to_bits(),
+                side.closures.h[k].to_bits(),
+                "hk = h at M=0"
+            );
+            assert_eq!(side.closures.machsqd_edge[k], 0.0);
         }
     }
     // the wake has no wall shear
-    assert!(bl.wake.cf.iter().all(|&c| c == 0.0));
-    assert!(bl.wake.lagged_closures.cf_dump.iter().all(|&c| c == 0.0));
+    assert!(bl.wake.closures.cf.iter().all(|&c| c == 0.0));
+    assert!(bl
+        .wake
+        .lagged_closures
+        .as_ref()
+        .unwrap()
+        .cf_dump
+        .iter()
+        .all(|&c| c == 0.0));
 
     // every plottable column is finite and sized
     for q in BlQuantity::ALL {
@@ -127,7 +141,7 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
 fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
     let bl = out.boundary_layer.as_ref().unwrap();
 
     // The stored arrays were evaluated on the state entering the final Newton iteration; the live
@@ -139,10 +153,22 @@ fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
     for side in [&bl.upper, &bl.lower, &bl.wake] {
         for k in 0..side.len() {
             let rel = |a: f64, b: f64| (a - b).abs() / a.abs().max(b.abs()).max(1e-3);
-            largest = largest.max(rel(side.hstar[k], side.lagged_closures.hstar_dump[k]));
-            largest = largest.max(rel(side.cf[k], side.lagged_closures.cf_dump[k]));
-            largest = largest.max(rel(side.delta[k], side.lagged_closures.delta[k]));
-            largest = largest.max(rel(side.sqrtctaueq[k], side.lagged_closures.sqrtctaueq[k]));
+            largest = largest.max(rel(
+                side.closures.hstar[k],
+                side.lagged_closures.as_ref().unwrap().hstar_dump[k],
+            ));
+            largest = largest.max(rel(
+                side.closures.cf[k],
+                side.lagged_closures.as_ref().unwrap().cf_dump[k],
+            ));
+            largest = largest.max(rel(
+                side.closures.delta[k],
+                side.lagged_closures.as_ref().unwrap().delta[k],
+            ));
+            largest = largest.max(rel(
+                side.closures.sqrtctaueq[k],
+                side.lagged_closures.as_ref().unwrap().sqrtctaueq[k],
+            ));
         }
     }
     assert!(
@@ -159,29 +185,23 @@ fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
 fn markers_and_wake_split_follow_xfoil() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
     let bl = out.boundary_layer.as_ref().unwrap();
     let st = &session.state;
 
     // transition: XOCTR is what the operating point reports; the point lies on the surface
     assert_eq!(
         bl.transition[0].x_transition.to_bits(),
-        out.results.transition_upper.to_bits()
+        out.results.transition_upper.unwrap()[0].to_bits()
     );
     assert_eq!(
         bl.transition[1].x_transition.to_bits(),
-        out.results.transition_lower.to_bits()
+        out.results.transition_lower.unwrap()[0].to_bits()
     );
     assert_eq!(bl.transition[0].i_station, st.i_transition_station[1]);
     assert!(!bl.transition[0].forced);
     assert_eq!(bl.transition[0].s_transition, st.s_stagnation - st.xi_transition[1]);
     assert_eq!(bl.transition[1].s_transition, st.s_stagnation + st.xi_transition[2]);
-    for t in &bl.transition {
-        assert!(
-            (t.x - t.x_transition).abs() < 1e-3,
-            "transition x on the surface ≈ x/c for a unit chord"
-        );
-    }
 
     // stagnation near the LE, on the spline
     assert_eq!(bl.stagnation.i_stagnation_node, st.i_stagnation_node);
@@ -189,9 +209,9 @@ fn markers_and_wake_split_follow_xfoil() {
     assert!(bl.stagnation.x.abs() < 0.01);
 
     // CPDISP's split recomputes from the emitted columns; TESYS closes it at convergence
-    let dstrte = bl.wake.dstar[0];
-    let f1 = (bl.upper.dstar[bl.upper.len() - 1] + 0.5 * bl.te_thickness_normal) / dstrte;
-    let f2 = (bl.lower.dstar[bl.lower.len() - 1] + 0.5 * bl.te_thickness_normal) / dstrte;
+    let dstrte = bl.wake.primaries.dstar[0];
+    let f1 = (bl.upper.primaries.dstar[bl.upper.len() - 1] + 0.5 * bl.te_thickness_normal) / dstrte;
+    let f2 = (bl.lower.primaries.dstar[bl.lower.len() - 1] + 0.5 * bl.te_thickness_normal) / dstrte;
     assert_eq!(bl.wake_split[0].to_bits(), f1.to_bits());
     assert_eq!(bl.wake_split[1].to_bits(), f2.to_bits());
     // TESYS's DSTR(wake 1) = DSTR1 + DSTR2 + ANTE is a Newton equation, satisfied to the final
@@ -208,8 +228,8 @@ fn markers_and_wake_split_follow_xfoil() {
         let side = if m.side == 1 { &bl.upper } else { &bl.lower };
         let k = side.i_station.iter().position(|&i| i == m.station_before).unwrap();
         match m.kind {
-            SeparationKind::Separation => assert!(side.cf[k] >= 0.0 && side.cf[k + 1] < 0.0),
-            SeparationKind::Reattachment => assert!(side.cf[k] < 0.0 && side.cf[k + 1] >= 0.0),
+            SeparationKind::Separation => assert!(side.closures.cf[k] >= 0.0 && side.closures.cf[k + 1] < 0.0),
+            SeparationKind::Reattachment => assert!(side.closures.cf[k] < 0.0 && side.closures.cf[k + 1] >= 0.0),
         }
         assert!(m.s > st.s[side.i_node[k]].min(st.s[side.i_node[k + 1]]));
     }
@@ -219,19 +239,23 @@ fn markers_and_wake_split_follow_xfoil() {
 fn json_round_trips_and_inviscid_has_no_boundary_layer() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", &spec(), false);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
     let json = out.to_json().unwrap();
     let back: AnalysisOutput = serde_json::from_str(&json).unwrap();
     assert_eq!(back.geometry, out.geometry);
     assert_eq!(back.boundary_layer, out.boundary_layer);
 
-    let inviscid = FlowConditions { re: 0.0, ..spec() };
+    let inviscid = FlowConditions { re: None, ..spec() };
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).unwrap();
     let airfoil = panel_foil(&geometry);
     let mut session = Session::new(&airfoil, inviscid.clone());
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", &inviscid, true);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", false);
     assert!(out.boundary_layer.is_none());
+    assert!(out.results.cd.is_none() && out.results.residual.is_none());
+    assert_eq!(out.surface.q.len(), airfoil.n_foil_nodes);
+    let json = out.to_json().unwrap();
+    assert!(!json.contains("\"boundary_layer\"") && !json.contains("\"residual\""));
     assert!(out.geometry.wake.is_none());
     assert_eq!(out.geometry.n(), airfoil.n_foil_nodes);
 }
@@ -252,13 +276,7 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
     let result = compute_polar_with(&airfoil, &config, &mut |session, p| {
         visited.push(p.alpha.to_degrees());
         assert_eq!(session.state.alpha, p.alpha, "the session is in the point's state");
-        records.push(AnalysisOutput::from_session(
-            session,
-            p,
-            "naca0012",
-            &config.conditions,
-            false,
-        ));
+        records.push(AnalysisOutput::from_session(session, p, "naca0012", false));
     });
     // 0, 1, 2 then (after INIT) -1, -2: the sweep order, every point once
     assert_eq!(visited, vec![0.0, 1.0, 2.0, -1.0, -2.0]);

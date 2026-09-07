@@ -4,17 +4,20 @@
 //! reinitialise, −step → min, stitched ascending).
 
 use crate::bl::system::{AmplificationModel, MachClDependence, ReClDependence};
+use serde::{Deserialize, Serialize};
+
 use crate::geometry::PanelledFoil;
 use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::specal::{alpha_command, cl_command, sequence_command};
 use crate::solver::viscal::{solve_viscous, IterationRecord};
 
-/// Flow specification (the OPER settings that must be pinned explicitly).
-#[derive(Debug, Clone)]
+/// The flow conditions shared by every point of a polar: the OPER settings that must be pinned
+/// explicitly. Also the `conditions` block of the analysis and polar JSON outputs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowConditions {
-    /// Reynolds number REINF1 (0 → inviscid analysis)
-    pub re: f64,
+    /// Reynolds number REINF1; `None` for an inviscid analysis
+    pub re: Option<f64>,
     /// Mach number MINF1
     pub mach: f64,
     /// Critical amplification ACRIT (both sides)
@@ -37,7 +40,7 @@ pub struct FlowConditions {
 impl Default for FlowConditions {
     fn default() -> Self {
         Self {
-            re: 1.0e6,
+            re: Some(1.0e6),
             mach: 0.0,
             ncrit: 9.0,
             max_iterations: 20,
@@ -92,8 +95,8 @@ impl Session {
         // NW = N/12 + 10*INT(WAKLEN)
         let nw = airfoil.n_foil_nodes / 12 + 10 * (spec.wake_length as usize);
         let mut st = SolverState::from_foil(airfoil, nw);
-        st.re_cl1 = spec.re;
-        st.re = spec.re;
+        st.re_cl1 = spec.re.unwrap_or(0.0);
+        st.re = spec.re.unwrap_or(0.0);
         st.mach_cl1 = spec.mach;
         st.mach = spec.mach;
         st.mach_cl_dependence = spec.mach_cl_dependence;
@@ -102,7 +105,7 @@ impl Session {
         st.ncrit = [0.0, spec.ncrit, spec.ncrit];
         st.elimination_threshold = spec.elimination_threshold;
         st.x_trip = [0.0, spec.x_trip[0], spec.x_trip[1]];
-        st.viscous = spec.re > 0.0;
+        st.viscous = spec.re.is_some();
         st.alpha_specified = true;
         st.qinf = 1.0;
         Self {

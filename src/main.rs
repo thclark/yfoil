@@ -8,7 +8,7 @@ use yfoil::geometry::{
     naca_4digit, naca_4digit_xfoil, naca_5digit, naca_5digit_xfoil, panel_foil, read_dat_file, read_geometry_from_file,
     repanel_by_curvature, repanel_cosine, write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
 };
-use yfoil::output::{AnalysisOutput, InviscidAnalysisOutput, PolarOutput};
+use yfoil::output::{AnalysisOutput, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
 
 #[cfg(feature = "plotting")]
@@ -35,8 +35,8 @@ enum Commands {
         action: GeomAction,
     },
 
-    /// Analyze airfoil at a single operating point (placeholder)
-    Analyze {
+    /// Analyse an aerofoil at a single operating point
+    Analyse {
         /// Path to geometry file (JSON)
         file: PathBuf,
 
@@ -55,20 +55,24 @@ enum Commands {
         #[arg(short, long, default_value_t = 0.0)]
         mach: f64,
 
-        /// Critical amplification factor for transition
-        #[arg(short, long, default_value_t = 9.0)]
+        /// Critical amplification factor for transition (Ncrit)
+        #[arg(long, default_value_t = 9.0)]
         ncrit: f64,
 
         /// Inviscid analysis only
         #[arg(long)]
         inviscid: bool,
         /// Maximum VISCAL iterations (XFOIL ITER)
-        #[arg(long, alias = "iter", default_value_t = 20)]
-        iterations: usize,
+        #[arg(long, default_value_t = 20)]
+        max_iterations: usize,
 
         /// Output file path for JSON results
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Also emit XFOIL's lagged closure arrays under each side's `lagged_closures`
+        #[arg(long)]
+        include_lagged_closures: bool,
     },
 
     /// Generate polar sweep
@@ -96,8 +100,8 @@ enum Commands {
         #[arg(short, long, default_value_t = 0.0)]
         mach: f64,
 
-        /// Critical amplification factor for transition
-        #[arg(short, long, default_value_t = 9.0)]
+        /// Critical amplification factor for transition (Ncrit)
+        #[arg(long, default_value_t = 9.0)]
         ncrit: f64,
 
         /// Output JSON format
@@ -108,13 +112,17 @@ enum Commands {
         #[arg(long)]
         label: Option<String>,
         /// Maximum VISCAL iterations (XFOIL ITER)
-        #[arg(long, alias = "iter", default_value_t = 20)]
-        iterations: usize,
+        #[arg(long, default_value_t = 20)]
+        max_iterations: usize,
 
-        /// Embed the full point record (geometry, wake, boundary layer) of every sweep point in the
-        /// JSON, for `yfoil plot foil polar.json --alpha ...`
+        /// Embed the full analysis record (geometry, wake, boundary layer) of every sweep point in
+        /// the JSON, for `yfoil plot foil polar.json --alpha ...`
         #[arg(long)]
         distributions: bool,
+
+        /// Also emit XFOIL's lagged closure arrays in the embedded records
+        #[arg(long)]
+        include_lagged_closures: bool,
 
         /// Output file path
         #[arg(short, long)]
@@ -354,7 +362,7 @@ fn main() {
 
     match cli.command {
         Commands::Geometry { action } => handle_geom(action),
-        Commands::Analyze {
+        Commands::Analyse {
             file,
             alpha,
             cl,
@@ -363,70 +371,51 @@ fn main() {
             ncrit,
             inviscid,
             output,
-            iterations,
+            max_iterations,
+            include_lagged_closures,
         } => {
-            // Read geometry
             let geometry = read_geometry_auto(&file);
-            let airfoil = panel_foil(&geometry);
-            let airfoil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
+            let foil = panel_foil(&geometry);
+            let foil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
-            // Convert angle to radians
-            let alpha_rad = alpha.to_radians();
-
-            let spec = FlowConditions {
-                re: if inviscid { 0.0 } else { reynolds },
+            let conditions = FlowConditions {
+                re: if inviscid { None } else { Some(reynolds) },
                 mach,
                 ncrit,
-                max_iterations: iterations,
+                max_iterations,
                 ..FlowConditions::default()
             };
-            let mut session = Session::new(&airfoil, spec.clone());
+            let mut session = Session::new(&foil, conditions.clone());
             let point = match cl {
                 Some(clspec) => session.cl(clspec),
-                None => session.alpha(alpha_rad),
+                None => session.alpha(alpha.to_radians()),
             };
-            let alpha = point.alpha.to_degrees();
+            let alpha_deg = point.alpha.to_degrees();
 
+            println!(
+                "{}",
+                if inviscid {
+                    "Inviscid Analysis Results"
+                } else {
+                    "Viscous Analysis Results"
+                }
+            );
+            println!("========================");
+            println!("Foil:    {}", file.display());
+            println!("Alpha:   {:.2}°", alpha_deg);
+            if let Some(re) = conditions.re {
+                println!("Re:      {:.2e}", re);
+            }
+            println!("Mach:    {:.3}", mach);
+            if !inviscid {
+                println!("Ncrit:   {:.1}", ncrit);
+            }
+            println!();
+            println!("CL  = {:+.6}", point.cl);
             if inviscid {
-                println!("Inviscid Analysis Results");
-                println!("========================");
-                println!("Airfoil: {}", file.display());
-                println!("Alpha:   {:.2}°", alpha);
-                println!("Mach:    {:.3}", mach);
-                println!();
-                println!("CL  = {:+.6}", point.cl);
                 println!("CM  = {:+.6}", point.cm);
                 println!("CDp = {:+.6} (pressure drag)", point.cd_pressure);
-
-                // Write JSON output if requested
-                if let Some(ref path) = output {
-                    let n = airfoil.n_foil_nodes;
-                    let velocity: Vec<f64> = session.state.q_inviscid[1..=n].to_vec();
-                    let cp: Vec<f64> = session.state.cp_inviscid[1..=n].to_vec();
-                    let result = InviscidAnalysisOutput::new(
-                        &airfoil,
-                        &velocity,
-                        &cp,
-                        (point.cl, point.cm, point.cd_pressure),
-                        alpha,
-                        mach,
-                        airfoil_name,
-                    );
-                    let json_str = result.to_json().expect("Failed to serialize results");
-                    std::fs::write(path, &json_str).expect("Failed to write output file");
-                    println!();
-                    println!("Wrote JSON to {}", path.display());
-                }
             } else {
-                println!("Viscous Analysis Results");
-                println!("========================");
-                println!("Airfoil: {}", file.display());
-                println!("Alpha:   {:.2}°", alpha);
-                println!("Re:      {:.2e}", reynolds);
-                println!("Mach:    {:.3}", mach);
-                println!("Ncrit:   {:.1}", ncrit);
-                println!();
-                println!("CL  = {:+.6}", point.cl);
                 println!("CD  = {:+.6}", point.cd);
                 println!("  CDf = {:+.6} (friction)", point.cd_friction);
                 println!("  CDp = {:+.6} (pressure, CD - CDf)", point.cd - point.cd_friction);
@@ -439,19 +428,18 @@ fn main() {
                 println!("Convergence:");
                 println!("  Iterations: {}", point.iterations);
                 println!("  rms:        {:.2e}", point.residual);
-                if point.converged {
-                    println!("  Status:     Converged");
-                } else {
-                    println!("  Status:     NOT CONVERGED");
-                }
+                println!(
+                    "  Status:     {}",
+                    if point.converged { "Converged" } else { "NOT CONVERGED" }
+                );
+            }
 
-                if let Some(ref path) = output {
-                    let result = AnalysisOutput::from_session(&session, &point, airfoil_name, &spec, false);
-                    let json_str = result.to_json().expect("Failed to serialize results");
-                    std::fs::write(path, &json_str).expect("Failed to write output file");
-                    println!();
-                    println!("Wrote JSON to {}", path.display());
-                }
+            if let Some(ref path) = output {
+                let result = AnalysisOutput::from_session(&session, &point, foil_name, include_lagged_closures);
+                let json_str = result.to_json().expect("Failed to serialize results");
+                std::fs::write(path, &json_str).expect("Failed to write output file");
+                println!();
+                println!("Wrote JSON to {}", path.display());
             }
         }
         Commands::Polar {
@@ -465,8 +453,9 @@ fn main() {
             json,
             label,
             output,
-            iterations,
+            max_iterations,
             distributions,
+            include_lagged_closures,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
@@ -479,10 +468,10 @@ fn main() {
                 alpha_min,
                 alpha_step,
                 conditions: FlowConditions {
-                    re: reynolds,
+                    re: Some(reynolds),
                     mach,
                     ncrit,
-                    max_iterations: iterations,
+                    max_iterations,
                     ..FlowConditions::default()
                 },
                 ..Default::default()
@@ -491,9 +480,13 @@ fn main() {
             // Run polar sweep, capturing every visited point's state when asked to
             let mut records: Vec<AnalysisOutput> = Vec::new();
             let result = if distributions {
-                let spec = config.conditions.clone();
                 compute_polar_with(&airfoil, &config, &mut |session, p| {
-                    records.push(AnalysisOutput::from_session(session, p, airfoil_name, &spec, false));
+                    records.push(AnalysisOutput::from_session(
+                        session,
+                        p,
+                        airfoil_name,
+                        include_lagged_closures,
+                    ));
                 })
             } else {
                 compute_polar(&airfoil, &config)
@@ -530,18 +523,18 @@ fn main() {
                 println!("{}", "-".repeat(98));
 
                 for point in &polar_output.results {
-                    let conv_marker = if point.converged { "Y" } else { "N" };
+                    let conv_marker = if point.is_converged() { "Y" } else { "N" };
                     println!(
                         "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e} {:>5}",
                         point.alpha_deg,
                         point.cl,
-                        point.cd,
+                        point.cd.unwrap_or(0.0),
                         point.cm,
-                        point.ldratio,
-                        point.transition_upper,
-                        point.transition_lower,
-                        point.iterations,
-                        point.residual,
+                        point.ldratio.unwrap_or(0.0),
+                        point.transition_upper.map_or(0.0, |t| t[0]),
+                        point.transition_lower.map_or(0.0, |t| t[0]),
+                        point.iterations.unwrap_or(0),
+                        point.residual.unwrap_or(0.0),
                         conv_marker
                     );
                 }
@@ -726,11 +719,11 @@ fn handle_plot(action: PlotAction) {
                 }
             };
 
-            let analysis: InviscidAnalysisOutput = match serde_json::from_str(&json_str) {
+            let analysis: AnalysisOutput = match serde_json::from_str(&json_str) {
                 Ok(a) => a,
                 Err(e) => {
                     eprintln!("Error parsing JSON: {}", e);
-                    eprintln!("Make sure the file is an inviscid analysis output (from 'yfoil analyze --inviscid -o')");
+                    eprintln!("Make sure the file is an analysis output (from 'yfoil analyse -o')");
                     std::process::exit(1);
                 }
             };

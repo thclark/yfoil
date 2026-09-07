@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::output::svg::nice_step;
-use crate::output::InviscidAnalysisOutput;
+use crate::output::AnalysisOutput;
 
 /// Error type for plotting operations
 #[derive(thiserror::Error, Debug)]
@@ -66,7 +66,7 @@ impl Default for AnalysisPlotConfig {
 ///
 /// Uses high-precision SVG output (6 decimal places) for smooth curves.
 pub fn plot_analysis_svg<P: AsRef<Path>>(
-    analysis: &InviscidAnalysisOutput,
+    analysis: &AnalysisOutput,
     output_path: P,
     config: &AnalysisPlotConfig,
 ) -> Result<(), PlotError> {
@@ -75,7 +75,7 @@ pub fn plot_analysis_svg<P: AsRef<Path>>(
 
 /// Plot Cp and Ue distributions to PNG
 pub fn plot_analysis_png<P: AsRef<Path>>(
-    analysis: &InviscidAnalysisOutput,
+    analysis: &AnalysisOutput,
     output_path: P,
     config: &AnalysisPlotConfig,
 ) -> Result<(), PlotError> {
@@ -87,7 +87,7 @@ pub fn plot_analysis_png<P: AsRef<Path>>(
 /// Internal implementation for analysis distribution plotting (for PNG)
 fn plot_analysis_impl<DB: DrawingBackend>(
     root: &DrawingArea<DB, plotters::coord::Shift>,
-    analysis: &InviscidAnalysisOutput,
+    analysis: &AnalysisOutput,
     config: &AnalysisPlotConfig,
 ) -> Result<(), PlotError>
 where
@@ -101,8 +101,8 @@ where
     let (x_lower, cp_lower, vel_lower) = analysis.lower_surface();
 
     // Get airfoil outline
-    let airfoil_x = &analysis.stations.x;
-    let airfoil_y = &analysis.stations.y;
+    let airfoil_x = &analysis.geometry.x;
+    let airfoil_y = &analysis.geometry.y;
 
     // Calculate data ranges for Cp (note: inverted y-axis for negative convention)
     let cp_min = cp_upper
@@ -140,7 +140,7 @@ where
     let title = config
         .title
         .clone()
-        .unwrap_or_else(|| format!("{} at α = {:.1}°", analysis.airfoil, analysis.alpha_deg));
+        .unwrap_or_else(|| format!("{} at α = {:.1}°", analysis.foil, analysis.results.alpha_deg));
 
     let (upper, lower) = root.split_vertically(config.height / 2);
 
@@ -275,7 +275,7 @@ where
 /// Unlike the plotters SVGBackend which rounds to integer pixels,
 /// this outputs coordinates with 6 decimal places for smooth curves.
 fn write_analysis_precision_svg<P: AsRef<Path>>(
-    analysis: &InviscidAnalysisOutput,
+    analysis: &AnalysisOutput,
     output_path: P,
     config: &AnalysisPlotConfig,
 ) -> Result<(), PlotError> {
@@ -286,8 +286,8 @@ fn write_analysis_precision_svg<P: AsRef<Path>>(
     let (x_lower, cp_lower, vel_lower) = analysis.lower_surface();
 
     // Get airfoil outline
-    let airfoil_x = &analysis.stations.x;
-    let airfoil_y = &analysis.stations.y;
+    let airfoil_x = &analysis.geometry.x;
+    let airfoil_y = &analysis.geometry.y;
 
     // Calculate data ranges for Cp
     let cp_min = cp_upper
@@ -391,7 +391,7 @@ fn write_analysis_precision_svg<P: AsRef<Path>>(
     let title = config
         .title
         .clone()
-        .unwrap_or_else(|| format!("{} at α = {:.1}°", analysis.airfoil, analysis.alpha_deg));
+        .unwrap_or_else(|| format!("{} at α = {:.1}°", analysis.foil, analysis.results.alpha_deg));
     writeln!(
         file,
         r#"<text x="{:.1}" y="25" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold">{}</text>"#,
@@ -791,7 +791,7 @@ impl PolarData {
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
         let alpha: Vec<f64> = polar.results.iter().map(|p| p.alpha_deg).collect();
         let cl: Vec<f64> = polar.results.iter().map(|p| p.cl).collect();
-        let cd: Vec<f64> = polar.results.iter().map(|p| p.cd).collect();
+        let cd: Vec<f64> = polar.results.iter().map(|p| p.cd.unwrap_or(0.0)).collect();
         Self { alpha, cl, cd }
     }
 
@@ -1760,7 +1760,7 @@ impl PolarDataWithCm {
         Self {
             alpha: polar.results.iter().map(|p| p.alpha_deg).collect(),
             cl: polar.results.iter().map(|p| p.cl).collect(),
-            cd: polar.results.iter().map(|p| p.cd).collect(),
+            cd: polar.results.iter().map(|p| p.cd.unwrap_or(0.0)).collect(),
             cm: polar.results.iter().map(|p| p.cm).collect(),
         }
     }
@@ -2950,12 +2950,12 @@ impl PolarSeries {
     ///
     /// The label is the polar's `label` if set, otherwise its `airfoil` name.
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
-        let pts: Vec<_> = polar.results.iter().filter(|p| p.converged).collect();
+        let pts: Vec<_> = polar.results.iter().filter(|p| p.is_converged()).collect();
         Self {
             label: polar.label.clone().unwrap_or_else(|| polar.foil.clone()),
             alpha: pts.iter().map(|p| p.alpha_deg).collect(),
             cl: pts.iter().map(|p| p.cl).collect(),
-            cd: pts.iter().map(|p| p.cd).collect(),
+            cd: pts.iter().map(|p| p.cd.unwrap_or(0.0)).collect(),
             cm: pts.iter().map(|p| p.cm).collect(),
         }
     }

@@ -1,101 +1,92 @@
-//! Result structures for JSON serialization
-//!
-//! These structs provide a clean, serializable interface for analysis results
-//! that can be easily exported to JSON or other formats.
+//! The serialised results: one analysed point (`AnalysisOutput`), a polar (`PolarOutput`) and the
+//! geometry report (`GeometryInfo`). Keys are the variable names of `docs/conventions/naming.md`.
 
 use serde::{Deserialize, Serialize};
 
-/// Single operating point result
+/// One operating point's results, as XFOIL reports them after `ALFA`/`CL` and keeps them in a
+/// polar. The viscous-only fields are `None` for an inviscid point and are then omitted from the
+/// JSON, so an inviscid record is a strict subset of a viscous one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolarPoint {
     /// Angle of attack (degrees)
     pub alpha_deg: f64,
-    /// Lift coefficient
     pub cl: f64,
-    /// Drag coefficient
-    pub cd: f64,
-    /// Moment coefficient (about quarter chord)
+    /// Moment coefficient about `cm_ref`
     pub cm: f64,
-    /// Friction drag coefficient
-    pub cd_friction: f64,
-    /// Pressure drag coefficient
+    /// Pressure drag (CDP): the only drag an inviscid solve has
     pub cd_pressure: f64,
-    /// Lift-to-drag ratio
-    pub ldratio: f64,
-    /// Transition location on upper surface (x/c)
-    pub transition_upper: f64,
-    /// Transition location on lower surface (x/c)
-    pub transition_lower: f64,
-    /// Whether solution converged
-    pub converged: bool,
-    /// Number of iterations to converge
-    pub iterations: usize,
-    /// Final RMSBL (rms BL Newton change) of the last VISCAL iteration
-    pub residual: f64,
+    /// Total drag from the wake momentum defect (CD)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cd: Option<f64>,
+    /// Friction drag (CDF)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cd_friction: Option<f64>,
+    /// CL/CD
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ldratio: Option<f64>,
+    /// (x, y) of the transition point on the upper side, chord fractions (XOCTR(1), YOCTR(1))
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_upper: Option<[f64; 2]>,
+    /// (x, y) of the transition point on the lower side (XOCTR(2), YOCTR(2))
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_lower: Option<[f64; 2]>,
+    /// LVCONV: the viscous solution converged
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converged: Option<bool>,
+    /// VISCAL iterations performed
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iterations: Option<usize>,
+    /// RMSBL of the last iteration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub residual: Option<f64>,
 }
 
 impl PolarPoint {
-    /// Create from an analysis operating point
-    pub fn from_point(p: &crate::solver::analysis::PointResult) -> Self {
+    /// From a solved point; `viscous` selects whether the viscous-only fields are carried
+    pub fn from_point(p: &crate::solver::analysis::PointResult, viscous: bool) -> Self {
+        let v = viscous;
         Self {
             alpha_deg: p.alpha.to_degrees(),
             cl: p.cl,
-            cd: p.cd,
             cm: p.cm,
-            cd_friction: p.cd_friction,
             cd_pressure: p.cd_pressure,
-            ldratio: if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 },
-            transition_upper: p.transition_upper[0],
-            transition_lower: p.transition_lower[0],
-            converged: p.converged,
-            iterations: p.iterations,
-            residual: p.residual,
+            cd: v.then_some(p.cd),
+            cd_friction: v.then_some(p.cd_friction),
+            ldratio: v.then_some(if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 }),
+            transition_upper: v.then_some(p.transition_upper),
+            transition_lower: v.then_some(p.transition_lower),
+            converged: v.then_some(p.converged),
+            iterations: v.then_some(p.iterations),
+            residual: v.then_some(p.residual),
         }
     }
-}
 
-/// Flow conditions for analysis
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlowConditionsOutput {
-    /// Reynolds number
-    pub re: f64,
-    /// Mach number
-    pub mach: f64,
-    /// Critical amplification factor (Ncrit)
-    pub ncrit: f64,
-}
-
-impl FlowConditionsOutput {
-    /// Create from the flow specification
-    pub fn from_spec(spec: &crate::solver::analysis::FlowConditions) -> Self {
-        Self {
-            re: spec.re,
-            mach: spec.mach,
-            ncrit: spec.ncrit,
-        }
+    /// True unless the point is a viscous one that did not converge
+    pub fn is_converged(&self) -> bool {
+        self.converged.unwrap_or(true)
     }
 }
 
 /// Polar sweep result (multiple operating points)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolarOutput {
-    /// Airfoil name/description
+    /// Aerofoil name (the geometry file stem)
     pub foil: String,
-    /// Display label for this polar (legend entry when plotted); falls back to `airfoil`
+    /// Display label for this polar (legend entry when plotted); falls back to `foil`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    /// Flow conditions
-    pub conditions: FlowConditionsOutput,
-    /// Operating points
+    /// The flow conditions every point shares
+    pub conditions: crate::solver::analysis::FlowConditions,
+    /// One record per converged point, ascending in alpha
     pub results: Vec<PolarPoint>,
     /// Summary statistics
     pub summary: PolarSummary,
-    /// Whether sweep completed without excessive failures
+    /// Whether the sweep completed without excessive failures
     pub completed: bool,
-    /// Full point records (geometry, wake and BL distributions) at every point the sweep visited,
-    /// converged or not, ascending in alpha; written by `yfoil polar --distributions`. A point
-    /// reached inside a sweep starts from the previous alpha's BL and is not the same solve as
-    /// `yfoil analyze` at that alpha.
+    /// Full analysis records (geometry, wake and boundary layer) at every point the sweep
+    /// visited, converged or not, ascending in alpha; written by `yfoil polar --distributions`.
+    /// A point reached inside a sweep starts from the previous alpha's BL and is not the same
+    /// solve as `yfoil analyse` at that alpha.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub distributions: Vec<AnalysisOutput>,
 }
@@ -107,11 +98,11 @@ pub struct PolarSummary {
     pub cl_max: Option<f64>,
     /// Alpha at CL_max (degrees)
     pub alpha_at_cl_max: Option<f64>,
-    /// Maximum L/D ratio
+    /// Maximum L/D
     pub ldratio_max: Option<f64>,
     /// CL at maximum L/D
     pub cl_at_ldratio_max: Option<f64>,
-    /// Zero-lift drag coefficient
+    /// CD at the point of smallest |CL|
     pub cd0: Option<f64>,
     /// Number of converged points
     pub n_converged: usize,
@@ -121,30 +112,35 @@ pub struct PolarSummary {
 
 impl PolarOutput {
     /// Create from PolarResult
-    pub fn from_polar(result: &crate::solver::analysis::PolarResult, airfoil_name: &str) -> Self {
-        let points: Vec<PolarPoint> = result.results.iter().map(PolarPoint::from_point).collect();
+    pub fn from_polar(result: &crate::solver::analysis::PolarResult, foil_name: &str) -> Self {
+        let viscous = result.conditions.re.is_some();
+        let results: Vec<PolarPoint> = result
+            .results
+            .iter()
+            .map(|p| PolarPoint::from_point(p, viscous))
+            .collect();
 
-        let (cl_max, alpha_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| (Some(cl), Some(a)));
+        let (cl_max, alpha_at_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| (Some(cl), Some(a)));
 
-        let (ld_max, cl_at_ld_max) = result
+        let (ldratio_max, cl_at_ldratio_max) = result
             .ldratio_max()
             .map_or((None, None), |(ld, cl)| (Some(ld), Some(cl)));
 
         let summary = PolarSummary {
             cl_max,
-            alpha_at_cl_max: alpha_cl_max,
-            ldratio_max: ld_max,
-            cl_at_ldratio_max: cl_at_ld_max,
+            alpha_at_cl_max,
+            ldratio_max,
+            cl_at_ldratio_max,
             cd0: result.cd0(),
             n_converged: result.results.iter().filter(|p| p.converged).count(),
             n_failed: result.failed_alphas.len(),
         };
 
         Self {
-            foil: airfoil_name.to_string(),
+            foil: foil_name.to_string(),
             label: None,
-            conditions: FlowConditionsOutput::from_spec(&result.conditions),
-            results: points,
+            conditions: result.conditions.clone(),
+            results,
             summary,
             completed: result.completed,
             distributions: Vec::new(),
@@ -157,148 +153,94 @@ impl PolarOutput {
     }
 }
 
-/// Single-point analysis result: forces, the geometry as solved (with the wake), and every
-/// per-station boundary-layer quantity (see [`crate::output::BoundaryLayerOutput`]).
+/// Per-node surface distributions of one solve: the surface speed q and Cp at every foil node,
+/// inviscid or viscous according to `conditions.re`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SurfaceDistributions {
+    /// Surface speed q/q∞ (QINV for an inviscid solve, QVIS for a viscous one)
+    pub q: Vec<f64>,
+    /// Pressure coefficient (CPI or CPV)
+    pub cp: Vec<f64>,
+}
+
+/// One analysed point: the conditions, the results, the geometry as solved (with the wake after
+/// a viscous solve), the surface distributions and, after a viscous solve, every per-station
+/// boundary-layer quantity (see [`crate::output::BoundaryLayerOutput`]). An inviscid point has
+/// no `geometry.wake` and no `boundary_layer`; everything else is the same shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisOutput {
-    /// Airfoil name/description
+    /// Aerofoil name (the geometry file stem)
     pub foil: String,
-    /// Flow conditions
-    pub conditions: FlowConditionsOutput,
-    /// Operating point result
+    pub conditions: crate::solver::analysis::FlowConditions,
     pub results: PolarPoint,
-    /// Inviscid-only mode
-    pub inviscid_only: bool,
     /// Panel nodes, normals and (after a viscous solve) the wake
     pub geometry: crate::output::FoilNodes,
-    /// Boundary-layer distributions and markers; `None` for an inviscid point
+    pub surface: SurfaceDistributions,
+    /// Boundary-layer distributions and markers; absent for an inviscid point
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundary_layer: Option<crate::output::BoundaryLayerOutput>,
 }
 
 impl AnalysisOutput {
-    /// Create from a session's state after an operating point
+    /// From a session's state after an operating point. `include_lagged_closures` also emits
+    /// XFOIL's lagged closure arrays under each side's `lagged_closures`
+    /// (`yfoil analyse --include-lagged-closures`).
     pub fn from_session(
         session: &crate::solver::analysis::Session,
         p: &crate::solver::analysis::PointResult,
-        airfoil_name: &str,
-        spec: &crate::solver::analysis::FlowConditions,
-        inviscid_only: bool,
+        foil_name: &str,
+        include_lagged_closures: bool,
     ) -> Self {
         let st = &session.state;
-        let boundary_layer = if st.viscous && st.bl_initialised {
-            Some(crate::output::BoundaryLayerOutput::from_state(st))
+        let viscous = session.conditions.re.is_some();
+        let n = st.n_foil_nodes;
+        let surface = if viscous {
+            SurfaceDistributions {
+                q: st.q_viscous[1..=n].to_vec(),
+                cp: st.cp_viscous[1..=n].to_vec(),
+            }
+        } else {
+            SurfaceDistributions {
+                q: st.q_inviscid[1..=n].to_vec(),
+                cp: st.cp_inviscid[1..=n].to_vec(),
+            }
+        };
+        let boundary_layer = if viscous && st.bl_initialised {
+            Some(crate::output::BoundaryLayerOutput::from_state(
+                st,
+                include_lagged_closures,
+            ))
         } else {
             None
         };
         Self {
-            foil: airfoil_name.to_string(),
-            conditions: FlowConditionsOutput::from_spec(spec),
-            results: PolarPoint::from_point(p),
-            inviscid_only,
+            foil: foil_name.to_string(),
+            conditions: session.conditions.clone(),
+            results: PolarPoint::from_point(p, viscous),
             geometry: crate::output::FoilNodes::from_state(st),
+            surface,
             boundary_layer,
         }
     }
 
-    /// Serialize to JSON string
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
-    }
-}
-
-/// Inviscid analysis result with velocity distributions
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InviscidAnalysisOutput {
-    /// Airfoil name/description
-    pub airfoil: String,
-    /// Angle of attack in degrees
-    pub alpha_deg: f64,
-    /// Mach number
-    pub mach: f64,
-    /// Number of stations (panel nodes)
-    pub n_stations: usize,
-    /// Leading edge index (for splitting upper/lower surfaces)
-    pub le_index: usize,
-    /// Force coefficients
-    pub coefficients: InviscidCoefficients,
-    /// Station distributions
-    pub stations: SurfaceDistributions,
-}
-
-/// Inviscid force coefficients
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InviscidCoefficients {
-    /// Lift coefficient
-    pub cl: f64,
-    /// Moment coefficient (about quarter chord)
-    pub cm: f64,
-    /// Pressure drag coefficient
-    pub cdp: f64,
-}
-
-/// Distributions at each station
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SurfaceDistributions {
-    /// X-coordinates (x/c)
-    pub x: Vec<f64>,
-    /// Y-coordinates (y/c)
-    pub y: Vec<f64>,
-    /// Arc length parameter
-    pub s: Vec<f64>,
-    /// Surface velocity (normalized by freestream)
-    pub velocity: Vec<f64>,
-    /// Pressure coefficient
-    pub cp: Vec<f64>,
-}
-
-impl InviscidAnalysisOutput {
-    /// Create from inviscid solution and airfoil geometry
-    pub fn new(
-        airfoil: &crate::geometry::PanelledFoil,
-        velocity: &[f64],
-        cp: &[f64],
-        (cl, cm, cdp): (f64, f64, f64),
-        alpha_deg: f64,
-        mach: f64,
-        airfoil_name: &str,
-    ) -> Self {
-        Self {
-            airfoil: airfoil_name.to_string(),
-            alpha_deg,
-            mach,
-            n_stations: airfoil.n_foil_nodes,
-            le_index: airfoil.i_le_node,
-            coefficients: InviscidCoefficients { cl, cm, cdp },
-            stations: SurfaceDistributions {
-                x: airfoil.x.clone(),
-                y: airfoil.y.clone(),
-                s: airfoil.s.clone(),
-                velocity: velocity.to_vec(),
-                cp: cp.to_vec(),
-            },
-        }
-    }
-
-    /// Get upper surface data (TE to LE, indices 0..=le_index)
-    ///
-    /// Returns (x, cp, velocity) vectors for the upper surface
+    /// Upper-surface (x, cp, q), TE to LE (nodes `0..=i_le_node`)
     pub fn upper_surface(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-        let le = self.le_index;
-        let x: Vec<f64> = self.stations.x[0..=le].to_vec();
-        let cp: Vec<f64> = self.stations.cp[0..=le].to_vec();
-        let vel: Vec<f64> = self.stations.velocity[0..=le].to_vec();
-        (x, cp, vel)
+        let le = self.geometry.i_le_node;
+        (
+            self.geometry.x[0..=le].to_vec(),
+            self.surface.cp[0..=le].to_vec(),
+            self.surface.q[0..=le].to_vec(),
+        )
     }
 
-    /// Get lower surface data (LE to TE, indices le_index..n)
-    ///
-    /// Returns (x, cp, velocity) vectors for the lower surface
+    /// Lower-surface (x, cp, q), LE to TE (nodes `i_le_node..`)
     pub fn lower_surface(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-        let le = self.le_index;
-        let x: Vec<f64> = self.stations.x[le..].to_vec();
-        let cp: Vec<f64> = self.stations.cp[le..].to_vec();
-        let vel: Vec<f64> = self.stations.velocity[le..].to_vec();
-        (x, cp, vel)
+        let le = self.geometry.i_le_node;
+        (
+            self.geometry.x[le..].to_vec(),
+            self.surface.cp[le..].to_vec(),
+            self.surface.q[le..].to_vec(),
+        )
     }
 
     /// Serialize to JSON string
@@ -489,16 +431,16 @@ mod tests {
         let point = PolarPoint {
             alpha_deg: 5.0,
             cl: 0.55,
-            cd: 0.0085,
             cm: -0.05,
-            cd_friction: 0.005,
             cd_pressure: 0.0035,
-            ldratio: 64.7,
-            transition_upper: 0.15,
-            transition_lower: 0.45,
-            converged: true,
-            iterations: 12,
-            residual: 1.2e-5,
+            cd: Some(0.0085),
+            cd_friction: Some(0.005),
+            ldratio: Some(64.7),
+            transition_upper: Some([0.15, 0.03]),
+            transition_lower: Some([0.45, -0.02]),
+            converged: Some(true),
+            iterations: Some(12),
+            residual: Some(1.2e-5),
         };
 
         let json = serde_json::to_string(&point).unwrap();
@@ -509,7 +451,7 @@ mod tests {
         // Deserialize back
         let restored: PolarPoint = serde_json::from_str(&json).unwrap();
         assert!((restored.cl - 0.55).abs() < 1e-10);
-        assert!((restored.residual - 1.2e-5).abs() < 1e-10);
+        assert!((restored.residual.unwrap() - 1.2e-5).abs() < 1e-10);
     }
 
     #[test]

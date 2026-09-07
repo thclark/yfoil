@@ -241,7 +241,7 @@ fn inviscid_cl(airfoil: &yfoil::geometry::PanelledFoil, alpha: f64) -> f64 {
         airfoil,
         alpha,
         &FlowConditions {
-            re: 0.0,
+            re: None,
             ..FlowConditions::default()
         },
     )
@@ -420,7 +420,7 @@ fn test_blunt_te_reasonable_results() {
     let mut session = Session::new(
         &airfoil,
         FlowConditions {
-            re: 0.0,
+            re: None,
             ..FlowConditions::default()
         },
     );

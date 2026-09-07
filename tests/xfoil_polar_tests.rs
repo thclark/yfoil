@@ -39,7 +39,7 @@ fn parse_points(path: &PathBuf) -> Vec<HashMap<String, String>> {
 
 fn spec() -> FlowConditions {
     FlowConditions {
-        re: 1.0e6,
+        re: Some(1.0e6),
         mach: 0.0,
         ncrit: 9.0,
         max_iterations: 20,

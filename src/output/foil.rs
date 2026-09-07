@@ -14,11 +14,12 @@
 //! Newton correction (bounded by the RMSBL < 1e-4 convergence test on a converged point; unbounded
 //! on an unconverged one).
 //!
-//! YFoil reproduces those stored arrays exactly (they are fixture-gated). The canonical columns of
+//! YFoil reproduces those stored arrays exactly (they are fixture-gated). The `closures` of
 //! [`SideStations`] are therefore computed *live* here by running XFOIL's own BLPRV → BLKIN → BLVAR
-//! on the converged primaries, and the lagged arrays are also emitted verbatim under
-//! [`SideStations::stored`] so a column-for-column comparison with an XFOIL `DUMP` is possible. A
-//! side-by-side of the live `hs` against DUMP's `H*` differs at that ~1e-4 level by construction.
+//! on the converged `primaries`, and the lagged arrays are emitted verbatim under
+//! [`SideStations::lagged_closures`] only when asked for (`--include-lagged-closures`), so a
+//! column-for-column comparison with an XFOIL `DUMP` stays possible. A side-by-side of the live
+//! `hstar` against DUMP's `H*` differs at that ~1e-4 level by construction.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -63,6 +64,8 @@ pub struct FoilNodes {
     pub y_te: f64,
     /// Arc length of the leading edge
     pub s_le: f64,
+    /// The node nearest the spline leading edge (0-based; splits the upper and lower surfaces)
+    pub i_le_node: usize,
     /// TE gap area projected normal to the TE bisector (TECALC's ANTE)
     pub te_thickness_normal: f64,
     pub sharp_te: bool,
@@ -99,6 +102,15 @@ impl FoilNodes {
             x_te: st.x_te,
             y_te: st.y_te,
             s_le: st.s_le,
+            i_le_node: (1..=n)
+                .min_by(|&i, &j| {
+                    (st.s[i] - st.s_le)
+                        .abs()
+                        .partial_cmp(&(st.s[j] - st.s_le).abs())
+                        .unwrap()
+                })
+                .map(|i| i - 1)
+                .unwrap_or(0),
             te_thickness_normal: st.te_thickness_normal,
             sharp_te: st.sharp_te,
             wake,
@@ -274,6 +286,49 @@ pub struct LaggedClosures {
     pub cf_dump: Vec<f64>,
 }
 
+/// The converged primary variables of one side, one entry per station (the solver's state
+/// after the last UPDATE)
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Primaries {
+    /// UEDG: incompressible edge velocity
+    pub ue: Vec<f64>,
+    /// THET
+    pub theta: Vec<f64>,
+    /// DSTR (in the wake: total, including the wake gap WGAP)
+    pub dstar: Vec<f64>,
+    /// CTAU (Cτ^½ turbulent, amplification N laminar)
+    pub sqrtctau: Vec<f64>,
+    /// MASS
+    pub mass_defect: Vec<f64>,
+}
+
+/// The closure quantities evaluated live on the converged primaries (BLPRV → BLKIN → BLVAR)
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Closures {
+    /// Ue/q∞ after the Karman–Tsien transformation (unsigned; DUMP signs it by GAM)
+    pub ue_compressible: Vec<f64>,
+    /// H = δ*/θ (wake: without the wake gap, as BLKIN)
+    pub h: Vec<f64>,
+    /// Hk from HKIN (unclamped)
+    pub hk: Vec<f64>,
+    /// H* from BLVAR
+    pub hstar: Vec<f64>,
+    /// Cf = ρ·Ue²·cf/q∞² (BLVAR's cf scaled as SETBL forms TAU, then DUMP's normalisation)
+    pub cf: Vec<f64>,
+    /// CD = DIS/q∞³ with DIS as SETBL forms it
+    pub cdiss: Vec<f64>,
+    /// δ from BLVAR (DE)
+    pub delta: Vec<f64>,
+    /// Cτ_eq^½ from BLVAR (CQ)
+    pub sqrtctaueq: Vec<f64>,
+    /// Us/Ue from BLVAR (the normalised wall-slip velocity; XFOIL's USLP is 1.6/(1+Us))
+    pub us: Vec<f64>,
+    /// Rθ from BLKIN
+    pub retheta: Vec<f64>,
+    /// Edge Mach² from BLKIN
+    pub machsqd_edge: Vec<f64>,
+}
+
 /// One side's stations (upper, lower or wake) as a struct of arrays; every vector has one entry
 /// per station, in marching order.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -284,49 +339,15 @@ pub struct SideStations {
     pub i_node: Vec<usize>,
     pub x: Vec<f64>,
     pub y: Vec<f64>,
-    /// BL arc length from the stagnation point (XSSI)
+    /// BL arc coordinate ξ from the stagnation point (XSSI)
     pub xi: Vec<f64>,
-
-    // ---- converged primaries (post-UPDATE) ----
-    /// UEDG: incompressible edge velocity
-    pub ue: Vec<f64>,
-    /// THET
-    pub theta: Vec<f64>,
-    /// DSTR (in the wake: total, including the wake gap WGAP)
-    pub dstar: Vec<f64>,
-    /// CTAU (√Cτ turbulent, amplification N laminar)
-    pub sqrtctau: Vec<f64>,
-    /// MASS
-    pub mass_defect: Vec<f64>,
-
-    // ---- live closure values on the primaries above (BLPRV → BLKIN → BLVAR) ----
-    /// Ue/Vinf after the Karman–Tsien transformation (unsigned; DUMP signs it by GAM)
-    pub ue_compressible: Vec<f64>,
-    /// H = δ*/θ (wake: without the wake gap, as BLKIN)
-    pub h: Vec<f64>,
-    /// Hk from HKIN (unclamped)
-    pub hk: Vec<f64>,
-    /// H* from BLVAR
-    pub hstar: Vec<f64>,
-    /// Cf = ρ·Ue²·cf/QINF² (BLVAR's cf scaled as SETBL forms TAU, then DUMP's normalisation)
-    pub cf: Vec<f64>,
-    /// CD = DIS/QINF³ with DIS as SETBL forms it
-    pub cdiss: Vec<f64>,
-    /// δ from BLVAR (DE)
-    pub delta: Vec<f64>,
-    /// √Cτ_eq from BLVAR (CQ)
-    pub sqrtctaueq: Vec<f64>,
-    /// 1.6/(1+Us) from BLVAR
-    pub us: Vec<f64>,
-    /// Rθ from BLKIN
-    pub retheta: Vec<f64>,
-    /// Edge Mach² from BLKIN
-    pub machsqd_edge: Vec<f64>,
-    /// CPV at the node
+    /// CPV at the station's node
     pub cp: Vec<f64>,
-
-    /// XFOIL's stored (lagged) closure arrays
-    pub lagged_closures: LaggedClosures,
+    pub primaries: Primaries,
+    pub closures: Closures,
+    /// XFOIL's lagged closure arrays, only with `--include-lagged-closures`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lagged_closures: Option<LaggedClosures>,
 }
 
 impl SideStations {
@@ -343,58 +364,62 @@ impl SideStations {
     /// The column for a quantity
     pub fn column(&self, q: BlQuantity) -> &[f64] {
         match q {
-            BlQuantity::Dstar => &self.dstar,
-            BlQuantity::Theta => &self.theta,
-            BlQuantity::Delta => &self.delta,
-            BlQuantity::H => &self.h,
-            BlQuantity::Hk => &self.hk,
-            BlQuantity::Hstar => &self.hstar,
-            BlQuantity::Ue => &self.ue_compressible,
-            BlQuantity::Cf => &self.cf,
-            BlQuantity::Cdiss => &self.cdiss,
-            BlQuantity::Sqrtctau => &self.sqrtctau,
-            BlQuantity::Sqrtctaueq => &self.sqrtctaueq,
-            BlQuantity::Us => &self.us,
+            BlQuantity::Dstar => &self.primaries.dstar,
+            BlQuantity::Theta => &self.primaries.theta,
+            BlQuantity::Delta => &self.closures.delta,
+            BlQuantity::H => &self.closures.h,
+            BlQuantity::Hk => &self.closures.hk,
+            BlQuantity::Hstar => &self.closures.hstar,
+            BlQuantity::Ue => &self.closures.ue_compressible,
+            BlQuantity::Cf => &self.closures.cf,
+            BlQuantity::Cdiss => &self.closures.cdiss,
+            BlQuantity::Sqrtctau => &self.primaries.sqrtctau,
+            BlQuantity::Sqrtctaueq => &self.closures.sqrtctaueq,
+            BlQuantity::Us => &self.closures.us,
             BlQuantity::Cp => &self.cp,
-            BlQuantity::MassDefect => &self.mass_defect,
+            BlQuantity::MassDefect => &self.primaries.mass_defect,
         }
     }
 
     /// Every column has exactly one entry per station
     pub fn check_lengths(&self) -> Result<(), String> {
         let n = self.len();
-        let cols: [(&str, usize); 30] = [
-            ("node", self.i_node.len()),
+        let (p, c) = (&self.primaries, &self.closures);
+        let mut cols: Vec<(&str, usize)> = vec![
+            ("i_node", self.i_node.len()),
             ("x", self.x.len()),
             ("y", self.y.len()),
-            ("xssi", self.xi.len()),
-            ("uedg", self.ue.len()),
-            ("thet", self.theta.len()),
-            ("dstr", self.dstar.len()),
-            ("ctau", self.sqrtctau.len()),
-            ("mass", self.mass_defect.len()),
-            ("ue", self.ue_compressible.len()),
-            ("h", self.h.len()),
-            ("hk", self.hk.len()),
-            ("hs", self.hstar.len()),
-            ("cf", self.cf.len()),
-            ("cdis", self.cdiss.len()),
-            ("delta", self.delta.len()),
-            ("ctq", self.sqrtctaueq.len()),
-            ("uslp", self.us.len()),
-            ("rt", self.retheta.len()),
-            ("msq", self.machsqd_edge.len()),
+            ("xi", self.xi.len()),
             ("cp", self.cp.len()),
-            ("stored.tau", self.lagged_closures.tau.len()),
-            ("stored.dis", self.lagged_closures.dissipation.len()),
-            ("stored.ctq", self.lagged_closures.sqrtctaueq.len()),
-            ("stored.delt", self.lagged_closures.delta.len()),
-            ("stored.uslp", self.lagged_closures.us_plot_scale.len()),
-            ("stored.tstr", self.lagged_closures.thetastar.len()),
-            ("stored.hs_dump", self.lagged_closures.hstar_dump.len()),
-            ("stored.cf_dump", self.lagged_closures.cf_dump.len()),
-            ("ibl", n),
+            ("primaries.ue", p.ue.len()),
+            ("primaries.theta", p.theta.len()),
+            ("primaries.dstar", p.dstar.len()),
+            ("primaries.sqrtctau", p.sqrtctau.len()),
+            ("primaries.mass_defect", p.mass_defect.len()),
+            ("closures.ue_compressible", c.ue_compressible.len()),
+            ("closures.h", c.h.len()),
+            ("closures.hk", c.hk.len()),
+            ("closures.hstar", c.hstar.len()),
+            ("closures.cf", c.cf.len()),
+            ("closures.cdiss", c.cdiss.len()),
+            ("closures.delta", c.delta.len()),
+            ("closures.sqrtctaueq", c.sqrtctaueq.len()),
+            ("closures.us", c.us.len()),
+            ("closures.retheta", c.retheta.len()),
+            ("closures.machsqd_edge", c.machsqd_edge.len()),
         ];
+        if let Some(l) = &self.lagged_closures {
+            cols.extend([
+                ("lagged_closures.tau", l.tau.len()),
+                ("lagged_closures.dissipation", l.dissipation.len()),
+                ("lagged_closures.sqrtctaueq", l.sqrtctaueq.len()),
+                ("lagged_closures.delta", l.delta.len()),
+                ("lagged_closures.us_plot_scale", l.us_plot_scale.len()),
+                ("lagged_closures.thetastar", l.thetastar.len()),
+                ("lagged_closures.hstar_dump", l.hstar_dump.len()),
+                ("lagged_closures.cf_dump", l.cf_dump.len()),
+            ]);
+        }
         for (name, len) in cols {
             if len != n {
                 return Err(format!("column {name} has {len} entries, expected {n}"));
@@ -424,15 +449,13 @@ pub struct StagnationMarker {
 pub struct TransitionMarker {
     /// ITRAN: first turbulent station
     pub i_station: usize,
-    /// TFORCE: transition was forced (XSTRIP)
+    /// TFORCE: transition was forced (X_TRIP)
     pub forced: bool,
-    /// XOCTR, YOCTR: chord-projected position
+    /// XOCTR, YOCTR: the transition point as chord fractions
     pub x_transition: f64,
     pub y_transition: f64,
-    /// Spline arc length (SST ∓ XSSITR) and position on the surface
+    /// Foil arc coordinate of the transition point (SST ∓ XSSITR)
     pub s_transition: f64,
-    pub x: f64,
-    pub y: f64,
 }
 
 /// Direction of a wall-shear sign change
@@ -489,17 +512,17 @@ pub struct BoundaryLayerOutput {
 
 /// Live closure values at one station
 struct Live {
-    ue: f64,
+    ue_compressible: f64,
     h: f64,
     hk: f64,
-    hs: f64,
+    hstar: f64,
     cf: f64,
-    cdis: f64,
+    cdiss: f64,
     delta: f64,
-    ctq: f64,
-    uslp: f64,
-    rt: f64,
-    msq: f64,
+    sqrtctaueq: f64,
+    us: f64,
+    retheta: f64,
+    machsqd_edge: f64,
 }
 
 /// BLPRV → BLKIN → BLVAR on the converged primaries of station (is, ibl), with the flow type
@@ -514,17 +537,17 @@ fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usiz
     if thi == 0.0 || uei == 0.0 {
         // an unsolved station (DUMP prints H = H* = 1 there)
         return Live {
-            ue: 0.0,
+            ue_compressible: 0.0,
             h: 1.0,
             hk: 1.0,
-            hs: 1.0,
+            hstar: 1.0,
             cf: 0.0,
-            cdis: 0.0,
+            cdiss: 0.0,
             delta: 0.0,
-            ctq: 0.0,
-            uslp: 0.0,
-            rt: 0.0,
-            msq: 0.0,
+            sqrtctaueq: 0.0,
+            us: 0.0,
+            retheta: 0.0,
+            machsqd_edge: 0.0,
         };
     }
     // DSI = MDI/UEI, DSWAKI = WGAP(IW), as SETBL sets the "2" station
@@ -538,7 +561,7 @@ fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usiz
     let mut s = StationState::default();
     s.set_primary_variables(st.xi[is][ibl], ami, cti, thi, dsi, dswaki, uei, params);
     s.set_kinematic_variables(params);
-    let (h, hk, rt, msq) = (s.h, s.hk, s.retheta, s.machsqd_edge);
+    let (h, hk, retheta, machsqd_edge) = (s.h, s.hk, s.retheta, s.machsqd_edge);
     let flow = if wake {
         FlowRegime::Wake
     } else if turb {
@@ -550,19 +573,19 @@ fn live_closures(st: &SolverState, params: &FlowParameters, is: usize, ibl: usiz
 
     let qinf = st.qinf;
     Live {
-        ue: s.ue / qinf,
+        ue_compressible: s.ue / qinf,
         h,
         hk,
-        hs: s.hstar,
+        hstar: s.hstar,
         // TAU = ½·R2·U2²·CF2 (SETBL), Cf = TAU/(½·QINF²) (DUMP)
         cf: s.rho * s.ue * s.ue * s.cf / (qinf * qinf),
         // DIS = R2·U2³·DI2·HS2·½ (SETBL), CDIS = DIS/QINF³ (DUMP)
-        cdis: s.rho * s.ue * s.ue * s.ue * s.cdiss * s.hstar * 0.5 / (qinf * qinf * qinf),
+        cdiss: s.rho * s.ue * s.ue * s.ue * s.cdiss * s.hstar * 0.5 / (qinf * qinf * qinf),
         delta: s.delta,
-        ctq: s.sqrtctaueq,
-        uslp: 1.60 / (1.0 + s.us),
-        rt,
-        msq,
+        sqrtctaueq: s.sqrtctaueq,
+        us: s.us,
+        retheta,
+        machsqd_edge,
     }
 }
 
@@ -571,47 +594,57 @@ fn side_output(
     params: &FlowParameters,
     is: usize,
     stations: impl Iterator<Item = usize>,
+    include_lagged_closures: bool,
 ) -> SideStations {
     let mut out = SideStations::default();
+    let mut lagged = LaggedClosures::default();
     let qinf = st.qinf;
     for ibl in stations {
         let i = st.i_node[is][ibl];
         let live = live_closures(st, params, is, ibl);
-        let thet = st.theta[is][ibl];
+        let theta = st.theta[is][ibl];
         out.i_station.push(ibl);
         out.i_node.push(i);
         out.x.push(st.x[i]);
         out.y.push(st.y[i]);
         out.xi.push(st.xi[is][ibl]);
-        out.ue.push(st.ue[is][ibl]);
-        out.theta.push(thet);
-        out.dstar.push(st.dstar[is][ibl]);
-        out.sqrtctau.push(st.sqrtctau[is][ibl]);
-        out.mass_defect.push(st.mass_defect[is][ibl]);
-        out.ue_compressible.push(live.ue);
-        out.h.push(live.h);
-        out.hk.push(live.hk);
-        out.hstar.push(live.hs);
-        out.cf.push(live.cf);
-        out.cdiss.push(live.cdis);
-        out.delta.push(live.delta);
-        out.sqrtctaueq.push(live.ctq);
-        out.us.push(live.uslp);
-        out.retheta.push(live.rt);
-        out.machsqd_edge.push(live.msq);
         out.cp.push(st.cp_viscous[i]);
-        let stored = &mut out.lagged_closures;
-        stored.tau.push(st.tau[is][ibl]);
-        stored.dissipation.push(st.dissipation[is][ibl]);
-        stored.sqrtctaueq.push(st.sqrtctaueq[is][ibl]);
-        stored.delta.push(st.delta[is][ibl]);
-        stored.us_plot_scale.push(st.us_plot_scale[is][ibl]);
-        stored.thetastar.push(st.thetastar[is][ibl]);
-        // BLDUMP: IF(TH.EQ.0.0) HS = 1.0 ELSE HS = TS/TH
-        stored
-            .hstar_dump
-            .push(if thet == 0.0 { 1.0 } else { st.thetastar[is][ibl] / thet });
-        stored.cf_dump.push(st.tau[is][ibl] / (0.5 * qinf * qinf));
+        let p = &mut out.primaries;
+        p.ue.push(st.ue[is][ibl]);
+        p.theta.push(theta);
+        p.dstar.push(st.dstar[is][ibl]);
+        p.sqrtctau.push(st.sqrtctau[is][ibl]);
+        p.mass_defect.push(st.mass_defect[is][ibl]);
+        let c = &mut out.closures;
+        c.ue_compressible.push(live.ue_compressible);
+        c.h.push(live.h);
+        c.hk.push(live.hk);
+        c.hstar.push(live.hstar);
+        c.cf.push(live.cf);
+        c.cdiss.push(live.cdiss);
+        c.delta.push(live.delta);
+        c.sqrtctaueq.push(live.sqrtctaueq);
+        c.us.push(live.us);
+        c.retheta.push(live.retheta);
+        c.machsqd_edge.push(live.machsqd_edge);
+        if include_lagged_closures {
+            lagged.tau.push(st.tau[is][ibl]);
+            lagged.dissipation.push(st.dissipation[is][ibl]);
+            lagged.sqrtctaueq.push(st.sqrtctaueq[is][ibl]);
+            lagged.delta.push(st.delta[is][ibl]);
+            lagged.us_plot_scale.push(st.us_plot_scale[is][ibl]);
+            lagged.thetastar.push(st.thetastar[is][ibl]);
+            // BLDUMP: IF(TH.EQ.0.0) HS = 1.0 ELSE HS = TS/TH
+            lagged.hstar_dump.push(if theta == 0.0 {
+                1.0
+            } else {
+                st.thetastar[is][ibl] / theta
+            });
+            lagged.cf_dump.push(st.tau[is][ibl] / (0.5 * qinf * qinf));
+        }
+    }
+    if include_lagged_closures {
+        out.lagged_closures = Some(lagged);
     }
     out
 }
@@ -628,7 +661,7 @@ fn spline_point(st: &SolverState, s: f64) -> (f64, f64) {
 fn separation_markers(st: &SolverState, side: &SideStations, is: usize) -> Vec<SeparationMarker> {
     let mut out = Vec::new();
     for k in 1..side.len() {
-        let (prev, cur) = (side.cf[k - 1], side.cf[k]);
+        let (prev, cur) = (side.closures.cf[k - 1], side.closures.cf[k]);
         let kind = if prev >= 0.0 && cur < 0.0 {
             SeparationKind::Separation
         } else if prev < 0.0 && cur >= 0.0 {
@@ -654,12 +687,14 @@ fn separation_markers(st: &SolverState, side: &SideStations, is: usize) -> Vec<S
 
 impl BoundaryLayerOutput {
     /// Every station of a solved state. Requires the pointer layer and BL arrays (any state after
-    /// a viscous VISCAL call, converged or not).
-    pub fn from_state(st: &SolverState) -> Self {
+    /// a viscous VISCAL call, converged or not). `include_lagged_closures` adds XFOIL's lagged
+    /// closure arrays to each side.
+    pub fn from_state(st: &SolverState, include_lagged_closures: bool) -> Self {
         let params = FlowParameters::new(st.mach, st.re, st.gamma_gas);
-        let upper = side_output(st, &params, 1, 2..=st.i_te_station[1]);
-        let lower = side_output(st, &params, 2, 2..=st.i_te_station[2]);
-        let wake = side_output(st, &params, 2, st.i_te_station[2] + 1..=st.n_stations[2]);
+        let lag = include_lagged_closures;
+        let upper = side_output(st, &params, 1, 2..=st.i_te_station[1], lag);
+        let lower = side_output(st, &params, 2, 2..=st.i_te_station[2], lag);
+        let wake = side_output(st, &params, 2, st.i_te_station[2] + 1..=st.n_stations[2], lag);
 
         let (sx, sy) = spline_point(st, st.s_stagnation);
         let stagnation = StagnationMarker {
@@ -674,15 +709,12 @@ impl BoundaryLayerOutput {
             } else {
                 st.s_stagnation + st.xi_transition[is]
             };
-            let (x, y) = spline_point(st, s);
             TransitionMarker {
                 i_station: st.i_transition_station[is],
                 forced: st.transition_forced[is],
                 x_transition: st.x_transition[is],
                 y_transition: st.y_transition[is],
                 s_transition: s,
-                x,
-                y,
             }
         };
         let transition = [transition_marker(1), transition_marker(2)];
