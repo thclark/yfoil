@@ -1,0 +1,700 @@
+--- a/src/xbl.f
++++ b/src/xbl.f
+@@ -24,17 +24,35 @@
+ C     for the current BL variables and the edge
+ C     velocities received from SETUP. The local
+ C     BL system coefficients are then
+-C     incorporated into the global Newton system.  
++C     incorporated into the global Newton system.
+ C-------------------------------------------------
+       INCLUDE 'XFOIL.INC'
+       INCLUDE 'XBL.INC'
++      INCLUDE 'XLOG.INC'
+       REAL USAV(IVX,2)
+       REAL U1_M(2*IVX), U2_M(2*IVX)
+       REAL D1_M(2*IVX), D2_M(2*IVX)
+       REAL ULE1_M(2*IVX), ULE2_M(2*IVX)
+       REAL UTE1_M(2*IVX), UTE2_M(2*IVX)
+       REAL MA_CLMR, MSQ_CLMR, MDI
++C---- INSTRUMENTATION: SETBL call counter (fixture files are per call) and trace flag.
++C     The calls to dump come from dump_calls.txt in the working directory (one integer per
++C     line, up to 32) if it exists, else calls 1..3.
++      INTEGER NSETBL, NDUMP, IDUMP(32), IDC
++      LOGICAL LDUMPC
++      SAVE NSETBL, NDUMP, IDUMP
++      DATA NSETBL / 0 /, NDUMP / -1 /
++      CHARACTER*32 FNINST
++      LOGICAL LMDUTR
++      COMMON/MDU_INST/ LMDUTR
+ C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('SETBL')
++      CALL LOGINT('NBL1', NBL(1))
++      CALL LOGINT('NBL2', NBL(2))
++      CALL LOGINT('ITRAN1', ITRAN(1))
++      CALL LOGINT('ITRAN2', ITRAN(2))
++C
+ C---- set the CL used to define Mach, Reynolds numbers
+       IF(LALFA) THEN
+        CLMR = CL
+@@ -88,10 +106,105 @@
+       ENDIF
+ C
+       WRITE(*,*)
++C
++C---- INSTRUMENTATION: state before MRCHDU, per dumped SETBL call
++      NSETBL = NSETBL + 1
++      IF(NDUMP.LT.0) THEN
++       CALL RDDUMP(NDUMP, IDUMP)
++      ENDIF
++      LDUMPC = .FALSE.
++      DO 8000 IDC=1, NDUMP
++        IF(IDUMP(IDC).EQ.NSETBL) LDUMPC = .TRUE.
++ 8000 CONTINUE
++      IF(LDUMPC) THEN
++       WRITE(FNINST,'(A,I0,A)') 'mrchdu_input_', NSETBL, '.dat'
++       OPEN(95, FILE=FNINST, STATUS='REPLACE')
++       WRITE(95,'(A,I5)') 'NBL1=', NBL(1)
++       WRITE(95,'(A,I5)') 'NBL2=', NBL(2)
++       WRITE(95,'(A,I5)') 'IBLTE1=', IBLTE(1)
++       WRITE(95,'(A,I5)') 'IBLTE2=', IBLTE(2)
++       WRITE(95,'(A,ES24.16)') 'MINF=', MINF
++       WRITE(95,'(A,ES24.16)') 'REINF=', REINF
++       WRITE(95,'(A,ES24.16)') 'ACRIT1=', ACRIT(1)
++       WRITE(95,'(A,ES24.16)') 'ACRIT2=', ACRIT(2)
++       WRITE(95,'(A,I5)') 'ITRAN1=', ITRAN(1)
++       WRITE(95,'(A,I5)') 'ITRAN2=', ITRAN(2)
++       WRITE(95,'(A,ES24.16)') 'REYBL=', REYBL
++       WRITE(95,'(A,ES24.16)') 'HSTINV=', HSTINV
++       WRITE(95,'(A,ES24.16)') 'GM1BL=', GM1BL
++       WRITE(95,'(A,ES24.16)') 'ANTE=', ANTE
++       WRITE(95,'(A,ES24.16)') 'XSTRIP1=', XSTRIP(1)
++       WRITE(95,'(A,ES24.16)') 'XSTRIP2=', XSTRIP(2)
++       WRITE(95,'(A,I5)') 'IST=', IST
++       WRITE(95,'(A,ES24.16)') 'SST=', SST
++       WRITE(95,'(A,ES24.16)') 'SST_GO=', SST_GO
++       WRITE(95,'(A,ES24.16)') 'SST_GP=', SST_GP
++       WRITE(95,'(A,L1)') 'LALFA=', LALFA
++       WRITE(95,'(A,I5)') 'MATYP=', MATYP
++       WRITE(95,'(A,I5)') 'RETYP=', RETYP
++       WRITE(95,'(A,ES24.16)') 'CLMR=', CLMR
++       WRITE(95,'(A,ES24.16)') 'RE_CLMR=', RE_CLMR
++       WRITE(95,'(A,ES24.16)') 'MSQ_CLMR=', MSQ_CLMR
++       WRITE(95,'(A,ES24.16)') 'QINF=', QINF
++       WRITE(95,'(A,ES24.16)') 'VACCEL=', VACCEL
++       DO 8001 IS=1, 2
++         DO 8002 IBL=1, NBL(IS)
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++ 8002    CONTINUE
++ 8001  CONTINUE
++       CLOSE(95)
++      ENDIF
+ C
++C---- INSTRUMENTATION: per-iteration MRCHDU Newton trace on the first call only
++      LMDUTR = NSETBL.EQ.1
++      IF(LMDUTR) THEN
++       OPEN(79, FILE='xfoil_mrchdu_trace.dat', STATUS='REPLACE')
++       WRITE(79,'(A)') '# MRCHDU Newton iteration trace (SETBL call 1)'
++       WRITE(79,'(A)') '# STATION IBL IS ITBL'
++       WRITE(79,'(A)') '# AMPL: AMPL1 AMPL2 XT AMCRIT TRAN ITRAN'
++       WRITE(79,'(A)') '# PRIMARY: X2 U2 T2 D2 S2'
++       WRITE(79,'(A)') '# KINEMATIC: M2 H2 HK2 RT2 V2'
++       WRITE(79,'(A)') '# CLOSURE: HS2 US2 CQ2 CF2 DI2'
++       WRITE(79,'(A)') '# REF: UEREF HKREF'
++       WRITE(79,'(A)') '# SENS: SENNEW SENS'
++       WRITE(79,'(A)') '# RESIDUAL: VSREZ(1..4)   VS2_k: VS2(k,1..5)'
++       WRITE(79,'(A)') '# SOLUTION: VSREZ(1..4) after GAUSS'
++       WRITE(79,'(A)') '# RELAX: DMAX RLX'
++       WRITE(79,'(A)') '# UPDATED: CTI THI DSI UEI AMI'
++       WRITE(79,'(A)') '# CONVERGED: ITBL DMAX    FAILED: IBL IS DMAX'
++      ENDIF
++C
+ C---- march BL with current Ue and Ds to establish transition
+       CALL MRCHDU
+ C
++      IF(LMDUTR) CLOSE(79)
++      LMDUTR = .FALSE.
++C
++C---- INSTRUMENTATION: state after MRCHDU, per dumped SETBL call
++      IF(LDUMPC) THEN
++       WRITE(FNINST,'(A,I0,A)') 'mrchdu_output_', NSETBL, '.dat'
++       OPEN(95, FILE=FNINST, STATUS='REPLACE')
++       WRITE(95,'(A,I5)') 'ITRAN1=', ITRAN(1)
++       WRITE(95,'(A,I5)') 'ITRAN2=', ITRAN(2)
++       WRITE(95,'(A,ES24.16)') 'XSSITR1=', XSSITR(1)
++       WRITE(95,'(A,ES24.16)') 'XSSITR2=', XSSITR(2)
++       WRITE(95,'(A,L1)') 'TFORCE1=', TFORCE(1)
++       WRITE(95,'(A,L1)') 'TFORCE2=', TFORCE(2)
++       DO 8003 IS=1, 2
++         DO 8004 IBL=1, NBL(IS)
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++           WRITE(95,'(A,I2,A,I4,A,5ES24.16)') 'BLX(',IS,',',IBL,')=',
++     &       TAU(IBL,IS), DIS(IBL,IS), CTQ(IBL,IS),
++     &       DELT(IBL,IS), TSTR(IBL,IS)
++ 8004    CONTINUE
++ 8003  CONTINUE
++       CLOSE(95)
++      ENDIF
++C
+       DO 5 IS=1, 2
+         DO 6 IBL=2, NBL(IS)
+           USAV(IBL,IS) = UEDG(IBL,IS)
+@@ -238,6 +351,22 @@
+        DTE = DSTR(IBLTE(1),1) + DSTR(IBLTE(2),2) + ANTE
+        CTE = ( CTAU(IBLTE(1),1)*THET(IBLTE(1),1)
+      &       + CTAU(IBLTE(2),2)*THET(IBLTE(2),2) ) / TTE
++C
++C----- INSTRUMENTATION: Log wake initialization
++       WRITE(98,'(A)') '=== WAKE_INIT ==='
++       WRITE(98,'(A,ES24.16)') 'THET_TE1=', THET(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'THET_TE2=', THET(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'DSTR_TE1=', DSTR(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'DSTR_TE2=', DSTR(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'CTAU_TE1=', CTAU(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'CTAU_TE2=', CTAU(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'UEDG_TE1=', UEDG(IBLTE(1),1)
++       WRITE(98,'(A,ES24.16)') 'UEDG_TE2=', UEDG(IBLTE(2),2)
++       WRITE(98,'(A,ES24.16)') 'ANTE=', ANTE
++       WRITE(98,'(A,ES24.16)') 'TTE=', TTE
++       WRITE(98,'(A,ES24.16)') 'DTE=', DTE
++       WRITE(98,'(A,ES24.16)') 'CTE=', CTE
++C
+        CALL TESYS(CTE,TTE,DTE)
+ C
+        TTE_TTE1 = 1.0
+@@ -271,6 +400,25 @@
+ C
+        CALL BLSYS
+ C
++      ENDIF
++C
++C---- INSTRUMENTATION: Log wake station data
++      IF(WAKE) THEN
++        IW = IBL - IBLTE(IS)
++        WRITE(98,'(A,I4)') '=== WAKE_STATION IW=', IW
++        WRITE(98,'(A,ES24.16)') 'XSSI=', XSSI(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'UEDG=', UEDG(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'THET=', THET(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'DSTR=', DSTR(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'MASS=', MASS(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'CTAU=', CTAU(IBL,IS)
++        WRITE(98,'(A,ES24.16)') 'T2=', T2
++        WRITE(98,'(A,ES24.16)') 'D2=', D2
++        WRITE(98,'(A,ES24.16)') 'U2=', U2
++        WRITE(98,'(A,ES24.16)') 'HK2=', HK2
++        WRITE(98,'(A,ES24.16)') 'HS2=', HS2
++        WRITE(98,'(A,ES24.16)') 'CF2=', CF2
++        WRITE(98,'(A,ES24.16)') 'DI2=', DI2
+       ENDIF
+ C
+ C
+@@ -512,6 +660,41 @@
+ C---- next airfoil side
+  2000 CONTINUE
+ C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGINT('NSYS', NSYS)
++      CALL LOGREAL('RMSBL_SETBL', DBLE(RMSBL))
++      CALL LOGEXIT('SETBL')
++C
++C---- INSTRUMENTATION: SETBL outputs beyond the Newton system (dumped calls)
++      IF(LDUMPC) THEN
++       WRITE(FNINST,'(A,I0,A)') 'setbl_output_', NSETBL, '.dat'
++       OPEN(95, FILE=FNINST, STATUS='REPLACE')
++       WRITE(95,'(A,I5)') 'ITRAN1=', ITRAN(1)
++       WRITE(95,'(A,I5)') 'ITRAN2=', ITRAN(2)
++       WRITE(95,'(A,ES24.16)') 'XSSITR1=', XSSITR(1)
++       WRITE(95,'(A,ES24.16)') 'XSSITR2=', XSSITR(2)
++       WRITE(95,'(A,L1)') 'TFORCE1=', TFORCE(1)
++       WRITE(95,'(A,L1)') 'TFORCE2=', TFORCE(2)
++       WRITE(95,'(A,ES24.16)') 'XOCTR1=', XOCTR(1)
++       WRITE(95,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
++       WRITE(95,'(A,ES24.16)') 'YOCTR1=', YOCTR(1)
++       WRITE(95,'(A,ES24.16)') 'YOCTR2=', YOCTR(2)
++       WRITE(95,'(A,ES24.16)') 'TINDEX1=', TINDEX(1)
++       WRITE(95,'(A,ES24.16)') 'TINDEX2=', TINDEX(2)
++       WRITE(95,'(A,ES24.16)') 'DULE1=', DULE1
++       WRITE(95,'(A,ES24.16)') 'DULE2=', DULE2
++       DO 8005 IS=1, 2
++         DO 8006 IBL=1, NBL(IS)
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BLX(',IS,',',IBL,')=',
++     &       TAU(IBL,IS), DIS(IBL,IS), CTQ(IBL,IS),
++     &       DELT(IBL,IS), USLP(IBL,IS), USAV(IBL,IS)
++ 8006    CONTINUE
++ 8005  CONTINUE
++       CLOSE(95)
++      ENDIF
+       RETURN
+       END
+ 
+@@ -535,6 +718,68 @@
+       NSYS = IV
+       IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
+ C
++C---- INSTRUMENTATION (S2): pointer layer after STFIND/IBLPAN/XICALC/IBLSYS
++      CALL DUMPPTR
++C
++      RETURN
++      END
++
++
++      SUBROUTINE DUMPPTR
++C---------------------------------------------------------------
++C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
++C     (append per call). Everything YFoil's pointers.rs must reproduce.
++C---------------------------------------------------------------
++      INCLUDE 'XFOIL.INC'
++      INCLUDE 'XBL.INC'
++      INTEGER NPCALL
++      SAVE NPCALL
++      DATA NPCALL / 0 /
++      NPCALL = NPCALL + 1
++      IF(NPCALL.EQ.1) THEN
++       OPEN(93, FILE='xfoil_pointers.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(93, FILE='xfoil_pointers.dat', STATUS='OLD',
++     &          ACCESS='APPEND')
++      ENDIF
++      WRITE(93,'(A,I5)') '=== IBLSYS_CALL', NPCALL
++      WRITE(93,'(A,I6)') 'IST=', IST
++      WRITE(93,'(A,I6)') 'N=', N
++      WRITE(93,'(A,I6)') 'NW=', NW
++      WRITE(93,'(A,I6)') 'NSYS=', NSYS
++      WRITE(93,'(A,ES24.16)') 'SST=', SST
++      WRITE(93,'(A,ES24.16)') 'SST_GO=', SST_GO
++      WRITE(93,'(A,ES24.16)') 'SST_GP=', SST_GP
++      WRITE(93,'(A,ES24.16)') 'ANTE=', ANTE
++      WRITE(93,'(A,ES24.16)') 'ASTE=', ASTE
++      WRITE(93,'(A,ES24.16)') 'DSTE=', DSTE
++      WRITE(93,'(A,ES24.16)') 'CHORD=', CHORD
++      WRITE(93,'(A,ES24.16)') 'SLE=', SLE
++      WRITE(93,'(A,ES24.16)') 'XLE=', XLE
++      WRITE(93,'(A,ES24.16)') 'YLE=', YLE
++      WRITE(93,'(A,ES24.16)') 'XTE=', XTE
++      WRITE(93,'(A,ES24.16)') 'YTE=', YTE
++      WRITE(93,'(A,L2)') 'SHARP=', SHARP
++      WRITE(93,'(A,2I6)') 'NBL=', NBL(1), NBL(2)
++      WRITE(93,'(A,2I6)') 'IBLTE=', IBLTE(1), IBLTE(2)
++      WRITE(93,'(A,2I6)') 'ITRAN=', ITRAN(1), ITRAN(2)
++      WRITE(93,'(A)') '--- NODES I X Y S NX NY APANEL'
++      DO 10 I=1, N+NW
++        WRITE(93,'(I6,6ES24.16)') I, X(I), Y(I), S(I),
++     &    NX(I), NY(I), APANEL(I)
++   10 CONTINUE
++      DO 20 IS=1, 2
++        WRITE(93,'(A,I2,A)') '--- SIDE', IS, ' IBL IPAN VTI ISYS XSSI'
++        DO 25 IBL=1, IBLTE(IS)+NW
++          WRITE(93,'(2I6,ES24.16,I6,ES24.16)') IBL, IPAN(IBL,IS),
++     &      VTI(IBL,IS), ISYS(IBL,IS), XSSI(IBL,IS)
++   25   CONTINUE
++   20 CONTINUE
++      WRITE(93,'(A)') '--- WGAP IW WGAP'
++      DO 30 IW=1, NW
++        WRITE(93,'(I6,ES24.16)') IW, WGAP(IW)
++   30 CONTINUE
++      CLOSE(93)
+       RETURN
+       END
+ 
+@@ -549,9 +794,44 @@
+ C----------------------------------------------------
+       INCLUDE 'XFOIL.INC'
+       INCLUDE 'XBL.INC'
++C---- INSTRUMENTATION: enable TRDIF dumps while MRCHUE's trace is open
++      LOGICAL LTRDIF
++      COMMON/TRD_INST/ LTRDIF
++      INTEGER NMRCHUE
++      SAVE NMRCHUE
++      DATA NMRCHUE / 0 /
+       LOGICAL DIRECT
+       REAL MSQ
+ C
++C---- DEBUG: Open output file and write header
++C---- DEBUG: Open Newton iteration trace file
++      NMRCHUE = NMRCHUE + 1
++      LTRDIF = NMRCHUE.EQ.1
++      IF(LTRDIF) THEN
++      OPEN(78, FILE='xfoil_newton_trace.dat', STATUS='REPLACE')
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# Newton iteration trace'
++      ENDIF
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# FORMAT: STATION IBL IS ITBL'
++      ENDIF
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# PRIMARY: X2 U2 T2 D2 S2'
++      ENDIF
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# KINEMATIC: M2 H2 HK2 RT2 V2'
++      ENDIF
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# CLOSURE: HS2 US2 CQ2 CF2 DI2'
++      ENDIF
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# RESIDUAL: RES1 RES2 RES3'
++      ENDIF
++      IF(LTRDIF) THEN
++      WRITE(78,'(A)') '# UPDATE: DZ1 DZ2 DZ3 DMAX RLX'
++      ENDIF
++      ENDIF
++C
+ C---- shape parameters for separation criteria
+       HLMAX = 3.8
+       HTMAX = 2.5
+@@ -618,6 +898,21 @@
+           CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
+           CALL BLKIN
+ C
++C-------- DEBUG: Output primary and kinematic variables
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,3I4)') 'STATION', IBL, IS, ITBL
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,4ES24.16,L2,I4)') 'AMPL:', AMPL1, AMPL2, XT,
++     &       AMCRIT, TRAN, ITRAN(IS)
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,5ES24.16)') 'PRIMARY:', X2, U2, T2, D2, S2
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,5ES24.16)') 'KINEMATIC:', M2, H2, HK2, RT2, V2
++          ENDIF
++C
+ C-------- check for transition and set appropriate flags and things
+           IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
+            CALL TRCHEK
+@@ -646,7 +941,27 @@
+            CALL BLSYS
+           ENDIF
+ C
+-
++C-------- DEBUG: Output closure variables and residuals after BLSYS
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,5ES24.16)') 'CLOSURE:', HS2, US2, CQ2, CF2, DI2
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,4ES24.16)') 'RESIDUAL:', VSREZ(1),VSREZ(2),
++     &       VSREZ(3),VSREZ(4)
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,5ES24.16)') 'VS2_1:', VS2(1,1),VS2(1,2),VS2(1,3),
++     &       VS2(1,4),VS2(1,5)
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,5ES24.16)') 'VS2_2:', VS2(2,1),VS2(2,2),VS2(2,3),
++     &       VS2(2,4),VS2(2,5)
++          ENDIF
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,5ES24.16)') 'VS2_3:', VS2(3,1),VS2(3,2),VS2(3,3),
++     &       VS2(3,4),VS2(3,5)
++          ENDIF
++C
+           IF(DIRECT) THEN
+ C
+ C--------- try direct mode (set dUe = 0 in currently empty 4th line)
+@@ -658,6 +973,12 @@
+ C
+ C--------- solve Newton system for current "2" station
+            CALL GAUSS(4,4,VS2,VSREZ,1)
++C
++C--------- DEBUG: Output Newton solution (update vector)
++           IF(LTRDIF) THEN
++           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
++     &        VSREZ(3),VSREZ(4)
++           ENDIF
+ C
+ C--------- determine max changes and underrelax if necessary
+            DMAX = MAX( ABS(VSREZ(2)/THI),
+@@ -668,6 +989,11 @@
+            RLX = 1.0
+            IF(DMAX.GT.0.3) RLX = 0.3/DMAX
+ C
++C--------- DEBUG: Output relaxation info
++           IF(LTRDIF) THEN
++           WRITE(78,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
++           ENDIF
++C
+ C--------- see if direct mode is not applicable
+            IF(IBL .NE. IBLTE(IS)+1) THEN
+ C
+@@ -738,6 +1064,11 @@
+            VSREZ(4) = HTARG - HK2
+ C
+            CALL GAUSS(4,4,VS2,VSREZ,1)
++C--------- DEBUG: Output Newton solution (inverse branch)
++           IF(LTRDIF) THEN
++           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
++     &        VSREZ(3),VSREZ(4)
++           ENDIF
+ C
+ C--------- added Ue clamp   MD  3 Apr 03
+            DMAX = MAX( ABS(VSREZ(2)/THI),
+@@ -750,6 +1081,10 @@
+ C
+ C--------- update variables
+ ccc           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
++C--------- DEBUG: Output relaxation (inverse branch)
++           IF(LTRDIF) THEN
++           WRITE(78,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
++           ENDIF
+            IF(IBL.GE.ITRAN(IS)) CTI = CTI + RLX*VSREZ(1)
+            THI = THI + RLX*VSREZ(2)
+            DSI = DSI + RLX*VSREZ(3)
+@@ -773,8 +1108,18 @@
+           CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
+           DSI = DSW + DSWAKI
+ C
+-          IF(DMAX.LE.1.0E-5) GO TO 110
++C-------- DEBUG: Output updated values
++          IF(LTRDIF) THEN
++          WRITE(78,'(A,4ES24.16)') 'UPDATED:', CTI, THI, DSI, UEI
++          ENDIF
+ C
++          IF(DMAX.LE.1.0E-5) THEN
++           IF(LTRDIF) THEN
++           WRITE(78,'(A,I4,ES24.16)') 'CONVERGED:', ITBL, DMAX
++           ENDIF
++           GO TO 110
++          ENDIF
++C
+   100   CONTINUE
+         WRITE(*,1350) IBL, IS, DMAX 
+  1350   FORMAT(' MRCHUE: Convergence failed at',I4,'  side',I2,
+@@ -842,6 +1187,7 @@
+         DELT(IBL,IS) = DE2
+         TSTR(IBL,IS) = HS2*T2
+ C
++C
+ C------ set "1" variables to "2" variables for next streamwise station
+         CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
+         CALL BLKIN
+@@ -868,10 +1214,14 @@
+  1000 CONTINUE
+  2000 CONTINUE
+ C
++C---- DEBUG: Close output file
++C
++      IF(LTRDIF) CLOSE(78)
++      LTRDIF = .FALSE.
+       RETURN
+       END
+-  
+- 
++
++
+       SUBROUTINE MRCHDU
+ C----------------------------------------------------
+ C     Marches the BLs and wake in mixed mode using
+@@ -888,6 +1238,10 @@
+       REAL MSQ
+ ccc   REAL MDI
+ C
++C---- INSTRUMENTATION: per-iteration trace (unit 79) while SETBL has it open
++      LOGICAL LMDUTR
++      COMMON/MDU_INST/ LMDUTR
++C
+       DATA DEPS / 5.0E-6 /
+ C
+ C---- constant controlling how far Hk is allowed to deviate
+@@ -962,6 +1316,12 @@
+           CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
+           CALL BLKIN
+ C
++          IF(LMDUTR) THEN
++           WRITE(79,'(A,3I4)') 'STATION', IBL, IS, ITBL
++           WRITE(79,'(A,4ES24.16,L2,I4)') 'AMPL:', AMPL1, AMPL2, XT,
++     &       AMCRIT, TRAN, ITRAN(IS)
++          ENDIF
++C
+ C-------- check for transition and set appropriate flags and things
+           IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
+            CALL TRCHEK
+@@ -980,6 +1340,12 @@
+            CALL BLSYS
+           ENDIF
+ C
++          IF(LMDUTR) THEN
++           WRITE(79,'(A,5ES24.16)') 'PRIMARY:', X2, U2, T2, D2, S2
++           WRITE(79,'(A,5ES24.16)') 'KINEMATIC:', M2, H2, HK2, RT2, V2
++           WRITE(79,'(A,5ES24.16)') 'CLOSURE:', HS2, US2, CQ2, CF2, DI2
++          ENDIF
++C
+ C-------- set stuff at first iteration...
+           IF(ITBL.EQ.1) THEN
+ C
+@@ -1048,6 +1414,7 @@
+            ELSE IF(ITBL.LE.15) THEN
+             SENS = 0.5*(SENS + SENNEW)
+            ENDIF
++           IF(LMDUTR) WRITE(79,'(A,2ES24.16)') 'SENS:', SENNEW, SENS
+ C
+ C--------- set prescribed Ue-Hk combination
+            VS2(4,1) = 0.
+@@ -1057,11 +1424,23 @@
+            VSREZ(4) = -(HKREF**2)*(HK2 / HKREF - 1.0)
+      &                     - SENS*(U2  / UEREF - 1.0)
+ C
++          ENDIF
++C
++          IF(LMDUTR) THEN
++           WRITE(79,'(A,2ES24.16)') 'REF:', UEREF, HKREF
++           WRITE(79,'(A,4ES24.16)') 'RESIDUAL:', VSREZ(1),VSREZ(2),
++     &       VSREZ(3),VSREZ(4)
++           DO 8110 K=1, 4
++             WRITE(79,'(A,I1,A,5ES24.16)') 'VS2_',K,':',(VS2(K,L),L=1,5)
++ 8110      CONTINUE
+           ENDIF
+ C
+ C-------- solve Newton system for current "2" station
+           CALL GAUSS(4,4,VS2,VSREZ,1)
+ C
++          IF(LMDUTR) WRITE(79,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),
++     &       VSREZ(2),VSREZ(3),VSREZ(4)
++C
+ C-------- determine max changes and underrelax if necessary
+ C-------- (added Ue clamp   MD  3 Apr 03)
+           DMAX = MAX( ABS(VSREZ(2)/THI),
+@@ -1071,6 +1450,7 @@
+ C
+           RLX = 1.0
+           IF(DMAX.GT.0.3) RLX = 0.3/DMAX
++          IF(LMDUTR) WRITE(79,'(A,2ES24.16)') 'RELAX:', DMAX, RLX
+ C
+ C-------- update as usual
+           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
+@@ -1095,10 +1475,16 @@
+           CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
+           DSI = DSW + DSWAKI
+ C
++          IF(LMDUTR) THEN
++           WRITE(79,'(A,5ES24.16)') 'UPDATED:', CTI, THI, DSI, UEI, AMI
++           IF(DMAX.LE.DEPS) WRITE(79,'(A,I4,ES24.16)') 'CONVERGED:',
++     &       ITBL, DMAX
++          ENDIF
+           IF(DMAX.LE.DEPS) GO TO 110
+ C
+   100   CONTINUE
+ C
++        IF(LMDUTR) WRITE(79,'(A,2I4,ES24.16)') 'FAILED:', IBL, IS, DMAX
+         WRITE(*,1350) IBL, IS, DMAX 
+  1350   FORMAT(' MRCHDU: Convergence failed at',I4,'  side',I2,
+      &         '    Res =', E12.4)
+@@ -1267,6 +1653,12 @@
+       EQUIVALENCE (VA(1,1,IVX), U_AC(1,1)) ,
+      &            (VB(1,1,IVX), Q_AC(1)  )
+       REAL MSQ
++C---- INSTRUMENTATION: UPDATE call counter (fixture files are per call); dumped calls as SETBL
++      INTEGER NUPDATE, NBLD, NDUMPU, IDUMPU(32), IDC
++      LOGICAL LDUMPU
++      SAVE NUPDATE, NDUMPU, IDUMPU
++      DATA NUPDATE / 0 /, NDUMPU / -1 /
++      CHARACTER*32 FNINST
+ C
+ C---- max allowable alpha changes per iteration
+       DALMAX =  0.5*DTOR
+@@ -1281,6 +1673,8 @@
+ C
+ C---- calculate new Ue distribution assuming no under-relaxation
+ C-    also set the sensitivity of Ue wrt to alpha or Re
++C
++C
+       DO 1 IS=1, 2
+         DO 10 IBL=2, NBL(IS)
+           I = IPAN(IBL,IS)
+@@ -1306,10 +1700,12 @@
+ C
+           UNEW(IBL,IS) = UINV(IBL,IS) + DUI
+           U_AC(IBL,IS) = UINV_AC      + DUI_AC
++C
+ C
+    10   CONTINUE
+     1 CONTINUE
+ C
++C
+ C---- set new Qtan from new Ue with appropriate sign change
+       DO 2 IS=1, 2
+         DO 20 IBL=2, IBLTE(IS)
+@@ -1556,6 +1952,44 @@
+         TSTR(IBLTE(1)+KBL,1) = TSTR(IBLTE(2)+KBL,2)
+     6 CONTINUE
+ C
++C---- INSTRUMENTATION: state after UPDATE (dumped calls); side 1 includes the equated wake
++      NUPDATE = NUPDATE + 1
++      IF(NDUMPU.LT.0) CALL RDDUMP(NDUMPU, IDUMPU)
++      LDUMPU = .FALSE.
++      DO 8009 IDC=1, NDUMPU
++        IF(IDUMPU(IDC).EQ.NUPDATE) LDUMPU = .TRUE.
++ 8009 CONTINUE
++      IF(LDUMPU) THEN
++       WRITE(FNINST,'(A,I0,A)') 'update_output_', NUPDATE, '.dat'
++       OPEN(95, FILE=FNINST, STATUS='REPLACE')
++       WRITE(95,'(A,ES24.16)') 'RLX=', RLX
++       WRITE(95,'(A,ES24.16)') 'RMSBL=', RMSBL
++       WRITE(95,'(A,ES24.16)') 'RMXBL=', RMXBL
++       WRITE(95,'(A,A1)') 'VMXBL=', VMXBL
++       WRITE(95,'(A,I5)') 'IMXBL=', IMXBL
++       WRITE(95,'(A,I5)') 'ISMXBL=', ISMXBL
++       WRITE(95,'(A,ES24.16)') 'DAC=', DAC
++       WRITE(95,'(A,ES24.16)') 'CL=', CL
++       WRITE(95,'(A,ES24.16)') 'ALFA=', ALFA
++       WRITE(95,'(A,ES24.16)') 'CLNEW=', CLNEW
++       WRITE(95,'(A,ES24.16)') 'CL_A=', CL_A
++       WRITE(95,'(A,ES24.16)') 'CL_MS=', CL_MS
++       WRITE(95,'(A,ES24.16)') 'CL_AC=', CL_AC
++       WRITE(95,'(A,ES24.16)') 'MINF_CL=', MINF_CL
++       DO 8007 IS=1, 2
++         NBLD = NBL(IS)
++         IF(IS.EQ.1) NBLD = IBLTE(1) + NBL(2) - IBLTE(2)
++         DO 8008 IBL=1, NBLD
++           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &       XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &       DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++           WRITE(95,'(A,I2,A,I4,A,5ES24.16)') 'BLX(',IS,',',IBL,')=',
++     &       TAU(IBL,IS), DIS(IBL,IS), CTQ(IBL,IS),
++     &       DELT(IBL,IS), TSTR(IBL,IS)
++ 8008    CONTINUE
++ 8007  CONTINUE
++       CLOSE(95)
++      ENDIF
+       RETURN
+       END
+ 
+@@ -1596,3 +2030,31 @@
+       RETURN
+       END
+ 
++
++
++      SUBROUTINE RDDUMP(NDUMP, IDUMP)
++C---- INSTRUMENTATION: read the list of SETBL/UPDATE/BLSOLV call numbers to dump from
++C     dump_calls.txt (one integer per line, at most 32); default 1, 2, 3.
++      INTEGER NDUMP, IDUMP(32)
++      LOGICAL LEX
++      INTEGER IOS
++      INQUIRE(FILE='dump_calls.txt', EXIST=LEX)
++      NDUMP = 0
++      IF(LEX) THEN
++       OPEN(73, FILE='dump_calls.txt', STATUS='OLD')
++ 10    CONTINUE
++       IF(NDUMP.GE.32) GO TO 20
++       READ(73,*,IOSTAT=IOS) IDUMP(NDUMP+1)
++       IF(IOS.NE.0) GO TO 20
++       NDUMP = NDUMP + 1
++       GO TO 10
++ 20    CONTINUE
++       CLOSE(73)
++      ELSE
++       NDUMP = 3
++       IDUMP(1) = 1
++       IDUMP(2) = 2
++       IDUMP(3) = 3
++      ENDIF
++      RETURN
++      END

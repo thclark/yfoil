@@ -1,0 +1,320 @@
+--- a/src/xoper.f
++++ b/src/xoper.f
+@@ -2734,7 +2734,14 @@
+ C     Converges to specified alpha.
+ C-----------------------------------
+       INCLUDE 'XFOIL.INC'
++      INCLUDE 'XLOG.INC'
+       REAL MINF_CLM, MSQ_CLM
++C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('SPECAL')
++      CALL LOGREAL('ALFA', DBLE(ALFA))
++      CALL LOGBOOL('LGAMU', LGAMU)
++      CALL LOGBOOL('LQAIJ', LQAIJ)
+ C
+ C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
+       IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
+@@ -2811,6 +2818,34 @@
+        CALL CPCALC(N,QINV,QINF,MINF,CPI)
+       ENDIF
+       IF(LFLAP) CALL MHINGE
++C
++C---- INSTRUMENTATION: Output inviscid solution to file
++      OPEN(UNIT=98,FILE='xfoil_inviscid.dat',STATUS='REPLACE')
++      WRITE(98,*) '=== INVISCID SOLUTION ==='
++      WRITE(98,*) 'ALFA =', ALFA
++      WRITE(98,*) 'CL =', CL
++      WRITE(98,*) 'CM =', CM
++      WRITE(98,*) 'N =', N
++      WRITE(98,*) '--- GAM and QINV ---'
++      WRITE(98,*) 'I, GAM, QINV, CPI'
++      DO I = 1, N
++        WRITE(98,'(I5,3ES24.16)') I, GAM(I), QINV(I), CPI(I)
++      ENDDO
++      WRITE(98,*) '--- GAMU(alpha=0) and GAMU(alpha=90) ---'
++      WRITE(98,*) 'I, GAMU1, GAMU2, QINVU1, QINVU2'
++      DO I = 1, N
++        WRITE(98,'(I5,4ES24.16)') I, GAMU(I,1), GAMU(I,2),
++     &                          QINVU(I,1), QINVU(I,2)
++      ENDDO
++      CLOSE(98)
++      WRITE(*,*) '=== Wrote inviscid to /tmp/xfoil_inviscid.dat ==='
++C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGREAL('CL', DBLE(CL))
++      CALL LOGREAL('CM', DBLE(CM))
++      CALL LOGREAL('ALFA_OUT', DBLE(ALFA))
++      CALL LOGCOMMON1('SPECAL')
++      CALL LOGEXIT('SPECAL')
+ C
+       RETURN
+       END ! SPECAL
+@@ -2888,11 +2923,44 @@
+ C     Converges viscous operating point
+ C----------------------------------------
+       INCLUDE 'XFOIL.INC'
++      INTEGER ISTB
++C---- INSTRUMENTATION: per-iteration record and final state (first call), point record (all)
++      LOGICAL LVC, LBLIN0, LWAKE0
++      INTEGER NITDONE, NVISCAL
++      SAVE NVISCAL
++      DATA NVISCAL / 0 /
++      INCLUDE 'XLOG.INC'
+ C
+ C---- convergence tolerance
+       DATA EPS1 / 1.0E-4 /
+ C
++C---- INSTRUMENTATION: Log subroutine entry
++      CALL LOGENTER('VISCAL')
++      CALL LOGINT('NITER1', NITER1)
++      CALL LOGREAL('ALFA', DBLE(ALFA))
++      CALL LOGBOOL('LWAKE', LWAKE)
++      CALL LOGBOOL('LIPAN', LIPAN)
++      CALL LOGBOOL('LBLINI', LBLINI)
++C
++C---- INSTRUMENTATION: Open log file for subroutine tracing (legacy)
++      OPEN(98, FILE='xfoil_subroutine_log.dat', STATUS='REPLACE')
++      WRITE(98,'(A)') '=== VISCAL START ==='
++C
+       NITER = NITER1
++C---- INSTRUMENTATION: VISCAL call counter and entry flags
++      NVISCAL = NVISCAL + 1
++      LBLIN0 = LBLINI
++      LWAKE0 = LWAKE
++      NITDONE = 0
++      IF(NVISCAL.EQ.1) THEN
++       OPEN(77, FILE='viscal_iters_all.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(77, FILE='viscal_iters_all.dat', STATUS='OLD',
++     &      POSITION='APPEND')
++      ENDIF
++      WRITE(77,'(A,I5,A,ES24.16,A,I5,A,L1,A,L1,A,L1)') 'ENTRY', NVISCAL,
++     &  ' ALFA=', ALFA, ' IST=', IST, ' LWAKE=', LWAKE, ' LIPAN=', LIPAN,
++     &  ' LBLINI=', LBLINI
+ C
+ C---- calculate wake trajectory from current inviscid solution if necessary
+       IF(.NOT.LWAKE) THEN
+@@ -2926,6 +2994,28 @@
+ C---- set inviscid BL edge velocity UINV from QINV
+       CALL UICALC
+ C
++C---- INSTRUMENTATION: inviscid arrays entering the Newton loop (this VISCAL call)
++      IF(NVISCAL.EQ.1) THEN
++      OPEN(79, FILE='viscal_inviscid.dat', STATUS='REPLACE')
++      WRITE(79,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(79,'(A,ES24.16)') 'QINF=', QINF
++      WRITE(79,'(A,ES24.16)') 'MINF=', MINF
++      WRITE(79,'(A,ES24.16)') 'TKLAM=', TKLAM
++      WRITE(79,'(A,ES24.16)') 'MINF_CL=', MINF_CL
++      WRITE(79,'(A,ES24.16)') 'CL=', CL
++      WRITE(79,'(A,L1)') 'LWAKE=', LWAKE
++      WRITE(79,'(A,L1)') 'LIPAN=', LIPAN
++      WRITE(79,'(A,L1)') 'LBLINI=', LBLINI
++      WRITE(79,'(A,L1)') 'LVCONV=', LVCONV
++      WRITE(79,'(A,L1)') 'LWDIJ=', LWDIJ
++      WRITE(79,'(A,L1)') 'LADIJ=', LADIJ
++      DO 8093 I=1, N+NW
++        WRITE(79,'(A,I4,A,6ES24.16)') 'NODE(',I,')=',
++     &    QINVU(I,1), QINVU(I,2), QINV(I), QINV_A(I), GAM(I), GAM_A(I)
++ 8093 CONTINUE
++      CLOSE(79)
++      ENDIF
++C
+       IF(.NOT.LBLINI) THEN
+ C
+ C----- set initial Ue from inviscid Ue
+@@ -2957,12 +3047,34 @@
+ C---- set up source influence matrix if it doesn't exist
+       IF(.NOT.LWDIJ .OR. .NOT.LADIJ) CALL QDCALC
+ C
++C---- INSTRUMENTATION: Output DIJ matrix
++      OPEN(UNIT=97,FILE='xfoil_dij.dat',STATUS='REPLACE')
++      WRITE(97,*) '=== DIJ MATRIX ==='
++      WRITE(97,*) 'N =', N
++      WRITE(97,*) 'NW =', NW
++      DO I = 1, N+NW
++        DO J = 1, N+NW
++          WRITE(97,'(2I5,ES24.16)') I, J, DIJ(I,J)
++        ENDDO
++      ENDDO
++      CLOSE(97)
++      WRITE(*,*) '=== Wrote DIJ matrix to /tmp/xfoil_dij.dat ==='
++C
++C
+ C---- Newton iteration for entire BL solution
+       IF(NITER.EQ.0) CALL ASKI('Enter number of iterations^',NITER)
+       WRITE(*,*)
+       WRITE(*,*) 'Solving BL system ...'
++      CALL LOGEVENT('VISCAL_LOOP_START')
++      CALL LOGINT('NITER', NITER)
+       DO 1000 ITER=1, NITER
+ C
++C---- INSTRUMENTATION: Log iteration start
++      CALL LOGITER('VISCAL', ITER)
++      CALL LOGREAL('ALFA_ITER', DBLE(ALFA))
++      CALL LOGREAL('CL_ITER', DBLE(CL))
++      CALL LOGINT('IST_ITER', IST)
++C
+ C------ fill Newton system for BL variables
+         CALL SETBL
+ C
+@@ -2989,6 +3101,7 @@
+         CALL GAMQV
+ C
+ C------ relocate stagnation point
++        ISTB = IST
+         CALL STMOVE
+ C
+ C------ set updated CL,CD
+@@ -2996,6 +3109,40 @@
+      &              CL,CM,CDP,CL_ALF,CL_MSQ)
+         CALL CDCALC
+ C
++C------ INSTRUMENTATION: per-iteration record (after CLCALC/CDCALC, before the test)
++        LVC = RMSBL .LT. EPS1
++        NITDONE = ITER
++        WRITE(77,'(A,2I4,5ES24.16,4I5,3ES24.16)') 'IT', NVISCAL, ITER,
++     &    RMSBL, RLX, CL, CD, CM, ISTB, IST, ITRAN(1), ITRAN(2),
++     &    ALFA, MINF, REINF
++        IF(NVISCAL.EQ.1) THEN
++        IF(ITER.EQ.1) OPEN(79, FILE='viscal_iter.dat', STATUS='REPLACE')
++        WRITE(79,'(A,I5)') 'ITER=', ITER
++        WRITE(79,'(A,ES24.16)') 'RMSBL=', RMSBL
++        WRITE(79,'(A,ES24.16)') 'RMXBL=', RMXBL
++        WRITE(79,'(A,A1)') 'VMXBL=', VMXBL
++        WRITE(79,'(A,I5)') 'IMXBL=', IMXBL
++        WRITE(79,'(A,I5)') 'ISMXBL=', ISMXBL
++        WRITE(79,'(A,ES24.16)') 'RLX=', RLX
++        WRITE(79,'(A,ES24.16)') 'ALFA=', ALFA
++        WRITE(79,'(A,ES24.16)') 'MINF=', MINF
++        WRITE(79,'(A,ES24.16)') 'REINF=', REINF
++        WRITE(79,'(A,ES24.16)') 'CL=', CL
++        WRITE(79,'(A,ES24.16)') 'CM=', CM
++        WRITE(79,'(A,ES24.16)') 'CD=', CD
++        WRITE(79,'(A,ES24.16)') 'CDF=', CDF
++        WRITE(79,'(A,ES24.16)') 'CDP=', CDP
++        WRITE(79,'(A,ES24.16)') 'CL_ALF=', CL_ALF
++        WRITE(79,'(A,ES24.16)') 'CL_MSQ=', CL_MSQ
++        WRITE(79,'(A,I5)') 'IST=', IST
++        WRITE(79,'(A,ES24.16)') 'SST=', SST
++        WRITE(79,'(A,I5)') 'ITRAN1=', ITRAN(1)
++        WRITE(79,'(A,I5)') 'ITRAN2=', ITRAN(2)
++        WRITE(79,'(A,ES24.16)') 'XOCTR1=', XOCTR(1)
++        WRITE(79,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
++        WRITE(79,'(A,L1)') 'LVCONV=', LVC
++        ENDIF
++C
+ C------ display changes and test for convergence
+         IF(RLX.LT.1.0) 
+      &   WRITE(*,2000) ITER, RMSBL, RMXBL, VMXBL,IMXBL,ISMXBL,RLX
+@@ -3005,7 +3152,8 @@
+          WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDPDIF
+ c         CDSURF = CDP + CDF
+ c         WRITE(*,2025) CDSURF, CDF, CDP
+-
++C
++C
+         IF(RMSBL .LT. EPS1) THEN
+          LVCONV = .TRUE.
+          AVISC = ALFA
+@@ -3020,8 +3168,76 @@
+       CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
+       CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
+       IF(LFLAP) CALL MHINGE
++C
++      CLOSE(77)
++C---- INSTRUMENTATION: final state of the first VISCAL call
++      IF(NVISCAL.EQ.1) THEN
++      CLOSE(79)
++      OPEN(79, FILE='viscal_final.dat', STATUS='REPLACE')
++      WRITE(79,'(A,I5)') 'NITDONE=', NITDONE
++      WRITE(79,'(A,L1)') 'LVCONV=', LVCONV
++      WRITE(79,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(79,'(A,ES24.16)') 'CL=', CL
++      WRITE(79,'(A,ES24.16)') 'CM=', CM
++      WRITE(79,'(A,ES24.16)') 'CD=', CD
++      WRITE(79,'(A,ES24.16)') 'CDF=', CDF
++      WRITE(79,'(A,ES24.16)') 'CDP=', CDP
++      WRITE(79,'(A,ES24.16)') 'CL_ALF=', CL_ALF
++      WRITE(79,'(A,ES24.16)') 'CL_MSQ=', CL_MSQ
++      WRITE(79,'(A,ES24.16)') 'AVISC=', AVISC
++      WRITE(79,'(A,ES24.16)') 'MVISC=', MVISC
++      WRITE(79,'(A,I5)') 'IST=', IST
++      WRITE(79,'(A,I5)') 'ITRAN1=', ITRAN(1)
++      WRITE(79,'(A,I5)') 'ITRAN2=', ITRAN(2)
++      WRITE(79,'(A,ES24.16)') 'XOCTR1=', XOCTR(1)
++      WRITE(79,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
++      DO 8090 I=1, N+NW
++        WRITE(79,'(A,I4,A,5ES24.16)') 'NODE(',I,')=',
++     &    CPI(I), CPV(I), QINV(I), QVIS(I), GAM(I)
++ 8090 CONTINUE
++      DO 8091 IS=1, 2
++        DO 8092 IBL=1, NBL(IS)
++          WRITE(79,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
++     &      XSSI(IBL,IS), UEDG(IBL,IS), THET(IBL,IS),
++     &      DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS)
++ 8092   CONTINUE
++ 8091 CONTINUE
++      CLOSE(79)
++      ENDIF
++C
++C---- INSTRUMENTATION: one record per VISCAL call (the polar state machine)
++      IF(NVISCAL.EQ.1) THEN
++       OPEN(79, FILE='viscal_points.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(79, FILE='viscal_points.dat', STATUS='OLD',
++     &      POSITION='APPEND')
++      ENDIF
++      WRITE(79,'(A,I5)') 'CALL=', NVISCAL
++      WRITE(79,'(A,I5)') 'NITER1=', NITER1
++      WRITE(79,'(A,L1)') 'LBLINI0=', LBLIN0
++      WRITE(79,'(A,L1)') 'LWAKE0=', LWAKE0
++      WRITE(79,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(79,'(A,ES24.16)') 'MINF=', MINF
++      WRITE(79,'(A,ES24.16)') 'REINF=', REINF
++      WRITE(79,'(A,I5)') 'NITDONE=', NITDONE
++      WRITE(79,'(A,L1)') 'LVCONV=', LVCONV
++      WRITE(79,'(A,ES24.16)') 'RMSBL=', RMSBL
++      WRITE(79,'(A,ES24.16)') 'CL=', CL
++      WRITE(79,'(A,ES24.16)') 'CM=', CM
++      WRITE(79,'(A,ES24.16)') 'CD=', CD
++      WRITE(79,'(A,ES24.16)') 'CDF=', CDF
++      WRITE(79,'(A,ES24.16)') 'CDP=', CDP
++      WRITE(79,'(A,ES24.16)') 'CL_ALF=', CL_ALF
++      WRITE(79,'(A,I5)') 'IST=', IST
++      WRITE(79,'(A,I5)') 'ITRAN1=', ITRAN(1)
++      WRITE(79,'(A,I5)') 'ITRAN2=', ITRAN(2)
++      WRITE(79,'(A,ES24.16)') 'XOCTR1=', XOCTR(1)
++      WRITE(79,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
++      CLOSE(79)
++C
++      WRITE(*,*) '=== Wrote viscal to /tmp/xfoil_viscal_iter.dat ==='
++C
+ 
+-
+         is = 1
+         hkmax = 0.
+         hkm = 0.0
+@@ -3092,7 +3308,20 @@
+         close(lu)
+ 
+ 
+-
++C
++C---- INSTRUMENTATION: Close log file
++      WRITE(98,'(A)') '=== VISCAL END ==='
++      CLOSE(98)
++C
++C---- INSTRUMENTATION: Log subroutine exit
++      CALL LOGREAL('CL_FINAL', DBLE(CL))
++      CALL LOGREAL('CD_FINAL', DBLE(CD))
++      CALL LOGREAL('CM_FINAL', DBLE(CM))
++      CALL LOGREAL('RMSBL_FINAL', DBLE(RMSBL))
++      CALL LOGBOOL('LVCONV', LVCONV)
++      CALL LOGCOMMON1('VISCAL')
++      CALL LOGEXIT('VISCAL')
++C
+       RETURN
+ C....................................................................
+  2000   FORMAT

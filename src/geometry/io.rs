@@ -61,10 +61,8 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
 
     let mut x_coords = Vec::new();
     let mut y_coords = Vec::new();
-    let mut line_num = 1;
-
-    for line_result in lines {
-        line_num += 1;
+    // line 1 is the name; data lines are numbered from 2 for error messages
+    for (line_num, line_result) in (2..).zip(lines) {
         let line = line_result?;
         let trimmed = line.trim();
 
@@ -78,17 +76,11 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
 
         if parts.len() >= 2 {
             let x: f64 = parts[0].parse().map_err(|_| {
-                GeometryReadError::DatParse(format!(
-                    "Invalid x coordinate '{}' on line {}",
-                    parts[0], line_num
-                ))
+                GeometryReadError::DatParse(format!("Invalid x coordinate '{}' on line {}", parts[0], line_num))
             })?;
 
             let y: f64 = parts[1].parse().map_err(|_| {
-                GeometryReadError::DatParse(format!(
-                    "Invalid y coordinate '{}' on line {}",
-                    parts[1], line_num
-                ))
+                GeometryReadError::DatParse(format!("Invalid y coordinate '{}' on line {}", parts[1], line_num))
             })?;
 
             x_coords.push(x);
@@ -98,9 +90,7 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
     }
 
     if x_coords.is_empty() {
-        return Err(GeometryReadError::DatParse(
-            "No coordinates found in file".to_string(),
-        ));
+        return Err(GeometryReadError::DatParse("No coordinates found in file".to_string()));
     }
 
     // Detect Lednicer format: if x values go 0->1 then 0->1 again
@@ -109,9 +99,9 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
         convert_lednicer_to_selig(&x_coords, &y_coords)?
     } else {
         Geometry {
-            reference: [0.25, 0.0], // Default quarter-chord reference
-            x_c: x_coords,
-            y_c: y_coords,
+            cm_ref: [0.25, 0.0], // Default quarter-chord reference
+            x: x_coords,
+            y: y_coords,
         }
     };
 
@@ -201,17 +191,14 @@ fn convert_lednicer_to_selig(x: &[f64], y: &[f64]) -> Result<Geometry, GeometryR
     }
 
     Ok(Geometry {
-        reference: [0.25, 0.0],
-        x_c,
-        y_c,
+        cm_ref: [0.25, 0.0],
+        x: x_c,
+        y: y_c,
     })
 }
 
 /// Write airfoil geometry to a JSON file
-pub fn write_geometry_to_json<P: AsRef<Path>>(
-    geometry: &Geometry,
-    path: P,
-) -> Result<(), std::io::Error> {
+pub fn write_geometry_to_json<P: AsRef<Path>>(geometry: &Geometry, path: P) -> Result<(), std::io::Error> {
     let file = File::create(path)?;
     serde_json::to_writer_pretty(file, geometry)?;
     Ok(())
@@ -220,19 +207,16 @@ pub fn write_geometry_to_json<P: AsRef<Path>>(
 /// Write airfoil geometry to a Selig/XFOIL .dat file
 ///
 /// Format: First line is the airfoil name, subsequent lines are x y coordinates.
-pub fn write_dat_file<P: AsRef<Path>>(
-    geometry: &Geometry,
-    name: &str,
-    path: P,
-) -> Result<(), std::io::Error> {
+pub fn write_dat_file<P: AsRef<Path>>(geometry: &Geometry, name: &str, path: P) -> Result<(), std::io::Error> {
     let mut file = File::create(path)?;
 
     // Write name
     writeln!(file, "{}", name)?;
 
-    // Write coordinates with full double precision for numerical consistency
-    for i in 0..geometry.x_c.len() {
-        writeln!(file, " {:22.16}  {:22.16}", geometry.x_c[i], geometry.y_c[i])?;
+    // 17 significant digits round-trip an f64 bitwise (CLAUDE.md Rule 4). Fixed-point
+    // {:22.16} does not: it drops to ~14 significant figures for small y values.
+    for i in 0..geometry.x.len() {
+        writeln!(file, " {:.17e}  {:.17e}", geometry.x[i], geometry.y[i])?;
     }
 
     Ok(())
@@ -275,9 +259,9 @@ mod tests {
     fn test_read_write_dat_roundtrip() {
         // Create a simple geometry
         let original = Geometry {
-            reference: [0.25, 0.0],
-            x_c: vec![1.0, 0.5, 0.0, 0.5, 1.0],
-            y_c: vec![0.0, 0.05, 0.0, -0.05, 0.0],
+            cm_ref: [0.25, 0.0],
+            x: vec![1.0, 0.5, 0.0, 0.5, 1.0],
+            y: vec![0.0, 0.05, 0.0, -0.05, 0.0],
         };
 
         // Write to temp file
@@ -288,11 +272,11 @@ mod tests {
         let (name, loaded) = read_dat_file(temp_file.path()).unwrap();
 
         assert_eq!(name, "Test Airfoil");
-        assert_eq!(loaded.x_c.len(), original.x_c.len());
+        assert_eq!(loaded.x.len(), original.x.len());
 
-        for i in 0..original.x_c.len() {
-            assert!((loaded.x_c[i] - original.x_c[i]).abs() < 1e-5);
-            assert!((loaded.y_c[i] - original.y_c[i]).abs() < 1e-5);
+        for i in 0..original.x.len() {
+            assert!((loaded.x[i] - original.x[i]).abs() < 1e-5);
+            assert!((loaded.y[i] - original.y[i]).abs() < 1e-5);
         }
     }
 
@@ -311,24 +295,24 @@ mod tests {
         let (name, geom) = read_dat_file(temp_file.path()).unwrap();
 
         assert_eq!(name, "NACA 0012");
-        assert_eq!(geom.x_c.len(), 5);
-        assert!((geom.x_c[0] - 1.0).abs() < 1e-6);
-        assert!((geom.x_c[2] - 0.0).abs() < 1e-6);
+        assert_eq!(geom.x.len(), 5);
+        assert!((geom.x[0] - 1.0).abs() < 1e-6);
+        assert!((geom.x[2] - 0.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_skip_empty_lines() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "Test").unwrap();
-        writeln!(temp_file, "").unwrap();
+        writeln!(temp_file).unwrap();
         writeln!(temp_file, "  1.0  0.0").unwrap();
-        writeln!(temp_file, "").unwrap();
+        writeln!(temp_file).unwrap();
         writeln!(temp_file, "  0.0  0.0").unwrap();
         temp_file.flush().unwrap();
 
         let (_, geom) = read_dat_file(temp_file.path()).unwrap();
 
-        assert_eq!(geom.x_c.len(), 2);
+        assert_eq!(geom.x.len(), 2);
     }
 
     #[test]
@@ -360,34 +344,30 @@ mod tests {
         let (name, geom) = read_dat_file(temp_file.path()).unwrap();
 
         assert_eq!(name, "NACA 0012");
-        assert_eq!(geom.x_c.len(), 7);
+        assert_eq!(geom.x.len(), 7);
 
         // Check first point (TE upper)
-        assert!(
-            (geom.x_c[0] - 1.0).abs() < 1e-6,
-            "x[0] = {} (expected 1.0)",
-            geom.x_c[0]
-        );
-        assert!((geom.y_c[0] - 0.00126).abs() < 1e-8);
+        assert!((geom.x[0] - 1.0).abs() < 1e-6, "x[0] = {} (expected 1.0)", geom.x[0]);
+        assert!((geom.y[0] - 0.00126).abs() < 1e-8);
 
         // Check second point
-        assert!((geom.x_c[1] - 0.9916796).abs() < 1e-6);
-        assert!((geom.y_c[1] - 0.00242145).abs() < 1e-8);
+        assert!((geom.x[1] - 0.9916796).abs() < 1e-6);
+        assert!((geom.y[1] - 0.00242145).abs() < 1e-8);
 
         // Check LE point
-        assert!((geom.x_c[3] - 0.000026).abs() < 1e-8);
-        assert!((geom.y_c[3] - 0.00091).abs() < 1e-8);
+        assert!((geom.x[3] - 0.000026).abs() < 1e-8);
+        assert!((geom.y[3] - 0.00091).abs() < 1e-8);
 
         // Check TE lower (last point)
-        assert!((geom.x_c[6] - 1.0).abs() < 1e-6);
-        assert!((geom.y_c[6] - (-0.00126)).abs() < 1e-8);
+        assert!((geom.x[6] - 1.0).abs() < 1e-6);
+        assert!((geom.y[6] - (-0.00126)).abs() < 1e-8);
     }
 
     #[test]
     fn test_xfoil_paneled_geometry_properties() {
         // Test that XFOIL-paneled coordinates produce correct geometric properties
         // This simulates loading a 160-panel NACA 0012 from XFOIL
-        use crate::geometry::panel::create_paneled_airfoil;
+        use crate::geometry::panel::panel_foil;
 
         // Create a representative subset of XFOIL-paneled NACA 0012
         // (Full 160 panels would be too verbose, using 20 points for test)
@@ -418,10 +398,10 @@ mod tests {
 
         let (name, geom) = read_dat_file(temp_file.path()).unwrap();
         assert_eq!(name, "NACA 0012 (XFOIL paneled)");
-        assert_eq!(geom.x_c.len(), 19);
+        assert_eq!(geom.x.len(), 19);
 
         // Create paneled airfoil and verify properties
-        let paneled = create_paneled_airfoil(&geom);
+        let paneled = panel_foil(&geom);
 
         // Chord should be approximately 1.0
         assert!(
@@ -431,7 +411,7 @@ mod tests {
         );
 
         // LE should be at index 9 (the 0,0 point)
-        assert_eq!(paneled.le_index, 9, "LE should be at index 9");
+        assert_eq!(paneled.i_le_node, 9, "LE should be at index 9");
 
         // Arc lengths should be monotonically increasing
         for i in 1..paneled.s.len() {
@@ -443,13 +423,9 @@ mod tests {
         }
 
         // Normal vectors should have unit length
-        for i in 0..paneled.n {
-            let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
-            assert!(
-                (mag - 1.0).abs() < 1e-10,
-                "Normal at {} should be unit length",
-                i
-            );
+        for i in 0..paneled.n_foil_nodes {
+            let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
+            assert!((mag - 1.0).abs() < 1e-10, "Normal at {} should be unit length", i);
         }
     }
 }

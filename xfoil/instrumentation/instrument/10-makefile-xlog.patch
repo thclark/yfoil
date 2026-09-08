@@ -1,0 +1,45 @@
+--- a/bin/Makefile
++++ b/bin/Makefile
+@@ -17,7 +17,7 @@
+ XFOILOBJ = xfoil.o xpanel.o xoper.o xtcam.o xgdes.o xqdes.o xmdes.o \
+ xsolve.o xbl.o xblsys.o xpol.o xplots.o pntops.o xgeom.o xutils.o modify.o \
+ blplot.o polplt.o aread.o naca.o spline.o plutil.o iopol.o gui.o sort.o \
+-dplot.o profil.o
++dplot.o profil.o xlog.o
+ 
+ PPLOTOBJ = pplot.o polplt.o sort.o iopol.o
+ PXPLOTOBJ = pxplot.o plutil.o gui.o
+@@ -161,11 +161,11 @@
+ blu.o: $(SRC)/blu.f
+ 	$(FC) -c $(FFLAGS) $(SRC)/blu.f
+ 
+-xfoil.o: $(SRC)/xfoil.f  $(SRC)/XFOIL.INC $(SRC)/XBL.INC
++xfoil.o: $(SRC)/xfoil.f  $(SRC)/XFOIL.INC $(SRC)/XBL.INC $(SRC)/XLOG.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/xfoil.f
+-xpanel.o: $(SRC)/xpanel.f  $(SRC)/XFOIL.INC
++xpanel.o: $(SRC)/xpanel.f  $(SRC)/XFOIL.INC $(SRC)/XLOG.INC
+ 	$(FC) -c $(FFLOPT)  $(SRC)/xpanel.f
+-xoper.o: $(SRC)/xoper.f  $(SRC)/XFOIL.INC  $(SRC)/BLPAR.INC
++xoper.o: $(SRC)/xoper.f  $(SRC)/XFOIL.INC  $(SRC)/BLPAR.INC $(SRC)/XLOG.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/xoper.f
+ xsolve.o: $(SRC)/xsolve.f  $(SRC)/XFOIL.INC
+ 	$(FC) -c $(FFLOPT)  $(SRC)/xsolve.f
+@@ -179,7 +179,7 @@
+ 	$(FC) -c $(FFLAGS)  $(SRC)/xqdes.f
+ xmdes.o: $(SRC)/xmdes.f  $(SRC)/XFOIL.INC $(SRC)/XDES.INC $(SRC)/CIRCLE.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/xmdes.f
+-xbl.o:   $(SRC)/xbl.f    $(SRC)/XFOIL.INC $(SRC)/XBL.INC $(SRC)/BLPAR.INC
++xbl.o:   $(SRC)/xbl.f    $(SRC)/XFOIL.INC $(SRC)/XBL.INC $(SRC)/BLPAR.INC $(SRC)/XLOG.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/xbl.f
+ xblsys.o: $(SRC)/xblsys.f                  $(SRC)/XBL.INC $(SRC)/BLPAR.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/xblsys.f
+@@ -213,6 +213,9 @@
+ 	$(FC) -c $(FFLAGS)  $(SRC)/sort.f
+ profil.o: $(SRC)/profil.f
+ 	$(FC) -c $(FFLAGS)  $(SRC)/profil.f
++xlog.o: $(SRC)/xlog.f $(SRC)/XLOG.INC $(SRC)/XFOIL.INC
++	$(FC) -c $(FFLAGS)  $(SRC)/xlog.f
++
+ polplt.o: $(SRC)/polplt.f $(SRC)/PINDEX.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/polplt.f
+ iopol.o: $(SRC)/iopol.f $(SRC)/PINDEX.INC

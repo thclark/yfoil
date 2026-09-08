@@ -353,7 +353,7 @@ H* correlations for laminar and turbulent flow.
 
 ## YFoil Equivalent
 
-`src/bl/closure.rs`, `src/bl/system.rs`
+`src/bl/closure.rs`, `src/bl/station.rs`, `src/bl/transition.rs`, `src/bl/difference.rs`, `src/bl/blsys.rs`
 
 ```rust
 /// Kinetic energy shape factor correlation

@@ -1,0 +1,969 @@
+# The translated subroutine set for the Rule-6 branch-completeness measurement
+# (`cargo xtask coverage` -> docs/validation/coverage.md).
+#
+# `file` entries name the XFOIL subroutines YFoil translates, per Fortran file; gcov branch
+# counts are reported for exactly these. `unreachable` entries annotate branches that can
+# never be taken on the analysis path YFoil covers (Rule 6: "numerically exact" is claimable
+# only over branches that have been exercised, and the fixture set is complete when every
+# *reachable* branch has been). Each annotation is a claim with the same evidence standard
+# as a bug report: cite the reason the branch is unreachable, not the fact that no case hit it.
+
+[[file]]
+name = "xpanel.f"
+subroutines = ["APCALC", "NCALC", "PSILIN", "PSWLIN", "GGCALC", "QWCALC", "QDCALC", "XYWAKE",
+               "STFIND", "IBLPAN", "XICALC", "UICALC", "UECALC", "QVFUE", "QISET", "GAMQV",
+               "STMOVE", "UESET", "DSSET"]
+
+[[file]]
+name = "xbl.f"
+subroutines = ["SETBL", "IBLSYS", "MRCHUE", "MRCHDU", "XIFSET", "UPDATE", "DSLIM"]
+
+[[file]]
+name = "xblsys.f"
+subroutines = ["TRCHEK", "AXSET", "TRCHEK2", "BLSYS", "TESYS", "BLPRV", "BLKIN", "BLVAR", "BLMID",
+               "TRDIF", "BLDIF", "DAMPL", "DAMPL2", "HKIN", "DIL", "DILW", "HSL", "CFL", "DIT",
+               "HST", "CFT", "HCT"]
+
+[[file]]
+name = "xoper.f"
+subroutines = ["SPECAL", "SPECCL", "VISCAL"]
+
+[[file]]
+name = "xsolve.f"
+subroutines = ["GAUSS", "LUDCMP", "BAKSUB", "BLSOLV"]
+
+[[file]]
+name = "xfoil.f"
+subroutines = ["MRCL", "COMSET", "CPCALC", "CLCALC", "CDCALC", "NACA", "PANGEN", "TECALC"]
+
+[[file]]
+name = "xutils.f"
+subroutines = ["SETEXP"]
+
+[[file]]
+name = "naca.f"
+subroutines = ["NACA4", "NACA5"]
+
+[[file]]
+name = "spline.f"
+subroutines = ["SPLIND", "TRISOL", "SEVAL", "DEVAL", "D2VAL", "CURV", "SINVRT", "SCALC", "SEGSPL"]
+
+[[file]]
+name = "xgeom.f"
+subroutines = ["LEFIND", "GEOPAR"]
+
+# ---- annotated unreachable branches --------------------------------------------------------
+# class: structural | mode | guard | compiler (see docs/validation/coverage.md)
+
+[[unreachable]]
+file = "xpanel.f"
+line = 29
+class = "structural"
+why = "SX = SY = 0 needs two coincident consecutive nodes: ABCOPY deletes consecutive duplicates on LOAD and PANGEN inserts a buffer corner as one node"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 58
+class = "structural"
+why = "N <= 1: every caller passes the paneled airfoil or the wake (N >= 3)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 66
+class = "structural"
+why = "SMOD = 0 needs both spline derivatives zero at a node (a cusp), not producible from distinct ordered nodes"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 77
+class = "structural"
+why = "S(I) = S(I+1): coincident consecutive nodes (see line 29)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 81
+class = "structural"
+why = "S(I) = S(I+1): coincident consecutive nodes (see line 29)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 180
+class = "structural"
+why = "DSO = 0 is a null panel: coincident consecutive nodes (see line 29)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 231
+class = "mode"
+why = "GEOLIN = .TRUE. only from the inverse-design routines (xqdes.f:1340); every analysis-path caller passes .FALSE."
+
+[[unreachable]]
+file = "xpanel.f"
+line = 386
+class = "mode"
+why = "GEOLIN = .TRUE. only from the inverse-design routines (xqdes.f:1340); every analysis-path caller passes .FALSE."
+
+[[unreachable]]
+file = "xpanel.f"
+line = 449
+class = "mode"
+why = "GEOLIN = .TRUE. only from the inverse-design routines (xqdes.f:1340); every analysis-path caller passes .FALSE."
+
+[[unreachable]]
+file = "xpanel.f"
+line = 488
+class = "mode"
+why = "LIMAGE is never .TRUE. in 6.99: its only toggle is commented out (xoper.f:405), so the image-airfoil block that follows is dead"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 498
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 500
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 502
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 504
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 510
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 538
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 557
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 571
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 573
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 712
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 775
+class = "mode"
+why = "inside the LIMAGE image-airfoil block (see line 488)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 861
+branch = 2
+class = "structural"
+why = "IO > N+NW is impossible: PSWLIN's only callers (QDCALC, xpanel.f:1178 and :1227) pass IO <= N+NW"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 867
+branch = 3
+class = "structural"
+why = "RS1/RS2 = 0 with IO /= JO needs a node coincident with another node; wake nodes are offset from the TE and strictly downstream"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 875
+branch = 3
+class = "structural"
+why = "RS1/RS2 = 0 with IO /= JO needs a node coincident with another node; wake nodes are offset from the TE and strictly downstream"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 1281
+class = "guard"
+why = "NW > IWX array-bound STOP; NW = N/12 + 10*WAKLEN is within IWX for every case dimension (YFoil has no fixed dimensions)"
+
+[[unreachable]]
+file = "xpanel.f"
+line = 1444
+class = "guard"
+why = "IBLMAX > IVX array-bound STOP (see line 1281)"
+
+[[unreachable]]
+file = "xbl.f"
+line = 488
+branch = 3
+class = "structural"
+why = "X2 > X1 always: XSSI is strictly increasing (XICALC with the XEPS floor)"
+
+[[unreachable]]
+file = "xbl.f"
+line = 536
+class = "guard"
+why = "NSYS > 2*IVX array-bound STOP (YFoil has no fixed dimensions)"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2740
+branch = 2
+class = "structural"
+why = "LQAIJ is never cleared without LGAMU (INIT, PANGEN, xpol, xgdes, xqdes clear both), so .NOT.LQAIJ is never evaluated true once LGAMU holds"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2813
+class = "mode"
+why = "LFLAP: flap hinge moments (MHINGE) are out of scope"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2880
+class = "mode"
+why = "LFLAP: flap hinge moments (MHINGE) are out of scope"
+
+[[unreachable]]
+file = "xoper.f"
+line = 3022
+class = "mode"
+why = "LFLAP: flap hinge moments (MHINGE) are out of scope"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2826
+branch = 2
+class = "structural"
+why = "LQAIJ is never cleared without LGAMU (see line 2740)"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2910
+class = "mode"
+why = "LIPAN cleared while LBLINI stays only happens in the QDES design routine (xqdes.f:497, LBLINI deliberately left); INIT, WAKL, PANGEN and GDES clear both"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2961
+class = "mode"
+why = "NITER = 0 prompts interactively (ASKI); ITER is pinned in every run"
+
+[[unreachable]]
+file = "xsolve.f"
+line = 193
+class = "guard"
+why = "N > NVX array-bound STOP (YFoil has no fixed dimensions)"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 795
+class = "guard"
+why = "illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; YFoil's type is an enum"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 800
+class = "guard"
+why = "illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; YFoil's type is an enum"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 1574
+class = "mode"
+why = "NACA with no designation prompts interactively (ASKI)"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 1581
+branch = 1
+class = "guard"
+why = "designation > 25099 is rejected; YFoil returns NacaError before PANGEN"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 1584
+class = "guard"
+why = "unrecognised designation; YFoil returns NacaError before PANGEN"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 1594
+class = "guard"
+why = "unrecognised designation; YFoil returns NacaError before PANGEN"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 1636
+class = "guard"
+why = "NB < 2: no buffer airfoil; YFoil's generator always supplies one"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 2025
+class = "guard"
+why = "N > IQX-1 array-bound STOP (YFoil has no fixed dimensions)"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 2091
+class = "mode"
+why = "LBFLAP: flap deflection is out of scope"
+
+[[unreachable]]
+file = "xutils.f"
+line = 30
+class = "guard"
+why = "NEX <= 1 STOP: impossible with NW >= 10"
+
+[[unreachable]]
+file = "xutils.f"
+line = 32
+class = "structural"
+why = "NEX = 2 impossible: SETEXP's only analysis-path caller is XYWAKE with NW = N/12 + 10*WAKLEN >= 10"
+
+[[unreachable]]
+file = "naca.f"
+line = 75
+branch = 1
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 75
+branch = 3
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 171
+branch = 1
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 171
+branch = 3
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 179
+branch = 0
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 179
+branch = 2
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 179
+branch = 3
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 179
+branch = 4
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "naca.f"
+line = 179
+branch = 5
+class = "compiler"
+why = "edges generated for CHARACTER concatenation length handling; no source-level decision"
+
+[[unreachable]]
+file = "spline.f"
+line = 85
+class = "guard"
+why = "N > NMAX array-bound STOP (YFoil has no fixed dimensions)"
+
+[[unreachable]]
+file = "spline.f"
+line = 96
+class = "structural"
+why = "SPLIND is reached only through SEGSPL (end conditions -999/-999) on the analysis path; the 999 (zero second derivative) and specified-slope conditions belong to SPLINE (plotting) and the design routines"
+
+[[unreachable]]
+file = "spline.f"
+line = 113
+class = "structural"
+why = "SPLIND is reached only through SEGSPL (end conditions -999/-999) on the analysis path; the 999 (zero second derivative) and specified-slope conditions belong to SPLINE (plotting) and the design routines"
+
+[[unreachable]]
+file = "spline.f"
+line = 101
+branch = 1
+class = "structural"
+why = "see line 96"
+
+[[unreachable]]
+file = "spline.f"
+line = 117
+branch = 1
+class = "structural"
+why = "see line 96"
+
+[[unreachable]]
+file = "spline.f"
+line = 542
+class = "guard"
+why = "duplicated end point STOP: ABCOPY/PANGEN never produce one"
+
+[[unreachable]]
+file = "spline.f"
+line = 543
+class = "guard"
+why = "duplicated end point STOP: ABCOPY/PANGEN never produce one"
+
+# ---- open branches with a recorded way to reach them (the next cases to add) ----------------
+
+[[note]]
+file = "xpanel.f"
+line = 1365
+branch = 1
+reach = "GAM(1) < 0 at the upper TE node (negative alpha with a marginally negative TE vorticity); otherwise the scan starts where GAM >= 0 and stops at the first sign change"
+
+[[note]]
+file = "xpanel.f"
+line = 1385
+reach = "the stagnation point falling bitwise on a node (GAM(I) = 0 exactly): threshold-straddling territory"
+
+[[note]]
+file = "xpanel.f"
+line = 1386
+reach = "the stagnation point falling bitwise on a node (GAM(I) = 0 exactly): threshold-straddling territory"
+
+[[note]]
+file = "xpanel.f"
+line = 1737
+reach = "UEDG <= UEPS at a BL station after the stagnation-point shift: strongly separated case"
+
+[[note]]
+file = "xbl.f"
+line = 227
+branch = 2
+reach = "IBL = ITRAN with TRAN false: a side that stays laminar to the TE (ITRAN past IBLTE), low Re"
+
+[[note]]
+file = "xbl.f"
+line = 628
+reach = "CTI <= 0 at the transition station on the first march: a trip where the amplification is still 0 (XTR very near the LE)"
+
+[[note]]
+file = "xbl.f"
+line = 699
+reach = "inverse (prescribed-Hk) marching in the wake during MRCHUE: massive separation at the initial alpha"
+
+[[note]]
+file = "xbl.f"
+line = 717
+reach = "inverse (prescribed-Hk) marching in the wake during MRCHUE: massive separation at the initial alpha"
+
+[[note]]
+file = "xbl.f"
+line = 785
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 788
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 789
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 792
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 801
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 805
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 813
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 816
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 817
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 823
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 827
+reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 940
+reach = "stored CTAU <= 0 at a turbulent station (an UPDATE step driving CTAU negative)"
+
+[[note]]
+file = "xbl.f"
+line = 1111
+reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 1112
+reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 1116
+reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 1135
+reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 1145
+reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 1149
+reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
+
+[[note]]
+file = "xbl.f"
+line = 1241
+reach = "trip upstream of the stagnation point (e.g. XTR 1 0.001 at positive alpha)"
+
+[[note]]
+file = "xbl.f"
+line = 1396
+reach = "fixed-CL mode with the alpha step limited to +-0.5 deg: a CL target far from the current alpha (e.g. CL 1.0 from alpha 0)"
+
+[[note]]
+file = "xbl.f"
+line = 1397
+reach = "fixed-CL mode with the alpha step limited to +-0.5 deg: a CL target far from the current alpha (e.g. CL 1.0 from alpha 0)"
+
+[[note]]
+file = "xbl.f"
+line = 1474
+reach = "an UPDATE step reducing a BL variable by more than 50 % (DLO)"
+
+[[note]]
+file = "xbl.f"
+line = 1537
+branch = 2
+reach = "an island of negative Ue after UPDATE: strongly separated or diverging case"
+
+[[note]]
+file = "xblsys.f"
+line = 390
+reach = "AX <= 0 at a transition check (no amplification between the two stations)"
+
+[[note]]
+file = "xblsys.f"
+line = 432
+branch = 1
+reach = "a laminar station with XIFORC <= X1: the trip moved upstream past a still-laminar station by STMOVE between iterations"
+
+[[note]]
+file = "xblsys.f"
+line = 833
+branch = 2
+reach = "Us > 0.95 at an airfoil station: deep separation"
+
+[[note]]
+file = "xblsys.f"
+line = 843
+branch = 2
+reach = "Us > 0.99995 in the wake: deep separation"
+
+[[note]]
+file = "xblsys.f"
+line = 864
+reach = "Hk within 0.01 + GCC/Rtheta of 1: far wake (long WAKLEN) or very high Re"
+
+[[note]]
+file = "xblsys.f"
+line = 1712
+reach = "Hk within 0.01 + GCC/Rtheta of 1 at the mid-station: far wake (long WAKLEN) or very high Re"
+
+[[note]]
+file = "xoper.f"
+line = 2807
+branch = 1
+reach = "inviscid-only run (no VISC)"
+
+[[note]]
+file = "xoper.f"
+line = 2874
+branch = 1
+reach = "inviscid-only run (no VISC)"
+
+[[note]]
+file = "xfoil.f"
+line = 843
+reach = "TYPE 2 with M > 0 at a CL small enough that M/sqrt(CL) >= 0.99"
+
+[[note]]
+file = "xfoil.f"
+line = 854
+reach = "TYPE 2/3 at CL ~ 0 (Re ratio > 100), e.g. a symmetric section at alpha 0 with TYPE 2"
+
+[[note]]
+file = "xfoil.f"
+line = 1075
+reach = "Karman-Tsien denominator <= 0: locally supersonic speed (high alpha at M >= 0.5)"
+
+[[note]]
+file = "xfoil.f"
+line = 1078
+reach = "Karman-Tsien denominator <= 0: locally supersonic speed (high alpha at M >= 0.5)"
+
+[[note]]
+file = "xfoil.f"
+line = 1178
+branch = 1
+reach = "inviscid-only run (no VISC)"
+
+[[note]]
+file = "xfoil.f"
+line = 1680
+branch = 2
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0): LOAD of such a file, then PPAR"
+
+[[note]]
+file = "xfoil.f"
+line = 1708
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0): LOAD of such a file, then PPAR"
+
+[[note]]
+file = "xfoil.f"
+line = 1955
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0): LOAD of such a file, then PPAR"
+
+[[note]]
+file = "xfoil.f"
+line = 1755
+branch = 3
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0)"
+
+[[note]]
+file = "xfoil.f"
+line = 1755
+branch = 4
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0)"
+
+[[note]]
+file = "xfoil.f"
+line = 1812
+branch = 1
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0)"
+
+[[note]]
+file = "xfoil.f"
+line = 1844
+branch = 1
+reach = "a buffer airfoil with a doubled LE node (sharp LE, IBLE /= 0)"
+
+[[note]]
+file = "xfoil.f"
+line = 1738
+reach = "a buffer airfoil with a corner (doubled node), e.g. a flapped section: LOAD then PPAR"
+
+[[note]]
+file = "xfoil.f"
+line = 2003
+branch = 1
+reach = "a buffer airfoil with a corner (doubled node): the corner-insertion loop"
+
+[[note]]
+file = "xfoil.f"
+line = 2015
+reach = "a buffer airfoil with a corner (doubled node): the corner-insertion loop"
+
+[[note]]
+file = "xfoil.f"
+line = 2033
+reach = "a buffer airfoil with a corner (doubled node): the corner-insertion loop"
+
+[[note]]
+file = "xfoil.f"
+line = 2039
+reach = "a buffer airfoil with a corner (doubled node): the corner-insertion loop"
+
+[[note]]
+file = "xfoil.f"
+line = 1794
+branch = 0
+reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
+
+[[note]]
+file = "xfoil.f"
+line = 1794
+branch = 2
+reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
+
+[[note]]
+file = "xfoil.f"
+line = 1794
+branch = 3
+reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
+
+[[note]]
+file = "xfoil.f"
+line = 1802
+branch = 0
+reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
+
+[[note]]
+file = "xfoil.f"
+line = 1802
+branch = 2
+reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
+
+[[note]]
+file = "xfoil.f"
+line = 1802
+branch = 3
+reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
+
+[[note]]
+file = "xfoil.f"
+line = 1883
+branch = 1
+reach = "zero curvature at two consecutive nodes: a flat-sided section (flat plate, diamond)"
+
+[[note]]
+file = "xfoil.f"
+line = 1898
+branch = 1
+reach = "zero curvature at two consecutive nodes: a flat-sided section (flat plate, diamond)"
+
+[[note]]
+file = "xfoil.f"
+line = 1973
+reach = "a node-position Newton step that would stretch a panel by more than 4x (hard buffer geometry)"
+
+[[note]]
+file = "xfoil.f"
+line = 2106
+reach = "PANGEN on a sharp-TE buffer airfoil (LOAD of a sharp section, then PPAR)"
+
+[[note]]
+file = "xutils.f"
+line = 38
+reach = "the quadratic initial guess landing on RATIO = 1.0 bitwise"
+
+[[note]]
+file = "spline.f"
+line = 127
+branch = 0
+reach = "a two-point spline segment (two adjacent corners in the buffer)"
+
+[[note]]
+file = "spline.f"
+line = 127
+branch = 2
+reach = "a two-point spline segment (two adjacent corners in the buffer)"
+
+[[note]]
+file = "spline.f"
+line = 127
+branch = 3
+reach = "a two-point spline segment (two adjacent corners in the buffer)"
+
+[[note]]
+file = "spline.f"
+line = 127
+branch = 4
+reach = "a two-point spline segment (two adjacent corners in the buffer)"
+
+[[note]]
+file = "spline.f"
+line = 127
+branch = 5
+reach = "a two-point spline segment (two adjacent corners in the buffer)"
+
+[[note]]
+file = "spline.f"
+line = 547
+branch = 1
+reach = "a buffer airfoil with a corner (doubled node)"
+
+[[note]]
+file = "xgeom.f"
+line = 54
+branch = 1
+reach = "a buffer airfoil with a doubled LE node (sharp LE)"
+
+[[note]]
+file = "xgeom.f"
+line = 350
+branch = 1
+reach = "LE curvature below 0.001/(S(N)-S(1)): a flat plate or wedge (RADLE left 0)"
+
+# ---- subroutines never called on the analysis path ------------------------------------------
+
+[[dead]]
+file = "xpanel.f"
+subroutine = "UECALC"
+why = "never called anywhere in XFOIL 6.99 (dead code, translated for completeness)"
+
+[[dead]]
+file = "xpanel.f"
+subroutine = "DSSET"
+why = "never called anywhere in XFOIL 6.99 (dead code, translated for completeness)"
+
+[[dead]]
+file = "xblsys.f"
+subroutine = "DIT"
+why = "its only call site is commented out (xblsys.f:944)"
+[[note]]
+file = "xoper.f"
+line = 2945
+branch = 1
+reach = "inviscid-only run (no VISC), re-entered at the same alpha"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2958
+branch = 2
+class = "structural"
+why = "LADIJ false while LWDIJ is true is impossible: LADIJ is only cleared together with LWDIJ (INIT, PANGEN, design routines) and XYWAKE clears LWDIJ alone"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 812
+branch = 1
+class = "structural"
+why = "MATYP = 3 is never set: the TYPE command maps TYPE 3 to MATYP = 1, RETYP = 3 (xoper.f:362)"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 817
+class = "structural"
+why = "MATYP = 3 is never set (see line 812)"
+
+[[unreachable]]
+file = "xfoil.f"
+line = 835
+branch = 1
+class = "guard"
+why = "RETYP outside 1..3 when the RETYP = 3 test is reached: only 1..3 are producible through TYPE"
+
+[[unreachable]]
+file = "xoper.f"
+line = 2784
+branch = 5
+class = "structural"
+why = "MINF_CLM = 0 with MATYP /= 1 and MINF /= 0 needs MATYP = 3, which the TYPE command never sets; for MATYP = 2, MINF_CLM = -0.5*MINF/CL is never 0"
+
+[[note]]
+file = "xblsys.f"
+line = 277
+branch = 1
+reach = "iteration cap: TRCHEK2's 30-iteration transition-location Newton exhausted (non-converged XT)"
+
+[[note]]
+file = "xoper.f"
+line = 2767
+branch = 1
+reach = "iteration cap: SPECAL's 20-iteration CL(M) loop exhausted (MATYP 2 at M > 0 failing to settle)"
+
+[[note]]
+file = "xoper.f"
+line = 2776
+branch = 1
+reach = "iteration cap: SPECAL's 12-step RLX halving exhausted (MATYP 2 at M > 0)"
+
+[[note]]
+file = "xoper.f"
+line = 2846
+branch = 1
+reach = "iteration cap: SPECCL's 20-iteration alpha Newton exhausted (a CL target that cannot be met)"
+
+[[note]]
+file = "xfoil.f"
+line = 1874
+branch = 1
+reach = "iteration cap: PANGEN's 20-iteration node-placement Newton exhausted (DMAX never below 1e-3)"
+
+[[note]]
+file = "xutils.f"
+line = 41
+branch = 1
+reach = "iteration cap: SETEXP's 100-iteration ratio Newton exhausted"
+
+[[note]]
+file = "spline.f"
+line = 421
+branch = 1
+reach = "iteration cap: SINVRT's 10-iteration inversion exhausted (XTR trip far from any node on a coarse panelling)"
+
+[[note]]
+file = "xgeom.f"
+line = 60
+branch = 1
+reach = "iteration cap: LEFIND's 50-iteration LE Newton exhausted"
+
+[[note]]
+file = "xblsys.f"
+line = 2258
+reach = "DAMP with a separated laminar profile (Hk > 3.5) at a log10(Rtheta) below GR0(Hk): the modified rate AX2 negative and clamped to 0 (low-Re laminar bubble with DAMP)"

@@ -2,10 +2,11 @@
 
 use approx::assert_relative_eq;
 use tempfile::NamedTempFile;
+use yfoil::geometry::Thickness;
 
 use yfoil::geometry::{
-    create_paneled_airfoil, naca_4digit, naca_5digit, read_dat_file, read_geometry_from_file,
-    repanel_cosine, write_dat_file, write_geometry_to_json,
+    naca_4digit, naca_5digit, panel_foil, read_dat_file, read_geometry_from_file, repanel_cosine, write_dat_file,
+    write_geometry_to_json,
 };
 
 /// Test NACA 0012 against the standard NACA formula from external reference.
@@ -26,15 +27,13 @@ fn test_naca_0012_against_standard_formula() {
     // Helper: compute NACA 0012 thickness using our closed-TE formula
     fn naca_0012_closed_te(x: f64) -> f64 {
         let t = 0.12;
-        (t / 0.2)
-            * (0.2969 * x.sqrt() - 0.126 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3)
-                - 0.1036 * x.powi(4))
+        (t / 0.2) * (0.2969 * x.sqrt() - 0.126 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3) - 0.1036 * x.powi(4))
     }
 
     // For each reference point, compute what our formula gives and compare
-    for i in 0..reference.x_c.len() {
-        let ref_x = reference.x_c[i];
-        let ref_y = reference.y_c[i];
+    for i in 0..reference.x.len() {
+        let ref_x = reference.x[i];
+        let ref_y = reference.y[i];
 
         // Our formula's expected y at this x (symmetric airfoil)
         let our_y = if ref_y >= 0.0 {
@@ -66,7 +65,7 @@ fn test_naca_0012_against_standard_formula() {
 /// Test roundtrip: generate -> write -> read -> compare
 #[test]
 fn test_json_roundtrip() {
-    let original = naca_4digit("4412", 120).unwrap();
+    let original = naca_4digit("4412", 120, Thickness::Perpendicular).unwrap();
 
     // Write to temp file
     let temp_file = NamedTempFile::with_suffix(".json").unwrap();
@@ -76,17 +75,17 @@ fn test_json_roundtrip() {
     let loaded = read_geometry_from_file(temp_file.path()).unwrap();
 
     // Compare
-    assert_eq!(original.x_c.len(), loaded.x_c.len());
-    for i in 0..original.x_c.len() {
-        assert_relative_eq!(original.x_c[i], loaded.x_c[i], epsilon = 1e-10);
-        assert_relative_eq!(original.y_c[i], loaded.y_c[i], epsilon = 1e-10);
+    assert_eq!(original.x.len(), loaded.x.len());
+    for i in 0..original.x.len() {
+        assert_relative_eq!(original.x[i], loaded.x[i], epsilon = 1e-10);
+        assert_relative_eq!(original.y[i], loaded.y[i], epsilon = 1e-10);
     }
 }
 
 /// Test roundtrip: generate -> write DAT -> read DAT -> compare
 #[test]
 fn test_dat_roundtrip() {
-    let original = naca_5digit("23015", 100).unwrap();
+    let original = naca_5digit("23015", 100, Thickness::Perpendicular).unwrap();
 
     // Write to temp file
     let temp_file = NamedTempFile::with_suffix(".dat").unwrap();
@@ -97,17 +96,17 @@ fn test_dat_roundtrip() {
 
     // Compare
     assert_eq!(name, "NACA 23015");
-    assert_eq!(original.x_c.len(), loaded.x_c.len());
-    for i in 0..original.x_c.len() {
-        assert_relative_eq!(original.x_c[i], loaded.x_c[i], epsilon = 1e-5);
-        assert_relative_eq!(original.y_c[i], loaded.y_c[i], epsilon = 1e-5);
+    assert_eq!(original.x.len(), loaded.x.len());
+    for i in 0..original.x.len() {
+        assert_relative_eq!(original.x[i], loaded.x[i], epsilon = 1e-5);
+        assert_relative_eq!(original.y[i], loaded.y[i], epsilon = 1e-5);
     }
 }
 
 /// Test format conversion: JSON -> DAT -> JSON
 #[test]
 fn test_format_conversion() {
-    let original = naca_4digit("2412", 120).unwrap();
+    let original = naca_4digit("2412", 120, Thickness::Perpendicular).unwrap();
 
     // Write JSON
     let json_file = NamedTempFile::with_suffix(".json").unwrap();
@@ -124,27 +123,27 @@ fn test_format_conversion() {
     let (_, from_dat) = read_dat_file(dat_file.path()).unwrap();
 
     // Compare original to final
-    assert_eq!(original.x_c.len(), from_dat.x_c.len());
-    for i in 0..original.x_c.len() {
-        assert_relative_eq!(original.x_c[i], from_dat.x_c[i], epsilon = 1e-5);
-        assert_relative_eq!(original.y_c[i], from_dat.y_c[i], epsilon = 1e-5);
+    assert_eq!(original.x.len(), from_dat.x.len());
+    for i in 0..original.x.len() {
+        assert_relative_eq!(original.x[i], from_dat.x[i], epsilon = 1e-5);
+        assert_relative_eq!(original.y[i], from_dat.y[i], epsilon = 1e-5);
     }
 }
 
 /// Test repaneling preserves airfoil shape
 #[test]
 fn test_repanel_shape_preservation() {
-    let original = naca_4digit("0012", 100).unwrap();
+    let original = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
     let repaneled = repanel_cosine(&original, 200, 0.15);
 
     // Maximum thickness should be preserved
-    let orig_max_y = original.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let new_max_y = repaneled.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let orig_max_y = original.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let new_max_y = repaneled.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     assert_relative_eq!(orig_max_y, new_max_y, epsilon = 0.002);
 
     // Minimum thickness should be preserved
-    let orig_min_y = original.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
-    let new_min_y = repaneled.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let orig_min_y = original.y.iter().cloned().fold(f64::INFINITY, f64::min);
+    let new_min_y = repaneled.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert_relative_eq!(orig_min_y, new_min_y, epsilon = 0.002);
 }
 
@@ -152,45 +151,41 @@ fn test_repanel_shape_preservation() {
 #[test]
 fn test_full_geometry_pipeline() {
     // Generate NACA airfoil
-    let raw = naca_5digit("23012", 100).unwrap();
+    let raw = naca_5digit("23012", 100, Thickness::Perpendicular).unwrap();
 
     // Repanel with finer distribution
     let repaneled = repanel_cosine(&raw, 160, 0.15);
 
     // Create paneled airfoil with all derived quantities
-    let paneled = create_paneled_airfoil(&repaneled);
+    let paneled = panel_foil(&repaneled);
 
     // Verify paneled airfoil has correct properties
-    assert!(paneled.n > 150);
+    assert!(paneled.n_foil_nodes > 150);
     assert_relative_eq!(paneled.chord, 1.0, epsilon = 0.05);
 
     // Arc length should be monotonically increasing
     for i in 1..paneled.s.len() {
-        assert!(
-            paneled.s[i] > paneled.s[i - 1],
-            "Arc length not monotonic at {}",
-            i
-        );
+        assert!(paneled.s[i] > paneled.s[i - 1], "Arc length not monotonic at {}", i);
     }
 
     // All normal vectors should be unit length
-    for i in 0..paneled.n {
-        let mag = (paneled.nx[i].powi(2) + paneled.ny[i].powi(2)).sqrt();
+    for i in 0..paneled.n_foil_nodes {
+        let mag = (paneled.normal_x[i].powi(2) + paneled.normal_y[i].powi(2)).sqrt();
         assert_relative_eq!(mag, 1.0, epsilon = 1e-10);
     }
 
     // Leading edge should be found
-    assert!(paneled.sle > 0.0);
-    assert!(paneled.sle < paneled.s[paneled.n - 1]);
+    assert!(paneled.s_le > 0.0);
+    assert!(paneled.s_le < paneled.s[paneled.n_foil_nodes - 1]);
 }
 
 /// Test that symmetric airfoils are indeed symmetric
 #[test]
 fn test_airfoil_symmetry() {
-    let geom = naca_4digit("0015", 160).unwrap();
+    let geom = naca_4digit("0015", 160, Thickness::Perpendicular).unwrap();
 
-    let max_y = geom.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y = geom.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_y = geom.y.iter().cloned().fold(f64::INFINITY, f64::min);
 
     // Should be symmetric about y=0
     assert_relative_eq!(max_y, -min_y, epsilon = 0.001);
@@ -200,28 +195,28 @@ fn test_airfoil_symmetry() {
 #[test]
 fn test_airfoil_camber() {
     // NACA 4-digit cambered
-    let geom_4 = naca_4digit("6412", 160).unwrap();
-    let max_y_4 = geom_4.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y_4 = geom_4.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let geom_4 = naca_4digit("6412", 160, Thickness::Perpendicular).unwrap();
+    let max_y_4 = geom_4.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_y_4 = geom_4.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!(max_y_4 > -min_y_4, "4-digit should have positive camber");
 
     // NACA 5-digit cambered
-    let geom_5 = naca_5digit("23018", 160).unwrap();
-    let max_y_5 = geom_5.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let min_y_5 = geom_5.y_c.iter().cloned().fold(f64::INFINITY, f64::min);
+    let geom_5 = naca_5digit("23018", 160, Thickness::Perpendicular).unwrap();
+    let max_y_5 = geom_5.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_y_5 = geom_5.y.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!(max_y_5 > -min_y_5, "5-digit should have positive camber");
 }
 
 /// Test different thickness values
 #[test]
 fn test_thickness_values() {
-    let thin = naca_4digit("0006", 100).unwrap();
-    let medium = naca_4digit("0012", 100).unwrap();
-    let thick = naca_4digit("0024", 100).unwrap();
+    let thin = naca_4digit("0006", 100, Thickness::Perpendicular).unwrap();
+    let medium = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
+    let thick = naca_4digit("0024", 100, Thickness::Perpendicular).unwrap();
 
-    let thick_thin = thin.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
-    let thick_med = medium.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
-    let thick_thick = thick.y_c.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
+    let thick_thin = thin.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
+    let thick_med = medium.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
+    let thick_thick = thick.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max) * 2.0;
 
     // Thickness should scale appropriately
     assert!(thick_thin < thick_med);
@@ -237,8 +232,22 @@ fn test_thickness_values() {
 // Panel Method Validation Tests
 // ============================================================================
 
-use yfoil::forces::integrate_forces;
-use yfoil::panel::solve_inviscid;
+use yfoil::solver::analysis::{analyse, FlowConditions, Session};
+use yfoil::solver::blstate::SolverState;
+use yfoil::solver::ggcalc::build_inviscid_system;
+use yfoil::solver::specal::solve_inviscid_at_alpha;
+
+fn inviscid_cl(airfoil: &yfoil::geometry::PanelledFoil, alpha: f64) -> f64 {
+    analyse(
+        airfoil,
+        alpha,
+        &FlowConditions {
+            re: None,
+            ..FlowConditions::default()
+        },
+    )
+    .cl
+}
 
 /// Test inviscid panel method lift curve slope against thin airfoil theory.
 ///
@@ -247,21 +256,12 @@ use yfoil::panel::solve_inviscid;
 /// thickness effects (typically 5.8-6.2).
 #[test]
 fn test_panel_method_lift_slope() {
-    let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
+    let airfoil = panel_foil(&geom);
     // Calculate CL at two angles
     let alpha1 = 0.0_f64;
     let alpha2 = 5.0_f64.to_radians();
-
-    let vel1 = solution.velocity_at_alpha(alpha1);
-    let vel2 = solution.velocity_at_alpha(alpha2);
-
-    let coeffs1 = integrate_forces(&airfoil, &vel1, alpha1, 0.0);
-    let coeffs2 = integrate_forces(&airfoil, &vel2, alpha2, 0.0);
-
-    let dcl_dalpha = (coeffs2.cl - coeffs1.cl) / (alpha2 - alpha1);
+    let dcl_dalpha = (inviscid_cl(&airfoil, alpha2) - inviscid_cl(&airfoil, alpha1)) / (alpha2 - alpha1);
 
     // Should be in range 5.0 to 7.0 (thin airfoil theory ≈ 6.28)
     assert!(
@@ -274,44 +274,32 @@ fn test_panel_method_lift_slope() {
 /// Test that symmetric airfoil has zero lift at alpha=0
 #[test]
 fn test_panel_method_symmetric_zero_lift() {
-    let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
-
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
+    let airfoil = panel_foil(&geom);
+    let cl = inviscid_cl(&airfoil, 0.0);
     assert!(
-        coeffs.cl.abs() < 0.01,
-        "CL={} should be ~0 for symmetric airfoil at α=0",
-        coeffs.cl
+        cl.abs() < 1e-12,
+        "CL={cl} should be zero to the noise floor for a symmetric airfoil at α=0"
     );
 }
 
 /// Test that cambered airfoil has positive lift at alpha=0
 #[test]
 fn test_panel_method_cambered_lift() {
-    let geom = naca_4digit("4412", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
-
+    let geom = naca_4digit("4412", 160, Thickness::Perpendicular).unwrap();
+    let airfoil = panel_foil(&geom);
+    let cl = inviscid_cl(&airfoil, 0.0);
     // NACA 4412 has 4% camber, should produce positive lift at α=0
     // Thin airfoil theory predicts CL ≈ 2π * 2 * (0.04) ≈ 0.5 for 4% camber
-    assert!(
-        coeffs.cl > 0.2,
-        "CL={} should be positive for cambered airfoil at α=0",
-        coeffs.cl
-    );
+    assert!(cl > 0.2, "CL={cl} should be positive for cambered airfoil at α=0");
 }
 
 // ============================================================================
 // Boundary Layer Validation Tests
 // ============================================================================
 
-use yfoil::bl::{cf_lam, dampl, hkin, hs_lam, FlowConditions, FlowRegime};
+use yfoil::bl::system::amplification_rate;
+use yfoil::bl::{cf_laminar, hk_from_h, hstar_laminar};
 
 /// Test Blasius flat plate solution for laminar boundary layer
 ///
@@ -326,7 +314,7 @@ use yfoil::bl::{cf_lam, dampl, hkin, hs_lam, FlowConditions, FlowRegime};
 fn test_blasius_shape_factor() {
     // Blasius shape factor H = 2.591
     let h_blasius = 2.591;
-    let (hk, _, _) = hkin(h_blasius, 0.0);
+    let (hk, _, _) = hk_from_h(h_blasius, 0.0);
 
     // At incompressible conditions, Hk = H
     assert_relative_eq!(hk, h_blasius, epsilon = 1e-10);
@@ -344,13 +332,13 @@ fn test_blasius_skin_friction() {
 
     // Test at different Re_θ values
     for rt in [500.0, 1000.0, 2000.0, 5000.0] {
-        let result = cf_lam(hk_blasius, rt, 0.0);
+        let result = cf_laminar(hk_blasius, rt, 0.0);
         // Cf should be positive for attached laminar flow
-        assert!(result.val > 0.0, "Cf should be positive at Re_θ={}", rt);
+        assert!(result.value > 0.0, "Cf should be positive at Re_θ={}", rt);
 
         // Cf * sqrt(Re_θ) should be approximately constant for Blasius
         // The Falkner-Skan correlation gives Cf * Re_θ ≈ constant for given Hk
-        let cf_rt = result.val * rt;
+        let cf_rt = result.value * rt;
         assert!(
             cf_rt > 0.1 && cf_rt < 1.0,
             "Cf*Re_θ = {} should be O(1) at Re_θ={}",
@@ -365,13 +353,13 @@ fn test_blasius_energy_shape_factor() {
     // Test H* correlation at Blasius conditions
     // For Blasius flow, H* ≈ 1.573
     let hk_blasius = 2.591;
-    let result = hs_lam(hk_blasius, 1000.0, 0.0);
+    let result = hstar_laminar(hk_blasius, 1000.0, 0.0);
 
     // H* should be between 1.5 and 1.7 for Blasius-like conditions
     assert!(
-        result.val > 1.5 && result.val < 1.7,
+        result.value > 1.5 && result.value < 1.7,
         "H* = {} should be ~1.57 for Blasius",
-        result.val
+        result.value
     );
 }
 
@@ -382,11 +370,8 @@ fn test_laminar_amplification_off_below_critical() {
     let theta = 0.001; // Small momentum thickness
 
     // At low Re_θ (below ~200 for Blasius)
-    let (ax, _, _, _) = dampl(hk_blasius, theta, 100.0);
-    assert_eq!(
-        ax, 0.0,
-        "Amplification should be 0 below critical Re_θ"
-    );
+    let ax = amplification_rate(hk_blasius, theta, 100.0).rate;
+    assert_eq!(ax, 0.0, "Amplification should be 0 below critical Re_θ");
 }
 
 #[test]
@@ -396,34 +381,8 @@ fn test_laminar_amplification_on_above_critical() {
     let theta = 0.001;
 
     // At high Re_θ (well above critical)
-    let (ax, _, _, _) = dampl(hk_blasius, theta, 5000.0);
-    assert!(
-        ax > 0.0,
-        "Amplification should be positive above critical Re_θ"
-    );
-}
-
-#[test]
-fn test_flow_conditions_construction() {
-    let cond = FlowConditions::new(1_000_000.0, 0.3, 9.0, 1.0);
-
-    assert_eq!(cond.reynolds, 1_000_000.0);
-    assert_eq!(cond.mach, 0.3);
-    assert_relative_eq!(cond.msq, 0.09, epsilon = 1e-10);
-    assert_eq!(cond.ncrit, 9.0);
-    // ν = chord / Re = 1.0 / 1e6 = 1e-6
-    assert_relative_eq!(cond.nu, 1e-6, epsilon = 1e-12);
-}
-
-#[test]
-fn test_flow_regime_enum() {
-    let laminar = FlowRegime::Laminar;
-    let turbulent = FlowRegime::Turbulent;
-    let wake = FlowRegime::Wake;
-
-    assert_eq!(laminar, FlowRegime::Laminar);
-    assert_ne!(laminar, turbulent);
-    assert_ne!(turbulent, wake);
+    let ax = amplification_rate(hk_blasius, theta, 5000.0).rate;
+    assert!(ax > 0.0, "Amplification should be positive above critical Re_θ");
 }
 
 // ============================================================================
@@ -433,20 +392,14 @@ fn test_flow_regime_enum() {
 /// Test that blunt TE detection works correctly
 #[test]
 fn test_blunt_te_detection() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
 
     // Blunten the geometry
     let blunt_geom = geom.blunten(0.002);
-    let paneled = create_paneled_airfoil(&blunt_geom);
+    let paneled = panel_foil(&blunt_geom);
 
-    assert!(
-        !paneled.sharp_te,
-        "Blunted airfoil should have blunt TE"
-    );
-    assert!(
-        !blunt_geom.is_sharp_te(),
-        "Geometry should detect as blunt TE"
-    );
+    assert!(!paneled.sharp_te, "Blunted airfoil should have blunt TE");
+    assert!(!blunt_geom.is_sharp_te(), "Geometry should detect as blunt TE");
 
     // TE gap should be ~0.002
     assert_relative_eq!(blunt_geom.te_gap(), 0.002, epsilon = 1e-10);
@@ -459,15 +412,21 @@ fn test_blunt_te_detection() {
 /// be physically reasonable even if not as clean as sharp TE.
 #[test]
 fn test_blunt_te_reasonable_results() {
-    let geom = naca_4digit("0012", 160).unwrap();
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
     let blunt_geom = geom.blunten(0.002); // 0.2% gap
-    let airfoil = create_paneled_airfoil(&blunt_geom);
+    let airfoil = panel_foil(&blunt_geom);
 
     assert!(!airfoil.sharp_te, "Should use blunt TE handling");
 
-    let solution = solve_inviscid(&airfoil);
-    let vel = solution.velocity_at_alpha(0.0);
-    let coeffs = integrate_forces(&airfoil, &vel, 0.0, 0.0);
+    let mut session = Session::new(
+        &airfoil,
+        FlowConditions {
+            re: None,
+            ..FlowConditions::default()
+        },
+    );
+    let coeffs = session.alpha(0.0);
+    let vel: Vec<f64> = session.state().q_inviscid[1..=airfoil.n_foil_nodes].to_vec();
 
     // For symmetric airfoil at α=0, CL should still be near zero
     assert!(
@@ -479,9 +438,9 @@ fn test_blunt_te_reasonable_results() {
     // CDp may not be exactly zero but should be small
     // The blunt TE may cause some small asymmetry in the solution
     assert!(
-        coeffs.cdp.abs() < 0.01,
+        coeffs.cd_pressure.abs() < 0.01,
         "CDp = {} should be small for blunt TE",
-        coeffs.cdp
+        coeffs.cd_pressure
     );
 
     // Velocities should be smooth (no huge spikes)
@@ -497,32 +456,20 @@ fn test_blunt_te_reasonable_results() {
 #[test]
 fn test_te_type_lift_slope_comparison() {
     // Sharp TE
-    let geom_sharp = naca_4digit("0012", 160).unwrap();
-    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
-    let solution_sharp = solve_inviscid(&airfoil_sharp);
+    let geom_sharp = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
+    let airfoil_sharp = panel_foil(&geom_sharp);
 
     // Blunt TE
     let geom_blunt = geom_sharp.blunten(0.002);
-    let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
-    let solution_blunt = solve_inviscid(&airfoil_blunt);
+    let airfoil_blunt = panel_foil(&geom_blunt);
 
     // Calculate lift slope for both
     let alpha1 = 0.0_f64;
     let alpha2 = 5.0_f64.to_radians();
-
-    // Sharp TE lift slope
-    let vel1_sharp = solution_sharp.velocity_at_alpha(alpha1);
-    let vel2_sharp = solution_sharp.velocity_at_alpha(alpha2);
-    let coeffs1_sharp = integrate_forces(&airfoil_sharp, &vel1_sharp, alpha1, 0.0);
-    let coeffs2_sharp = integrate_forces(&airfoil_sharp, &vel2_sharp, alpha2, 0.0);
-    let dcl_dalpha_sharp = (coeffs2_sharp.cl - coeffs1_sharp.cl) / (alpha2 - alpha1);
-
-    // Blunt TE lift slope
-    let vel1_blunt = solution_blunt.velocity_at_alpha(alpha1);
-    let vel2_blunt = solution_blunt.velocity_at_alpha(alpha2);
-    let coeffs1_blunt = integrate_forces(&airfoil_blunt, &vel1_blunt, alpha1, 0.0);
-    let coeffs2_blunt = integrate_forces(&airfoil_blunt, &vel2_blunt, alpha2, 0.0);
-    let dcl_dalpha_blunt = (coeffs2_blunt.cl - coeffs1_blunt.cl) / (alpha2 - alpha1);
+    let dcl_dalpha_sharp =
+        (inviscid_cl(&airfoil_sharp, alpha2) - inviscid_cl(&airfoil_sharp, alpha1)) / (alpha2 - alpha1);
+    let dcl_dalpha_blunt =
+        (inviscid_cl(&airfoil_blunt, alpha2) - inviscid_cl(&airfoil_blunt, alpha1)) / (alpha2 - alpha1);
 
     // Both should be close to thin airfoil theory (2π ≈ 6.28)
     assert!(
@@ -550,41 +497,32 @@ fn test_te_type_lift_slope_comparison() {
 /// Test Kutta condition is satisfied for both sharp and blunt TE
 #[test]
 fn test_kutta_condition_both_te_types() {
-    // Sharp TE
-    let geom_sharp = naca_4digit("0012", 160).unwrap();
-    let airfoil_sharp = create_paneled_airfoil(&geom_sharp);
-    let solution_sharp = solve_inviscid(&airfoil_sharp);
+    // GGCALC's Kutta row: GAMU(1) + GAMU(N) = 0 for both the alpha = 0 and alpha = 90 solutions
+    let kutta = |airfoil: &yfoil::geometry::PanelledFoil| -> (f64, f64) {
+        let mut st = SolverState::from_foil(airfoil, airfoil.n_foil_nodes / 12 + 10);
+        build_inviscid_system(&mut st);
+        let n = airfoil.n_foil_nodes;
+        (
+            st.q_inviscid_basis[1][1] + st.q_inviscid_basis[1][n],
+            st.q_inviscid_basis[2][1] + st.q_inviscid_basis[2][n],
+        )
+    };
 
-    let kutta_sharp_0 = solution_sharp.gam_0[0] + solution_sharp.gam_0[airfoil_sharp.n - 1];
-    let kutta_sharp_90 = solution_sharp.gam_90[0] + solution_sharp.gam_90[airfoil_sharp.n - 1];
-    assert!(
-        kutta_sharp_0.abs() < 1e-9,
-        "Sharp TE Kutta condition violated for α=0°: {}",
-        kutta_sharp_0
-    );
-    assert!(
-        kutta_sharp_90.abs() < 1e-9,
-        "Sharp TE Kutta condition violated for α=90°: {}",
-        kutta_sharp_90
-    );
+    // Sharp TE
+    let geom_sharp = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap().sharpen();
+    let airfoil_sharp = panel_foil(&geom_sharp);
+    assert!(airfoil_sharp.sharp_te);
+    let (k0, k90) = kutta(&airfoil_sharp);
+    assert!(k0.abs() < 1e-9, "Sharp TE Kutta condition violated for α=0°: {k0}");
+    assert!(k90.abs() < 1e-9, "Sharp TE Kutta condition violated for α=90°: {k90}");
 
     // Blunt TE
-    let geom_blunt = geom_sharp.blunten(0.002);
-    let airfoil_blunt = create_paneled_airfoil(&geom_blunt);
-    let solution_blunt = solve_inviscid(&airfoil_blunt);
-
-    let kutta_blunt_0 = solution_blunt.gam_0[0] + solution_blunt.gam_0[airfoil_blunt.n - 1];
-    let kutta_blunt_90 = solution_blunt.gam_90[0] + solution_blunt.gam_90[airfoil_blunt.n - 1];
-    assert!(
-        kutta_blunt_0.abs() < 1e-9,
-        "Blunt TE Kutta condition violated for α=0°: {}",
-        kutta_blunt_0
-    );
-    assert!(
-        kutta_blunt_90.abs() < 1e-9,
-        "Blunt TE Kutta condition violated for α=90°: {}",
-        kutta_blunt_90
-    );
+    let geom_blunt = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap();
+    let airfoil_blunt = panel_foil(&geom_blunt);
+    assert!(!airfoil_blunt.sharp_te);
+    let (k0, k90) = kutta(&airfoil_blunt);
+    assert!(k0.abs() < 1e-9, "Blunt TE Kutta condition violated for α=0°: {k0}");
+    assert!(k90.abs() < 1e-9, "Blunt TE Kutta condition violated for α=90°: {k90}");
 }
 
 /// Test that the gamma distribution is smooth near TE for sharp case
@@ -593,33 +531,25 @@ fn test_kutta_condition_both_te_types() {
 /// from both upper and lower surfaces.
 #[test]
 fn test_sharp_te_smooth_gamma() {
-    let geom = naca_4digit("0012", 160).unwrap();
-    let airfoil = create_paneled_airfoil(&geom);
-    let solution = solve_inviscid(&airfoil);
-
-    // For α=0° symmetric case, check gamma at TE nodes
-    let n = airfoil.n;
-    let gam = solution.gamma_at_alpha(0.0);
-
-    // TE gammas should be small (Kutta condition + smooth approach)
+    // For the symmetric airfoil at α = 0 the TE vorticity is small and the second differences
+    // approaching the TE from both sides agree (the sharp-TE bisector row of GGCALC)
+    let geom = naca_4digit("0012", 160, Thickness::Perpendicular).unwrap().sharpen();
+    let airfoil = panel_foil(&geom);
+    let mut st = SolverState::from_foil(&airfoil, airfoil.n_foil_nodes / 12 + 10);
+    let mut sys = None;
+    st.alpha = 0.0;
+    st.qinf = 1.0;
+    solve_inviscid_at_alpha(&mut st, &mut sys);
+    let n = airfoil.n_foil_nodes;
+    let gam = &st.gamma;
+    assert!(gam[1].abs() < 2.0, "Upper TE gamma {} should be small", gam[1]);
+    assert!(gam[n].abs() < 2.0, "Lower TE gamma {} should be small", gam[n]);
+    // XFOIL's GAM is antisymmetric on a symmetric section at α = 0 (GAM(I) = −GAM(N+1−I)), so
+    // the second differences approaching the TE are equal and opposite
+    let curv_upper = gam[3] - 2.0 * gam[2] + gam[1];
+    let curv_lower = gam[n - 2] - 2.0 * gam[n - 1] + gam[n];
     assert!(
-        gam[0].abs() < 2.0,
-        "Upper TE gamma {} should be small with curvature extrapolation",
-        gam[0]
-    );
-    assert!(
-        gam[n - 1].abs() < 2.0,
-        "Lower TE gamma {} should be small with curvature extrapolation",
-        gam[n - 1]
-    );
-
-    // Second derivatives at TE should be similar (curvature condition)
-    let curv_upper = gam[2] - 2.0 * gam[1] + gam[0];
-    let curv_lower = gam[n - 3] - 2.0 * gam[n - 2] + gam[n - 1];
-    assert!(
-        (curv_upper - curv_lower).abs() < 0.1,
-        "TE curvatures should match: upper={}, lower={}",
-        curv_upper,
-        curv_lower
+        (curv_upper + curv_lower).abs() < 1e-9,
+        "TE curvatures should be antisymmetric: upper={curv_upper}, lower={curv_lower}"
     );
 }

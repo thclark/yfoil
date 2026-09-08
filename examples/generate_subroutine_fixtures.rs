@@ -275,9 +275,13 @@ fn parse_bool(line: &str) -> Option<bool> {
     let parts: Vec<&str> = line.split('=').collect();
     if parts.len() == 2 {
         let val = parts[1].trim();
-        if val == "T" { Some(true) }
-        else if val == "F" { Some(false) }
-        else { None }
+        if val == "T" {
+            Some(true)
+        } else if val == "F" {
+            Some(false)
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -308,10 +312,11 @@ struct ParsedFixtures {
     dil: Vec<DilFixture>,
     hst: Vec<HstFixture>,
     cft: Vec<CftFixture>,
-    dampl: Vec<DamplFixture>,
+    amplification_rate: Vec<DamplFixture>,
     blkin: Vec<BlkinFixture>,
     blvar: Vec<BlvarFixture>,
     trchek2: Vec<Trchek2Fixture>,
+    #[allow(dead_code)]
     blsys: Vec<BlsysFixture>,
 }
 
@@ -345,10 +350,23 @@ fn parse_log(log_path: &Path) -> Result<ParsedFixtures, Box<dyn std::error::Erro
         // Check for subroutine markers
         if line.starts_with("=== ") && line.ends_with(" ===") {
             // Save previous subroutine data before switching
-            save_fixture(&current_sub, &current_values, &current_bools, &mut fixtures,
-                        &mut seen_hkin, &mut seen_cfl, &mut seen_hsl, &mut seen_dil,
-                        &mut seen_hst, &mut seen_cft, &mut seen_dampl,
-                        &mut seen_blkin, &mut seen_blvar, &mut seen_trchek2, &mut seen_blsys);
+            save_fixture(
+                &current_sub,
+                &current_values,
+                &current_bools,
+                &mut fixtures,
+                &mut seen_hkin,
+                &mut seen_cfl,
+                &mut seen_hsl,
+                &mut seen_dil,
+                &mut seen_hst,
+                &mut seen_cft,
+                &mut seen_dampl,
+                &mut seen_blkin,
+                &mut seen_blvar,
+                &mut seen_trchek2,
+                &mut seen_blsys,
+            );
 
             current_values.clear();
             current_bools.clear();
@@ -383,10 +401,23 @@ fn parse_log(log_path: &Path) -> Result<ParsedFixtures, Box<dyn std::error::Erro
     }
 
     // Save final subroutine
-    save_fixture(&current_sub, &current_values, &current_bools, &mut fixtures,
-                &mut seen_hkin, &mut seen_cfl, &mut seen_hsl, &mut seen_dil,
-                &mut seen_hst, &mut seen_cft, &mut seen_dampl,
-                &mut seen_blkin, &mut seen_blvar, &mut seen_trchek2, &mut seen_blsys);
+    save_fixture(
+        &current_sub,
+        &current_values,
+        &current_bools,
+        &mut fixtures,
+        &mut seen_hkin,
+        &mut seen_cfl,
+        &mut seen_hsl,
+        &mut seen_dil,
+        &mut seen_hst,
+        &mut seen_cft,
+        &mut seen_dampl,
+        &mut seen_blkin,
+        &mut seen_blvar,
+        &mut seen_trchek2,
+        &mut seen_blsys,
+    );
 
     Ok(fixtures)
 }
@@ -410,10 +441,13 @@ fn save_fixture(
 ) {
     match current_sub {
         CurrentSub::Hkin => {
-            if let (Some(&h), Some(&msq), Some(&hk), Some(&hk_h), Some(&hk_msq)) =
-                (values.get("H"), values.get("MSQ"), values.get("HK"),
-                 values.get("HK_H"), values.get("HK_MSQ"))
-            {
+            if let (Some(&h), Some(&msq), Some(&hk), Some(&hk_h), Some(&hk_msq)) = (
+                values.get("H"),
+                values.get("MSQ"),
+                values.get("HK"),
+                values.get("HK_H"),
+                values.get("HK_MSQ"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}", h, msq);
                 if !seen_hkin.contains(&key) && fixtures.hkin.len() < 200 {
                     seen_hkin.insert(key);
@@ -425,42 +459,63 @@ fn save_fixture(
             }
         }
         CurrentSub::Cfl => {
-            if let (Some(&hk), Some(&rt), Some(&msq), Some(&cf),
-                    Some(&cf_hk), Some(&cf_rt), Some(&cf_msq)) =
-                (values.get("HK"), values.get("RT"), values.get("MSQ"), values.get("CF"),
-                 values.get("CF_HK"), values.get("CF_RT"), values.get("CF_MSQ"))
-            {
+            if let (Some(&hk), Some(&rt), Some(&msq), Some(&cf), Some(&cf_hk), Some(&cf_rt), Some(&cf_msq)) = (
+                values.get("HK"),
+                values.get("RT"),
+                values.get("MSQ"),
+                values.get("CF"),
+                values.get("CF_HK"),
+                values.get("CF_RT"),
+                values.get("CF_MSQ"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", hk, rt, msq);
                 if !seen_cfl.contains(&key) && fixtures.cfl.len() < 200 {
                     seen_cfl.insert(key);
                     fixtures.cfl.push(CflFixture {
                         input: CflInput { hk, rt, msq },
-                        output: CflOutput { cf, cf_hk, cf_rt, cf_msq },
+                        output: CflOutput {
+                            cf,
+                            cf_hk,
+                            cf_rt,
+                            cf_msq,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Hsl => {
-            if let (Some(&hk), Some(&rt), Some(&msq), Some(&hs),
-                    Some(&hs_hk), Some(&hs_rt), Some(&hs_msq)) =
-                (values.get("HK"), values.get("RT"), values.get("MSQ"), values.get("HS"),
-                 values.get("HS_HK"), values.get("HS_RT"), values.get("HS_MSQ"))
-            {
+            if let (Some(&hk), Some(&rt), Some(&msq), Some(&hs), Some(&hs_hk), Some(&hs_rt), Some(&hs_msq)) = (
+                values.get("HK"),
+                values.get("RT"),
+                values.get("MSQ"),
+                values.get("HS"),
+                values.get("HS_HK"),
+                values.get("HS_RT"),
+                values.get("HS_MSQ"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", hk, rt, msq);
                 if !seen_hsl.contains(&key) && fixtures.hsl.len() < 200 {
                     seen_hsl.insert(key);
                     fixtures.hsl.push(HslFixture {
                         input: HslInput { hk, rt, msq },
-                        output: HslOutput { hs, hs_hk, hs_rt, hs_msq },
+                        output: HslOutput {
+                            hs,
+                            hs_hk,
+                            hs_rt,
+                            hs_msq,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Dil => {
-            if let (Some(&hk), Some(&rt), Some(&di), Some(&di_hk), Some(&di_rt)) =
-                (values.get("HK"), values.get("RT"), values.get("DI"),
-                 values.get("DI_HK"), values.get("DI_RT"))
-            {
+            if let (Some(&hk), Some(&rt), Some(&di), Some(&di_hk), Some(&di_rt)) = (
+                values.get("HK"),
+                values.get("RT"),
+                values.get("DI"),
+                values.get("DI_HK"),
+                values.get("DI_RT"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}", hk, rt);
                 if !seen_dil.contains(&key) && fixtures.dil.len() < 200 {
                     seen_dil.insert(key);
@@ -472,102 +527,214 @@ fn save_fixture(
             }
         }
         CurrentSub::Hst => {
-            if let (Some(&hk), Some(&rt), Some(&msq), Some(&hs),
-                    Some(&hs_hk), Some(&hs_rt), Some(&hs_msq)) =
-                (values.get("HK"), values.get("RT"), values.get("MSQ"), values.get("HS"),
-                 values.get("HS_HK"), values.get("HS_RT"), values.get("HS_MSQ"))
-            {
+            if let (Some(&hk), Some(&rt), Some(&msq), Some(&hs), Some(&hs_hk), Some(&hs_rt), Some(&hs_msq)) = (
+                values.get("HK"),
+                values.get("RT"),
+                values.get("MSQ"),
+                values.get("HS"),
+                values.get("HS_HK"),
+                values.get("HS_RT"),
+                values.get("HS_MSQ"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", hk, rt, msq);
                 if !seen_hst.contains(&key) && fixtures.hst.len() < 200 {
                     seen_hst.insert(key);
                     fixtures.hst.push(HstFixture {
                         input: HstInput { hk, rt, msq },
-                        output: HstOutput { hs, hs_hk, hs_rt, hs_msq },
+                        output: HstOutput {
+                            hs,
+                            hs_hk,
+                            hs_rt,
+                            hs_msq,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Cft => {
-            if let (Some(&hk), Some(&rt), Some(&msq), Some(&cf),
-                    Some(&cf_hk), Some(&cf_rt), Some(&cf_msq)) =
-                (values.get("HK"), values.get("RT"), values.get("MSQ"), values.get("CF"),
-                 values.get("CF_HK"), values.get("CF_RT"), values.get("CF_MSQ"))
-            {
+            if let (Some(&hk), Some(&rt), Some(&msq), Some(&cf), Some(&cf_hk), Some(&cf_rt), Some(&cf_msq)) = (
+                values.get("HK"),
+                values.get("RT"),
+                values.get("MSQ"),
+                values.get("CF"),
+                values.get("CF_HK"),
+                values.get("CF_RT"),
+                values.get("CF_MSQ"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", hk, rt, msq);
                 if !seen_cft.contains(&key) && fixtures.cft.len() < 200 {
                     seen_cft.insert(key);
                     fixtures.cft.push(CftFixture {
                         input: CftInput { hk, rt, msq },
-                        output: CftOutput { cf, cf_hk, cf_rt, cf_msq },
+                        output: CftOutput {
+                            cf,
+                            cf_hk,
+                            cf_rt,
+                            cf_msq,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Dampl => {
-            if let (Some(&hk), Some(&th), Some(&rt), Some(&ax),
-                    Some(&ax_hk), Some(&ax_th), Some(&ax_rt)) =
-                (values.get("HK"), values.get("TH"), values.get("RT"), values.get("AX"),
-                 values.get("AX_HK"), values.get("AX_TH"), values.get("AX_RT"))
-            {
+            if let (Some(&hk), Some(&th), Some(&rt), Some(&ax), Some(&ax_hk), Some(&ax_th), Some(&ax_rt)) = (
+                values.get("HK"),
+                values.get("TH"),
+                values.get("RT"),
+                values.get("AX"),
+                values.get("AX_HK"),
+                values.get("AX_TH"),
+                values.get("AX_RT"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", hk, th, rt);
-                if !seen_dampl.contains(&key) && fixtures.dampl.len() < 200 {
+                if !seen_dampl.contains(&key) && fixtures.amplification_rate.len() < 200 {
                     seen_dampl.insert(key);
-                    fixtures.dampl.push(DamplFixture {
+                    fixtures.amplification_rate.push(DamplFixture {
                         input: DamplInput { hk, th, rt },
-                        output: DamplOutput { ax, ax_hk, ax_th, ax_rt },
+                        output: DamplOutput {
+                            ax,
+                            ax_hk,
+                            ax_th,
+                            ax_rt,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Blkin => {
-            if let (Some(&t2), Some(&d2), Some(&u2), Some(&hstinv), Some(&gm1bl),
-                    Some(&rstbl), Some(&hvrat), Some(&reybl), Some(&m2), Some(&h2),
-                    Some(&hk2), Some(&rt2), Some(&hk2_t2), Some(&hk2_d2), Some(&hk2_u2),
-                    Some(&rt2_t2), Some(&rt2_u2)) =
-                (values.get("T2"), values.get("D2"), values.get("U2"), values.get("HSTINV"),
-                 values.get("GM1BL"), values.get("RSTBL"), values.get("HVRAT"), values.get("REYBL"),
-                 values.get("M2"), values.get("H2"), values.get("HK2"), values.get("RT2"),
-                 values.get("HK2_T2"), values.get("HK2_D2"), values.get("HK2_U2"),
-                 values.get("RT2_T2"), values.get("RT2_U2"))
-            {
+            if let (
+                Some(&t2),
+                Some(&d2),
+                Some(&u2),
+                Some(&hstinv),
+                Some(&gm1bl),
+                Some(&rstbl),
+                Some(&hvrat),
+                Some(&reybl),
+                Some(&m2),
+                Some(&h2),
+                Some(&hk2),
+                Some(&rt2),
+                Some(&hk2_t2),
+                Some(&hk2_d2),
+                Some(&hk2_u2),
+                Some(&rt2_t2),
+                Some(&rt2_u2),
+            ) = (
+                values.get("T2"),
+                values.get("D2"),
+                values.get("U2"),
+                values.get("HSTINV"),
+                values.get("GM1BL"),
+                values.get("RSTBL"),
+                values.get("HVRAT"),
+                values.get("REYBL"),
+                values.get("M2"),
+                values.get("H2"),
+                values.get("HK2"),
+                values.get("RT2"),
+                values.get("HK2_T2"),
+                values.get("HK2_D2"),
+                values.get("HK2_U2"),
+                values.get("RT2_T2"),
+                values.get("RT2_U2"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", t2, d2, u2);
                 if !seen_blkin.contains(&key) && fixtures.blkin.len() < 200 {
                     seen_blkin.insert(key);
                     fixtures.blkin.push(BlkinFixture {
-                        input: BlkinInput { t2, d2, u2, hstinv, gm1bl, rstbl, hvrat, reybl },
-                        output: BlkinOutput { m2, h2, hk2, rt2, hk2_t2, hk2_d2, hk2_u2, rt2_t2, rt2_u2 },
+                        input: BlkinInput {
+                            t2,
+                            d2,
+                            u2,
+                            hstinv,
+                            gm1bl,
+                            rstbl,
+                            hvrat,
+                            reybl,
+                        },
+                        output: BlkinOutput {
+                            m2,
+                            h2,
+                            hk2,
+                            rt2,
+                            hk2_t2,
+                            hk2_d2,
+                            hk2_u2,
+                            rt2_t2,
+                            rt2_u2,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Blvar => {
             // ITYP is stored as float (parsed from "ITYP=    1")
-            if let (Some(&ityp_f), Some(&hk2), Some(&rt2), Some(&m2), Some(&t2),
-                    Some(&d2), Some(&s2), Some(&hs2), Some(&cf2), Some(&di2),
-                    Some(&us2), Some(&cq2), Some(&de2)) =
-                (values.get("ITYP"), values.get("HK2"), values.get("RT2"), values.get("M2"),
-                 values.get("T2"), values.get("D2"), values.get("S2"),
-                 values.get("HS2"), values.get("CF2"), values.get("DI2"), values.get("US2"),
-                 values.get("CQ2"), values.get("DE2"))
-            {
+            if let (
+                Some(&ityp_f),
+                Some(&hk2),
+                Some(&rt2),
+                Some(&m2),
+                Some(&t2),
+                Some(&d2),
+                Some(&s2),
+                Some(&hs2),
+                Some(&cf2),
+                Some(&di2),
+                Some(&us2),
+                Some(&cq2),
+                Some(&de2),
+            ) = (
+                values.get("ITYP"),
+                values.get("HK2"),
+                values.get("RT2"),
+                values.get("M2"),
+                values.get("T2"),
+                values.get("D2"),
+                values.get("S2"),
+                values.get("HS2"),
+                values.get("CF2"),
+                values.get("DI2"),
+                values.get("US2"),
+                values.get("CQ2"),
+                values.get("DE2"),
+            ) {
                 let ityp = ityp_f as i32;
                 let key = format!("{}_{:.16e}_{:.16e}_{:.16e}", ityp, hk2, rt2, m2);
                 if !seen_blvar.contains(&key) && fixtures.blvar.len() < 200 {
                     seen_blvar.insert(key);
                     fixtures.blvar.push(BlvarFixture {
-                        input: BlvarInput { ityp, hk2, rt2, m2, t2, d2, s2 },
-                        output: BlvarOutput { hs2, cf2, di2, us2, cq2, de2 },
+                        input: BlvarInput {
+                            ityp,
+                            hk2,
+                            rt2,
+                            m2,
+                            t2,
+                            d2,
+                            s2,
+                        },
+                        output: BlvarOutput {
+                            hs2,
+                            cf2,
+                            di2,
+                            us2,
+                            cq2,
+                            de2,
+                        },
                     });
                 }
             }
         }
         CurrentSub::Trchek2 => {
-            if let (Some(&x1), Some(&x2), Some(&ampl1), Some(&ampl2), Some(&xt),
-                    Some(&tran), Some(&turb)) =
-                (values.get("X1"), values.get("X2"), values.get("AMPL1"),
-                 values.get("AMPL2"), values.get("XT"),
-                 bools.get("TRAN"), bools.get("TURB"))
-            {
+            if let (Some(&x1), Some(&x2), Some(&ampl1), Some(&ampl2), Some(&xt), Some(&tran), Some(&turb)) = (
+                values.get("X1"),
+                values.get("X2"),
+                values.get("AMPL1"),
+                values.get("AMPL2"),
+                values.get("XT"),
+                bools.get("TRAN"),
+                bools.get("TURB"),
+            ) {
                 let key = format!("{:.16e}_{:.16e}_{:.16e}", x1, x2, ampl1);
                 if !seen_trchek2.contains(&key) && fixtures.trchek2.len() < 100 {
                     seen_trchek2.insert(key);
@@ -580,11 +747,12 @@ fn save_fixture(
         }
         CurrentSub::Blsys => {
             // BLSYS outputs arrays - parse specially
-            if let (Some(&vsrez1), Some(&vsrez2), Some(&vsrez3), Some(&vsrez4)) =
-                (values.get("VSREZ"), None::<&f64>, None::<&f64>, None::<&f64>) // Skip for now
+            if let (Some(&vsrez1), Some(&_vsrez2), Some(&_vsrez3), Some(&_vsrez4)) =
+                (values.get("VSREZ"), None::<&f64>, None::<&f64>, None::<&f64>)
+            // Skip for now
             {
                 let _ = (vsrez1, seen_blsys); // Suppress warnings
-                // BLSYS has complex array output - skip for initial implementation
+                                              // BLSYS has complex array output - skip for initial implementation
             }
         }
         _ => {}
@@ -637,7 +805,7 @@ fn write_fixtures(fixtures: &ParsedFixtures, output_dir: &Path) -> Result<(), Bo
     write_fixture_files(&fixtures.dil, &output_dir.join("dil"), "dil")?;
     write_fixture_files(&fixtures.hst, &output_dir.join("hst"), "hst")?;
     write_fixture_files(&fixtures.cft, &output_dir.join("cft"), "cft")?;
-    write_fixture_files(&fixtures.dampl, &output_dir.join("dampl"), "dampl")?;
+    write_fixture_files(&fixtures.amplification_rate, &output_dir.join("dampl"), "dampl")?;
     write_fixture_files(&fixtures.blkin, &output_dir.join("blkin"), "blkin")?;
     write_fixture_files(&fixtures.blvar, &output_dir.join("blvar"), "blvar")?;
     write_fixture_files(&fixtures.trchek2, &output_dir.join("trchek"), "trchek2")?;
@@ -645,17 +813,13 @@ fn write_fixtures(fixtures: &ParsedFixtures, output_dir: &Path) -> Result<(), Bo
     Ok(())
 }
 
-fn write_fixture_files<T: Serialize>(
-    fixtures: &[T],
-    dir: &Path,
-    name: &str
-) -> Result<(), Box<dyn std::error::Error>> {
+fn write_fixture_files<T: Serialize>(fixtures: &[T], dir: &Path, name: &str) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(dir)?;
 
     // Clear existing files
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 let _ = fs::remove_file(entry.path());
             }
         }
@@ -701,7 +865,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  DIL:     {} cases", fixtures.dil.len());
     println!("  HST:     {} cases", fixtures.hst.len());
     println!("  CFT:     {} cases", fixtures.cft.len());
-    println!("  DAMPL:   {} cases", fixtures.dampl.len());
+    println!("  DAMPL:   {} cases", fixtures.amplification_rate.len());
     println!("  BLKIN:   {} cases", fixtures.blkin.len());
     println!("  BLVAR:   {} cases", fixtures.blvar.len());
     println!("  TRCHEK2: {} cases", fixtures.trchek2.len());

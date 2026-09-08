@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use yfoil::bl::{cf_lam, cf_turb, dampl, di_lam, hkin, hs_lam, hs_turb};
+use yfoil::bl::system::amplification_rate;
+use yfoil::bl::{cdiss_laminar, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent};
 
 const REL_TOL: f64 = 1e-12;
 
@@ -180,6 +181,7 @@ struct CaseDetail {
     case_num: usize,
     inputs: String,
     outputs: Vec<OutputComparison>,
+    #[allow(dead_code)]
     passed: bool,
 }
 
@@ -194,7 +196,7 @@ fn load_fixtures<T: for<'de> Deserialize<'de>>(dir: &Path) -> Vec<T> {
     let mut fixtures = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.filter_map(Result::ok) {
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(fixture) = serde_json::from_str::<T>(&content) {
                         fixtures.push(fixture);
@@ -219,7 +221,7 @@ fn validate_hkin(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let (hk, hk_h, hk_msq) = hkin(f.input.h, f.input.msq);
+        let (hk, hk_h, hk_msq) = hk_from_h(f.input.h, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
@@ -278,33 +280,38 @@ fn validate_cfl(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = cf_lam(f.input.hk, f.input.rt, f.input.msq);
+        let r = cf_laminar(f.input.hk, f.input.rt, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
                 name: "CF".to_string(),
                 xfoil: f.output.cf,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.cf, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.cf, r.value),
             },
             OutputComparison {
                 name: "CF_HK".to_string(),
                 xfoil: f.output.cf_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.cf_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.cf_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "CF_RT".to_string(),
                 xfoil: f.output.cf_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.cf_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.cf_rt, r.value_d_retheta),
             },
         ];
 
         let max_err = outputs.iter().map(|o| o.rel_error).fold(0.0, f64::max);
         let passed = max_err < REL_TOL;
 
-        if passed { result.passed += 1; } else { result.failed += 1; result.status = false; }
+        if passed {
+            result.passed += 1;
+        } else {
+            result.failed += 1;
+            result.status = false;
+        }
         result.max_rel_error = result.max_rel_error.max(max_err);
 
         result.details.push(CaseDetail {
@@ -331,27 +338,32 @@ fn validate_hsl(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = hs_lam(f.input.hk, f.input.rt, f.input.msq);
+        let r = hstar_laminar(f.input.hk, f.input.rt, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
                 name: "HS".to_string(),
                 xfoil: f.output.hs,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.hs, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.hs, r.value),
             },
             OutputComparison {
                 name: "HS_HK".to_string(),
                 xfoil: f.output.hs_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.hs_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.hs_hk, r.value_d_hk),
             },
         ];
 
         let max_err = outputs.iter().map(|o| o.rel_error).fold(0.0, f64::max);
         let passed = max_err < REL_TOL;
 
-        if passed { result.passed += 1; } else { result.failed += 1; result.status = false; }
+        if passed {
+            result.passed += 1;
+        } else {
+            result.failed += 1;
+            result.status = false;
+        }
         result.max_rel_error = result.max_rel_error.max(max_err);
 
         result.details.push(CaseDetail {
@@ -378,33 +390,38 @@ fn validate_dil(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = di_lam(f.input.hk, f.input.rt);
+        let r = cdiss_laminar(f.input.hk, f.input.rt);
 
         let outputs = vec![
             OutputComparison {
                 name: "DI".to_string(),
                 xfoil: f.output.di,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.di, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.di, r.value),
             },
             OutputComparison {
                 name: "DI_HK".to_string(),
                 xfoil: f.output.di_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.di_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.di_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "DI_RT".to_string(),
                 xfoil: f.output.di_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.di_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.di_rt, r.value_d_retheta),
             },
         ];
 
         let max_err = outputs.iter().map(|o| o.rel_error).fold(0.0, f64::max);
         let passed = max_err < REL_TOL;
 
-        if passed { result.passed += 1; } else { result.failed += 1; result.status = false; }
+        if passed {
+            result.passed += 1;
+        } else {
+            result.failed += 1;
+            result.status = false;
+        }
         result.max_rel_error = result.max_rel_error.max(max_err);
 
         result.details.push(CaseDetail {
@@ -431,33 +448,38 @@ fn validate_hst(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = hs_turb(f.input.hk, f.input.rt, f.input.msq);
+        let r = hstar_turbulent(f.input.hk, f.input.rt, f.input.msq);
 
         let outputs = vec![
             OutputComparison {
                 name: "HS".to_string(),
                 xfoil: f.output.hs,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.hs, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.hs, r.value),
             },
             OutputComparison {
                 name: "HS_HK".to_string(),
                 xfoil: f.output.hs_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.hs_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.hs_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "HS_RT".to_string(),
                 xfoil: f.output.hs_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.hs_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.hs_rt, r.value_d_retheta),
             },
         ];
 
         let max_err = outputs.iter().map(|o| o.rel_error).fold(0.0, f64::max);
         let passed = max_err < REL_TOL;
 
-        if passed { result.passed += 1; } else { result.failed += 1; result.status = false; }
+        if passed {
+            result.passed += 1;
+        } else {
+            result.failed += 1;
+            result.status = false;
+        }
         result.max_rel_error = result.max_rel_error.max(max_err);
 
         result.details.push(CaseDetail {
@@ -484,33 +506,38 @@ fn validate_cft(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let r = cf_turb(f.input.hk, f.input.rt, f.input.msq, 1.0);
+        let r = cf_turbulent(f.input.hk, f.input.rt, f.input.msq, 1.0);
 
         let outputs = vec![
             OutputComparison {
                 name: "CF".to_string(),
                 xfoil: f.output.cf,
-                yfoil: r.val,
-                rel_error: relative_error(f.output.cf, r.val),
+                yfoil: r.value,
+                rel_error: relative_error(f.output.cf, r.value),
             },
             OutputComparison {
                 name: "CF_HK".to_string(),
                 xfoil: f.output.cf_hk,
-                yfoil: r.val_hk,
-                rel_error: relative_error(f.output.cf_hk, r.val_hk),
+                yfoil: r.value_d_hk,
+                rel_error: relative_error(f.output.cf_hk, r.value_d_hk),
             },
             OutputComparison {
                 name: "CF_RT".to_string(),
                 xfoil: f.output.cf_rt,
-                yfoil: r.val_rt,
-                rel_error: relative_error(f.output.cf_rt, r.val_rt),
+                yfoil: r.value_d_retheta,
+                rel_error: relative_error(f.output.cf_rt, r.value_d_retheta),
             },
         ];
 
         let max_err = outputs.iter().map(|o| o.rel_error).fold(0.0, f64::max);
         let passed = max_err < REL_TOL;
 
-        if passed { result.passed += 1; } else { result.failed += 1; result.status = false; }
+        if passed {
+            result.passed += 1;
+        } else {
+            result.failed += 1;
+            result.status = false;
+        }
         result.max_rel_error = result.max_rel_error.max(max_err);
 
         result.details.push(CaseDetail {
@@ -537,7 +564,8 @@ fn validate_dampl(fixture_dir: &Path) -> ValidationResult {
     };
 
     for (i, f) in fixtures.iter().enumerate() {
-        let (ax, ax_hk, ax_th, ax_rt) = dampl(f.input.hk, f.input.th, f.input.rt);
+        let r = amplification_rate(f.input.hk, f.input.th, f.input.rt);
+        let (ax, ax_hk, ax_th, ax_rt) = (r.rate, r.rate_d_hk, r.rate_d_theta, r.rate_d_retheta);
 
         let outputs = vec![
             OutputComparison {
@@ -569,7 +597,12 @@ fn validate_dampl(fixture_dir: &Path) -> ValidationResult {
         let max_err = outputs.iter().map(|o| o.rel_error).fold(0.0, f64::max);
         let passed = max_err < REL_TOL;
 
-        if passed { result.passed += 1; } else { result.failed += 1; result.status = false; }
+        if passed {
+            result.passed += 1;
+        } else {
+            result.failed += 1;
+            result.status = false;
+        }
         result.max_rel_error = result.max_rel_error.max(max_err);
 
         result.details.push(CaseDetail {
@@ -588,17 +621,29 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
 
     writeln!(file, "# Subroutine Validation")?;
     writeln!(file)?;
-    writeln!(file, "This report validates YFoil's boundary layer closure functions against XFOIL reference values.")?;
+    writeln!(
+        file,
+        "This report validates YFoil's boundary layer closure functions against XFOIL reference values."
+    )?;
     writeln!(file)?;
     writeln!(file, "## Summary")?;
     writeln!(file)?;
-    writeln!(file, "| Subroutine | Test Cases | Passed | Failed | Max Relative Error | Status |")?;
-    writeln!(file, "|------------|------------|--------|--------|-------------------|--------|")?;
+    writeln!(
+        file,
+        "| Subroutine | Test Cases | Passed | Failed | Max Relative Error | Status |"
+    )?;
+    writeln!(
+        file,
+        "|------------|------------|--------|--------|-------------------|--------|"
+    )?;
 
     for r in results {
         let status = if r.status { "✓" } else { "✗" };
-        writeln!(file, "| {} | {} | {} | {} | {:.2e} | {} |",
-            r.name, r.test_cases, r.passed, r.failed, r.max_rel_error, status)?;
+        writeln!(
+            file,
+            "| {} | {} | {} | {} | {:.2e} | {} |",
+            r.name, r.test_cases, r.passed, r.failed, r.max_rel_error, status
+        )?;
     }
 
     writeln!(file)?;
@@ -608,7 +653,10 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file)?;
     writeln!(file, "## Test Fixtures")?;
     writeln!(file)?;
-    writeln!(file, "Fixture data is stored in [`tests/fixtures/subroutines/`](../../../tests/fixtures/subroutines/):")?;
+    writeln!(
+        file,
+        "Fixture data is stored in [`tests/fixtures/subroutines/`](../../../tests/fixtures/subroutines/):"
+    )?;
     writeln!(file)?;
     writeln!(file, "```")?;
     writeln!(file, "tests/fixtures/subroutines/")?;
@@ -621,12 +669,21 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file, "└── dampl/    - Amplification rate (DAMPL)")?;
     writeln!(file, "```")?;
     writeln!(file)?;
-    writeln!(file, "Each fixture is a JSON file containing input parameters and expected XFOIL output.")?;
+    writeln!(
+        file,
+        "Each fixture is a JSON file containing input parameters and expected XFOIL output."
+    )?;
     writeln!(file)?;
     writeln!(file, "## XFOIL Instrumentation")?;
     writeln!(file)?;
-    writeln!(file, "Test fixtures were generated by instrumenting XFOIL with WRITE statements to log")?;
-    writeln!(file, "subroutine inputs and outputs. The instrumentation was added to `xfoil/xfoil6.99/src/xbl.f`.")?;
+    writeln!(
+        file,
+        "Test fixtures were generated by instrumenting XFOIL with WRITE statements to log"
+    )?;
+    writeln!(
+        file,
+        "subroutine inputs and outputs. The instrumentation was added to `xfoil/xfoil6.99/src/xbl.f`."
+    )?;
     writeln!(file)?;
     writeln!(file, "**Example instrumentation (HKIN subroutine):**")?;
     writeln!(file)?;
@@ -640,8 +697,14 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file, "      WRITE(96,'(A,E24.16)') 'HK_MSQ=', HK_MSQ")?;
     writeln!(file, "```")?;
     writeln!(file)?;
-    writeln!(file, "Similar instrumentation was added to each closure subroutine (HSL, HST, CFL, CFT, DIL, DAMPL).")?;
-    writeln!(file, "The instrumented XFOIL writes to unit 96, which outputs `xfoil_subroutine_log.dat`.")?;
+    writeln!(
+        file,
+        "Similar instrumentation was added to each closure subroutine (HSL, HST, CFL, CFT, DIL, DAMPL)."
+    )?;
+    writeln!(
+        file,
+        "The instrumented XFOIL writes to unit 96, which outputs `xfoil_subroutine_log.dat`."
+    )?;
     writeln!(file)?;
     writeln!(file, "**XFOIL script used to generate fixture data:**")?;
     writeln!(file)?;
@@ -662,8 +725,14 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file, "QUIT")?;
     writeln!(file, "```")?;
     writeln!(file)?;
-    writeln!(file, "Running this script with instrumented XFOIL produces the log file, which is then")?;
-    writeln!(file, "parsed by `examples/generate_subroutine_fixtures.rs` to create JSON fixtures.")?;
+    writeln!(
+        file,
+        "Running this script with instrumented XFOIL produces the log file, which is then"
+    )?;
+    writeln!(
+        file,
+        "parsed by `examples/generate_subroutine_fixtures.rs` to create JSON fixtures."
+    )?;
     writeln!(file)?;
     writeln!(file, "## Regenerating Validation")?;
     writeln!(file)?;
@@ -677,7 +746,10 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file)?;
     writeln!(file, "## Detailed Reports")?;
     writeln!(file)?;
-    writeln!(file, "- [Closure Functions (HKIN, CFL, HSL, DIL, CFT, HST)](closure.md)")?;
+    writeln!(
+        file,
+        "- [Closure Functions (HKIN, CFL, HSL, DIL, CFT, HST)](closure.md)"
+    )?;
     writeln!(file, "- [Transition (DAMPL)](transition.md)")?;
 
     Ok(())
@@ -688,11 +760,16 @@ fn write_closure_report(results: &[ValidationResult], output_dir: &Path) -> std:
 
     writeln!(file, "# Closure Functions Validation")?;
     writeln!(file)?;
-    writeln!(file, "This report details the validation of YFoil's boundary layer closure relations.")?;
+    writeln!(
+        file,
+        "This report details the validation of YFoil's boundary layer closure relations."
+    )?;
     writeln!(file)?;
 
     for r in results {
-        if r.name == "DAMPL" { continue; }  // DAMPL goes in transition.md
+        if r.name == "DAMPL" {
+            continue;
+        } // DAMPL goes in transition.md
 
         let fixture_dir = r.name.to_lowercase();
         writeln!(file, "## {}", r.name)?;
@@ -701,7 +778,11 @@ fn write_closure_report(results: &[ValidationResult], output_dir: &Path) -> std:
         writeln!(file, "- **Passed:** {}", r.passed)?;
         writeln!(file, "- **Max Relative Error:** {:.2e}", r.max_rel_error)?;
         writeln!(file, "- **Status:** {}", if r.status { "✓ PASS" } else { "✗ FAIL" })?;
-        writeln!(file, "- **Fixtures:** [`tests/fixtures/subroutines/{}/`](../../../tests/fixtures/subroutines/{}/)", fixture_dir, fixture_dir)?;
+        writeln!(
+            file,
+            "- **Fixtures:** [`tests/fixtures/subroutines/{}/`](../../../tests/fixtures/subroutines/{}/)",
+            fixture_dir, fixture_dir
+        )?;
         writeln!(file)?;
 
         // Show sample of cases (first 10)
@@ -713,12 +794,17 @@ fn write_closure_report(results: &[ValidationResult], output_dir: &Path) -> std:
         for detail in r.details.iter().take(10) {
             for (j, output) in detail.outputs.iter().enumerate() {
                 if j == 0 {
-                    writeln!(file, "| {} | {} | {} | {:.10e} | {:.10e} | {:.2e} |",
-                        detail.case_num, detail.inputs, output.name,
-                        output.xfoil, output.yfoil, output.rel_error)?;
+                    writeln!(
+                        file,
+                        "| {} | {} | {} | {:.10e} | {:.10e} | {:.2e} |",
+                        detail.case_num, detail.inputs, output.name, output.xfoil, output.yfoil, output.rel_error
+                    )?;
                 } else {
-                    writeln!(file, "| | | {} | {:.10e} | {:.10e} | {:.2e} |",
-                        output.name, output.xfoil, output.yfoil, output.rel_error)?;
+                    writeln!(
+                        file,
+                        "| | | {} | {:.10e} | {:.10e} | {:.2e} |",
+                        output.name, output.xfoil, output.yfoil, output.rel_error
+                    )?;
                 }
             }
         }
@@ -733,22 +819,33 @@ fn write_transition_report(results: &[ValidationResult], output_dir: &Path) -> s
 
     writeln!(file, "# Transition (DAMPL) Validation")?;
     writeln!(file)?;
-    writeln!(file, "This report details the validation of YFoil's amplification rate calculation (DAMPL).")?;
+    writeln!(
+        file,
+        "This report details the validation of YFoil's amplification rate calculation (DAMPL)."
+    )?;
     writeln!(file)?;
 
     for r in results {
-        if r.name != "DAMPL" { continue; }
+        if r.name != "DAMPL" {
+            continue;
+        }
 
         writeln!(file, "## {}", r.name)?;
         writeln!(file)?;
-        writeln!(file, "The DAMPL subroutine computes the spatial amplification rate dN/dx for")?;
+        writeln!(
+            file,
+            "The DAMPL subroutine computes the spatial amplification rate dN/dx for"
+        )?;
         writeln!(file, "the eN transition prediction method.")?;
         writeln!(file)?;
         writeln!(file, "- **Test Cases:** {}", r.test_cases)?;
         writeln!(file, "- **Passed:** {}", r.passed)?;
         writeln!(file, "- **Max Relative Error:** {:.2e}", r.max_rel_error)?;
         writeln!(file, "- **Status:** {}", if r.status { "✓ PASS" } else { "✗ FAIL" })?;
-        writeln!(file, "- **Fixtures:** [`tests/fixtures/subroutines/dampl/`](../../../tests/fixtures/subroutines/dampl/)")?;
+        writeln!(
+            file,
+            "- **Fixtures:** [`tests/fixtures/subroutines/dampl/`](../../../tests/fixtures/subroutines/dampl/)"
+        )?;
         writeln!(file)?;
 
         writeln!(file, "### Sample Cases")?;
@@ -759,12 +856,17 @@ fn write_transition_report(results: &[ValidationResult], output_dir: &Path) -> s
         for detail in r.details.iter().take(15) {
             for (j, output) in detail.outputs.iter().enumerate() {
                 if j == 0 {
-                    writeln!(file, "| {} | {} | {} | {:.10e} | {:.10e} | {:.2e} |",
-                        detail.case_num, detail.inputs, output.name,
-                        output.xfoil, output.yfoil, output.rel_error)?;
+                    writeln!(
+                        file,
+                        "| {} | {} | {} | {:.10e} | {:.10e} | {:.2e} |",
+                        detail.case_num, detail.inputs, output.name, output.xfoil, output.yfoil, output.rel_error
+                    )?;
                 } else {
-                    writeln!(file, "| | | {} | {:.10e} | {:.10e} | {:.2e} |",
-                        output.name, output.xfoil, output.yfoil, output.rel_error)?;
+                    writeln!(
+                        file,
+                        "| | | {} | {:.10e} | {:.10e} | {:.2e} |",
+                        output.name, output.xfoil, output.yfoil, output.rel_error
+                    )?;
                 }
             }
         }
@@ -796,8 +898,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nResults:");
     for r in &results {
         let status = if r.status { "✓" } else { "✗" };
-        println!("  {}: {} cases, max error {:.2e} {}",
-            r.name, r.test_cases, r.max_rel_error, status);
+        println!(
+            "  {}: {} cases, max error {:.2e} {}",
+            r.name, r.test_cases, r.max_rel_error, status
+        );
     }
 
     println!("\nWriting reports to {}", output_dir.display());

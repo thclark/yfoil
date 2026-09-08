@@ -1,0 +1,385 @@
+--- /dev/null
++++ b/src/xlog.f
+@@ -0,0 +1,357 @@
++C***********************************************************************
++C    Module:  xlog.f
++C    XFOIL Instrumentation Logging Routines
++C***********************************************************************
++
++      SUBROUTINE LOGINIT
++C------------------------------------------
++C     Initialize logging system
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++C
++      LOGDEPTH = 0
++      OPEN(LULOG, FILE='xfoil_trace.log', STATUS='REPLACE')
++      WRITE(LULOG,'(A)') '{"events": ['
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGCLOSE
++C------------------------------------------
++C     Close logging system
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++C
++      WRITE(LULOG,'(A)') '{"type": "END", "name": "TRACE_END"}'
++      WRITE(LULOG,'(A)') ']}'
++      CLOSE(LULOG)
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGENTER(SUBNAME)
++C------------------------------------------
++C     Log subroutine entry
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) SUBNAME
++C
++      LOGDEPTH = LOGDEPTH + 1
++      WRITE(LULOG,'(A,A,A,I3,A)')
++     &  '{"type": "ENTER", "name": "', SUBNAME,
++     &  '", "depth": ', LOGDEPTH, '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGEXIT(SUBNAME)
++C------------------------------------------
++C     Log subroutine exit
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) SUBNAME
++C
++      WRITE(LULOG,'(A,A,A,I3,A)')
++     &  '{"type": "EXIT", "name": "', SUBNAME,
++     &  '", "depth": ', LOGDEPTH, '},'
++      LOGDEPTH = LOGDEPTH - 1
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGITER(SUBNAME, ITER)
++C------------------------------------------
++C     Log loop iteration
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) SUBNAME
++      INTEGER ITER
++C
++      WRITE(LULOG,'(A,A,A,I5,A)')
++     &  '{"type": "ITER", "name": "', SUBNAME,
++     &  '", "iter": ', ITER, '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGINT(VARNAME, VALUE)
++C------------------------------------------
++C     Log integer variable
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) VARNAME
++      INTEGER VALUE
++C
++      WRITE(LULOG,'(A,A,A,I10,A)')
++     &  '{"type": "VAR", "name": "', VARNAME,
++     &  '", "value": ', VALUE, '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGREAL(VARNAME, VALUE)
++C------------------------------------------
++C     Log real variable
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) VARNAME
++      REAL*8 VALUE
++C
++      WRITE(LULOG,'(A,A,A,ES24.16,A)')
++     &  '{"type": "VAR", "name": "', VARNAME,
++     &  '", "value": ', VALUE, '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGBOOL(VARNAME, VALUE)
++C------------------------------------------
++C     Log logical variable
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) VARNAME
++      LOGICAL VALUE
++C
++      IF(VALUE) THEN
++        WRITE(LULOG,'(A,A,A)')
++     &    '{"type": "VAR", "name": "', VARNAME,
++     &    '", "value": true},'
++      ELSE
++        WRITE(LULOG,'(A,A,A)')
++     &    '{"type": "VAR", "name": "', VARNAME,
++     &    '", "value": false},'
++      ENDIF
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGARR1(VARNAME, ARR, N)
++C------------------------------------------
++C     Log 1D array (first few and last elements)
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) VARNAME
++      INTEGER N
++      REAL*8 ARR(N)
++C
++      INTEGER I, NSHOW
++C
++      NSHOW = MIN(5, N)
++      WRITE(LULOG,'(A,A,A,I5,A)', ADVANCE='NO')
++     &  '{"type": "ARR", "name": "', VARNAME,
++     &  '", "n": ', N, ', "sample": ['
++      DO I = 1, NSHOW
++        IF(I.GT.1) WRITE(LULOG,'(A)', ADVANCE='NO') ', '
++        WRITE(LULOG,'(ES24.16)', ADVANCE='NO') ARR(I)
++      ENDDO
++      IF(N.GT.NSHOW) THEN
++        WRITE(LULOG,'(A,ES24.16)', ADVANCE='NO') ', ... , ', ARR(N)
++      ENDIF
++      WRITE(LULOG,'(A)') ']},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGEVENT(MSG)
++C------------------------------------------
++C     Log custom event message
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) MSG
++C
++      WRITE(LULOG,'(A,A,A)')
++     &  '{"type": "EVENT", "msg": "', MSG, '"},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGSTATE(ALPHA,CL,CD,CM,N,NW,IST)
++C------------------------------------------
++C     Log key state variables
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      REAL*8 ALPHA, CL, CD, CM
++      INTEGER N, NW, IST
++C
++      WRITE(LULOG,'(A,ES24.16,A,ES24.16,A,ES24.16,A,ES24.16,
++     &             A,I5,A,I5,A,I5,A)')
++     &  '{"type": "STATE", "alpha": ', ALPHA,
++     &  ', "cl": ', CL,
++     &  ', "cd": ', CD,
++     &  ', "cm": ', CM,
++     &  ', "n": ', N,
++     &  ', "nw": ', NW,
++     &  ', "ist": ', IST, '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGBLSTATE(IS, NBL_S, ITRAN_S)
++C------------------------------------------
++C     Log BL state for one side
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      INTEGER IS, NBL_S, ITRAN_S
++C
++      WRITE(LULOG,'(A,I2,A,I5,A,I5,A)')
++     &  '{"type": "BLSTATE", "side": ', IS,
++     &  ', "nbl": ', NBL_S,
++     &  ', "itran": ', ITRAN_S, '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGCOMMON1(SUBNAME)
++C------------------------------------------
++C     Log key common block variables from XFOIL.INC
++C     Called after a subroutine modifies global state
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      INCLUDE 'XFOIL.INC'
++      CHARACTER*(*) SUBNAME
++C
++      WRITE(LULOG,'(A,A,A)')
++     &  '{"type": "COMMON", "after": "', SUBNAME, '",'
++      WRITE(LULOG,'(A,ES24.16,A)') ' "alfa": ', ALFA, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "cl": ', CL, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "cd": ', CD, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "cm": ', CM, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "cdp": ', CDP, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "cdf": ', CDF, ','
++      WRITE(LULOG,'(A,I5,A)') ' "n": ', N, ','
++      WRITE(LULOG,'(A,I5,A)') ' "nw": ', NW, ','
++      WRITE(LULOG,'(A,I5,A)') ' "ist": ', IST, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "sst": ', SST, ','
++      IF(LVISC) THEN
++        WRITE(LULOG,'(A)') ' "lvisc": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lvisc": false,'
++      ENDIF
++      IF(LVCONV) THEN
++        WRITE(LULOG,'(A)') ' "lvconv": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lvconv": false,'
++      ENDIF
++      IF(LBLINI) THEN
++        WRITE(LULOG,'(A)') ' "lblini": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lblini": false,'
++      ENDIF
++      IF(LIPAN) THEN
++        WRITE(LULOG,'(A)') ' "lipan": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lipan": false,'
++      ENDIF
++      IF(LWAKE) THEN
++        WRITE(LULOG,'(A)') ' "lwake": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lwake": false,'
++      ENDIF
++      IF(LGAMU) THEN
++        WRITE(LULOG,'(A)') ' "lgamu": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lgamu": false,'
++      ENDIF
++      IF(LQAIJ) THEN
++        WRITE(LULOG,'(A)') ' "lqaij": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "lqaij": false,'
++      ENDIF
++      IF(LADIJ) THEN
++        WRITE(LULOG,'(A)') ' "ladij": true,'
++      ELSE
++        WRITE(LULOG,'(A)') ' "ladij": false,'
++      ENDIF
++      IF(N.GE.1) THEN
++        WRITE(LULOG,'(A,ES24.16,A)') ' "gam1": ', GAM(1), ','
++        WRITE(LULOG,'(A,ES24.16,A)') ' "gamN": ', GAM(N), ','
++        WRITE(LULOG,'(A,ES24.16,A)') ' "qinv1": ', QINV(1), ','
++        WRITE(LULOG,'(A,ES24.16,A)') ' "qinvN": ', QINV(N), ','
++      ENDIF
++      WRITE(LULOG,'(A,ES24.16,A)') ' "reinf1": ', REINF1, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "minf1": ', MINF1, ','
++      WRITE(LULOG,'(A,ES24.16)') ' "rmsbl": ', RMSBL
++      WRITE(LULOG,'(A)') '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGBLVARS(IBL, IS)
++C------------------------------------------
++C     Log BL variables at a specific station
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      INCLUDE 'XFOIL.INC'
++      INTEGER IBL, IS
++C
++      WRITE(LULOG,'(A,I5,A,I2,A)')
++     &  '{"type": "BLVAR", "ibl": ', IBL, ', "is": ', IS, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "xssi": ', XSSI(IBL,IS), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "uedg": ', UEDG(IBL,IS), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "uinv": ', UINV(IBL,IS), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "mass": ', MASS(IBL,IS), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "thet": ', THET(IBL,IS), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "dstr": ', DSTR(IBL,IS), ','
++      WRITE(LULOG,'(A,ES24.16)') ' "ctau": ', CTAU(IBL,IS)
++      WRITE(LULOG,'(A)') '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGPANEL(I)
++C------------------------------------------
++C     Log panel variables at a specific station
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      INCLUDE 'XFOIL.INC'
++      INTEGER I
++C
++      WRITE(LULOG,'(A,I5,A)')
++     &  '{"type": "PANEL", "i": ', I, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "x": ', X(I), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "y": ', Y(I), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "s": ', S(I), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "gam": ', GAM(I), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "sig": ', SIG(I), ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "qinv": ', QINV(I), ','
++      WRITE(LULOG,'(A,ES24.16)') ' "qvis": ', QVIS(I)
++      WRITE(LULOG,'(A)') '},'
++C
++      RETURN
++      END
++
++
++      SUBROUTINE LOGGEOM
++C------------------------------------------
++C     Log geometry state
++C------------------------------------------
++      INCLUDE 'XLOG.INC'
++      INCLUDE 'XFOIL.INC'
++C
++      WRITE(LULOG,'(A)') '{"type": "GEOM",'
++      WRITE(LULOG,'(A,I5,A)') ' "n": ', N, ','
++      WRITE(LULOG,'(A,I5,A)') ' "nb": ', NB, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "sle": ', SLE, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "xle": ', XLE, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "yle": ', YLE, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "xte": ', XTE, ','
++      WRITE(LULOG,'(A,ES24.16,A)') ' "yte": ', YTE, ','
++      WRITE(LULOG,'(A,ES24.16)') ' "chord": ', CHORD
++      WRITE(LULOG,'(A)') '},'
++C
++      RETURN
++      END
+--- /dev/null
++++ b/src/XLOG.INC
+@@ -0,0 +1,11 @@
++C
++C==== XFOIL Instrumentation Logging Include File ====
++C
++C---- Log file unit number
++      INTEGER LULOG
++      PARAMETER (LULOG = 99)
++C
++C---- Current call depth for indentation
++      INTEGER LOGDEPTH
++      COMMON/LOGCOM/ LOGDEPTH
++C
+--- a/src/XBL.INC
++++ b/src/XBL.INC
+@@ -69,4 +69,8 @@
+ C
+       COMMON/V_SYS/ VS1(4,5),VS2(4,5),VSREZ(4),VSR(4),VSM(4),VSX(4)
+ C
++C---- INSTRUMENTATION: Flags to capture only first iteration
++      LOGICAL FIRST_MRCHDU_DONE, MRCHDU_OUTPUT_DONE
++      COMMON/V_INST/ FIRST_MRCHDU_DONE, MRCHDU_OUTPUT_DONE
++C
+ 

@@ -1,1455 +1,469 @@
-//! SETBL: Newton system setup for viscous-inviscid coupling
+//! SETBL (xbl.f): sets up the BL Newton system coefficients for the current BL variables and
+//! the edge velocities, and incorporates the local BL system coefficients into the global
+//! Newton system (VA/VB/VM/VDEL/VZ) that BLSOLV consumes. Line-for-line on `SolverState`.
 //!
-//! This module implements XFOIL's SETBL subroutine, which builds the global
-//! Newton system for the coupled viscous-inviscid iteration. The key insight
-//! is that XFOIL solves ALL BL equations simultaneously with the DIJ coupling
-//! embedded in the Jacobian matrix.
-//!
-//! ## System Structure
-//!
-//! The global Newton system has 3 equations per BL station:
-//! 1. Shear lag (turbulent) or amplification (laminar) equation
-//! 2. Momentum integral equation
-//! 3. Shape parameter (energy) equation
-//!
-//! The unknowns at each station are:
-//! 1. dCtau (or dAmpl for laminar) - shear/amplification change
-//! 2. dTheta - momentum thickness change
-//! 3. dMass - mass defect change (where Mass = Ue * δ*)
-//!
-//! The Jacobian has special structure:
-//! - Block tridiagonal (VA, VB) for local station coupling
-//! - Dense VM matrix for global DIJ coupling
-//!
-//! ## Reference
-//!
-//! XFOIL source files:
-//! - xbl.f: SETBL (Newton system assembly)
-//! - xoper.f: VISCAL (coupling iteration)
+//! Also MRCL (xfoil.f) — the Mach/Re dependence on CL selected by MATYP/RETYP — which SETBL
+//! calls first. `IDAMPV = IDAMP` is pinned at 0 (the envelope e^N `DAMPL` model).
 
-use crate::bl::{
-    mrchdu::{SurfaceBLData, SurfaceMarchState, march_station},
-    system::{BLFlowType, BLGlobalParams, BLLocalSystem, BLStationState, MidpointCf},
-    BlsolvInput, FlowConditions,
+use crate::bl::blsolv::NewtonSystem;
+use crate::bl::blsys::{assemble_interval_system, assemble_te_system, IntervalFlags};
+use crate::bl::mrchdu::march_prescribed_dstar;
+use crate::bl::mrchue::march_direct;
+use crate::bl::system::{
+    check_transition, FlowParameters, FlowRegime, IntervalSystem, MachClDependence, ReClDependence, TransitionCheck,
 };
-use crate::geometry::PaneledAirfoil;
-use crate::panel::InviscidSolution;
+use crate::geometry::spline_value;
+use crate::solver::blstate::SolverState;
+use crate::solver::pointers::xi_trip;
+use crate::solver::velocity::set_ue_with_sources;
 
-/// State for the global Newton system
-///
-/// This holds all BL data for both surfaces plus the global system matrices.
+/// Everything SETBL produces besides the arrays it writes into `SolverState`.
 #[derive(Debug, Clone)]
-pub struct SetblState {
-    /// Upper surface BL data
-    pub upper: SurfaceBLData,
-    /// Lower surface BL data
-    pub lower: SurfaceBLData,
-    /// Wake BL data
-    pub wake: SurfaceBLData,
-
-    /// Upper surface march state
-    pub march_upper: SurfaceMarchState,
-    /// Lower surface march state
-    pub march_lower: SurfaceMarchState,
-
-    /// Station states for upper surface
-    pub stations_upper: Vec<BLStationState>,
-    /// Station states for lower surface
-    pub stations_lower: Vec<BLStationState>,
-    /// Station states for wake
-    pub stations_wake: Vec<BLStationState>,
-
-    /// Panel indices for upper surface (maps BL station to panel index)
-    pub ipan_upper: Vec<usize>,
-    /// Panel indices for lower surface
-    pub ipan_lower: Vec<usize>,
-
-    /// Stagnation point index (first lower surface panel)
-    pub stag_idx: usize,
-    /// Stagnation arc length (interpolated)
-    pub sst: f64,
-
-    /// Global BL parameters
-    pub params: BLGlobalParams,
-
-    /// Number of upper surface stations (including stagnation)
-    pub nbl_upper: usize,
-    /// Number of lower surface stations (including stagnation)
-    pub nbl_lower: usize,
-    /// Number of wake stations
-    pub nbl_wake: usize,
-
-    /// USAV: Saved edge velocities from previous UPDATE (indexed by panel)
-    /// This is UNEW = UINV + DIJ*(MASS + VDEL) from the previous iteration,
-    /// used for computing DUE2 = UEDG - USAV in SETBL.
-    pub usav: Vec<f64>,
+pub struct AssembledSystem {
+    /// The global BL Newton system as BLSOLV sees it (VA, VB, VDEL, VM, VZ, NSYS, IVTE1, IVZ).
+    pub newton: NewtonSystem,
+    /// The BL parameters SETBL derived (REYBL, HSTINV, ...): the marches and UPDATE share them.
+    pub flow: FlowParameters,
+    /// RE_CLMR, MSQ_CLMR: d(Re)/d(CL) and d(M²)/d(CL) for the fixed-CL sensitivity column.
+    pub re_d_cl: f64,
+    pub machsqd_d_cl: f64,
+    /// MA_CLMR: d(M)/d(CL) (MRCL's M_CLS); VISCAL's MINF_CL is the same quantity
+    pub mach_d_cl: f64,
+    /// DULE1, DULE2: the LE Ue mismatch between UEDG and USAV = UINV + DIJ·MASS, per side.
+    pub ue_le_mismatch: [f64; 3],
 }
 
-impl SetblState {
-    /// Create a new SETBL state from airfoil geometry
-    ///
-    /// # Arguments
-    /// * `airfoil` - Paneled airfoil geometry
-    /// * `stag_idx` - Stagnation point index (first panel with non-positive velocity)
-    /// * `sst` - Interpolated stagnation arc length
-    /// * `cond` - Flow conditions
-    pub fn new(
-        airfoil: &PaneledAirfoil,
-        stag_idx: usize,
-        sst: f64,
-        cond: &FlowConditions,
-    ) -> Self {
-        // Upper surface: from stag_idx-1 down to 0
-        let nbl_upper = stag_idx;
-        // Lower surface: from stag_idx to n-1
-        let nbl_lower = airfoil.n - stag_idx;
-
-        // Create BL data arrays
-        let upper = SurfaceBLData::new(nbl_upper);
-        let lower = SurfaceBLData::new(nbl_lower);
-        let wake = SurfaceBLData::new(0); // Wake size determined later
-
-        // Create march states
-        let acrit = cond.ncrit;
-        let march_upper = SurfaceMarchState::new(nbl_upper, nbl_upper, acrit);
-        let march_lower = SurfaceMarchState::new(nbl_lower, nbl_lower, acrit);
-
-        // Create global parameters
-        let params = BLGlobalParams::new(cond.mach, cond.reynolds, 1.4);
-
-        // Build panel index mappings
-        // Upper: station 0 -> panel stag_idx-1, station 1 -> panel stag_idx-2, etc.
-        let ipan_upper: Vec<usize> = (0..nbl_upper).map(|i| stag_idx - 1 - i).collect();
-        // Lower: station 0 -> panel stag_idx, station 1 -> panel stag_idx+1, etc.
-        let ipan_lower: Vec<usize> = (0..nbl_lower).map(|i| stag_idx + i).collect();
-
-        Self {
-            upper,
-            lower,
-            wake,
-            march_upper,
-            march_lower,
-            stations_upper: vec![BLStationState::default(); nbl_upper],
-            stations_lower: vec![BLStationState::default(); nbl_lower],
-            stations_wake: Vec::new(),
-            ipan_upper,
-            ipan_lower,
-            stag_idx,
-            sst,
-            params,
-            nbl_upper,
-            nbl_lower,
-            nbl_wake: 0,
-            usav: Vec::new(),  // Empty initially; set by first UPDATE
+/// MRCL: sets the actual Mach and Reynolds numbers from the unit-CL values and the specified
+/// CLS according to MATYP/RETYP. Returns (M_CLS, R_CLS).
+#[doc(alias = "MRCL")]
+pub fn set_mach_re_from_cl(state: &mut SolverState, cls: f64) -> (f64, f64) {
+    let cla = cls.max(0.000001);
+    // XFOIL's 'MRCL: Illegal Re(CL) / Mach(CL) dependence trigger. Setting fixed ...' branches
+    // are unreachable here: the dependence enums cannot hold an illegal index.
+    let mut m_cls;
+    match state.mach_cl_dependence {
+        MachClDependence::Fixed => {
+            state.mach = state.mach_cl1;
+            m_cls = 0.0;
+        }
+        MachClDependence::InverseSqrtCl => {
+            state.mach = state.mach_cl1 / cla.sqrt();
+            m_cls = -0.5 * state.mach / cla;
         }
     }
-
-    /// Initialize BL data from edge velocity distribution
-    ///
-    /// Sets up initial arc lengths and edge velocities from the panel solution.
-    /// Station 0 on both surfaces is the stagnation station with identical
-    /// initial conditions (xssi=xeps, uedg extrapolated from velocity gradient).
-    ///
-    /// This ensures symmetric BL development for symmetric airfoils at α=0°.
-    ///
-    /// # Arguments
-    /// * `airfoil` - Paneled airfoil
-    /// * `ue_mag` - Unsigned edge velocity at each panel
-    pub fn init_from_velocity(
-        &mut self,
-        airfoil: &PaneledAirfoil,
-        ue_mag: &[f64],
-    ) {
-        // Compute XEPS - minimum arc length near stagnation
-        let total_arc = airfoil.s[airfoil.n - 1] - airfoil.s[0];
-        let xeps = 1e-7 * total_arc;
-
-        // Compute velocity gradient near stagnation for initial condition
-        // Use average of first real panels on both surfaces
-        let ue_stag = if self.nbl_upper >= 2 && self.nbl_lower >= 2 {
-            // First upper panel after stagnation
-            let upper_ipan = self.ipan_upper[1.min(self.nbl_upper - 1)];
-            let ue_upper = ue_mag[upper_ipan].abs();
-            // First lower panel after stagnation
-            let lower_ipan = self.ipan_lower[1.min(self.nbl_lower - 1)];
-            let ue_lower = ue_mag[lower_ipan].abs();
-            // Use average for symmetric initial condition
-            0.5 * (ue_upper + ue_lower).max(0.01)
-        } else {
-            0.01 // Fallback
-        };
-
-        // Upper surface: arc length = sst - s[i]
-        // Station 0 is the stagnation station at xssi=0
-        for (ibl, &ipan) in self.ipan_upper.iter().enumerate() {
-            if ibl == 0 {
-                // Stagnation station at xssi=0 with symmetric velocity
-                self.upper.xssi[0] = 0.0;
-                self.upper.uedg[0] = ue_stag;
-            } else {
-                let arc_len = (self.sst - airfoil.s[ipan]).max(xeps);
-                self.upper.xssi[ibl] = arc_len;
-                self.upper.uedg[ibl] = ue_mag[ipan].abs();
-            }
+    let mut r_cls;
+    match state.re_cl_dependence {
+        ReClDependence::Fixed => {
+            state.re = state.re_cl1;
+            r_cls = 0.0;
         }
-
-        // Lower surface: arc length = s[i] - sst
-        // Station 0 is the stagnation station at xssi=0
-        for (ibl, &ipan) in self.ipan_lower.iter().enumerate() {
-            if ibl == 0 {
-                // Stagnation station at xssi=0 with symmetric velocity
-                self.lower.xssi[0] = 0.0;
-                self.lower.uedg[0] = ue_stag;
-            } else {
-                let arc_len = (airfoil.s[ipan] - self.sst).max(xeps);
-                self.lower.xssi[ibl] = arc_len;
-                self.lower.uedg[ibl] = ue_mag[ipan].abs();
-            }
+        ReClDependence::InverseSqrtCl => {
+            state.re = state.re_cl1 / cla.sqrt();
+            r_cls = -0.5 * state.re / cla;
+        }
+        ReClDependence::InverseCl => {
+            state.re = state.re_cl1 / cla;
+            r_cls = -state.re / cla;
         }
     }
-
-    /// Get total number of BL stations (for system sizing)
-    pub fn total_stations(&self) -> usize {
-        self.nbl_upper + self.nbl_lower + self.nbl_wake
+    if state.mach >= 0.99 {
+        // 'MRCL: CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99'
+        state.mach = 0.99;
+        m_cls = 0.0;
     }
-}
-
-/// Configuration for SETBL/VISCAL iteration
-#[derive(Debug, Clone)]
-pub struct SetblConfig {
-    /// Maximum Newton iterations per station
-    pub max_iter_station: usize,
-    /// BLSOLV acceleration parameter
-    pub vaccel: f64,
-    /// Convergence tolerance for RMSBL
-    pub tol_rmsbl: f64,
-    /// Maximum relative increase in variables (DHI) - XFOIL default is 1.5
-    pub dhi: f64,
-    /// Maximum relative decrease in variables (DLO) - XFOIL default is -0.5
-    pub dlo: f64,
-}
-
-impl Default for SetblConfig {
-    fn default() -> Self {
-        Self {
-            max_iter_station: 25,
-            vaccel: 0.01,
-            tol_rmsbl: 1e-4,
-            dhi: 1.5,   // Max relative increase (XFOIL default)
-            dlo: -0.5,  // Max relative decrease (XFOIL default)
-        }
+    let mut rrat = 1.0;
+    if state.re_cl1 > 0.0 {
+        rrat = state.re / state.re_cl1;
     }
+    if rrat > 100.0 {
+        // 'MRCL: CL too low for chosen Re(CL) dependence — artificially limiting Re'
+        state.re = state.re_cl1 * 100.0;
+        r_cls = 0.0;
+    }
+    (m_cls, r_cls)
 }
 
-/// Result of a single SETBL+BLSOLV+UPDATE iteration
-#[derive(Debug, Clone)]
-pub struct SetblResult {
-    /// RMS of normalized variable changes (convergence metric)
-    pub rmsbl: f64,
-    /// Maximum normalized variable change
-    pub dmax: f64,
-    /// Number of stations that failed to converge
-    pub n_failed: usize,
-    /// Whether the iteration should continue
-    pub continue_iteration: bool,
-}
-
-/// Build the global Newton system from current BL state
-///
-/// This is the main SETBL function that:
-/// 1. Marches the BL on both surfaces using current edge velocities
-/// 2. Builds VA, VB matrices from local Jacobians with DUE2 mismatch terms
-/// 3. Builds VM matrix for DIJ coupling
-/// 4. Returns BlsolvInput ready for blsolv()
-///
-/// The key XFOIL insight is that VDEL includes not just the BL equation residuals
-/// (VSREZ), but also "forced" mismatch terms DUE2 = UEDG - USAV that drive the
-/// Newton system to correct for viscous-inviscid coupling errors.
-///
-/// # Arguments
-/// * `state` - Current SETBL state (modified in place)
-/// * `airfoil` - Paneled airfoil
-/// * `inviscid` - Inviscid solution (contains DIJ matrix)
-/// * `qinv` - Inviscid velocity magnitude at each panel node
-/// * `config` - SETBL configuration
-///
-/// # Returns
-/// BlsolvInput ready to be solved with blsolv()
-pub fn build_newton_system(
-    state: &mut SetblState,
-    airfoil: &PaneledAirfoil,
-    inviscid: &InviscidSolution,
-    qinv: &[f64],
-    config: &SetblConfig,
-) -> BlsolvInput {
-    // Total system size: upper + lower surfaces, excluding stagnation stations
-    // XFOIL IBLSYS: NSYS = (NBL(1)-1) + (NBL(2)-1) = NBL(1) + NBL(2) - 2
-    // The stagnation station (ibl=0) on each surface is excluded from the Newton system
-    let n_upper_sys = state.nbl_upper - 1;  // System entries for upper surface
-    let n_lower_sys = state.nbl_lower - 1;  // System entries for lower surface
-    let nsys = n_upper_sys + n_lower_sys;
-
-    // Initialize BLSOLV input
-    let mut input = BlsolvInput {
-        nsys,
-        va: vec![[[0.0; 2]; 3]; nsys],
-        vb: vec![[[0.0; 2]; 3]; nsys],
-        vdel: vec![[[0.0; 2]; 3]; nsys],
-        vm: vec![vec![[0.0, 0.0, 0.0]; nsys]; nsys],
-        vz: [[0.0; 2]; 3],
-        ivte1: Some(n_upper_sys - 1),  // Upper TE system index (last upper entry)
-        ivz: Some(n_upper_sys),        // Lower surface start (first lower entry)
-        vaccel: config.vaccel,
-        arc_length: Some(airfoil.s[airfoil.n - 1] - airfoil.s[0]),
-    };
-
-    // Get USAV from saved state (from previous UPDATE) or compute from QINV if first iteration
-    // XFOIL saves USAV = UNEW = UINV + DIJ*(MASS + VDEL) in UPDATE,
-    // then uses it in SETBL as DUE2 = UEDG - USAV.
-    // On first iteration, state.usav is empty, so we use QINV (no coupling yet).
-    let usav = if state.usav.is_empty() {
-        // First iteration: use QINV as starting USAV
-        qinv.to_vec()
+/// SETBL. Requires the pointer layer, DIJ, UINV/UINV_A, the BL arrays (initialised by MRCHUE
+/// on the first call when `st.lblini` is false), SST_GO/SST_GP of the current stagnation point
+/// and the control fields (`lalfa`, `cl`/`clspec`, `matyp`/`retyp`, `minf1`/`reinf1`, `acrit`,
+/// `vaccel`). Writes TAU/DIS/CTQ/DELT/USLP, ITRAN/XSSITR/TFORCE, XOCTR/YOCTR/TINDEX and leaves
+/// UEDG holding the *marched* Ue (USAV = UINV + DIJ·MASS is the mismatch reference).
+#[doc(alias = "SETBL")]
+pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
+    // set the CL used to define Mach, Reynolds numbers
+    let clmr = if state.alpha_specified {
+        state.cl
     } else {
-        // Using saved USAV from previous UPDATE
-        state.usav.clone()
+        state.cl_specified
     };
 
-    // March upper surface and build system with DUE2 mismatch terms
-    build_surface_system(
-        state,
-        &mut input,
-        true, // is_upper
-        &usav,
-    );
+    // set current MINF(CL)
+    let (ma_clmr, re_clmr) = set_mach_re_from_cl(state, clmr);
+    let msq_clmr = 2.0 * state.mach * ma_clmr;
 
-    // March lower surface and build system with DUE2 mismatch terms
-    build_surface_system(
-        state,
-        &mut input,
-        false, // is_lower
-        &usav,
-    );
+    // set compressibility parameter TKLAM and derivative TK_MSQ (COMSET), gas constant, the
+    // parameters for compressibility correction, stagnation density and 1/enthalpy, and the
+    // Reynolds number based on freestream density, velocity, viscosity
+    let mut params = FlowParameters::new(state.mach, state.re, state.gamma_gas);
 
-    // Add DIJ coupling to VM matrix
-    if let Some(dij) = inviscid.get_dij() {
-        add_dij_coupling(state, &mut input, dij);
+    // IDAMPV = IDAMP
+    params.amplification_model = state.amplification_model;
+    // save TE thickness
+    let _dwte = state.wake_gap[1];
+
+    if !state.bl_initialised {
+        // initialize BL by marching with Ue (fudge at separation)
+        let acrit = state.ncrit;
+        march_direct(state, &params, acrit, None);
+        state.bl_initialised = true;
     }
 
-    input
-}
+    // march BL with current Ue and Ds to establish transition
+    let acrit = state.ncrit;
+    march_prescribed_dstar(state, &params, acrit, None);
 
-/// Compute USAV: predicted edge velocity from inviscid + mass defect coupling
-///
-/// USAV(i) = UINV(i) + sum_j(-VTI_i * VTI_j * DIJ(i,j) * MASS(j))
-///
-/// This matches XFOIL's UPDATE computation (xbl.f lines 1489-1514) but without
-/// the VDEL term. In SETBL, we compare UEDG against USAV computed from MASS only,
-/// since VDEL is what we're solving for.
-///
-/// # Arguments
-/// * `state` - Current SETBL state with station data
-/// * `inviscid` - Inviscid solution (contains DIJ matrix)
-/// * `qinv` - Inviscid velocity magnitude at each panel node
-///
-/// # Returns
-/// USAV array indexed by panel index
-fn compute_usav(
-    state: &SetblState,
-    inviscid: &InviscidSolution,
-    qinv: &[f64],
-) -> Vec<f64> {
-    let n_panels = qinv.len();
-    let mut usav = qinv.to_vec();
-
-    // Get DIJ matrix if available
-    let dij = match inviscid.get_dij() {
-        Some(d) => d,
-        None => return usav, // No coupling, USAV = QINV
-    };
-
-    let stag_idx = state.stag_idx;
-
-    // Build MASS array indexed by panel
-    // Also build VTI array (sign of tangent velocity at each panel)
-    let mut mass_by_panel = vec![0.0; n_panels];
-    let mut vti_by_panel = vec![0.0; n_panels];
-
-    // Upper surface: stations go from stag_idx-1 down to 0
-    // VTI is +1 for panels before stagnation (upper surface)
-    // CRITICAL: Use state.upper.uedg[ibl] for MASS, NOT station.u
-    // XFOIL: MASS(IBL,IS) = DSTR(IBL,IS) * UEDG(IBL,IS)  (xbl.f line 1763)
-    for (ibl, &ipan) in state.ipan_upper.iter().enumerate() {
-        if ibl < state.nbl_upper {
-            let station = &state.stations_upper[ibl];
-            mass_by_panel[ipan] = station.dstar * state.upper.uedg[ibl];
-            vti_by_panel[ipan] = 1.0; // Upper surface: positive VTI
+    let mut usav: [Vec<f64>; 3] = [Vec::new(), state.ue[1].clone(), state.ue[2].clone()];
+    set_ue_with_sources(state);
+    for side in 1..=2 {
+        for i_station in 2..=state.n_stations[side] {
+            std::mem::swap(&mut usav[side][i_station], &mut state.ue[side][i_station]);
         }
     }
 
-    // Lower surface: stations go from stag_idx to n-1
-    // VTI is -1 for panels at or after stagnation (lower surface)
-    // CRITICAL: Use state.lower.uedg[ibl] for MASS, NOT station.u
-    for (ibl, &ipan) in state.ipan_lower.iter().enumerate() {
-        if ibl < state.nbl_lower {
-            let station = &state.stations_lower[ibl];
-            mass_by_panel[ipan] = station.dstar * state.lower.uedg[ibl];
-            vti_by_panel[ipan] = -1.0; // Lower surface: negative VTI
+    let ile1 = state.i_node[1][2];
+    let ile2 = state.i_node[2][2];
+    let ite1 = state.i_node[1][state.i_te_station[1]];
+    let ite2 = state.i_node[2][state.i_te_station[2]];
+
+    let jvte1 = state.i_row[1][state.i_te_station[1]];
+    let jvte2 = state.i_row[2][state.i_te_station[2]];
+
+    let dule1 = state.ue[1][2] - usav[1][2];
+    let dule2 = state.ue[2][2] - usav[2][2];
+
+    let nsys = state.n_rows;
+
+    // set LE and TE Ue sensitivities wrt all m values
+    let mut ule1_m = vec![0.0; nsys + 1];
+    let mut ule2_m = vec![0.0; nsys + 1];
+    let mut ute1_m = vec![0.0; nsys + 1];
+    let mut ute2_m = vec![0.0; nsys + 1];
+    for j_side in 1..=2 {
+        for j_station in 2..=state.n_stations[j_side] {
+            let j = state.i_node[j_side][j_station];
+            let j_row = state.i_row[j_side][j_station];
+            ule1_m[j_row] = -state.velocity_sign[1][2] * state.velocity_sign[j_side][j_station] * state.dij[ile1][j];
+            ule2_m[j_row] = -state.velocity_sign[2][2] * state.velocity_sign[j_side][j_station] * state.dij[ile2][j];
+            ute1_m[j_row] = -state.velocity_sign[1][state.i_te_station[1]]
+                * state.velocity_sign[j_side][j_station]
+                * state.dij[ite1][j];
+            ute2_m[j_row] = -state.velocity_sign[2][state.i_te_station[2]]
+                * state.velocity_sign[j_side][j_station]
+                * state.dij[ite2][j];
         }
     }
 
-    // Compute USAV for each panel
-    // USAV(i) = UINV(i) + sum_j(-VTI_i * VTI_j * DIJ(i,j) * MASS(j))
-    for i in 0..n_panels {
-        if vti_by_panel[i] == 0.0 {
-            continue; // Skip panels not in BL stations
-        }
+    let ule1_a = state.ue_inviscid_d_alpha[1][2];
+    let ule2_a = state.ue_inviscid_d_alpha[2][2];
 
-        let vti_i = vti_by_panel[i];
-        let mut dui = 0.0;
+    state.transition_node_fraction[1] = 0.0;
+    state.transition_node_fraction[2] = 0.0;
 
-        for j in 0..n_panels {
-            if vti_by_panel[j] == 0.0 || mass_by_panel[j] == 0.0 {
-                continue;
+    // the global system
+    let mut va = vec![[[0.0f64; 2]; 3]; nsys];
+    let mut vb = vec![[[0.0f64; 2]; 3]; nsys];
+    let mut vdel = vec![[[0.0f64; 2]; 3]; nsys];
+    let mut vm = vec![vec![[0.0f64; 3]; nsys]; nsys];
+    let mut vz = [[0.0f64; 2]; 3];
+
+    // COM1/COM2 and the XT sensitivities are COMMON
+    let mut s1 = std::mem::take(&mut state.station1);
+    let mut s2 = std::mem::take(&mut state.station2);
+    let mut transition = std::mem::take(&mut state.transition);
+    let mut sys = IntervalSystem::default();
+    let (mut ami, mut cti) = (0.0, 0.0);
+    let mut trforc = false;
+
+    // Go over each boundary layer/wake
+    for side in 1..=2 {
+        // there is no station "1" at similarity, so zero everything out
+        let mut u1_m = vec![0.0; nsys + 1];
+        let mut d1_m = vec![0.0; nsys + 1];
+        let mut u2_m = vec![0.0; nsys + 1];
+        let mut d2_m = vec![0.0; nsys + 1];
+        let mut u1_a = 0.0;
+        let mut d1_a = 0.0;
+        let mut due1 = 0.0;
+        let mut dds1 = 0.0;
+
+        // similarity station pressure gradient parameter  x/u du/dx: BULE = 1.0 (BLDIF's constant)
+        let amcrit = state.ncrit[side];
+
+        // set forced transition arc length position
+        let xiforc = xi_trip(state, side);
+
+        let mut tran;
+        let mut turb;
+
+        // Sweep downstream setting up BL equation linearizations
+        for i_station in 2..=state.n_stations[side] {
+            let i_row = state.i_row[side][i_station];
+            let simi = i_station == 2;
+            let wake = i_station > state.i_te_station[side];
+            tran = i_station == state.i_transition_station[side];
+            turb = i_station > state.i_transition_station[side];
+            let i = state.i_node[side][i_station];
+
+            // set primary variables for current station
+            let xsi = state.xi[side][i_station];
+            if i_station < state.i_transition_station[side] {
+                ami = state.sqrtctau[side][i_station];
             }
-            let vti_j = vti_by_panel[j];
-            // UE_M = -VTI_i * VTI_j * DIJ(i,j)
-            let ue_m = -vti_i * vti_j * dij[(i, j)];
-            dui += ue_m * mass_by_panel[j];
-        }
-
-        usav[i] = qinv[i] + dui;
-    }
-
-    usav
-}
-
-/// Build Newton system for one surface
-///
-/// On first call (stations not initialized): marches BL to initialize station values.
-/// On subsequent calls: uses existing station values with updated edge velocities,
-/// computes residuals representing how much current state violates BL equations.
-///
-/// This matches XFOIL's behavior where SETBL evaluates the equations at the current
-/// state rather than re-solving from scratch each iteration.
-///
-/// # Arguments
-/// * `state` - SetblState with station data
-/// * `input` - BlsolvInput to populate
-/// * `is_upper` - Whether building upper (true) or lower (false) surface
-/// * `usav` - Predicted edge velocities from inviscid + mass defect coupling
-fn build_surface_system(
-    state: &mut SetblState,
-    input: &mut BlsolvInput,
-    is_upper: bool,
-    usav: &[f64],
-) {
-    // n_upper_sys = nbl_upper - 1 (number of upper surface system entries)
-    let n_upper_sys = state.nbl_upper - 1;
-
-    let (nbl, march, xssi, uedg, stations, ipan, offset) = if is_upper {
-        (
-            state.nbl_upper,
-            &mut state.march_upper,
-            &state.upper.xssi,
-            &state.upper.uedg,
-            &mut state.stations_upper,
-            &state.ipan_upper,
-            0,  // Upper surface: system index starts at 0
-        )
-    } else {
-        (
-            state.nbl_lower,
-            &mut state.march_lower,
-            &state.lower.xssi,
-            &state.lower.uedg,
-            &mut state.stations_lower,
-            &state.ipan_lower,
-            n_upper_sys,  // Lower surface: system index starts at n_upper_sys
-        )
-    };
-
-    if nbl < 2 {
-        return;
-    }
-
-    // Initialize march state for this iteration
-    march.init_march(march.itran);
-
-    // Local system for building Jacobian
-    let mut local_sys = BLLocalSystem::default();
-
-    // XFOIL's SETBL always marches to get the BL solution for current edge velocities.
-    // The Newton system then corrects the mass defect to find the coupled solution.
-    // We always march here - the previous "skip march" optimization was incorrect.
-
-    // Initialize stagnation station (similarity solution at ibl=0)
-    let s2_init = init_similarity_station(xssi[0], uedg[0], &state.params);
-    stations[0] = s2_init;
-
-    // March through stations (ibl=1 to nbl-1)
-    for ibl in 1..nbl {
-        let iv = offset + (ibl - 1);
-        let s1 = stations[ibl - 1].clone();
-
-        // Initialize s2 from extrapolation
-        let mut s2_init = BLStationState::default();
-        s2_init.blprv(
-            xssi[ibl],
-            s1.ampl,
-            s1.ctau,
-            s1.theta * 1.1,
-            s1.dstar * 1.1,
-            0.0,
-            uedg[ibl],
-            &state.params,
-        );
-        s2_init.blkin(&state.params);
-
-        let flow_type = if ibl >= march.itran {
-            BLFlowType::Turbulent
-        } else {
-            BLFlowType::Laminar
-        };
-
-        // March this station to get initial solution
-        let (_result, s2) = march_station(
-            &s1,
-            &s2_init,
-            march,
-            &state.params,
-            ibl + 1,
-            xssi[ibl],
-            0.0,
-            None,
-        );
-
-        // Compute DUE2: velocity mismatch at current station
-        // DUE2 = UEDG - USAV (what we're using minus what coupling predicts)
-        // This drives the Newton system to correct for viscous-inviscid errors.
-        // See XFOIL xbl.f line 279: DUE2 = UEDG(IBL,IS) - USAV(IBL,IS)
-        let ipan_idx = ipan[ibl];
-        let due2 = uedg[ibl] - usav[ipan_idx];
-
-
-        // Build local system
-        let is_simi = ibl == 1;
-        let s1_for_sys = if is_simi { &s2 } else { &s1 };
-        let cfm = MidpointCf::compute(s1_for_sys, &s2, flow_type, is_simi);
-        local_sys.bldif(s1_for_sys, &s2, &cfm, flow_type, is_simi);
-        copy_to_global_system(&local_sys, &s2, input, iv, is_simi, due2);
-
-        // Store marched solution
-        stations[ibl] = s2;
-    }
-}
-
-/// Initialize similarity (stagnation) station using Thwaites formula
-///
-/// For the stagnation station (xsi=0 or very small), uses a small but finite
-/// arc length to compute initial values via Thwaites correlation. This avoids
-/// zero theta which causes numerical issues in the march.
-///
-/// This matches XFOIL's behavior where the stagnation station serves as a
-/// starting point for the BL march with appropriate initial conditions.
-fn init_similarity_station(
-    xsi: f64,
-    uei: f64,
-    params: &BLGlobalParams,
-) -> BLStationState {
-    // Thwaites formula: theta^2 = 0.45 * nu * s / (6 * Ue) for BULE=1.0
-    // where BULE ≈ 1.0 at the Hiemenz stagnation point
-    let nu = 1.0 / params.reybl;
-
-    // For the stagnation station, use a minimum arc length that gives
-    // reasonable initial BL thickness. Using 1e-4 (0.01% of chord) as
-    // a typical small value near stagnation.
-    // This avoids the zero theta problem while staying in the similarity region.
-    let xsi_safe = if xsi < 1e-4 { 1e-4 } else { xsi };
-    let uei_safe = uei.max(0.01);
-
-    let theta = (0.45 * nu * xsi_safe / (6.0 * uei_safe)).sqrt();
-    let h = 2.2; // Hiemenz stagnation point shape factor
-    let dstar = h * theta;
-
-    let mut s = BLStationState::default();
-    s.blprv(xsi, 0.0, 0.03, theta, dstar, 0.0, uei_safe, params);
-    s.blkin(params);
-    s.blvar(BLFlowType::Laminar, params);
-    s
-}
-
-/// Copy local system matrices to global BLSOLV input
-///
-/// Adds the velocity mismatch terms (DUE2) to VDEL to drive Newton convergence.
-/// This matches XFOIL's SETBL (xbl.f lines 449-513) where VDEL includes:
-///   VDEL(k,1,IV) = VSREZ(k) + VS2(k,4)*DUE2 + VS2(k,3)*DDS2 + ...
-///
-/// # Arguments
-/// * `local` - Local BL system with Jacobians (VS1, VS2, VSREZ)
-/// * `s2` - Station state at current station
-/// * `input` - BlsolvInput to populate
-/// * `iv` - System index (0-based)
-/// * `_is_simi` - Whether this is similarity station
-/// * `due2` - Velocity mismatch: UEDG - USAV (what we use minus what coupling predicts)
-fn copy_to_global_system(
-    local: &BLLocalSystem,
-    s2: &BLStationState,
-    input: &mut BlsolvInput,
-    iv: usize,
-    _is_simi: bool,
-    due2: f64,
-) {
-    // VA: diagonal block (rows 0-2, cols 0-1 for Ctau/θ)
-    // VB: sub-diagonal block
-    // VM: mass defect coupling
-    // VDEL: residual (col 0) and Re sensitivity (col 1)
-
-    // The BLSOLV system has 3 equations per station:
-    // Row 0: Ctau/Ampl equation
-    // Row 1: Momentum equation
-    // Row 2: Shape equation
-
-    // VA block: derivatives w.r.t. Ctau and Theta at current station
-    for k in 0..3 {
-        input.va[iv][k][0] = local.vs2[k][0]; // d/dCtau
-        input.va[iv][k][1] = local.vs2[k][1]; // d/dTheta
-    }
-
-    // VB block: derivatives w.r.t. Ctau and Theta at previous station
-    if iv > 0 {
-        for k in 0..3 {
-            input.vb[iv][k][0] = local.vs1[k][0]; // d/dCtau_prev
-            input.vb[iv][k][1] = local.vs1[k][1]; // d/dTheta_prev
-        }
-    }
-
-    // VM diagonal: derivatives w.r.t. Mass (= Ue * dstar) at current station
-    // Mass = Ue * dstar, so d/dMass = (d/dDstar) / Ue + (d/dUe) * dstar / (Ue * dstar)
-    // Simplified: VM[iv][iv][k] = vs2[k][2] / Ue (derivative w.r.t. dstar scaled)
-    let ue = s2.u.max(0.01);
-    for k in 0..3 {
-        input.vm[iv][iv][k] = local.vs2[k][2] / ue; // d/dMass at this station
-    }
-
-    // Compute DDS2: displacement thickness change from velocity mismatch
-    // XFOIL xbl.f lines 262-263, 280:
-    //   D2_U2 = -DSI/UEI
-    //   DDS2 = D2_U2*DUE2
-    // This represents how dstar changes when edge velocity changes by DUE2
-    let dsi = s2.dstar;
-    let uei = ue;
-    let d2_u2 = -dsi / uei;
-    let dds2 = d2_u2 * due2;
-
-    // VDEL: residual + forced mismatch terms
-    // XFOIL xbl.f lines 449-453, 479-483, 509-513:
-    //   VDEL(k,1,IV) = VSREZ(k)
-    //        + (VS1(k,4)*DUE1 + VS1(k,3)*DDS1)   <- previous station terms (ignored for now)
-    //        + (VS2(k,4)*DUE2 + VS2(k,3)*DDS2)   <- current station mismatch
-    //        + (VS1(k,5) + VS2(k,5) + VSX(k))*(XI_ULE1*DULE1 + XI_ULE2*DULE2)  <- LE terms (ignored)
-    //
-    // vs2[k][3] = d(residual_k)/d(Ue) = Ue derivative
-    // vs2[k][2] = d(residual_k)/d(dstar) = dstar derivative
-
-    // Apply coupling mismatch with under-relaxation factor
-    // TEMPORARILY DISABLED: The mismatch terms cause divergence.
-    // The base algorithm without DUE2 should still work (it's what we had before).
-    // TODO: Debug why DUE2 terms cause instability even with small scaling.
-    let _coupling_rlx = 0.0;  // Disable mismatch terms completely
-    let _ = (due2, dds2);  // Suppress unused warnings (but keep for future use)
-
-    for k in 0..3 {
-        // let mismatch_term = coupling_rlx * (local.vs2[k][3] * due2 + local.vs2[k][2] * dds2);
-        input.vdel[iv][k][0] = local.vsrez[k];  // No mismatch term
-        input.vdel[iv][k][1] = local.vsr[k];   // Re sensitivity (unchanged)
-    }
-}
-
-/// Add DIJ coupling to VM matrix
-///
-/// The VM matrix contains the mass defect influence: how changing mass
-/// at station j affects the residual at station i through the velocity change.
-fn add_dij_coupling(
-    state: &SetblState,
-    input: &mut BlsolvInput,
-    dij: &nalgebra::DMatrix<f64>,
-) {
-    let nsys = input.nsys;
-    let n_upper_sys = state.nbl_upper - 1;  // System entries for upper surface
-    let stag_idx = state.stag_idx;  // Use stagnation index for VTI
-
-    // System index mapping (excluding stagnation station at ibl=0):
-    // - Upper: iv = 0..n_upper_sys-1 corresponds to ibl = 1..nbl_upper-1
-    // - Lower: iv = n_upper_sys..nsys-1 corresponds to ibl = 1..nbl_lower-1
-
-    // For each system station pair (i, j), add DIJ influence
-    // The coupling is: d(residual_i)/d(mass_j) += d(residual_i)/d(Ue_i) * d(Ue_i)/d(mass_j)
-    // where d(Ue_i)/d(mass_j) = -VTI_i * VTI_j * DIJ(ipan_i, ipan_j)
-
-    for iv in 0..nsys {
-        // Map system index to station index (add 1 because stagnation station excluded)
-        let (ibl_i, is_upper_i) = if iv < n_upper_sys {
-            (iv + 1, true)
-        } else {
-            (iv - n_upper_sys + 1, false)
-        };
-
-        // Get panel index for station
-        let ipan_i = if is_upper_i {
-            state.ipan_upper[ibl_i]
-        } else {
-            state.ipan_lower[ibl_i]
-        };
-
-        // Get station state for derivatives
-        let s_i = if is_upper_i {
-            &state.stations_upper[ibl_i]
-        } else {
-            &state.stations_lower[ibl_i]
-        };
-
-        // VTI sign for station i: upper (i < stag_idx) -> +1, lower (i >= stag_idx) -> -1
-        let vti_i = if ipan_i < stag_idx { 1.0 } else { -1.0 };
-
-        for jv in 0..nsys {
-            let (ibl_j, is_upper_j) = if jv < n_upper_sys {
-                (jv + 1, true)
+            if i_station >= state.i_transition_station[side] {
+                cti = state.sqrtctau[side][i_station];
+            }
+            let uei = state.ue[side][i_station];
+            let thi = state.theta[side][i_station];
+            let mdi = state.mass_defect[side][i_station];
+            let dsi = mdi / uei;
+            let dswaki = if wake {
+                state.wake_gap[i_station - state.i_te_station[side]]
             } else {
-                (jv - n_upper_sys + 1, false)
+                0.0
             };
 
-            let ipan_j = if is_upper_j {
-                state.ipan_upper[ibl_j]
+            // set derivatives of DSI (= D2)
+            let d2_m2 = 1.0 / uei;
+            let d2_u2 = -dsi / uei;
+            for j_side in 1..=2 {
+                for j_station in 2..=state.n_stations[j_side] {
+                    let j = state.i_node[j_side][j_station];
+                    let j_row = state.i_row[j_side][j_station];
+                    u2_m[j_row] = -state.velocity_sign[side][i_station]
+                        * state.velocity_sign[j_side][j_station]
+                        * state.dij[i][j];
+                    d2_m[j_row] = d2_u2 * u2_m[j_row];
+                }
+            }
+            d2_m[i_row] += d2_m2;
+
+            let u2_a = state.ue_inviscid_d_alpha[side][i_station];
+            let d2_a = d2_u2 * u2_a;
+
+            // "forced" changes due to mismatch between UEDG and USAV=UINV+dij*MASS
+            let due2 = state.ue[side][i_station] - usav[side][i_station];
+            let dds2 = d2_u2 * due2;
+
+            s2.set_primary_variables(xsi, ami, cti, thi, dsi, dswaki, uei, &params);
+            s2.set_kinematic_variables(&params);
+
+            // check for transition and set TRAN, XT, etc. if found
+            if tran {
+                match check_transition(&s1, &s2, s1.ampl, amcrit, xiforc, &params) {
+                    TransitionCheck::None { ampl2 } => {
+                        ami = ampl2;
+                        tran = false;
+                        transition.xi_transition = s2.xi;
+                    }
+                    TransitionCheck::Free {
+                        transition: found,
+                        ampl2,
+                    } => {
+                        ami = ampl2;
+                        trforc = false;
+                        transition = found;
+                    }
+                    TransitionCheck::Forced { transition: found } => {
+                        trforc = true;
+                        transition = found;
+                    }
+                }
+                s2.ampl = ami;
+            }
+            // if ibl == st.itran[is] && !tran: 'SETBL: Xtr???  n1 n2: ' AMPL1, AMPL2
+
+            // assemble 10x4 linearized system for dCtau, dTh, dDs, dUe, dXi
+            // at the previous "1" station and the current "2" station
+            let (mut tte_tte1, mut tte_tte2) = (0.0, 0.0);
+            let (mut cte_cte1, mut cte_cte2, mut cte_tte1, mut cte_tte2) = (0.0, 0.0, 0.0, 0.0);
+            if i_station == state.i_te_station[side] + 1 {
+                // define quantities at start of wake, adding TE base thickness to Dstar
+                let (it1, it2) = (state.i_te_station[1], state.i_te_station[2]);
+                let tte = state.theta[1][it1] + state.theta[2][it2];
+                let dte = state.dstar[1][it1] + state.dstar[2][it2] + state.te_thickness_normal;
+                let cte =
+                    (state.sqrtctau[1][it1] * state.theta[1][it1] + state.sqrtctau[2][it2] * state.theta[2][it2]) / tte;
+                assemble_te_system(&mut sys, &mut s2, cte, tte, dte, &params);
+
+                tte_tte1 = 1.0;
+                tte_tte2 = 1.0;
+                let dte_mte1 = 1.0 / state.ue[1][it1];
+                let dte_ute1 = -state.dstar[1][it1] / state.ue[1][it1];
+                let dte_mte2 = 1.0 / state.ue[2][it2];
+                let dte_ute2 = -state.dstar[2][it2] / state.ue[2][it2];
+                cte_cte1 = state.theta[1][it1] / tte;
+                cte_cte2 = state.theta[2][it2] / tte;
+                cte_tte1 = (state.sqrtctau[1][it1] - cte) / tte;
+                cte_tte2 = (state.sqrtctau[2][it2] - cte) / tte;
+
+                // re-define D1 sensitivities wrt m since D1 depends on both TE Ds values
+                for j_side in 1..=2 {
+                    for j_station in 2..=state.n_stations[j_side] {
+                        let j_row = state.i_row[j_side][j_station];
+                        d1_m[j_row] = dte_ute1 * ute1_m[j_row] + dte_ute2 * ute2_m[j_row];
+                    }
+                }
+                d1_m[jvte1] += dte_mte1;
+                d1_m[jvte2] += dte_mte2;
+
+                // "forced" changes from  UEDG --- USAV=UINV+dij*MASS  mismatch
+                due1 = 0.0;
+                dds1 = dte_ute1 * (state.ue[1][it1] - usav[1][it1]) + dte_ute2 * (state.ue[2][it2] - usav[2][it2]);
             } else {
-                state.ipan_lower[ibl_j]
+                let flags = IntervalFlags {
+                    similarity: simi,
+                    transition: tran,
+                    turbulent: turb,
+                    wake,
+                };
+                assemble_interval_system(&mut sys, &mut s1, &mut s2, flags, Some(&transition), amcrit, &params);
+            }
+
+            // Save wall shear and equil. max shear coefficient for plotting output
+            state.tau[side][i_station] = 0.5 * s2.rho * s2.ue * s2.ue * s2.cf;
+            state.dissipation[side][i_station] = s2.rho * s2.ue * s2.ue * s2.ue * s2.cdiss * s2.hstar * 0.5;
+            state.sqrtctaueq[side][i_station] = s2.sqrtctaueq;
+            state.delta[side][i_station] = s2.delta;
+            state.us_plot_scale[side][i_station] = 1.60 / (1.0 + s2.us);
+
+            // set XI sensitivities wrt LE Ue changes
+            let (xi_ule1, xi_ule2) = if side == 1 {
+                (state.s_stagnation_d_gamma_node0, -state.s_stagnation_d_gamma_node1)
+            } else {
+                (-state.s_stagnation_d_gamma_node0, state.s_stagnation_d_gamma_node1)
             };
 
-            // VTI sign for station j
-            let vti_j = if ipan_j < stag_idx { 1.0 } else { -1.0 };
-
-            // DIJ influence: dUe_i/dMass_j = -VTI_i * VTI_j * DIJ(ipan_i, ipan_j)
-            let ue_m = -vti_i * vti_j * dij[(ipan_i, ipan_j)];
-
-            // Add to VM matrix
-            // d(residual_k)/d(mass_j) += d(residual_k)/d(Ue_i) * dUe_i/dMass_j
-            // Note: The Ue derivative is in vs2[k][3], scaled by u_uei
-            // This is simplified - full XFOIL uses more complex chain rule
-            if iv != jv {
-                // Off-diagonal: influence through Ue change
-                // For momentum and shape equations, Ue changes affect residual
-                input.vm[iv][jv][1] += s_i.hs_u * ue_m; // Momentum via Hs
-                input.vm[iv][jv][2] += s_i.di_u * ue_m; // Shape via Di
+            // stuff BL system coefficients into main Jacobian matrix
+            for k in 0..3 {
+                let (vs1, vs2) = (&sys.jacobian_station1[k], &sys.jacobian_station2[k]);
+                let vsx = sys.residual_d_xi[k];
+                for j_row in 1..=nsys {
+                    vm[i_row - 1][j_row - 1][k] = vs1[2] * d1_m[j_row]
+                        + vs1[3] * u1_m[j_row]
+                        + vs2[2] * d2_m[j_row]
+                        + vs2[3] * u2_m[j_row]
+                        + (vs1[4] + vs2[4] + vsx) * (xi_ule1 * ule1_m[j_row] + xi_ule2 * ule2_m[j_row]);
+                }
+                vb[i_row - 1][k][0] = vs1[0];
+                vb[i_row - 1][k][1] = vs1[1];
+                va[i_row - 1][k][0] = vs2[0];
+                va[i_row - 1][k][1] = vs2[1];
+                if state.alpha_specified {
+                    vdel[i_row - 1][k][1] = sys.residual_d_re[k] * re_clmr + sys.residual_d_machsqd[k] * msq_clmr;
+                } else {
+                    vdel[i_row - 1][k][1] = (vs1[3] * u1_a + vs1[2] * d1_a)
+                        + (vs2[3] * u2_a + vs2[2] * d2_a)
+                        + (vs1[4] + vs2[4] + vsx) * (xi_ule1 * ule1_a + xi_ule2 * ule2_a);
+                }
+                vdel[i_row - 1][k][0] = sys.residual[k]
+                    + (vs1[3] * due1 + vs1[2] * dds1)
+                    + (vs2[3] * due2 + vs2[2] * dds2)
+                    + (vs1[4] + vs2[4] + vsx) * (xi_ule1 * dule1 + xi_ule2 * dule2);
             }
-        }
-    }
-}
 
-/// Apply Newton deltas with relaxation (UPDATE equivalent)
-///
-/// Takes the VDEL solution from BLSOLV and applies it to update the BL variables.
-/// Uses XFOIL's per-variable relaxation to ensure stability.
-///
-/// # Arguments
-/// * `state` - SETBL state to update
-/// * `vdel` - Newton deltas from BLSOLV (modified in place by blsolv)
-/// * `config` - SETBL configuration
-///
-/// # Returns
-/// SetblResult with RMSBL convergence metric
-pub fn apply_newton_update(
-    state: &mut SetblState,
-    vdel: &[[[f64; 2]; 3]],
-    config: &SetblConfig,
-) -> SetblResult {
-    let mut rmsbl: f64 = 0.0;
-    let mut dmax: f64 = 0.0;
-
-    let n_upper_sys = state.nbl_upper - 1;  // System entries for upper surface
-
-    // Total number of BL stations (for RMSBL divisor)
-    // XFOIL: RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
-    // NBL(1) + NBL(2) = total stations on both surfaces
-    let n_total = state.nbl_upper + state.nbl_lower;
-
-    // Update BL data arrays for stagnation stations (ibl=0) - no Newton deltas
-    // These stations are initialized in build_surface_system but their
-    // closure relations need to be computed for friction drag calculation
-    if state.nbl_upper > 0 {
-        let station = &mut state.stations_upper[0];
-        station.blkin(&state.params);
-        station.blvar(BLFlowType::Laminar, &state.params);  // Stagnation is always laminar
-        state.upper.thet[0] = station.theta;
-        state.upper.dstr[0] = station.dstar;
-        state.upper.ctau[0] = station.ctau;
-        state.upper.mass[0] = station.dstar * station.u;
-    }
-    if state.nbl_lower > 0 {
-        let station = &mut state.stations_lower[0];
-        station.blkin(&state.params);
-        station.blvar(BLFlowType::Laminar, &state.params);  // Stagnation is always laminar
-        state.lower.thet[0] = station.theta;
-        state.lower.dstr[0] = station.dstar;
-        state.lower.ctau[0] = station.ctau;
-        state.lower.mass[0] = station.dstar * station.u;
-    }
-
-    // Apply updates to upper surface (ibl=1 to nbl_upper-1)
-    // Newton system excludes stagnation station (ibl=0)
-    // System index: ibl=1 -> iv=0, ibl=2 -> iv=1, etc.
-    let itran_upper = state.march_upper.itran;
-    for ibl in 1..state.nbl_upper {
-        let iv = ibl - 1;  // System index (stagnation excluded)
-        let delta = &vdel[iv];
-        let station = &mut state.stations_upper[ibl];
-
-        let (_rlx, sum_sq, dm) = apply_station_update(station, delta, config);
-        rmsbl += sum_sq;  // Already sum of squared normalized changes
-        dmax = dmax.max(dm);
-
-        // Recompute closure relations (cf, hs, etc.) after updating primary variables
-        station.blkin(&state.params);
-        let flow_type = if ibl >= itran_upper {
-            BLFlowType::Turbulent
-        } else {
-            BLFlowType::Laminar
-        };
-        station.blvar(flow_type, &state.params);
-
-        // Update BL data arrays
-        state.upper.thet[ibl] = station.theta;
-        state.upper.dstr[ibl] = station.dstar;
-        state.upper.ctau[ibl] = station.ctau;
-        state.upper.mass[ibl] = station.dstar * station.u;
-    }
-
-    // Apply updates to lower surface (ibl=1 to nbl_lower-1)
-    // System index: iv = n_upper_sys + (ibl - 1)
-    let itran_lower = state.march_lower.itran;
-    for ibl in 1..state.nbl_lower {
-        let iv = n_upper_sys + (ibl - 1);
-        let delta = &vdel[iv];
-        let station = &mut state.stations_lower[ibl];
-
-        let (_rlx, sum_sq, dm) = apply_station_update(station, delta, config);
-        rmsbl += sum_sq;  // Already sum of squared normalized changes
-        dmax = dmax.max(dm);
-
-        // Recompute closure relations (cf, hs, etc.) after updating primary variables
-        station.blkin(&state.params);
-        let flow_type = if ibl >= itran_lower {
-            BLFlowType::Turbulent
-        } else {
-            BLFlowType::Laminar
-        };
-        station.blvar(flow_type, &state.params);
-
-        // Update BL data arrays
-        state.lower.thet[ibl] = station.theta;
-        state.lower.dstr[ibl] = station.dstar;
-        state.lower.ctau[ibl] = station.ctau;
-        state.lower.mass[ibl] = station.dstar * station.u;
-    }
-
-    // Compute RMS matching XFOIL formula
-    // XFOIL: RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
-    // Note: We have 3 variables (ctau, theta, mass) but XFOIL has 4 (includes DUEDG)
-    // For now we use 4*n_total as XFOIL does; DN4 contribution will be added later
-    rmsbl = if n_total > 0 {
-        (rmsbl / (4.0 * n_total as f64)).sqrt()
-    } else {
-        0.0
-    };
-
-    SetblResult {
-        rmsbl,
-        dmax,
-        n_failed: 0,
-        continue_iteration: rmsbl > config.tol_rmsbl,
-    }
-}
-
-/// Apply Newton deltas with relaxation AND edge velocity update (full UPDATE equivalent)
-///
-/// This is a combined UPDATE implementation that follows XFOIL exactly:
-/// 1. Computes new edge velocities from DIJ coupling with updated mass (MASS + dMASS)
-/// 2. Converts mass deltas to dstar deltas accounting for Ue change
-/// 3. Applies global under-relaxation to all variables
-/// 4. Recomputes mass nonlinearly as MASS = DSTR * UEDG
-///
-/// This matches XFOIL's UPDATE subroutine.
-///
-/// # Arguments
-/// * `state` - SETBL state to update
-/// * `vdel` - Newton deltas from BLSOLV
-/// * `inviscid` - Inviscid solution (for DIJ matrix)
-/// * `qinv` - Inviscid velocity distribution
-/// * `config` - SETBL configuration
-///
-/// # Returns
-/// (SetblResult with RMSBL metric, updated edge velocity vector)
-pub fn apply_newton_update_with_ue(
-    state: &mut SetblState,
-    vdel: &[[[f64; 2]; 3]],
-    inviscid: &InviscidSolution,
-    qinv: &[f64],
-    config: &SetblConfig,
-) -> (SetblResult, Vec<f64>) {
-    let n = qinv.len();
-    let n_upper_sys = state.nbl_upper - 1;
-    let stag_idx = state.stag_idx;
-
-    // Get DIJ matrix
-    let dij = match inviscid.get_dij() {
-        Some(d) => d,
-        None => {
-            // No coupling - just return simple update
-            let result = apply_newton_update(state, vdel, config);
-            return (result, qinv.to_vec());
-        }
-    };
-
-    // === Step 1: Compute new Ue using (MASS + dMASS) ===
-    // XFOIL: DUI = DUI + UE_M*(MASS(JBL,JS)+VDEL(3,1,JV))
-    // UNEW(IBL,IS) = UINV(IBL,IS) + DUI
-
-    // Build array of new masses (MASS + DMASS) for each panel
-    // IMPORTANT: XFOIL excludes stagnation station (JBL=1 in 1-indexed) from DIJ sum
-    // In 0-indexed: skip ibl=0 (stagnation station)
-    // XFOIL: DO 1000 JBL=2, NBL(JS)  -- starts at 2, not 1
-    //
-    // NOTE: We clamp new_mass to be non-negative to prevent the DIJ coupling from
-    // producing completely wrong velocities. This is a safeguard; large negative
-    // mass values would cause UNEW to explode.
-    let mut new_mass = vec![0.0; n];
-    let mut max_old_mass: f64 = 0.0;
-    let mut max_dmass: f64 = 0.0;
-    let mut max_dmass_iv: usize = 0;
-    for (ibl, &ipan) in state.ipan_upper.iter().enumerate() {
-        // Skip stagnation station (ibl=0)
-        if ibl >= 1 && ibl < state.nbl_upper {
-            let station = &state.stations_upper[ibl];
-            // CRITICAL: Use state.upper.uedg[ibl] for MASS, NOT station.u
-            // XFOIL: MASS(IBL,IS) = DSTR(IBL,IS) * UEDG(IBL,IS)  (xbl.f line 1763)
-            let old_mass = station.dstar * state.upper.uedg[ibl];
-            max_old_mass = max_old_mass.max(old_mass);
-            let iv = ibl - 1;
-            let dmass = vdel[iv][2][0];  // VDEL(3,1,JV) - mass delta
-            if dmass.abs() > max_dmass.abs() {
-                max_dmass = dmass;
-                max_dmass_iv = iv;
+            if i_station == state.i_te_station[side] + 1 {
+                // redefine coefficients for TTE, DTE, etc
+                for k in 0..3 {
+                    let vs1 = &sys.jacobian_station1[k];
+                    vz[k][0] = vs1[0] * cte_cte1;
+                    vz[k][1] = vs1[0] * cte_tte1 + vs1[1] * tte_tte1;
+                    vb[i_row - 1][k][0] = vs1[0] * cte_cte2;
+                    vb[i_row - 1][k][1] = vs1[0] * cte_tte2 + vs1[1] * tte_tte2;
+                }
             }
-            new_mass[ipan] = (old_mass + dmass).max(0.0);
-        }
-    }
-    let mut max_old_mass_lower: f64 = 0.0;
-    let mut max_dmass_lower: f64 = 0.0;
-    let mut max_dmass_iv_lower: usize = 0;
-    let _ = (max_old_mass, max_dmass, max_dmass_iv); // Suppress unused warnings
-    for (ibl, &ipan) in state.ipan_lower.iter().enumerate() {
-        // Skip stagnation station (ibl=0)
-        if ibl >= 1 && ibl < state.nbl_lower {
-            let station = &state.stations_lower[ibl];
-            // CRITICAL: Use state.lower.uedg[ibl] for MASS, NOT station.u
-            // XFOIL: MASS(IBL,IS) = DSTR(IBL,IS) * UEDG(IBL,IS)  (xbl.f line 1763)
-            let old_mass = station.dstar * state.lower.uedg[ibl];
-            max_old_mass_lower = max_old_mass_lower.max(old_mass);
-            let iv = n_upper_sys + (ibl - 1);
-            let dmass = vdel[iv][2][0];  // VDEL(3,1,JV) - mass delta
-            if dmass.abs() > max_dmass_lower.abs() {
-                max_dmass_lower = dmass;
-                max_dmass_iv_lower = iv;
+
+            // turbulent intervals will follow if currently at transition interval
+            if tran {
+                turb = true;
+
+                // save transition location
+                state.i_transition_station[side] = i_station;
+                state.transition_forced[side] = trforc;
+                state.xi_transition[side] = transition.xi_transition;
+
+                // interpolate airfoil geometry to find transition x/c (for user output)
+                let str = if side == 1 {
+                    state.s_stagnation - transition.xi_transition
+                } else {
+                    state.s_stagnation + transition.xi_transition
+                };
+                let chx = state.x_te - state.x_le;
+                let chy = state.y_te - state.y_le;
+                let chsq = chx * chx + chy * chy;
+                let n = state.n_foil_nodes;
+                let xtr = spline_value(str, &state.x[1..=n], &state.dxds[1..=n], &state.s[1..=n]);
+                let ytr = spline_value(str, &state.y[1..=n], &state.dyds[1..=n], &state.s[1..=n]);
+                state.x_transition[side] = ((xtr - state.x_le) * chx + (ytr - state.y_le) * chy) / chsq;
+                state.y_transition[side] = ((ytr - state.y_le) * chx - (xtr - state.x_le) * chy) / chsq;
             }
-            new_mass[ipan] = (old_mass + dmass).max(0.0);
+            // (TRAN = .FALSE.; both flags are recomputed from ITRAN at the top of the sweep)
+            let _ = turb;
+
+            if i_station == state.i_te_station[side] {
+                // set "2" variables at TE to wake correlations for next station
+                // (BLVAR(3); BLMID(3) only sets the interval CFM, which the next BLSYS recomputes)
+                s2.set_closure_variables(FlowRegime::Wake, &params);
+            }
+
+            for j_side in 1..=2 {
+                for j_station in 2..=state.n_stations[j_side] {
+                    let j_row = state.i_row[j_side][j_station];
+                    u1_m[j_row] = u2_m[j_row];
+                    d1_m[j_row] = d2_m[j_row];
+                }
+            }
+            u1_a = u2_a;
+            d1_a = d2_a;
+            due1 = due2;
+            dds1 = dds2;
+
+            if i_station == state.i_transition_station[side] && s2.xi > s1.xi {
+                let frac = (transition.xi_transition - s1.xi) / (s2.xi - s1.xi);
+                state.transition_node_fraction[side] = if side == 1 {
+                    (state.i_stagnation_node as i64 - state.i_transition_station[side] as i64 + 3) as f64 - frac
+                } else {
+                    (state.i_stagnation_node as i64 + state.i_transition_station[side] as i64 - 2) as f64 + frac
+                };
+            }
+
+            // set BL variables for next station
+            s1 = s2.clone();
         }
-    }
-    let _ = (max_old_mass_lower, max_dmass_lower, max_dmass_iv_lower); // Suppress unused warnings
-
-    // Compute UNEW from DIJ coupling
-    // Formula: UNEW[i] = QINV[i] + sum_j(-VTI[i] * VTI[j] * DIJ[i,j] * NEW_MASS[j])
-    let mut unew = qinv.to_vec();
-    for i in 0..n {
-        let vti_i = if i < stag_idx { 1.0 } else { -1.0 };
-        for j in 0..n {
-            let vti_j = if j < stag_idx { 1.0 } else { -1.0 };
-            let contribution = -vti_i * vti_j * dij[(i, j)] * new_mass[j];
-            unew[i] += contribution;
-        }
+        // 'Side IS forced/free transition at x/c = XOCTR(IS) ITRAN(IS)'
     }
 
-    // Save UNEW as USAV for the next iteration's SETBL
-    // XFOIL: USAV(IBL,IS) = UNEW(IBL,IS) in UPDATE
-    // This is the FULL Newton step velocity (before relaxation)
-    state.usav = unew.clone();
+    state.station1 = s1;
+    state.station2 = s2;
+    state.transition = transition;
 
-    // === Step 2: Compute under-relaxation factor ===
-    // XFOIL checks all variable changes and computes global RLX
-    let dhi = 1.5_f64;
-    let dlo = -0.5_f64;
-    let mut rlx = 1.0_f64;
-    let mut rmsbl = 0.0_f64;
-    let mut rmxbl = 0.0_f64;
-
-    // Collect deltas for all stations
-    struct StationDeltas {
-        dctau: f64,
-        dthet: f64,
-        dmass: f64,
-        duedg: f64,
-        ddstr: f64,
-        ctau: f64,
-        thet: f64,
-        dstr: f64,
-        uedg: f64,
-        is_turb: bool,
-    }
-
-    let mut upper_deltas = Vec::new();
-    let mut lower_deltas = Vec::new();
-
-    // Process upper surface
-    let itran_upper = state.march_upper.itran;
-    for ibl in 1..state.nbl_upper {
-        let iv = ibl - 1;
-        let ipan = state.ipan_upper[ibl];
-        let station = &state.stations_upper[ibl];
-
-        let dctau = vdel[iv][0][0];
-        let dthet = vdel[iv][1][0];
-        let dmass = vdel[iv][2][0];
-
-        let ctau = station.ctau.max(1e-6);
-        let thet = station.theta.max(1e-10);
-        let dstr = station.dstar.max(1e-10);
-        let uedg = state.upper.uedg[ibl].max(0.01);
-
-        let duedg = unew[ipan] - uedg;
-        // XFOIL: DDSTR = (DMASS - DSTR(IBL,IS)*DUEDG)/UEDG(IBL,IS)
-        let ddstr = (dmass - dstr * duedg) / uedg;
-
-        let is_turb = ibl >= itran_upper;
-
-        upper_deltas.push(StationDeltas {
-            dctau, dthet, dmass, duedg, ddstr,
-            ctau, thet, dstr, uedg, is_turb,
-        });
-
-        // Compute normalized changes for relaxation check
-        // XFOIL: DN1 = DCTAU / CTAU (or /10 for laminar)
-        let dn1 = if is_turb { dctau / ctau } else { dctau / 10.0 };
-        let dn2 = dthet / thet;
-        let dn3 = ddstr / dstr;
-        let dn4 = duedg.abs() / 0.25;  // XFOIL uses fixed 0.25, not current Ue
-
-        // Note: RMSBL will be computed AFTER global RLX is determined
-        rmxbl = rmxbl.max(dn1.abs()).max(dn2.abs()).max(dn3.abs()).max(dn4.abs());
-
-        // Check under-relaxation for each variable
-        // Need to check both directions for signed DN values
-        if dn1.abs() > 1e-10 {
-            if dn1 > dhi { rlx = rlx.min(dhi / dn1); }
-            if dn1 < dlo { rlx = rlx.min(dlo / dn1); }
-        }
-        if dn2.abs() > 1e-10 {
-            if dn2 > dhi { rlx = rlx.min(dhi / dn2); }
-            if dn2 < dlo { rlx = rlx.min(dlo / dn2); }
-        }
-        if dn3.abs() > 1e-10 {
-            if dn3 > dhi { rlx = rlx.min(dhi / dn3); }
-            if dn3 < dlo { rlx = rlx.min(dlo / dn3); }
-        }
-        if dn4 > dhi { rlx = rlx.min(dhi / dn4); }  // dn4 is always positive
-    }
-
-    // Process lower surface
-    let itran_lower = state.march_lower.itran;
-    for ibl in 1..state.nbl_lower {
-        let iv = n_upper_sys + (ibl - 1);
-        let ipan = state.ipan_lower[ibl];
-        let station = &state.stations_lower[ibl];
-
-        let dctau = vdel[iv][0][0];
-        let dthet = vdel[iv][1][0];
-        let dmass = vdel[iv][2][0];
-
-        let ctau = station.ctau.max(1e-6);
-        let thet = station.theta.max(1e-10);
-        let dstr = station.dstar.max(1e-10);
-        let uedg = state.lower.uedg[ibl].max(0.01);
-
-        let duedg = unew[ipan] - uedg;
-        let ddstr = (dmass - dstr * duedg) / uedg;
-
-        let is_turb = ibl >= itran_lower;
-
-        lower_deltas.push(StationDeltas {
-            dctau, dthet, dmass, duedg, ddstr,
-            ctau, thet, dstr, uedg, is_turb,
-        });
-
-        let dn1 = if is_turb { dctau / ctau } else { dctau / 10.0 };
-        let dn2 = dthet / thet;
-        let dn3 = ddstr / dstr;
-        let dn4 = duedg.abs() / 0.25;
-
-        // Note: RMSBL will be computed AFTER global RLX is determined
-        rmxbl = rmxbl.max(dn1.abs()).max(dn2.abs()).max(dn3.abs()).max(dn4.abs());
-
-        if dn1.abs() > 1e-10 {
-            if dn1 > dhi { rlx = rlx.min(dhi / dn1); }
-            if dn1 < dlo { rlx = rlx.min(dlo / dn1); }
-        }
-        if dn2.abs() > 1e-10 {
-            if dn2 > dhi { rlx = rlx.min(dhi / dn2); }
-            if dn2 < dlo { rlx = rlx.min(dlo / dn2); }
-        }
-        if dn3.abs() > 1e-10 {
-            if dn3 > dhi { rlx = rlx.min(dhi / dn3); }
-            if dn3 < dlo { rlx = rlx.min(dlo / dn3); }
-        }
-        if dn4 > dhi { rlx = rlx.min(dhi / dn4); }  // dn4 is always positive
-    }
-
-    // Ensure positive relaxation
-    rlx = rlx.max(0.01);
-
-    // Compute RMSBL using UNRELAXED DN values (as XFOIL does)
-    // XFOIL: RMSBL = RMSBL + DN1**2 + DN2**2 + DN3**2 + DN4**2 (no RLX factor)
-    for d in &upper_deltas {
-        let dn1 = if d.is_turb { d.dctau / d.ctau } else { d.dctau / 10.0 };
-        let dn2 = d.dthet / d.thet;
-        let dn3 = d.ddstr / d.dstr;
-        let dn4 = d.duedg.abs() / 0.25;
-        rmsbl += dn1*dn1 + dn2*dn2 + dn3*dn3 + dn4*dn4;
-    }
-    for d in &lower_deltas {
-        let dn1 = if d.is_turb { d.dctau / d.ctau } else { d.dctau / 10.0 };
-        let dn2 = d.dthet / d.thet;
-        let dn3 = d.ddstr / d.dstr;
-        let dn4 = d.duedg.abs() / 0.25;
-        rmsbl += dn1*dn1 + dn2*dn2 + dn3*dn3 + dn4*dn4;
-    }
-
-    // === Step 3: Apply relaxed updates ===
-    // Build output edge velocity
-    let mut ue_out = qinv.to_vec();
-
-    // Update upper surface
-    for (idx, ibl) in (1..state.nbl_upper).enumerate() {
-        let d = &upper_deltas[idx];
-        let ipan = state.ipan_upper[ibl];
-        let station = &mut state.stations_upper[ibl];
-
-        // Apply relaxed changes
-        station.ctau = (d.ctau + rlx * d.dctau).max(1e-6).min(0.25);
-        station.theta = (d.thet + rlx * d.dthet).max(1e-10);
-        station.dstar = (d.dstr + rlx * d.ddstr).max(station.theta * 1.02);
-        let new_uedg = (d.uedg + rlx * d.duedg).max(0.01);
-        station.u = new_uedg;
-
-        // Update BL arrays
-        state.upper.thet[ibl] = station.theta;
-        state.upper.dstr[ibl] = station.dstar;
-        state.upper.ctau[ibl] = station.ctau;
-        state.upper.uedg[ibl] = new_uedg;
-        state.upper.mass[ibl] = station.dstar * new_uedg;  // Nonlinear update
-
-        // Recompute closure relations
-        station.blkin(&state.params);
-        let flow_type = if d.is_turb { BLFlowType::Turbulent } else { BLFlowType::Laminar };
-        station.blvar(flow_type, &state.params);
-
-        ue_out[ipan] = new_uedg;
-    }
-
-    // Update lower surface
-    for (idx, ibl) in (1..state.nbl_lower).enumerate() {
-        let d = &lower_deltas[idx];
-        let ipan = state.ipan_lower[ibl];
-        let station = &mut state.stations_lower[ibl];
-
-        station.ctau = (d.ctau + rlx * d.dctau).max(1e-6).min(0.25);
-        station.theta = (d.thet + rlx * d.dthet).max(1e-10);
-        station.dstar = (d.dstr + rlx * d.ddstr).max(station.theta * 1.02);
-        let new_uedg = (d.uedg + rlx * d.duedg).max(0.01);
-        station.u = new_uedg;
-
-        state.lower.thet[ibl] = station.theta;
-        state.lower.dstr[ibl] = station.dstar;
-        state.lower.ctau[ibl] = station.ctau;
-        state.lower.uedg[ibl] = new_uedg;
-        state.lower.mass[ibl] = station.dstar * new_uedg;
-
-        station.blkin(&state.params);
-        let flow_type = if d.is_turb { BLFlowType::Turbulent } else { BLFlowType::Laminar };
-        station.blvar(flow_type, &state.params);
-
-        ue_out[ipan] = new_uedg;
-    }
-
-    // Update stagnation stations (no Newton deltas, just recompute closure)
-    if state.nbl_upper > 0 {
-        let station = &mut state.stations_upper[0];
-        station.blkin(&state.params);
-        station.blvar(BLFlowType::Laminar, &state.params);
-        state.upper.thet[0] = station.theta;
-        state.upper.dstr[0] = station.dstar;
-        state.upper.ctau[0] = station.ctau;
-        state.upper.mass[0] = station.dstar * station.u;
-    }
-    if state.nbl_lower > 0 {
-        let station = &mut state.stations_lower[0];
-        station.blkin(&state.params);
-        station.blvar(BLFlowType::Laminar, &state.params);
-        state.lower.thet[0] = station.theta;
-        state.lower.dstr[0] = station.dstar;
-        state.lower.ctau[0] = station.ctau;
-        state.lower.mass[0] = station.dstar * station.u;
-    }
-
-    // XFOIL: RMSBL = SQRT( RMSBL / (4.0*FLOAT( NBL(1)+NBL(2) )) )
-    let n_total = (state.nbl_upper + state.nbl_lower) as f64;
-    rmsbl = (rmsbl / (4.0 * n_total)).sqrt();
-
-    let result = SetblResult {
-        rmsbl,
-        dmax: rmxbl,
-        n_failed: 0,
-        continue_iteration: rmsbl > config.tol_rmsbl,
+    let sys = NewtonSystem {
+        n_rows: nsys,
+        diagonal: va,
+        subdiagonal: vb,
+        rhs: vdel,
+        mass_influence: vm,
+        te_block: vz,
+        i_te_row_upper: Some(state.i_row[1][state.i_te_station[1]] - 1),
+        i_wake_row: Some(state.i_row[2][state.i_te_station[2] + 1] - 1),
+        elimination_threshold: state.elimination_threshold,
+        s_total: Some(state.s[state.n_foil_nodes] - state.s[1]),
     };
-
-    (result, ue_out)
-}
-
-/// Apply Newton delta to a single station with relaxation
-///
-/// Returns (relaxation_factor, sum_of_squared_normalized_changes, max_normalized_change)
-///
-/// XFOIL accumulates DN1² + DN2² + DN3² for RMSBL calculation where:
-/// - DN1 = |dCtau/Ctau| * rlx
-/// - DN2 = |dTheta/Theta| * rlx
-/// - DN3 = |dMass/Mass| * rlx
-fn apply_station_update(
-    station: &mut BLStationState,
-    delta: &[[f64; 2]; 3],
-    config: &SetblConfig,
-) -> (f64, f64, f64) {
-    // Newton deltas: delta[0] = dCtau, delta[1] = dTheta, delta[2] = dMass
-    let d_ctau = delta[0][0];
-    let d_theta = delta[1][0];
-    let d_mass = delta[2][0];
-
-    // Current values
-    let ctau = station.ctau.max(1e-6);
-    let theta = station.theta.max(1e-10);
-    let mass = (station.dstar * station.u).max(1e-10);
-
-    // Compute relative changes (DN values before relaxation)
-    let dn1 = (d_ctau / ctau).abs();
-    let dn2 = (d_theta / theta).abs();
-    let dn3 = (d_mass / mass).abs();
-
-    // Find relaxation factor to keep changes within bounds
-    let mut rlx: f64 = 1.0;
-
-    // Limit increases
-    if dn1 > config.dhi {
-        rlx = rlx.min(config.dhi / dn1);
-    }
-    if dn2 > config.dhi {
-        rlx = rlx.min(config.dhi / dn2);
-    }
-    if dn3 > config.dhi {
-        rlx = rlx.min(config.dhi / dn3);
-    }
-
-    // Limit decreases (using signed relative changes)
-    let rel_ctau = d_ctau / ctau;
-    let rel_theta = d_theta / theta;
-    let rel_mass = d_mass / mass;
-
-    if rel_ctau < config.dlo {
-        rlx = rlx.min(config.dlo / rel_ctau);
-    }
-    if rel_theta < config.dlo {
-        rlx = rlx.min(config.dlo / rel_theta);
-    }
-    if rel_mass < config.dlo {
-        rlx = rlx.min(config.dlo / rel_mass);
-    }
-
-    // Note: XFOIL does NOT have a global under-relaxation factor here.
-    // The per-variable relaxation based on DHI/DLO bounds is sufficient.
-    // Removed: rlx *= config.global_rlx;
-
-    // Apply relaxed update
-    station.ctau = (ctau + rlx * d_ctau).max(1e-6).min(0.3);
-    station.theta = (theta + rlx * d_theta).max(1e-10);
-
-    // Update dstar from mass: mass = Ue * dstar, so dstar = mass / Ue
-    let new_mass = mass + rlx * d_mass;
-    let ue = station.u.max(0.01);
-    station.dstar = (new_mass / ue).max(station.theta * 1.00005);
-
-    // XFOIL RMSBL: accumulates (RLX*DN)² for each variable
-    // We return the sum of squared relaxed normalized changes
-    let dn1_rlx = rlx * dn1;
-    let dn2_rlx = rlx * dn2;
-    let dn3_rlx = rlx * dn3;
-    let sum_sq = dn1_rlx * dn1_rlx + dn2_rlx * dn2_rlx + dn3_rlx * dn3_rlx;
-
-    // Also return max for dmax tracking
-    let dmax = dn1.max(dn2).max(dn3) * rlx;
-
-    (rlx, sum_sq, dmax)
-}
-
-/// Update edge velocities from mass defect using DIJ matrix
-///
-/// Computes: Ue_new = Qinv + Σ_j (-VTI_i * VTI_j * DIJ(i,j) * mass_j)
-/// Then under-relaxes the change: Ue = Ue_old + RLX * (Ue_new - Ue_old)
-///
-/// This matches XFOIL's UPDATE subroutine behavior where DUEDG is under-relaxed.
-///
-/// # Arguments
-/// * `state` - SETBL state with current mass defect values
-/// * `inviscid` - Inviscid solution (contains DIJ)
-/// * `qinv` - Inviscid velocity at each panel (unsigned magnitude)
-///
-/// # Returns
-/// Updated edge velocity at each panel (unsigned magnitude)
-pub fn update_edge_velocities(
-    state: &SetblState,
-    inviscid: &InviscidSolution,
-    qinv: &[f64],
-    config: &SetblConfig,
-) -> Vec<f64> {
-    let n = qinv.len();
-
-    // Get current edge velocities
-    let mut current_ue = vec![0.0; n];
-    for (ibl, &ipan) in state.ipan_upper.iter().enumerate() {
-        if ibl < state.nbl_upper {
-            current_ue[ipan] = state.upper.uedg[ibl];
-        }
-    }
-    for (ibl, &ipan) in state.ipan_lower.iter().enumerate() {
-        if ibl < state.nbl_lower {
-            current_ue[ipan] = state.lower.uedg[ibl];
-        }
-    }
-    // For panels not covered by BL stations, use inviscid
-    for i in 0..n {
-        if current_ue[i] == 0.0 {
-            current_ue[i] = qinv[i];
-        }
-    }
-
-    // Get DIJ matrix
-    let dij = match inviscid.get_dij() {
-        Some(d) => d,
-        None => return current_ue,
-    };
-
-    // Build mass defect array from BL state
-    // IMPORTANT: XFOIL excludes stagnation station (JBL=1 in 1-indexed) from DIJ sum
-    // In 0-indexed: skip ibl=0 (stagnation station)
-    // XFOIL: DO 1000 JBL=2, NBL(JS)  -- starts at 2, not 1
-    // Build MASS array using DSTR * UEDG (not station.u!)
-    // XFOIL: MASS(IBL,IS) = DSTR(IBL,IS) * UEDG(IBL,IS)  (xbl.f line 1763)
-    let mut mass = vec![0.0; n];
-    for (ibl, &ipan) in state.ipan_upper.iter().enumerate() {
-        // Skip stagnation station (ibl=0)
-        if ibl >= 1 && ibl < state.nbl_upper {
-            let station = &state.stations_upper[ibl];
-            // CRITICAL: Use state.upper.uedg[ibl], NOT station.u
-            mass[ipan] = station.dstar * state.upper.uedg[ibl];
-        }
-    }
-    for (ibl, &ipan) in state.ipan_lower.iter().enumerate() {
-        // Skip stagnation station (ibl=0)
-        if ibl >= 1 && ibl < state.nbl_lower {
-            let station = &state.stations_lower[ibl];
-            // CRITICAL: Use state.lower.uedg[ibl], NOT station.u
-            mass[ipan] = station.dstar * state.lower.uedg[ibl];
-        }
-    }
-
-    // Compute new edge velocities from DIJ coupling
-    // VTI sign: upper surface (i < stag_idx) -> +1, lower surface (i >= stag_idx) -> -1
-    let stag_idx = state.stag_idx;
-    let mut new_ue = qinv.to_vec();
-
-    for i in 0..n {
-        let vti_i = if i < stag_idx { 1.0 } else { -1.0 };
-        for j in 0..n {
-            let vti_j = if j < stag_idx { 1.0 } else { -1.0 };
-            new_ue[i] += -vti_i * vti_j * dij[(i, j)] * mass[j];
-        }
-    }
-
-    // Compute under-relaxation factor based on maximum Ue change
-    // XFOIL uses DN4 = ABS(DUEDG)/0.25 with FIXED 0.25 reference
-    let dhi = config.dhi;
-    let mut rlx = 1.0_f64;
-
-    for i in 0..n {
-        let duedg = new_ue[i] - current_ue[i];
-        // XFOIL: DN4 = ABS(DUEDG)/0.25 - uses FIXED reference of 0.25, not current Ue
-        let dn4 = duedg.abs() / 0.25;
-
-        // Under-relax if change is too large
-        if dn4 > dhi {
-            rlx = rlx.min(dhi / dn4);
-        }
-    }
-
-    // Ensure some minimum relaxation
-    rlx = rlx.max(0.01);
-
-    // Note: XFOIL does NOT have a global under-relaxation factor here.
-    // Removed: rlx *= config.global_rlx;
-
-    // Apply under-relaxed change
-    let mut ue = vec![0.0; n];
-    for i in 0..n {
-        let duedg = new_ue[i] - current_ue[i];
-        ue[i] = current_ue[i] + rlx * duedg;
-        // Ensure positive
-        ue[i] = ue[i].max(0.01);
-    }
-
-    ue
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_setbl_state_creation() {
-        use crate::geometry::{naca_4digit, create_paneled_airfoil, repanel_xfoil, PaneConfig};
-
-        let geom = naca_4digit("0012", 80).unwrap();
-        let config = PaneConfig::default();
-        let repaneled = repanel_xfoil(&geom, 80, &config);
-        let airfoil = create_paneled_airfoil(&repaneled);
-
-        let cond = FlowConditions::new(1_000_000.0, 0.0, 9.0, 1.0);
-        let stag_idx = 40; // Approximate for symmetric at α=0
-        let sst = airfoil.s[40];
-
-        let state = SetblState::new(&airfoil, stag_idx, sst, &cond);
-
-        assert_eq!(state.nbl_upper, 40);
-        assert_eq!(state.nbl_lower, 40);
-        assert_eq!(state.total_stations(), 80);
-    }
-
-    #[test]
-    fn test_setbl_config_default() {
-        let config = SetblConfig::default();
-        assert_eq!(config.vaccel, 0.01);
-        assert!(config.tol_rmsbl > 0.0);
+    AssembledSystem {
+        newton: sys,
+        flow: params,
+        re_d_cl: re_clmr,
+        machsqd_d_cl: msq_clmr,
+        mach_d_cl: ma_clmr,
+        ue_le_mismatch: [0.0, dule1, dule2],
     }
 }

@@ -4,28 +4,27 @@
 //! with eN transition prediction.
 //!
 //! # Components
-//! - `state` - BL variable definitions
 //! - `closure` - Closure relations (Cf, H, Hs, etc.)
-//! - `transition` - eN method for laminar-turbulent transition
-//! - `march` - BL marching algorithms (direct and mixed modes)
-//! - `newton` - Newton iteration system
-//! - `system` - BL Newton system data structures (XFOIL-compatible)
+//! - `params` - BLPAR constants, flow regime, global BL parameters (/V_VAR/)
+//! - `station` - station state COM1/COM2 with BLPRV/BLKIN/BLVAR, BLMID, DSLIM
+//! - `transition` - TRCHEK2, DAMPL/DAMPL2, AXSET
+//! - `difference` - BLDIF/TRDIF local Newton system (/V_SYS/)
+//! - `system` - re-exports of the four above
 //! - `blsolv` - BLSOLV block solver for coupled Newton system
-//! - `wake` - Wake boundary layer model
 
 pub mod blsolv;
+pub mod blsys;
 mod closure;
+pub mod difference;
 pub mod gauss;
-mod march;
 pub mod mrchdu;
-mod newton;
-mod state;
+pub mod mrchue;
+pub mod params;
+pub mod station;
 pub mod system;
-mod wake;
+pub mod transition;
 
-pub use blsolv::*;
-pub use closure::*;
-pub use march::*;
-pub use newton::*;
-pub use state::*;
-pub use wake::*;
+pub use blsolv::{solve_newton_system, solve_newton_system_traced, BlsolvTrace, NewtonDeltas, NewtonSystem};
+pub use closure::{
+    cdiss_laminar, cdiss_wake, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent, hstarstar, Closure,
+};

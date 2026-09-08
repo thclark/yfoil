@@ -9,7 +9,6 @@
 //! The fixtures are written to tests/fixtures/
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -25,55 +24,7 @@ struct TestInput {
     reynolds: f64,
     mach: f64,
     n_panels: usize,
-    n_crit: f64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeometryFixture {
-    n: usize,
-    x: Vec<f64>,
-    y: Vec<f64>,
-    s: Vec<f64>,
-    nx: Vec<f64>,
-    ny: Vec<f64>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct InviscidFixture {
-    alpha_rad: f64,
-    gamma: Vec<f64>,
-    qinv: Vec<f64>,
-    cpi: Vec<f64>,
-    cl_inv: f64,
-    cm_inv: f64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BLStation {
-    ibl: usize,
-    x: f64,
-    s: f64,
-    ue: f64,
-    delta_star: f64,
-    theta: f64,
-    hk: f64,
-    cf: f64,
-    ctau: f64,
-    mass: f64,
-    regime: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BLSide {
-    n_stations: usize,
-    stations: Vec<BLStation>,
-    itran: usize,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BLFixture {
-    upper: BLSide,
-    lower: BLSide,
+    ncrit: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -225,7 +176,7 @@ QUIT
         reynolds: case.reynolds,
         mach: 0.0,
         n_panels: 160,
-        n_crit: 9.0,
+        ncrit: 9.0,
     };
     write_json(&output_dir.join("input.json"), &input)?;
 

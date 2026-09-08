@@ -12,25 +12,25 @@
 
 /// Result type for closure relations that includes sensitivities
 #[derive(Debug, Clone, Copy)]
-pub struct ClosureResult {
+pub struct Closure {
     /// Primary value
-    pub val: f64,
+    pub value: f64,
     /// Sensitivity to kinematic shape factor Hk
-    pub val_hk: f64,
+    pub value_d_hk: f64,
     /// Sensitivity to momentum thickness Reynolds number Rt
-    pub val_rt: f64,
+    pub value_d_retheta: f64,
     /// Sensitivity to Mach number squared
-    pub val_msq: f64,
+    pub value_d_machsqd: f64,
 }
 
-impl ClosureResult {
+impl Closure {
     /// Create a new closure result with only the value (zero sensitivities)
     pub fn value(val: f64) -> Self {
         Self {
-            val,
-            val_hk: 0.0,
-            val_rt: 0.0,
-            val_msq: 0.0,
+            value: val,
+            value_d_hk: 0.0,
+            value_d_retheta: 0.0,
+            value_d_machsqd: 0.0,
         }
     }
 }
@@ -39,12 +39,15 @@ impl ClosureResult {
 // Shape Factor Conversions
 // ============================================================================
 
+/// Translates XFOIL's `HKIN`.
+///
 /// Calculate kinematic shape factor Hk from H and Mach number
 ///
 /// Hk = (H - 0.29*M²) / (1 + 0.113*M²)
 ///
 /// This accounts for compressibility effects (from Whitfield)
-pub fn hkin(h: f64, msq: f64) -> (f64, f64, f64) {
+#[doc(alias = "HKIN")]
+pub fn hk_from_h(h: f64, msq: f64) -> (f64, f64, f64) {
     let denom = 1.0 + 0.113 * msq;
     let hk = (h - 0.29 * msq) / denom;
     let hk_h = 1.0 / denom;
@@ -52,24 +55,20 @@ pub fn hkin(h: f64, msq: f64) -> (f64, f64, f64) {
     (hk, hk_h, hk_msq)
 }
 
-/// Calculate H from kinematic shape factor Hk and Mach number
-///
-/// Inverse of hkin
-pub fn h_from_hk(hk: f64, msq: f64) -> f64 {
-    hk * (1.0 + 0.113 * msq) + 0.29 * msq
-}
-
 // ============================================================================
 // Laminar Closure Relations
 // ============================================================================
 
+/// Translates XFOIL's `CFL`.
+///
 /// Laminar skin friction coefficient Cf (from Falkner-Skan)
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
-pub fn cf_lam(hk: f64, rt: f64, _msq: f64) -> ClosureResult {
+#[doc(alias = "CFL")]
+pub fn cf_laminar(hk: f64, rt: f64, _msq: f64) -> Closure {
     let (cf, cf_hk) = if hk < 5.5 {
         let tmp = (5.5 - hk).powi(3) / (hk + 1.0);
         let cf = (0.0727 * tmp - 0.07) / rt;
@@ -84,25 +83,28 @@ pub fn cf_lam(hk: f64, rt: f64, _msq: f64) -> ClosureResult {
 
     let cf_rt = -cf / rt;
 
-    ClosureResult {
-        val: cf,
-        val_hk: cf_hk,
-        val_rt: cf_rt,
-        val_msq: 0.0,
+    Closure {
+        value: cf,
+        value_d_hk: cf_hk,
+        value_d_retheta: cf_rt,
+        value_d_machsqd: 0.0,
     }
 }
 
+/// Translates XFOIL's `HSL`.
+///
 /// Laminar energy shape factor H* correlation
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number (not used in laminar)
 /// * `msq` - Mach number squared (not used in laminar)
-pub fn hs_lam(hk: f64, _rt: f64, _msq: f64) -> ClosureResult {
+#[doc(alias = "HSL")]
+pub fn hstar_laminar(hk: f64, _rt: f64, _msq: f64) -> Closure {
     let (hs, hs_hk) = if hk < 4.35 {
         let tmp = hk - 4.35;
-        let hs = 0.0111 * tmp.powi(2) / (hk + 1.0) - 0.0278 * tmp.powi(3) / (hk + 1.0) + 1.528
-            - 0.0002 * (tmp * hk).powi(2);
+        let hs =
+            0.0111 * tmp.powi(2) / (hk + 1.0) - 0.0278 * tmp.powi(3) / (hk + 1.0) + 1.528 - 0.0002 * (tmp * hk).powi(2);
         let hs_hk = 0.0111 * (2.0 * tmp - tmp.powi(2) / (hk + 1.0)) / (hk + 1.0)
             - 0.0278 * (3.0 * tmp.powi(2) - tmp.powi(3) / (hk + 1.0)) / (hk + 1.0)
             - 0.0002 * 2.0 * tmp * hk * (tmp + hk);
@@ -114,20 +116,23 @@ pub fn hs_lam(hk: f64, _rt: f64, _msq: f64) -> ClosureResult {
         (hs, hs_hk)
     };
 
-    ClosureResult {
-        val: hs,
-        val_hk: hs_hk,
-        val_rt: 0.0,
-        val_msq: 0.0,
+    Closure {
+        value: hs,
+        value_d_hk: hs_hk,
+        value_d_retheta: 0.0,
+        value_d_machsqd: 0.0,
     }
 }
 
+/// Translates XFOIL's `DIL`.
+///
 /// Laminar dissipation coefficient 2*CD/H* (from Falkner-Skan)
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
-pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
+#[doc(alias = "DIL")]
+pub fn cdiss_laminar(hk: f64, rt: f64) -> Closure {
     let (di, di_hk) = if hk < 4.0 {
         let di = (0.00205 * (4.0 - hk).powf(5.5) + 0.207) / rt;
         let di_hk = (-0.00205 * 5.5 * (4.0 - hk).powf(4.5)) / rt;
@@ -142,11 +147,11 @@ pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
 
     let di_rt = -di / rt;
 
-    ClosureResult {
-        val: di,
-        val_hk: di_hk,
-        val_rt: di_rt,
-        val_msq: 0.0,
+    Closure {
+        value: di,
+        value_d_hk: di_hk,
+        value_d_retheta: di_rt,
+        value_d_machsqd: 0.0,
     }
 }
 
@@ -154,6 +159,8 @@ pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
 // Turbulent Closure Relations
 // ============================================================================
 
+/// Translates XFOIL's `CFT`.
+///
 /// Turbulent skin friction coefficient Cf (Coles correlation)
 ///
 /// # Arguments
@@ -161,7 +168,8 @@ pub fn di_lam(hk: f64, rt: f64) -> ClosureResult {
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
 /// * `cffac` - Skin friction factor (typically 1.0)
-pub fn cf_turb(hk: f64, rt: f64, msq: f64, cffac: f64) -> ClosureResult {
+#[doc(alias = "CFT")]
+pub fn cf_turbulent(hk: f64, rt: f64, msq: f64, cffac: f64) -> Closure {
     const GAM: f64 = 1.4;
     let gm1 = GAM - 1.0;
 
@@ -175,27 +183,28 @@ pub fn cf_turb(hk: f64, rt: f64, msq: f64, cffac: f64) -> ClosureResult {
     let cfo = cffac * 0.3 * arg.exp() * (grt / 2.3026).powf(gex);
     let cf = (cfo + 1.1e-4 * (thk - 1.0)) / fc;
 
-    let cf_hk = (-1.33 * cfo - 0.31 * (grt / 2.3026).ln() * cfo
-        - 1.1e-4 * (1.0 - thk.powi(2)) / 0.875)
-        / fc;
+    let cf_hk = (-1.33 * cfo - 0.31 * (grt / 2.3026).ln() * cfo - 1.1e-4 * (1.0 - thk.powi(2)) / 0.875) / fc;
     let cf_rt = gex * cfo / (fc * grt) / rt;
     let cf_msq = gex * cfo / (fc * grt) * (-0.25 * gm1 / fc.powi(2)) - 0.25 * gm1 * cf / fc.powi(2);
 
-    ClosureResult {
-        val: cf,
-        val_hk: cf_hk,
-        val_rt: cf_rt,
-        val_msq: cf_msq,
+    Closure {
+        value: cf,
+        value_d_hk: cf_hk,
+        value_d_retheta: cf_rt,
+        value_d_machsqd: cf_msq,
     }
 }
 
+/// Translates XFOIL's `HST`.
+///
 /// Turbulent energy shape factor H* correlation
 ///
 /// # Arguments
 /// * `hk` - Kinematic shape factor
 /// * `rt` - Momentum thickness Reynolds number Rθ
 /// * `msq` - Mach number squared
-pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
+#[doc(alias = "HST")]
+pub fn hstar_turbulent(hk: f64, rt: f64, msq: f64) -> Closure {
     const HSMIN: f64 = 1.5;
     const DHSINF: f64 = 0.015;
 
@@ -232,8 +241,7 @@ pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
 
         let hs = hdif.powi(2) * htmp + HSMIN + 4.0 / rtz;
         let hs_hk = hdif * 2.0 * htmp + hdif.powi(2) * htmp_hk;
-        let hs_rt =
-            hdif.powi(2) * htmp_rt - 4.0 / rtz.powi(2) * rtz_rt + hdif * 2.0 * htmp * (-ho_rt);
+        let hs_rt = hdif.powi(2) * htmp_rt - 4.0 / rtz.powi(2) * rtz_rt + hdif * 2.0 * htmp * (-ho_rt);
         (hs, hs_hk, hs_rt)
     };
 
@@ -244,131 +252,41 @@ pub fn hs_turb(hk: f64, rt: f64, msq: f64) -> ClosureResult {
     let hs_rt_final = hs_rt / fm;
     let hs_msq = (0.028 - 0.014 * hs_final) / fm;
 
-    ClosureResult {
-        val: hs_final,
-        val_hk: hs_hk_final,
-        val_rt: hs_rt_final,
-        val_msq: hs_msq,
+    Closure {
+        value: hs_final,
+        value_d_hk: hs_hk_final,
+        value_d_retheta: hs_rt_final,
+        value_d_machsqd: hs_msq,
     }
 }
 
-/// Turbulent dissipation function 2*CD/H*
+/// Translates XFOIL's `HCT`.
 ///
-/// # Arguments
-/// * `hs` - Energy shape factor H*
-/// * `us` - Edge velocity ratio Ue/Uinf (normalized)
-/// * `cf` - Skin friction coefficient
-/// * `st` - Shear stress ratio (typically derived from Cf)
-pub fn di_turb(hs: f64, us: f64, cf: f64, st: f64) -> (f64, f64, f64, f64, f64) {
-    let di = (0.5 * cf * us + st.powi(2) * (1.0 - us)) * 2.0 / hs;
-    let di_hs = -(0.5 * cf * us + st.powi(2) * (1.0 - us)) * 2.0 / hs.powi(2);
-    let di_us = (0.5 * cf - st.powi(2)) * 2.0 / hs;
-    let di_cf = (0.5 * us) * 2.0 / hs;
-    let di_st = (2.0 * st * (1.0 - us)) * 2.0 / hs;
-    (di, di_hs, di_us, di_cf, di_st)
-}
-
 /// Density shape parameter (from Whitfield)
-pub fn hc_turb(hk: f64, msq: f64) -> (f64, f64, f64) {
+#[doc(alias = "HCT")]
+pub fn hstarstar(hk: f64, msq: f64) -> (f64, f64, f64) {
     let hc = msq * (0.064 / (hk - 0.8) + 0.251);
     let hc_hk = msq * (-0.064 / (hk - 0.8).powi(2));
     let hc_msq = 0.064 / (hk - 0.8) + 0.251;
     (hc, hc_hk, hc_msq)
 }
 
-// ============================================================================
-// Transition Prediction (eN Method)
-// ============================================================================
-
-/// Amplification rate for envelope eN method (XFOIL DAMPL2 formulation)
-///
-/// Returns the spatial amplification rate dN/dx that is integrated
-/// along the surface to obtain N(x). Transition occurs when N >= Ncrit.
-///
-/// This uses the DAMPL2 formulation from XFOIL (Nov 1996) which includes
-/// improved correlation for high Hk (near-separation) profiles with an
-/// additional exponential term in the m(H) correlation.
-///
-/// # Arguments
-/// * `hk` - Kinematic shape factor
-/// * `th` - Momentum thickness θ
-/// * `rt` - Momentum thickness Reynolds number Rθ
-///
-/// # Returns
-/// (ax, ax_hk, ax_th, ax_rt) - Amplification rate and sensitivities
-///
-/// # Reference
-/// Drela, M., Giles, M., "Viscous/Inviscid Analysis of Transonic and
-/// Low Reynolds Number Airfoils", AIAA Journal, Oct. 1987.
-pub fn dampl(hk: f64, th: f64, rt: f64) -> (f64, f64, f64, f64) {
-    const DGR: f64 = 0.08;
-
-    let hmi = 1.0 / (hk - 1.0);
-    let hmi_hk = -hmi.powi(2);
-
-    // Critical Rtheta correlation for Falkner-Skan profiles
-    let aa = 2.492 * hmi.powf(0.43);
-    let aa_hk = (aa / hmi) * 0.43 * hmi_hk;
-
-    let bb = (14.0 * hmi - 9.24).tanh();
-    let bb_hk = (1.0 - bb.powi(2)) * 14.0 * hmi_hk;
-
-    let grcrit = aa + 0.7 * (bb + 1.0);
-    let grc_hk = aa_hk + 0.7 * bb_hk;
-
-    let gr = rt.log10();
-    let gr_rt = 1.0 / (2.3025851 * rt);
-
-    if gr < grcrit - DGR {
-        // No amplification for Rtheta < Rcrit
-        (0.0, 0.0, 0.0, 0.0)
-    } else {
-        // Smooth ramp to turn on amplification
-        let rnorm = (gr - (grcrit - DGR)) / (2.0 * DGR);
-        let rn_hk = -grc_hk / (2.0 * DGR);
-        let rn_rt = gr_rt / (2.0 * DGR);
-
-        let (rfac, rfac_hk, rfac_rt) = if rnorm >= 1.0 {
-            (1.0, 0.0, 0.0)
-        } else {
-            let rfac = 3.0 * rnorm.powi(2) - 2.0 * rnorm.powi(3);
-            let rfac_rn = 6.0 * rnorm - 6.0 * rnorm.powi(2);
-            (rfac, rfac_rn * rn_hk, rfac_rn * rn_rt)
-        };
-
-        // Amplification envelope slope correlation (d(N)/d(Rtheta))
-        let arg = 3.87 * hmi - 2.52;
-        let arg_hk = 3.87 * hmi_hk;
-
-        let ex = (-arg.powi(2)).exp();
-        let ex_hk = ex * (-2.0 * arg * arg_hk);
-
-        let dadr = 0.028 * (hk - 1.0) - 0.0345 * ex;
-        let dadr_hk = 0.028 - 0.0345 * ex_hk;
-
-        // m(H) correlation - DAMPL version (March 1991)
-        // Note: DAMPL2 has an additional +0.1*exp(-20*HMI) term, but XFOIL defaults to DAMPL
-        let af = -0.05 + 2.7 * hmi - 5.5 * hmi.powi(2) + 3.0 * hmi.powi(3);
-        let af_hmi = 2.7 - 11.0 * hmi + 9.0 * hmi.powi(2);
-        let af_hk = af_hmi * hmi_hk;
-
-        let ax = (af * dadr / th) * rfac;
-        let ax_hk = (af_hk * dadr / th + af * dadr_hk / th) * rfac + (af * dadr / th) * rfac_hk;
-        let ax_th = -ax / th;
-        let ax_rt = (af * dadr / th) * rfac_rt;
-
-        (ax, ax_hk, ax_th, ax_rt)
+/// DILW (xblsys.f): laminar wake dissipation function 2*CD/H* and its Hk, Rt sensitivities.
+pub fn cdiss_wake(hk: f64, rt: f64) -> Closure {
+    let msq = 0.0;
+    let hs = hstar_laminar(hk, rt, msq);
+    // Laminar wake dissipation function  ( 2 CD/H* )
+    let rcd = 1.10 * ((1.0 - 1.0 / hk) * (1.0 - 1.0 / hk)) / hk;
+    let rcd_hk = -1.10 * (1.0 - 1.0 / hk) * 2.0 / ((hk * hk) * hk) - rcd / hk;
+    let di = 2.0 * rcd / (hs.value * rt);
+    let di_hk = 2.0 * rcd_hk / (hs.value * rt) - (di / hs.value) * hs.value_d_hk;
+    let di_rt = -di / rt - (di / hs.value) * hs.value_d_retheta;
+    Closure {
+        value: di,
+        value_d_hk: di_hk,
+        value_d_retheta: di_rt,
+        value_d_machsqd: 0.0,
     }
-}
-
-/// Critical Reynolds number based on shape factor
-///
-/// Returns log10(Rtheta_crit) for transition onset
-pub fn rtheta_crit(hk: f64) -> f64 {
-    let hmi = 1.0 / (hk - 1.0);
-    let aa = 2.492 * hmi.powf(0.43);
-    let bb = (14.0 * hmi - 9.24).tanh();
-    aa + 0.7 * (bb + 1.0)
 }
 
 #[cfg(test)]
@@ -383,7 +301,7 @@ mod tests {
     #[test]
     fn test_hkin_incompressible() {
         // At M=0, Hk = H
-        let (hk, hk_h, hk_msq) = hkin(2.5, 0.0);
+        let (hk, hk_h, hk_msq) = hk_from_h(2.5, 0.0);
         assert_relative_eq!(hk, 2.5, epsilon = 1e-10);
         assert_relative_eq!(hk_h, 1.0, epsilon = 1e-10);
         // hk_msq = (-0.29 - 0.113*hk) / denom = -0.29 - 0.2825 = -0.5725
@@ -393,18 +311,9 @@ mod tests {
     #[test]
     fn test_hkin_compressible() {
         // At M=0.5 (M²=0.25), Hk should be reduced
-        let (hk, _, _) = hkin(2.5, 0.25);
+        let (hk, _, _) = hk_from_h(2.5, 0.25);
         assert!(hk < 2.5);
         assert!(hk > 2.0);
-    }
-
-    #[test]
-    fn test_h_hk_roundtrip() {
-        let h_orig = 2.7;
-        let msq = 0.16;
-        let (hk, _, _) = hkin(h_orig, msq);
-        let h_back = h_from_hk(hk, msq);
-        assert_relative_eq!(h_orig, h_back, epsilon = 1e-10);
     }
 
     // ========================================================================
@@ -415,33 +324,33 @@ mod tests {
     fn test_cf_lam_blasius() {
         // For Blasius flow, Hk ≈ 2.59, Cf ≈ 0.664/√Re_x
         // At Rθ = 1000, Cf ≈ 0.664/√Rex ≈ 0.0021 for appropriate Rex
-        let result = cf_lam(2.59, 1000.0, 0.0);
-        assert!(result.val > 0.0);
-        assert!(result.val < 0.01);
+        let result = cf_laminar(2.59, 1000.0, 0.0);
+        assert!(result.value > 0.0);
+        assert!(result.value < 0.01);
         // Cf should decrease with increasing Rt
-        assert!(result.val_rt < 0.0);
+        assert!(result.value_d_retheta < 0.0);
     }
 
     #[test]
     fn test_cf_lam_separated() {
         // For separated flow (high Hk), Cf should be small or negative
-        let result = cf_lam(6.0, 1000.0, 0.0);
-        assert!(result.val < 0.0); // Negative Cf indicates separation
+        let result = cf_laminar(6.0, 1000.0, 0.0);
+        assert!(result.value < 0.0); // Negative Cf indicates separation
     }
 
     #[test]
     fn test_hs_lam_attached() {
         // For attached laminar flow, H* should be around 1.5-1.6
-        let result = hs_lam(2.59, 1000.0, 0.0);
-        assert!(result.val > 1.4);
-        assert!(result.val < 1.8);
+        let result = hstar_laminar(2.59, 1000.0, 0.0);
+        assert!(result.value > 1.4);
+        assert!(result.value < 1.8);
     }
 
     #[test]
     fn test_di_lam_positive() {
         // Dissipation should always be positive for physical flows
-        let result = di_lam(2.59, 1000.0);
-        assert!(result.val > 0.0);
+        let result = cdiss_laminar(2.59, 1000.0);
+        assert!(result.value > 0.0);
     }
 
     // ========================================================================
@@ -451,60 +360,24 @@ mod tests {
     #[test]
     fn test_cf_turb_attached() {
         // Turbulent Cf for attached flow (Hk ≈ 1.3-1.5)
-        let result = cf_turb(1.4, 10000.0, 0.0, 1.0);
-        assert!(result.val > 0.002);
-        assert!(result.val < 0.01);
+        let result = cf_turbulent(1.4, 10000.0, 0.0, 1.0);
+        assert!(result.value > 0.002);
+        assert!(result.value < 0.01);
     }
 
     #[test]
     fn test_cf_turb_reynolds_effect() {
         // Cf should decrease with increasing Reynolds number
-        let cf1 = cf_turb(1.4, 10000.0, 0.0, 1.0);
-        let cf2 = cf_turb(1.4, 100000.0, 0.0, 1.0);
-        assert!(cf2.val < cf1.val);
+        let cf1 = cf_turbulent(1.4, 10000.0, 0.0, 1.0);
+        let cf2 = cf_turbulent(1.4, 100000.0, 0.0, 1.0);
+        assert!(cf2.value < cf1.value);
     }
 
     #[test]
     fn test_hs_turb_range() {
         // Turbulent H* should be > 1.5 (minimum) and typically < 2.5
-        let result = hs_turb(1.4, 10000.0, 0.0);
-        assert!(result.val >= 1.5);
-        assert!(result.val < 3.0);
-    }
-
-    // ========================================================================
-    // Transition Tests
-    // ========================================================================
-
-    #[test]
-    fn test_dampl_below_critical() {
-        // Below critical Reynolds number, amplification should be zero
-        let (ax, _, _, _) = dampl(2.5, 0.001, 100.0); // Low Rt
-        assert_eq!(ax, 0.0);
-    }
-
-    #[test]
-    fn test_dampl_above_critical() {
-        // Above critical Reynolds number, should have positive amplification
-        let (ax, _, _, _) = dampl(2.5, 0.001, 10000.0); // High Rt
-        assert!(ax > 0.0);
-    }
-
-    #[test]
-    fn test_rtheta_crit_blasius() {
-        // For Blasius (Hk ≈ 2.59), critical Rθ is around 200-500
-        let log_rt_crit = rtheta_crit(2.59);
-        let rt_crit = 10.0_f64.powf(log_rt_crit);
-        assert!(rt_crit > 100.0);
-        assert!(rt_crit < 1000.0);
-    }
-
-    #[test]
-    fn test_rtheta_crit_adverse_pressure_effect() {
-        // Higher Hk (more adverse pressure gradient) destabilizes the BL,
-        // leading to LOWER critical Rtheta (earlier transition)
-        let log_rt_crit_favorable = rtheta_crit(2.3); // More favorable (lower Hk)
-        let log_rt_crit_adverse = rtheta_crit(3.0); // More adverse (higher Hk)
-        assert!(log_rt_crit_adverse < log_rt_crit_favorable);
+        let result = hstar_turbulent(1.4, 10000.0, 0.0);
+        assert!(result.value >= 1.5);
+        assert!(result.value < 3.0);
     }
 }

@@ -14,14 +14,14 @@ XFOIL solves the 2D viscous airfoil problem using:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        INPUT                                     │
-│  Geometry: X, Y coordinates                                      │
+│                        INPUT                                    │
+│  Geometry: X, Y coordinates                                     │
 │  Conditions: α (or CL), Re, M∞                                  │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     GEOMETRY SETUP                               │
+│                     GEOMETRY SETUP                              │
 │  PANGEN: Repanel airfoil to N panels                            │
 │  SPLINE: Compute spline coefficients for X(S), Y(S)             │
 │  TECALC: Calculate TE geometry (sharp or blunt)                 │
@@ -29,16 +29,16 @@ XFOIL solves the 2D viscous airfoil problem using:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   INVISCID SOLUTION                              │
+│                   INVISCID SOLUTION                             │
 │  PSILIN: Compute vortex influence coefficients AIJ              │
 │  SETUP: Factor AIJ matrix (LU decomposition)                    │
-│  GAMCALC: Solve [AIJ]{γ} = {RHS} for vortex strengths          │
+│  GAMCALC: Solve [AIJ]{γ} = {RHS} for vortex strengths           │
 │  QINV: Tangential velocity from vortex distribution             │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      VISCAL                                      │
+│                      VISCAL                                     │
 │  Main viscous-inviscid coupling loop                            │
 └─────────────────────────────────────────────────────────────────┘
          │                    │                    │
@@ -52,7 +52,7 @@ XFOIL solves the 2D viscous airfoil problem using:
 │                 │  │ velocity        │  │ IBLPAN: Set     │
 │ QWCALC: Set     │  │                 │  │ BL→panel ptrs   │
 │ wake velocities │  │ DIJ(i,j) =      │  │                 │
-│                 │  │ ∂Qtan_i/∂σ_j   │  │ XICALC: Arc     │
+│                 │  │ ∂Qtan_i/∂σ_j    │  │ XICALC: Arc     │
 └─────────────────┘  └─────────────────┘  │ length coords   │
                                           └─────────────────┘
                               │
@@ -72,7 +72,7 @@ XFOIL solves the 2D viscous airfoil problem using:
 │                         │           │ underrelaxation         │
 │ For each BL station:    │           │                         │
 │ ├─ BLPRV: Primary vars  │           │ Solve:                  │
-│ ├─ BLKIN: Secondary     │           │ [VA VB] [Δ] = [VDEL]   │
+│ ├─ BLKIN: Secondary     │           │ [VA VB] [Δ] = [VDEL]    │
 │ ├─ BLVAR: Closures      │           │                         │
 │ ├─ BLSYS: Local system  │           └─────────────────────────┘
 │ └─ TRCHEK: Transition   │
@@ -80,24 +80,24 @@ XFOIL solves the 2D viscous airfoil problem using:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        UPDATE                                    │
+│                        UPDATE                                   │
 │  Apply Newton deltas with underrelaxation                       │
-│  Update: CTAU, THET, DSTR, UEDG, MASS                          │
+│  Update: CTAU, THET, DSTR, UEDG, MASS                           │
 │  Enforce bounds: Hk > 1, Ctau > 0                               │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    VELOCITY UPDATE                               │
-│  QVFUE: Compute QVIS from mass defect                          │
-│         QVIS_i = QINV_i + Σ_j DIJ(i,j)·σ_j                     │
+│                    VELOCITY UPDATE                              │
+│  QVFUE: Compute QVIS from mass defect                           │
+│         QVIS_i = QINV_i + Σ_j DIJ(i,j)·σ_j                      │
 │  GAMQV: Set γ from QVIS                                         │
 │  STMOVE: Relocate stagnation point                              │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  FORCE CALCULATION                               │
+│                  FORCE CALCULATION                              │
 │  CLCALC: Integrate Cp → CL, CM                                  │
 │  CDCALC: CD from momentum deficit                               │
 └─────────────────────────────────────────────────────────────────┘
@@ -116,11 +116,11 @@ XFOIL solves the 2D viscous airfoil problem using:
                                                │
                                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                          OUTPUT                                  │
+│                          OUTPUT                                 │
 │  CL, CD, CM coefficients                                        │
-│  Cp distribution                                                 │
+│  Cp distribution                                                │
 │  BL parameters: δ*, θ, Cf, H                                    │
-│  Transition locations                                            │
+│  Transition locations                                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -165,7 +165,7 @@ Station 1 (upstream)              Station 2 (downstream)
               │  TRCHEK     │
               │ Transition? │
               └─────────────┘
-                      │
+                     │
            ┌─────────┴─────────┐
            ▼                   ▼
       [Laminar]           [Turbulent]

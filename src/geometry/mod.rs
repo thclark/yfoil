@@ -1,6 +1,6 @@
-//! Airfoil geometry handling
+//! Aerofoil geometry handling
 //!
-//! This module provides functions and data structures for working with 2D airfoil
+//! This module provides functions and data structures for working with 2D aerofoil
 //! geometry, including coordinate representation, spline interpolation, panel
 //! distribution, NACA generation, and file I/O.
 //!
@@ -22,21 +22,21 @@
 //! Options:
 //!   --to <FORMAT>        Output format: json, dat [default: json]
 //!   -o, --output <PATH>  Output file path [default: input with new extension]
-//!   --name <NAME>        Airfoil name for .dat output [default: "Airfoil"]
+//!   --name <NAME>        Aerofoil name for .dat output [default: "Aerofoil"]
 //! ```
 //!
 //! Examples:
 //! ```text
 //! # Convert .dat to JSON
-//! yfoil geom convert airfoil.dat --to json
+//! yfoil geom convert aerofoil.dat --to json
 //!
 //! # Convert JSON to .dat with custom name
-//! yfoil geom convert airfoil.json --to dat --name "My Airfoil"
+//! yfoil geom convert aerofoil.json --to dat --name "My Aerofoil"
 //! ```
 //!
-//! ## `yfoil geom naca` - NACA Airfoil Generation
+//! ## `yfoil geom naca` - NACA Aerofoil Generation
 //!
-//! Generate standard NACA 4-digit or 5-digit airfoil profiles:
+//! Generate standard NACA 4-digit or 5-digit aerofoil profiles:
 //!
 //! ```text
 //! yfoil geom naca <spec> [OPTIONS]
@@ -46,6 +46,8 @@
 //!
 //! Options:
 //!   -n, --panels <N>     Number of panels [default: 160]
+//!   --thickness <T>      perpendicular (the NACA definition) | vertical (XFOIL's NACA4/NACA5) [default: perpendicular]
+//!   --sharp              Close the trailing edge
 //!   --to <FORMAT>        Output format: json, dat [default: json]
 //!   -o, --output <PATH>  Output file path [default: naca<spec>.<format>]
 //! ```
@@ -73,7 +75,7 @@
 //! yfoil geom naca 23015 -o my_airfoil.json
 //! ```
 //!
-//! ## `yfoil geom repanel` - Redistribute Panel Points
+//! ## `yfoil geom repanel` - Redistribute panel points
 //!
 //! Redistribute panel points on an existing geometry:
 //!
@@ -85,39 +87,39 @@
 //!
 //! Options:
 //!   -n, --panels <N>     Target number of panels [default: 160]
-//!   --method <METHOD>    Repaneling method [default: xfoil]
-//!   --le-ratio <RATIO>   LE/TE panel density ratio (cosine method only) [default: 0.15]
-//!   -o, --output <PATH>  Output file path [default: <input>_repaneled.json]
+//!   --method <METHOD>    Repanelling method: curvature | cosine [default: curvature]
+//!   --te-le-ratio <R>    TE/LE panel density ratio, XFOIL's CTERAT (cosine method only) [default: 0.15]
+//!   -o, --output <PATH>  Output file path [default: <input>_repanelled.json]
 //! ```
 //!
-//! ### Repaneling Methods
+//! ### Repanelling Methods
 //!
-//! **`xfoil` (default)**: Uses XFOIL's curvature-based PANE algorithm (PANGEN subroutine).
+//! **`curvature` (default)**: Uses XFOIL's curvature-based PANE algorithm (PANGEN subroutine).
 //! Distributes panels based on local surface curvature, placing more panels in
 //! high-curvature regions (leading edge) and fewer in low-curvature regions (mid-chord).
 //! This produces panel distributions that match XFOIL exactly.
 //!
-//! **`cosine`**: Uses modified cosine spacing with a configurable LE/TE density ratio.
-//! The `--le-ratio` parameter controls panel clustering:
-//! - Values < 1.0: Finer panels at LE, coarser at TE (recommended)
+//! **`cosine`**: Uses modified cosine spacing with a configurable TE/LE density ratio.
+//! The `--te-le-ratio` parameter controls panel clustering:
+//! - Values < 1.0: Finer panels at TE, coarser at LE
 //! - Value = 1.0: Symmetric cosine spacing
-//! - Values > 1.0: Finer panels at TE, coarser at LE
+//! - Values > 1.0: Finer panels at LE, coarser at TE
 //!
 //! Examples:
 //! ```text
 //! # Repanel using XFOIL's PANE algorithm (default)
-//! yfoil geom repanel airfoil.dat -n 180
+//! yfoil geom repanel aerofoil.dat -n 180
 //!
 //! # Repanel using modified cosine spacing
-//! yfoil geom repanel airfoil.json --method cosine --le-ratio 0.2
+//! yfoil geom repanel aerofoil.json --method cosine --te-le-ratio 0.2
 //!
 //! # Explicit XFOIL method
-//! yfoil geom repanel airfoil.dat --method xfoil -n 200 -o repaneled.json
+//! yfoil geom repanel aerofoil.dat --method curvature -n 200 -o repanelled.json
 //! ```
 //!
 //! ## `yfoil geom info` - Display Geometry Information
 //!
-//! Display statistics about an airfoil geometry:
+//! Display statistics about an aerofoil geometry:
 //!
 //! ```text
 //! yfoil geom info <input> [OPTIONS]
@@ -138,7 +140,7 @@
 //! - Trailing edge gap and whether TE is sharp
 //! - Reference point for moments
 //! - Leading edge index and arc length
-//! - Total arc length around the airfoil
+//! - Total arc length around the aerofoil
 //! - Maximum curvature
 //! - First/last point coordinates (trailing edge)
 //!
@@ -158,25 +160,6 @@
 //! yfoil geom info naca0012.json -o naca0012_info.json
 //! ```
 //!
-//! ## `yfoil geom plot` - Visualize Geometry (Feature-gated)
-//!
-//! Generate an interactive HTML plot of the airfoil shape:
-//!
-//! ```text
-//! yfoil geom plot <input> [OPTIONS]
-//!
-//! Arguments:
-//!   <input>              Input file path (.json or .dat)
-//!
-//! Options:
-//!   -o, --output <PATH>  Output HTML file [default: geometry.html]
-//! ```
-//!
-//! Note: Requires the `plotting` feature flag:
-//! ```text
-//! cargo build --features plotting
-//! ```
-//!
 //! # File Formats
 //!
 //! ## JSON Format
@@ -193,7 +176,7 @@
 //!
 //! ## Selig .dat Format
 //!
-//! Standard XFOIL/Selig format with airfoil name on first line:
+//! Standard XFOIL/Selig format with aerofoil name on first line:
 //!
 //! ```text
 //! NACA 0012
@@ -214,18 +197,18 @@
 //!
 //! # Data Structures
 //!
-//! - [`Geometry`]: Raw airfoil coordinates from input files
-//! - [`PaneledAirfoil`]: Fully processed geometry ready for aerodynamic analysis,
+//! - [`Geometry`]: Raw aerofoil coordinates from input files
+//! - [`PanelledFoil`]: Fully processed geometry ready for aerodynamic analysis,
 //!   including arc length parameterization, spline derivatives, normal vectors,
 //!   and panel angles
 //!
 //! # Key Functions
 //!
-//! - [`create_paneled_airfoil`]: Convert raw geometry to analysis-ready form
-//! - [`naca_4digit`], [`naca_5digit`]: Generate NACA airfoil profiles
-//! - [`repanel_xfoil`]: XFOIL's curvature-based PANE algorithm (default repaneling method)
-//! - [`repanel_cosine`]: Modified cosine spacing repaneling (alternative method)
-//! - [`spline`], [`seval`], [`deval`], [`d2val`]: Cubic spline interpolation
+//! - [`panel_foil`]: Convert raw geometry to analysis-ready form
+//! - [`naca_4digit`], [`naca_5digit`]: generate NACA aerofoil profiles
+//! - [`repanel_by_curvature`]: XFOIL's curvature-based PANE algorithm (default repanelling method)
+//! - [`repanel_cosine`]: modified cosine spacing (alternative method)
+//! - [`spline_derivatives`], [`spline_value`], [`spline_slope`], [`spline_second_derivative`]: cubic spline interpolation
 
 mod airfoil;
 mod io;
@@ -233,11 +216,16 @@ mod naca;
 mod panel;
 mod spline;
 
-pub use airfoil::{Geometry, InvalidGeometryError, PaneledAirfoil};
+pub use airfoil::{Geometry, InvalidGeometryError, PanelledFoil};
 pub use io::{
-    read_dat_file, read_geometry_auto, read_geometry_from_file, write_dat_file,
-    write_geometry_to_json, GeometryReadError,
+    read_dat_file, read_geometry_auto, read_geometry_from_file, write_dat_file, write_geometry_to_json,
+    GeometryReadError,
 };
-pub use naca::{naca_4digit, naca_5digit, NacaError};
-pub use panel::{create_paneled_airfoil, repanel_cosine, repanel_xfoil, PaneConfig};
-pub use spline::{d2val, deval, seval, spline};
+pub use naca::{
+    naca_4digit, naca_4digit_vertical, naca_5digit, naca_5digit_vertical, NacaError, Thickness, XFOIL_NACA_NSIDE,
+};
+pub use panel::{
+    arc_coordinate, curvature, find_le, panel_foil, repanel_by_curvature, repanel_cosine, solve_tridiagonal,
+    spline_segmented, PaneConfig,
+};
+pub use spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};

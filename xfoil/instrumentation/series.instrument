@@ -1,0 +1,9 @@
+instrument/10-makefile-xlog.patch
+instrument/11-xlog-harness.patch
+instrument/12-xfoil-dump.patch
+instrument/13-xgdes-dump.patch
+instrument/14-xpanel-dump.patch
+instrument/15-xbl-dump.patch
+instrument/16-xblsys-dump.patch
+instrument/17-xsolve-dump.patch
+instrument/18-xoper-dump.patch
