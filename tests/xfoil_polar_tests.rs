@@ -1,11 +1,15 @@
 //! S10 gate: the polar state machine against the reference.
 //!
-//! The tracked polar case runs XFOIL's OPER script `ALFA 0 / ASEQ 1 5 1 / INIT / ALFA -1 /
-//! ASEQ -2 -5 -1` on yFoil's panels; `viscal_points.dat` records every VISCAL call (ITMAX
+//! The tracked polar case runs XFOIL's OPER script `ALFA 0 / ASEQ 1 5 1 / INIT / ALFA 0 /
+//! ASEQ -1 -5 -1` on yFoil's panels; `viscal_points.dat` records every VISCAL call (ITMAX
 //! passed, LBLINI on entry, iterations, LVCONV, CL/CM/CD/CDF/CDP/XOCTR/IST/ITRAN). The same
 //! sequence is replayed through one persistent `Session`, and every record must match:
 //! identical iteration counts, converged flags, IST and ITRAN; converged forces within TOL_SOLVER;
 //! per-iteration transients (RLX/RMSBL/CL/CD) within TOL_TRANSIENT (see tolerances.rs).
+//!
+//! Both legs start from the 0° solution. The re-solved 0° after `INIT` (call 7) must reproduce
+//! call 1 exactly — in XFOIL's own records and bit-for-bit in yFoil — which is what makes it a
+//! seed rather than a second polar point.
 
 mod fixtures;
 mod utilities;
@@ -138,7 +142,7 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
     let geometry = read_geometry_from_file(fixture_path("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = panel_foil(&geometry);
     let xf = parse_points(&fixture_path("viscal_points.dat"));
-    assert_eq!(xf.len(), 11, "expected 11 VISCAL calls (0..5, INIT, -1..-5)");
+    assert_eq!(xf.len(), 12, "expected 12 VISCAL calls (0..5, INIT, 0, -1..-5)");
 
     let mut session = Session::new(&airfoil, spec());
     let mut k = 0;
@@ -160,19 +164,48 @@ fn test_polar_sequence_matches_xfoil_point_by_point() {
     for a in 1..=5 {
         seq_points.push(run(&mut session, a as f64, true, &mut k));
     }
-    // INIT / ALFA -1 / ASEQ -2 -5 -1
+    // INIT / ALFA 0 / ASEQ -1 -5 -1
     session.init();
     assert!(
         !session.state().bl_initialised && !session.state().pointers_built,
         "INIT clears LBLINI and LIPAN"
     );
-    seq_points.push(run(&mut session, -1.0, false, &mut k));
-    for a in 2..=5 {
+    let reseed = run(&mut session, 0.0, false, &mut k);
+    for a in 1..=5 {
         seq_points.push(run(&mut session, -(a as f64), true, &mut k));
     }
-    assert_eq!(k, 11);
+    assert_eq!(k, 12);
 
-    // compute_polar drives exactly this sequence and stitches ascending
+    // The re-solved 0° is the first 0° again: XFOIL's records are textually identical (same
+    // ES24.16 digits on every field) and yFoil's point is bit-identical.
+    let first = &seq_points[0];
+    for key in [
+        "NITDONE", "LVCONV", "RMSBL", "CL", "CM", "CD", "CDF", "CDP", "CL_ALF", "IST", "ITRAN1", "ITRAN2", "XOCTR1",
+        "XOCTR2",
+    ] {
+        assert_eq!(xf[0][key], xf[6][key], "XFOIL re-solved 0° after INIT: {key}");
+    }
+    assert_eq!(
+        reseed.iterations, first.iterations,
+        "yFoil re-solved 0°: iteration count"
+    );
+    assert_eq!(reseed.converged, first.converged);
+    for (name, a, b) in [
+        ("CL", reseed.cl, first.cl),
+        ("CD", reseed.cd, first.cd),
+        ("CM", reseed.cm, first.cm),
+        ("CDF", reseed.cd_friction, first.cd_friction),
+        ("CDP", reseed.cd_pressure, first.cd_pressure),
+        ("CL_ALF", reseed.cl_d_alpha, first.cl_d_alpha),
+        ("RMSBL", reseed.residual, first.residual),
+        ("XOCTR1", reseed.transition_upper[0], first.transition_upper[0]),
+        ("XOCTR2", reseed.transition_lower[0], first.transition_lower[0]),
+    ] {
+        assert_eq!(a.to_bits(), b.to_bits(), "yFoil re-solved 0° after INIT: {name}");
+    }
+
+    // compute_polar drives exactly this sequence, keeps the 0° seed out of the points, and
+    // stitches ascending
     let polar = compute_polar(
         &airfoil,
         &PolarConfig {

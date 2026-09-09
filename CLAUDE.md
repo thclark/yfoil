@@ -327,7 +327,10 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
 
 A polar is a state machine, not N independent solves. Model XFOIL's flags (`LWAKE, LIPAN, LBLINI, LADIJ, LWDIJ,
 LVCONV, LGAMU, LQAIJ`) and `AWAKE/AVISC/MVISC` explicitly; the previous alpha's BL is the next one's initial
-condition. Sweep 0°→+max, reinitialise, −1°→−min, stitch ascending.
+condition. Sweep 0°→+max, reinitialise, re-solve 0°, 0°→−min, stitch ascending. Both legs start from the
+0° solution: OPER cannot save a BL state, so the second leg re-solves 0° after `INIT` (a fresh MRCHUE march,
+identical to the first solve — the polar fixture test asserts it) and sweeps down from there. The re-solved 0° seeds
+the leg and is not a polar point; there is no configurable start angle.
 
 XFOIL equivalent:
 
@@ -350,8 +353,8 @@ INIT
 PACC
 polar_neg.txt
 
-ALFA -1
-ASEQ -2 -15 -1
+ALFA 0
+ASEQ -1 -15 -1
 
 QUIT
 ```

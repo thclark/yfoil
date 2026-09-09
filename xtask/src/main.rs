@@ -29,8 +29,9 @@ struct Case {
     alphas: Vec<f64>,
     #[serde(default)]
     alphas_after_reinit: Vec<f64>,
-    /// Drive the sweep with XFOIL's ASEQ (ALFA a0 / ASEQ a1 aN da / INIT / ALFA / ASEQ) instead
-    /// of one ALFA per point; ASEQ gives each point ITMAX+5 iterations, as the polar procedure does.
+    /// Drive the sweep with XFOIL's ASEQ (ALFA 0 / ASEQ a1 aN da / INIT / ALFA 0 / ASEQ ...)
+    /// instead of one ALFA per point; ASEQ gives each point ITMAX+5 iterations, as the polar
+    /// procedure does. `alphas_after_reinit` starts with the re-solved 0° that seeds the second leg.
     #[serde(default)]
     polar: bool,
     /// Fixed-CL points (OPER `CL x`), run after the alpha points

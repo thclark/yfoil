@@ -1,7 +1,7 @@
 //! The OPER analysis driver on `SolverState`: one persistent session per airfoil and flow
 //! specification, `alfa` = XFOIL's `ALFA` command (SPECAL, then VISCAL when viscous),
 //! `init` = XFOIL's `INIT`, and the polar sweep as CLAUDE.md prescribes it (0° → max,
-//! reinitialise, −step → min, stitched ascending).
+//! reinitialise and re-solve 0°, 0° → min, stitched ascending).
 
 use crate::bl::system::{AmplificationModel, MachClDependence, ReClDependence};
 use serde::{Deserialize, Serialize};
@@ -283,9 +283,13 @@ impl PolarResult {
 }
 
 /// The polar as XFOIL's OPER script runs it (CLAUDE.md):
-/// `ALFA 0` / `ASEQ step alpha_max step` / `INIT` / `ALFA -step` / `ASEQ -2step alpha_min -step`,
+/// `ALFA 0` / `ASEQ step alpha_max step` / `INIT` / `ALFA 0` / `ASEQ -step alpha_min -step`,
 /// with one persistent session so each point starts from the previous point's BL, and each
-/// ASEQ halting after NSEQEX consecutive non-converged points. Points are stitched ascending.
+/// ASEQ halting after NSEQEX consecutive non-converged points. Both legs start from the 0°
+/// solution: OPER cannot store a BL state, so the second leg re-solves 0° from a fresh march
+/// (`INIT` / `ALFA 0`) and sweeps down from it. That re-solve seeds the leg and is not a polar
+/// point — the polar carries the first 0° solve — and the polar fixture test asserts the two
+/// solves are identical. Points are stitched ascending.
 pub fn compute_polar(airfoil: &PanelledFoil, config: &PolarConfig) -> PolarResult {
     compute_polar_with(airfoil, config, &mut |_, _| {})
 }
@@ -359,21 +363,17 @@ pub fn compute_polar_with(
         );
     }
 
-    // INIT, ALFA -step, ASEQ -2step alpha_min -step
+    // INIT, ALFA 0 (re-solve to seed the leg; not recorded), ASEQ -step alpha_min -step
     if config.alpha_min <= -step {
         session.init();
-        let p = session.alpha(-step.to_radians());
-        observe(&session, &p);
-        record(p, &mut points, &mut failed);
-        if config.alpha_min <= -2.0 * step {
-            completed &= aseq(
-                &mut session,
-                aseq_alphas(-2.0 * step, config.alpha_min, -step),
-                &mut points,
-                &mut failed,
-                observe,
-            );
-        }
+        session.alpha(0.0);
+        completed &= aseq(
+            &mut session,
+            aseq_alphas(-step, config.alpha_min, -step),
+            &mut points,
+            &mut failed,
+            observe,
+        );
     }
 
     points.sort_by(|p, q| p.alpha.partial_cmp(&q.alpha).unwrap());

@@ -147,3 +147,12 @@ the sharp-TE case's iteration 3 the θ and δ* changes at the side-2 similarity 
 to 7 digits and the label flips — in the twin as well. RLX is a minimum over every variable and
 is unaffected; such flips are accepted only when |RMXBL| agrees within the recorded floor or the
 twin flips too.
+
+## 2026-09-09 — polar case re-solves 0° before the negative leg
+
+The polar procedure now seeds both legs from the 0° solution: `ALFA 0 / ASEQ 1 5 1 / INIT / ALFA 0 /
+ASEQ -1 -5 -1` (12 VISCAL calls; the re-solved 0° is call 7). `cargo xtask fixtures --case
+naca0012_n60_polar_re1e6` on the new script: branch trace identical under 1 ULP, worst point spread
+1.19e-12, worst per-iteration spread 5.03e-10 — the same floor as the 11-call script above. XFOIL's
+call 7 record is textually identical to call 1 on every field, and yFoil's re-solve is bit-identical
+to its first solve (`tests/xfoil_polar_tests.rs`).
