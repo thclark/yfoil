@@ -2,12 +2,12 @@
 
 Two generators, two questions.
 
-**What matters for solver equivalence** is that YFoil's panels survive the hand-off into XFOIL
-bitwise (CLAUDE.md Rule 4): YFoil writes `panels.dat` at 17 significant digits, XFOIL `LOAD`s it,
+**What matters for solver equivalence** is that yFoil's panels survive the hand-off into XFOIL
+bitwise (CLAUDE.md Rule 4): yFoil writes `panels.dat` at 17 significant digits, XFOIL `LOAD`s it,
 and the fixture pipeline asserts XFOIL's `X/Y` after `ABCOPY` are identical to what was written
 (`cargo xtask fixtures`, every case, every run). That has held on all cases since 2026-09-03.
 
-**Stage G** is the optional question: can YFoil reproduce what XFOIL itself produces from a bare
+**Stage G** is the optional question: can yFoil reproduce what XFOIL itself produces from a bare
 `NACA dddd` command? That needs XFOIL's own generator (`naca.f`, thickness applied vertically,
 NSIDE = 123 points per side, TE-bunched spacing with AN = 1.5) and `PANGEN`. Both are translated
 line for line (`naca_4digit_xfoil`, `naca_5digit_xfoil`, `repanel_xfoil`; CLI `yfoil geom naca
@@ -41,7 +41,7 @@ things were stacked in those numbers:
    `FORMAT(1X,G15.7,G15.7)`: seven significant figures. Nothing below ~1e-7 could ever be shown.
 2. **Two different NACA definitions.** XFOIL's `NACA4` applies the thickness distribution
    vertically (`YB = YC ± YT`, `naca.f:62`). The NACA definition applies it perpendicular to the
-   camber line, which is what YFoil's default generator (`naca_4digit`) does — a deliberate,
+   camber line, which is what yFoil's default generator (`naca_4digit`) does — a deliberate,
    documented divergence (CLAUDE.md Rule 2). For a symmetric section the two agree (the camber
    slope is zero), which is why 0012 was "better" than 4412 by 3×: the 4412 figure was the
    thickness-application difference, not a paneling error.
@@ -54,5 +54,5 @@ NACA definition; `--naca-model xfoil` reproduces XFOIL's.
 ```bash
 cargo xtask fixtures --case pangen_naca0012_n160 --case pangen_naca4412_n81   # regenerate the dumps
 cargo test --test xfoil_pangen_tests -- --nocapture                            # the gate, with counts
-yfoil geom naca 4412 -n 160 --naca-model xfoil -o naca4412_xfoil.json          # XFOIL's panels from YFoil
+yfoil geom naca 4412 -n 160 --naca-model xfoil -o naca4412_xfoil.json          # XFOIL's panels from yFoil
 ```

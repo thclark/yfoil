@@ -93,7 +93,7 @@ fn test_mrchue_newton_trace_matches_xfoil_iteration_by_iteration() {
     for (k, x) in xf.iter().enumerate() {
         let Some(y) = trace.iters.get(k) else {
             mism.push(format!(
-                "YFoil trace ended after {k} iterations; XFOIL has {} (next: IBL={} IS={} ITBL={})",
+                "yFoil trace ended after {k} iterations; XFOIL has {} (next: IBL={} IS={} ITBL={})",
                 xf.len(),
                 x.ibl,
                 x.is,

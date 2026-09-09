@@ -769,7 +769,7 @@ impl Default for PolarPlotConfig {
             color_2: (200, 50, 50),      // Red
             background: (255, 255, 255), // White
             title: None,
-            label_1: "YFoil".to_string(),
+            label_1: "yFoil".to_string(),
             label_2: "XFOIL".to_string(),
         }
     }
@@ -1373,11 +1373,11 @@ pub fn stitch_polars(polar_pos: &PolarData, polar_neg: &PolarData) -> PolarData 
     PolarData::new(alphas, cls, cds)
 }
 
-/// Parse a YFoil polar JSON file into PolarData
+/// Parse a yFoil polar JSON file into PolarData
 pub fn parse_yfoil_polar_file<P: AsRef<Path>>(path: P) -> Result<PolarData, PlotError> {
     let content = std::fs::read_to_string(path)?;
     let polar: crate::output::PolarOutput = serde_json::from_str(&content)
-        .map_err(|e| PlotError::Drawing(format!("Failed to parse YFoil polar JSON: {}", e)))?;
+        .map_err(|e| PlotError::Drawing(format!("Failed to parse yFoil polar JSON: {}", e)))?;
     Ok(PolarData::from_polar_output(&polar))
 }
 
@@ -1394,7 +1394,7 @@ pub struct GeometryComparisonPlotConfig {
     pub height: u32,
     /// First series color (RGB) - XFOIL reference
     pub series1_color: (u8, u8, u8),
-    /// Second series color (RGB) - YFoil generated
+    /// Second series color (RGB) - yFoil generated
     pub series2_color: (u8, u8, u8),
     /// Marker size for data points
     pub marker_size: f64,
@@ -1414,12 +1414,12 @@ impl Default for GeometryComparisonPlotConfig {
             width: 1200,
             height: 400,
             series1_color: (0, 100, 200), // Blue for XFOIL
-            series2_color: (200, 50, 50), // Red for YFoil
+            series2_color: (200, 50, 50), // Red for yFoil
             marker_size: 4.0,
             background: (255, 255, 255), // White
             title: None,
             label_1: "XFOIL".to_string(),
-            label_2: "YFoil".to_string(),
+            label_2: "yFoil".to_string(),
         }
     }
 }
@@ -1428,7 +1428,7 @@ impl Default for GeometryComparisonPlotConfig {
 ///
 /// Creates an overlay plot comparing two sets of coordinates:
 /// - Series 1 (XFOIL): blue line with circle markers
-/// - Series 2 (YFoil): red line with cross markers
+/// - Series 2 (yFoil): red line with cross markers
 ///
 /// Uses high-precision SVG output for smooth curves.
 pub fn plot_geometry_comparison_svg<P: AsRef<Path>>(
@@ -1597,7 +1597,7 @@ pub fn plot_geometry_comparison_svg<P: AsRef<Path>>(
         )?;
     }
 
-    // Series 2 (YFoil) - red line with cross markers
+    // Series 2 (yFoil) - red line with cross markers
     write!(
         file,
         r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#,
@@ -1812,11 +1812,11 @@ pub fn parse_xfoil_polar_file_with_cm<P: AsRef<Path>>(path: P) -> Result<PolarDa
     Ok(PolarDataWithCm::new(alphas, cls, cds, cms))
 }
 
-/// Parse a YFoil polar JSON file into PolarDataWithCm
+/// Parse a yFoil polar JSON file into PolarDataWithCm
 pub fn parse_yfoil_polar_file_with_cm<P: AsRef<Path>>(path: P) -> Result<PolarDataWithCm, PlotError> {
     let content = std::fs::read_to_string(path)?;
     let polar: crate::output::PolarOutput = serde_json::from_str(&content)
-        .map_err(|e| PlotError::Drawing(format!("Failed to parse YFoil polar JSON: {}", e)))?;
+        .map_err(|e| PlotError::Drawing(format!("Failed to parse yFoil polar JSON: {}", e)))?;
     Ok(PolarDataWithCm::from_polar_output(&polar))
 }
 
@@ -2523,7 +2523,7 @@ pub fn plot_cp_ue_comparison_svg<P: AsRef<Path>>(
         cp_plot_top + plot_height / 2.0
     )?;
 
-    // YFoil Cp
+    // yFoil Cp
     write!(
         file,
         r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#,
@@ -2599,7 +2599,7 @@ pub fn plot_cp_ue_comparison_svg<P: AsRef<Path>>(
         ue_plot_top + plot_height / 2.0
     )?;
 
-    // YFoil Ue
+    // yFoil Ue
     write!(
         file,
         r#"<polyline fill="none" stroke="{}" stroke-width="2" points=""#,
@@ -2646,7 +2646,7 @@ pub fn plot_cp_ue_comparison_svg<P: AsRef<Path>>(
     )?;
     writeln!(
         file,
-        r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">YFoil</text>"#,
+        r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">yFoil</text>"#,
         legend_x + 45.0,
         legend_y + 19.0
     )?;
@@ -2674,7 +2674,7 @@ pub fn plot_cp_ue_comparison_svg<P: AsRef<Path>>(
 // BL Comparison Plot (6 vertical subplots)
 // ============================================================================
 
-/// YFoil BL distribution data for plotting
+/// yFoil BL distribution data for plotting
 #[derive(Debug, Clone)]
 pub struct YfoilBLDist {
     /// X coordinate
@@ -2851,7 +2851,7 @@ pub fn plot_bl_comparison_svg<P: AsRef<Path>>(
         }
         writeln!(file, "</g>")?;
 
-        // YFoil data
+        // yFoil data
         write!(
             file,
             r#"<polyline fill="none" stroke="{}" stroke-width="1.5" points=""#,
@@ -2902,7 +2902,7 @@ pub fn plot_bl_comparison_svg<P: AsRef<Path>>(
     )?;
     writeln!(
         file,
-        r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">YFoil</text>"#,
+        r#"<text x="{:.1}" y="{:.1}" font-family="sans-serif" font-size="11">yFoil</text>"#,
         legend_x + 30.0,
         legend_y + 4.0
     )?;
@@ -2962,7 +2962,7 @@ impl PolarSeries {
 }
 
 /// Point-marker shape, cycled per series. Open markers come first so that coincident series
-/// (YFoil over XFOIL in the validation plots) stay visible through each other.
+/// (yFoil over XFOIL in the validation plots) stay visible through each other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Marker {
     /// Diagonal cross (no filled variant)

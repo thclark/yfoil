@@ -1,17 +1,17 @@
-# XFOIL 6.99: known issues, quirks, and how YFoil handles each
+# XFOIL 6.99: known issues, quirks, and how yFoil handles each
 
 XFOIL is the reference (CLAUDE.md Rule 1) and its algorithm is reproduced including its own bugs and
 quirks (Rule 2). This page is the register of everything found while translating it that a reader
 comparing the two codes, or reading XFOIL's output, needs to know about. Each entry says what XFOIL
-does, cites both sources, and states YFoil's handling:
+does, cites both sources, and states yFoil's handling:
 
-- **Replicated** — YFoil does the same thing, and the behaviour is fixture-gated where a gate exists.
-- **Overcome** — YFoil deliberately differs. Only one such divergence affects results (the NACA
+- **Replicated** — yFoil does the same thing, and the behaviour is fixture-gated where a gate exists.
+- **Overcome** — yFoil deliberately differs. Only one such divergence affects results (the NACA
   generator); the others are output-side or instrumentation-side and leave the solver untouched.
 - **Out of scope** — code XFOIL itself never executes on the analysis path, or design/plotting
-  features YFoil does not translate. Listed so nobody looks for them.
+  features yFoil does not translate. Listed so nobody looks for them.
 
-Line numbers refer to `xfoil/third-party/xfoil-6.99/src/` and to YFoil at the commit that last
+Line numbers refer to `xfoil/third-party/xfoil-6.99/src/` and to yFoil at the commit that last
 touched this page. Every "unreachable" claim below is also carried, with its reason, in
 `xtask/fixtures-config/coverage.toml` and measured by `cargo xtask coverage`
 (`docs/validation/coverage.md`).
@@ -43,7 +43,7 @@ Verified in the source, not inferred:
   corrections), so ~1e-4 relative or better on a converged point; unbounded on an unconverged one.
   On the reference case (NACA 0012, N=60, α=2°, Re=1e6) live and DUMP `H*` differ by ~1e-8.
 
-**YFoil.** The stored arrays are reproduced exactly (`tests/xfoil_mrchdu_tests.rs:60`,
+**yFoil.** The stored arrays are reproduced exactly (`tests/xfoil_mrchdu_tests.rs:60`,
 `tests/xfoil_update_tests.rs:75`, the SETBL gates); the solver is untouched. In the analysis JSON
 (`BlSideOutput`, `src/output/foil.rs`) the canonical columns `hs, cf, cdis, delta, ctq, uslp` are
 computed *live* by running XFOIL's own BLPRV → BLKIN → BLVAR on the converged primaries, and the lagged
@@ -55,7 +55,7 @@ side-by-side of live `hs` against DUMP's `H*` will differ at the ~RMSBL level by
 ### 1.2 DUMP's `Ue/Vinf` is signed by GAM — Overcome (output only)
 
 DUMP forms `UE = (GAM(I)/QINF)(1-TKLAM)/(1-TKLAM(GAM(I)/QINF)²)` (`xoper.f:1987`), so the lower surface
-prints negative Ue. YFoil's `ue` column applies the same Kármán–Tsien transformation to UEDG (BLPRV's
+prints negative Ue. yFoil's `ue` column applies the same Kármán–Tsien transformation to UEDG (BLPRV's
 `U2/QINF`), which is unsigned on both sides. `|DUMP Ue| == ue` on the surface.
 
 ### 1.3 DUMP writes `H = H* = 1` where THET = 0 — Replicated
@@ -69,7 +69,7 @@ prints negative Ue. YFoil's `ue` column applies the same Kármán–Tsien transf
 split into upper/lower fractions `DSF1 = (DSTR(IBLTE(1),1) + ½ANTE)/DSTR(IBLTE(2)+1,2)` (and DSF2
 likewise) with a 0.5/0.5 fallback when the first wake δ* is exactly zero, and the wake normal points
 to the *lower* side so the upper edge is `X − N·DSTR·DSF1`. `src/output/foil_plot.rs` follows this
-exactly for δ*, and additionally (YFoil's own): a per-quantity scale factor, the same construction for
+exactly for δ*, and additionally (yFoil's own): a per-quantity scale factor, the same construction for
 other quantities with a 0.5/0.5 split, and markers for stagnation, transition and separation, which
 XFOIL never draws on the airfoil plot. The separation/reattachment markers are derived from the sign of
 the live Cf; XFOIL reports no separation location anywhere.
@@ -140,7 +140,7 @@ branch with a reach note in `coverage.toml`.
 
 ## 3. Drela's own dated fixes and flagged defects in the shipped source
 
-| Where | Comment | YFoil |
+| Where | Comment | yFoil |
 |---|---|---|
 | `xbl.f:934` (MRCHDU) | `fixed BUG   MD 7 June 99` — whether `CTAU` holds an amplification (laminar) or a shear coefficient (turbulent) at stations upstream of the previous ITRAN; `CTI <= 0 → 0.03` | Replicated verbatim, `src/bl/mrchdu.rs:103` |
 | `xbl.f:742`, `:1066` | `added Ue clamp   MD  3 Apr 03` — Ue enters DMAX in the under-relaxation of both marches | Replicated, `src/bl/mrchue.rs:271`, `src/bl/mrchdu.rs:281` |
@@ -158,10 +158,10 @@ branch with a reach note in `coverage.toml`.
 
 ## 4. Silent self-corrections and continue-on-failure
 
-XFOIL prints and carries on in every case below; none aborts, none is flagged in the result. YFoil
+XFOIL prints and carries on in every case below; none aborts, none is flagged in the result. yFoil
 replicates each (with the message as a code comment) so that its results and branch traces match.
 
-| Where | Behaviour | YFoil |
+| Where | Behaviour | yFoil |
 |---|---|---|
 | `xfoil.f:796, 801` (MRCL) | `Illegal Re(CL)/Mach(CL) dependence trigger. Setting fixed` — RETYP/MATYP outside 1..3 silently reset to 1 | `src/solver/setbl.rs:39, 43`; unreachable through TYPE (§5.4) |
 | `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; reach notes in `coverage.toml` |
@@ -205,7 +205,7 @@ GEOLIN (geometric sensitivities) is inverse-design only and also not translated.
 
 The `TYPE` command maps TYPE 3 to `MATYP = 1, RETYP = 3` (`xoper.f:357-366`); nothing ever sets
 `MATYP = 3`, so MRCL's third Mach branch (`xfoil.f:812, 817`) and SPECAL's `MINF_CLM = 0` branch
-(`xoper.f:2784`) are dead. YFoil's `FlowConditions { mach_cl_dependence: Fixed, re_cl_dependence: InverseCl }` reproduces TYPE 3
+(`xoper.f:2784`) are dead. yFoil's `FlowConditions { mach_cl_dependence: Fixed, re_cl_dependence: InverseCl }` reproduces TYPE 3
 (`tests/xfoil_coverage_tests.rs:290`).
 
 ### 5.5 OPER `DAMP` is reachable and undocumented — Replicated
@@ -219,7 +219,7 @@ ported and gated (`FlowConditions.amplification_model`, case `naca0012_n60_a2_re
 Coincident/duplicate consecutive nodes (ABCOPY deletes them on LOAD, PANGEN never produces them):
 `xpanel.f:29, 66, 77, 81, 180, 861, 867, 875`, `spline.f:542-543`. SPLIND's `999`/specified-slope end
 conditions (only SEGSPL's `-999/-999` is reached on the analysis path): `spline.f:96, 101, 113, 117`.
-Array-bound `STOP`s that YFoil, having no fixed dimensions, cannot hit. Interactive prompts (`NITER = 0`,
+Array-bound `STOP`s that yFoil, having no fixed dimensions, cannot hit. Interactive prompts (`NITER = 0`,
 `NACA` without a designation). Flap hinge moments (`LFLAP`, `LBFLAP`). `LIPAN` cleared with `LBLINI`
 kept (`xqdes.f:497` only). The impossible flag combinations `LADIJ = F ∧ LWDIJ = T` and
 `LQAIJ = F ∧ LGAMU = T`. Each is an `[[unreachable]]` entry with a class and reason in `coverage.toml`;
@@ -232,14 +232,14 @@ kept (`xqdes.f:497` only). The impossible flag combinations `LADIJ = F ∧ LWDIJ
 ### 6.1 NACA4 applies thickness vertically — Overcome (the one live divergence)
 
 `naca.f:62`: `YB(IB) = YC(I) + YT(I)`, i.e. thickness added vertically rather than perpendicular to
-the camber line, which is not the NACA definition (irrelevant for symmetric sections). YFoil's
+the camber line, which is not the NACA definition (irrelevant for symmetric sections). yFoil's
 default `naca_4digit`/`naca_5digit` use the NACA definition; `--naca-model xfoil` reproduces XFOIL's
-generator bitwise. This never enters a comparison because YFoil generates the panels and XFOIL
+generator bitwise. This never enters a comparison because yFoil generates the panels and XFOIL
 consumes them (Rule 4). Recorded in CLAUDE.md's divergence table, the only row.
 
 ### 6.2 LOAD reverses clockwise input — Constraint
 
-`xfoil.f:1251-1260`: a negative signed area flips the node order. YFoil writes counter-clockwise
+`xfoil.f:1251-1260`: a negative signed area flips the node order. yFoil writes counter-clockwise
 (TE → upper → LE → lower → TE) so the bitwise handoff holds; `LNORM` defaults to false
 (`xfoil.f:495`) so LOAD does not rescale.
 
@@ -247,7 +247,7 @@ consumes them (Rule 4). Recorded in CLAUDE.md's divergence table, the only row.
 
 `CHORD` (GEOPAR) is the distance from the LE point *on the spline* to the TE midpoint, 0.99995721 for
 the 60-panel NACA 0012 rather than 1; `APANEL` (APCALC) is the panel-*normal* angle, 3π/2 from a
-node-tangent angle. Both were YFoil misreadings found by the S3 gate; both are now XFOIL's, and
+node-tangent angle. Both were yFoil misreadings found by the S3 gate; both are now XFOIL's, and
 `CHORD` is what SETEXP scales the wake by.
 
 ### 6.4 NW = N/12 + 10·INT(WAKLEN) — Replicated
@@ -265,11 +265,11 @@ Tightening it moves every wake node; ported character for character (`src/solver
 ### 7.2 BLSOLV's VACC2/VACC3 association — Replicated
 
 `VACC2 = VACC3 = (VACCEL*2.0)/(S(N)-S(1))` gates the sparse-elimination skips; a 1-ULP difference in the
-threshold flips a branch (`src/bl/blsolv.rs:122-124`). A historic "~1 % BLSOLV error" was a YFoil test
+threshold flips a branch (`src/bl/blsolv.rs:122-124`). A historic "~1 % BLSOLV error" was a yFoil test
 hard-coding `S(N)−S(1) = 2.0` instead of the fixture's 2.0387 (`tests/xfoil_blsolv_tests.rs:9-12`);
 BLSOLV is bit-identical.
 
-### 7.3 Kármán–Tsien TK must be formed as COMSET forms it — Overcome (YFoil bug, fixed)
+### 7.3 Kármán–Tsien TK must be formed as COMSET forms it — Overcome (yFoil bug, fixed)
 
 `TKLAM = MSQ/(1+β)²` and `TKBL = 1/β − 1` are algebraically equal and numerically different; the
 difference is dead at M = 0. `BLGlobalParams::new` now uses COMSET's form; two tests derived with the
@@ -277,13 +277,13 @@ other form are ignored pending regeneration from the M = 0.3 coverage case.
 
 ### 7.4 Integer powers — Replicated (gfortran)
 
-gfortran expands `X**2`, `X**3` inline as multiplications; YFoil writes `x*x*x` where bit-exactness
+gfortran expands `X**2`, `X**3` inline as multiplications; yFoil writes `x*x*x` where bit-exactness
 matters rather than `powi` (CLAUDE.md conventions). Transcendentals come from the host libm in both
 codes, so bit-identity is a same-host property.
 
 ### 7.5 EQUIVALENCE aliasing of UNEW/QNEW onto VA/VB — Overcome (structure only)
 
-UPDATE's `UNEW`/`QNEW` alias the factored `VA`/`VB` blocks (`xbl.f`), which are dead after BLSOLV. YFoil
+UPDATE's `UNEW`/`QNEW` alias the factored `VA`/`VB` blocks (`xbl.f`), which are dead after BLSOLV. yFoil
 uses separate locals and a consuming `BlsolvInput`, same numerics, so the alias cannot be read by
 accident (`src/bl/blsolv.rs:92-94`, `src/solver/update.rs:6-8`).
 
@@ -297,7 +297,7 @@ smoke case clean; the only raised (untrapped) flag is `IEEE_DIVIDE_BY_ZERO` from
 
 ---
 
-## 8. Open items in YFoil's own tooling
+## 8. Open items in yFoil's own tooling
 
 - `src/bin/generate_subroutine_validation.rs:691-695` still emits an `E24.16` instrumentation
   template (16 significant figures) where the rule is `ES24.16`. Harmless today because nothing

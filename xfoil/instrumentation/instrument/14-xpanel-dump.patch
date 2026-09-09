@@ -186,7 +186,7 @@
        SST_GO = (SST  - S(I+1))/DGAM
        SST_GP = (S(I) - SST   )/DGAM
 +C
-+C---- YFoil instrumentation: output stagnation point data
++C---- yFoil instrumentation: output stagnation point data
 +      WRITE(*,'(A)') '=== STFIND OUTPUT ==='
 +      WRITE(*,'(A,I6)') 'IST =', IST
 +      WRITE(*,'(A,ES24.16)') 'SST =', SST
@@ -203,7 +203,7 @@
          STOP
        ENDIF
  C
-+C---- YFoil instrumentation: output IBLPAN data
++C---- yFoil instrumentation: output IBLPAN data
 +      WRITE(*,'(A)') '=== IBLPAN OUTPUT ==='
 +      WRITE(*,'(A,I6)') 'IST =', IST
 +      WRITE(*,'(A,I6)') 'N =', N
@@ -222,7 +222,7 @@
          XSSI(IBL2,IS2) = XSSI(IBL2-1,IS2) + DXSSI
     25 CONTINUE
 +C
-+C---- YFoil instrumentation: output XICALC data
++C---- yFoil instrumentation: output XICALC data
 +      WRITE(*,'(A)') '=== XICALC OUTPUT ==='
 +      WRITE(*,'(A,ES24.16)') 'XEPS =', XEPS
 +      WRITE(*,'(A,ES24.16)') 'SST =', SST

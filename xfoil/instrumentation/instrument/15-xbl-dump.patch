@@ -248,7 +248,7 @@
 +      SUBROUTINE DUMPPTR
 +C---------------------------------------------------------------
 +C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
-+C     (append per call). Everything YFoil's pointers.rs must reproduce.
++C     (append per call). Everything yFoil's pointers.rs must reproduce.
 +C---------------------------------------------------------------
 +      INCLUDE 'XFOIL.INC'
 +      INCLUDE 'XBL.INC'

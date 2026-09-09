@@ -14,7 +14,7 @@
 //! Newton correction (bounded by the RMSBL < 1e-4 convergence test on a converged point; unbounded
 //! on an unconverged one).
 //!
-//! YFoil reproduces those stored arrays exactly (they are fixture-gated). The `closures` of
+//! yFoil reproduces those stored arrays exactly (they are fixture-gated). The `closures` of
 //! [`SideStations`] are therefore computed *live* here by running XFOIL's own BLPRV → BLKIN → BLVAR
 //! on the converged `primaries`, and the lagged arrays are emitted verbatim under
 //! [`SideStations::lagged_closures`] only when asked for (`--include-lagged-closures`), so a
@@ -468,7 +468,7 @@ pub enum SeparationKind {
     Reattachment,
 }
 
-/// A separation or reattachment point. **Derived by YFoil for plotting**: XFOIL reports no such
+/// A separation or reattachment point. **Derived by yFoil for plotting**: XFOIL reports no such
 /// location anywhere. It is the sign change of the live `cf` between two consecutive surface
 /// stations, interpolated linearly in arc length and placed on the spline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

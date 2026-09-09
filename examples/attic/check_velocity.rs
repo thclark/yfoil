@@ -46,6 +46,6 @@ fn main() {
 
     // Check TE velocity (should be ~0.88 for NACA 0012)
     println!("\nExpected TE velocity from XFOIL: 0.8856");
-    println!("YFoil TE velocity (index 0): {:.6}", qinv[0].abs());
-    println!("YFoil TE velocity (index {}): {:.6}", n-1, qinv[n-1].abs());
+    println!("yFoil TE velocity (index 0): {:.6}", qinv[0].abs());
+    println!("yFoil TE velocity (index {}): {:.6}", n-1, qinv[n-1].abs());
 }

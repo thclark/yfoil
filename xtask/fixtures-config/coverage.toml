@@ -1,9 +1,9 @@
 # The translated subroutine set for the Rule-6 branch-completeness measurement
 # (`cargo xtask coverage` -> docs/validation/coverage.md).
 #
-# `file` entries name the XFOIL subroutines YFoil translates, per Fortran file; gcov branch
+# `file` entries name the XFOIL subroutines yFoil translates, per Fortran file; gcov branch
 # counts are reported for exactly these. `unreachable` entries annotate branches that can
-# never be taken on the analysis path YFoil covers (Rule 6: "numerically exact" is claimable
+# never be taken on the analysis path yFoil covers (Rule 6: "numerically exact" is claimable
 # only over branches that have been exercised, and the fixture set is complete when every
 # *reachable* branch has been). Each annotation is a claim with the same evidence standard
 # as a bug report: cite the reason the branch is unreachable, not the fact that no case hit it.
@@ -206,7 +206,7 @@ why = "RS1/RS2 = 0 with IO /= JO needs a node coincident with another node; wake
 file = "xpanel.f"
 line = 1281
 class = "guard"
-why = "NW > IWX array-bound STOP; NW = N/12 + 10*WAKLEN is within IWX for every case dimension (YFoil has no fixed dimensions)"
+why = "NW > IWX array-bound STOP; NW = N/12 + 10*WAKLEN is within IWX for every case dimension (yFoil has no fixed dimensions)"
 
 [[unreachable]]
 file = "xpanel.f"
@@ -225,7 +225,7 @@ why = "X2 > X1 always: XSSI is strictly increasing (XICALC with the XEPS floor)"
 file = "xbl.f"
 line = 536
 class = "guard"
-why = "NSYS > 2*IVX array-bound STOP (YFoil has no fixed dimensions)"
+why = "NSYS > 2*IVX array-bound STOP (yFoil has no fixed dimensions)"
 
 [[unreachable]]
 file = "xoper.f"
@@ -275,19 +275,19 @@ why = "NITER = 0 prompts interactively (ASKI); ITER is pinned in every run"
 file = "xsolve.f"
 line = 193
 class = "guard"
-why = "N > NVX array-bound STOP (YFoil has no fixed dimensions)"
+why = "N > NVX array-bound STOP (yFoil has no fixed dimensions)"
 
 [[unreachable]]
 file = "xfoil.f"
 line = 795
 class = "guard"
-why = "illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; YFoil's type is an enum"
+why = "illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; yFoil's type is an enum"
 
 [[unreachable]]
 file = "xfoil.f"
 line = 800
 class = "guard"
-why = "illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; YFoil's type is an enum"
+why = "illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; yFoil's type is an enum"
 
 [[unreachable]]
 file = "xfoil.f"
@@ -300,31 +300,31 @@ file = "xfoil.f"
 line = 1581
 branch = 1
 class = "guard"
-why = "designation > 25099 is rejected; YFoil returns NacaError before PANGEN"
+why = "designation > 25099 is rejected; yFoil returns NacaError before PANGEN"
 
 [[unreachable]]
 file = "xfoil.f"
 line = 1584
 class = "guard"
-why = "unrecognised designation; YFoil returns NacaError before PANGEN"
+why = "unrecognised designation; yFoil returns NacaError before PANGEN"
 
 [[unreachable]]
 file = "xfoil.f"
 line = 1594
 class = "guard"
-why = "unrecognised designation; YFoil returns NacaError before PANGEN"
+why = "unrecognised designation; yFoil returns NacaError before PANGEN"
 
 [[unreachable]]
 file = "xfoil.f"
 line = 1636
 class = "guard"
-why = "NB < 2: no buffer airfoil; YFoil's generator always supplies one"
+why = "NB < 2: no buffer airfoil; yFoil's generator always supplies one"
 
 [[unreachable]]
 file = "xfoil.f"
 line = 2025
 class = "guard"
-why = "N > IQX-1 array-bound STOP (YFoil has no fixed dimensions)"
+why = "N > IQX-1 array-bound STOP (yFoil has no fixed dimensions)"
 
 [[unreachable]]
 file = "xfoil.f"
@@ -411,7 +411,7 @@ why = "edges generated for CHARACTER concatenation length handling; no source-le
 file = "spline.f"
 line = 85
 class = "guard"
-why = "N > NMAX array-bound STOP (YFoil has no fixed dimensions)"
+why = "N > NMAX array-bound STOP (yFoil has no fixed dimensions)"
 
 [[unreachable]]
 file = "spline.f"

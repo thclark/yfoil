@@ -1,6 +1,6 @@
 # Test Fixtures
 
-This directory contains validation fixtures generated from XFOIL for testing YFoil numerical accuracy.
+This directory contains validation fixtures generated from XFOIL for testing yFoil numerical accuracy.
 
 ## Directory Structure
 
@@ -162,7 +162,7 @@ This runs the instrumented XFOIL binary and parses the output into JSON fixtures
 
 All floating-point values are stored with full double precision (16 significant figures).
 
-When comparing YFoil results:
+When comparing yFoil results:
 - Relative tolerance: 1e-10
 - Absolute tolerance: 1e-14 (for values near zero)
 

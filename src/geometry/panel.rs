@@ -667,7 +667,7 @@ pub fn panel_foil(geometry: &Geometry) -> PanelledFoil {
     // LEFIND / GEOPAR: leading edge on the spline; chord is the LE–TE distance (XFOIL's
     // definition — for a NACA section whose nodes straddle the LE this is slightly under 1)
     let sle = find_le(&x, &xp, &y, &yp, &s);
-    // YFoil convenience only (XFOIL works with SLE): the node nearest the spline LE
+    // yFoil convenience only (XFOIL works with SLE): the node nearest the spline LE
     let le_index = (0..n)
         .min_by(|&i, &j| (s[i] - sle).abs().partial_cmp(&(s[j] - sle).abs()).unwrap())
         .unwrap_or(0);

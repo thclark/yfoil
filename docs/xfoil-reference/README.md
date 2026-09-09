@@ -2,7 +2,7 @@
 
 This directory contains detailed documentation of XFOIL 6.99 for the purpose of:
 
-1. Validating YFoil produces numerically identical results
+1. Validating yFoil produces numerically identical results
 2. Understanding the algorithm flow for debugging
 
 ## Overview
@@ -98,13 +98,13 @@ Input Geometry (X, Y coordinates)
 └───────────────────┘
 ```
 
-## YFoil equivalents
+## yFoil equivalents
 
-The full XFOIL → YFoil name mapping is [`xfoil-to-yfoil-mapping.md`](xfoil-to-yfoil-mapping.md);
+The full XFOIL → yFoil name mapping is [`xfoil-to-yfoil-mapping.md`](xfoil-to-yfoil-mapping.md);
 the naming rules are [`docs/conventions/naming.md`](../conventions/naming.md). Where the
 translated routines live:
 
-| XFOIL             | YFoil                                                  |
+| XFOIL             | yFoil                                                  |
 |-------------------|--------------------------------------------------------|
 | `xoper.f:VISCAL`  | `src/solver/viscal.rs::solve_viscous`                  |
 | `xoper.f:SPECAL`  | `src/solver/specal.rs::solve_inviscid_at_alpha`        |
@@ -143,7 +143,7 @@ Alternatively, you can use the online Mermaid Live Editor at https://mermaid.liv
 
 This documentation serves as a reference when:
 
-1. Debugging mismatches between YFoil and XFOIL
+1. Debugging mismatches between yFoil and XFOIL
 2. Understanding algorithmic details for implementation
 3. Writing test fixtures and validation cases
 4. Preparing paper content describing the method

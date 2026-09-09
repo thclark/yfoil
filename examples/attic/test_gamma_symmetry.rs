@@ -90,7 +90,7 @@ fn main() {
 
     // What XFOIL expects
     println!("\nXFOIL expects UINV(IBL=2) = 0.1461460999 on both surfaces");
-    println!("YFoil computed:");
+    println!("yFoil computed:");
     println!("  Upper: |gamma|={:.10}", upper_gamma.abs());
     println!("  Lower: |gamma|={:.10}", lower_gamma.abs());
 
@@ -99,7 +99,7 @@ fn main() {
     println!("XFOIL panel coordinates for NACA 0012, 160 panels:");
     println!("  Panel 80 (1-based): should be symmetric upper LE node");
     println!("  Panel 81 (1-based): should be symmetric lower LE node");
-    println!("\nYFoil panel coordinates (0-based):");
+    println!("\nyFoil panel coordinates (0-based):");
     for i in (stag_idx.saturating_sub(3))..=(stag_idx + 3).min(airfoil.n - 1) {
         let marker = if i == stag_idx { " <-- stag_idx" }
                      else if i == stag_idx - 1 { " <-- upper[1]" }

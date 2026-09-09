@@ -1,4 +1,4 @@
-//! Generate validation report comparing YFoil vs XFOIL subroutines
+//! Generate validation report comparing yFoil vs XFOIL subroutines
 //!
 //! This generates markdown documentation with detailed comparison tables
 //! for BL closure relations (hkin, hs, cf, etc.).
@@ -623,7 +623,7 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file)?;
     writeln!(
         file,
-        "This report validates YFoil's boundary layer closure functions against XFOIL reference values."
+        "This report validates yFoil's boundary layer closure functions against XFOIL reference values."
     )?;
     writeln!(file)?;
     writeln!(file, "## Summary")?;
@@ -649,7 +649,7 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file)?;
     writeln!(file, "## Tolerance")?;
     writeln!(file)?;
-    writeln!(file, "All tests use a relative tolerance of **{:.0e}**, ensuring at least 12 significant figures match between YFoil and XFOIL.", REL_TOL)?;
+    writeln!(file, "All tests use a relative tolerance of **{:.0e}**, ensuring at least 12 significant figures match between yFoil and XFOIL.", REL_TOL)?;
     writeln!(file)?;
     writeln!(file, "## Test Fixtures")?;
     writeln!(file)?;
@@ -762,7 +762,7 @@ fn write_closure_report(results: &[ValidationResult], output_dir: &Path) -> std:
     writeln!(file)?;
     writeln!(
         file,
-        "This report details the validation of YFoil's boundary layer closure relations."
+        "This report details the validation of yFoil's boundary layer closure relations."
     )?;
     writeln!(file)?;
 
@@ -788,7 +788,7 @@ fn write_closure_report(results: &[ValidationResult], output_dir: &Path) -> std:
         // Show sample of cases (first 10)
         writeln!(file, "### Sample Cases")?;
         writeln!(file)?;
-        writeln!(file, "| Case | Inputs | Output | XFOIL | YFoil | Rel Error |")?;
+        writeln!(file, "| Case | Inputs | Output | XFOIL | yFoil | Rel Error |")?;
         writeln!(file, "|------|--------|--------|-------|-------|-----------|")?;
 
         for detail in r.details.iter().take(10) {
@@ -821,7 +821,7 @@ fn write_transition_report(results: &[ValidationResult], output_dir: &Path) -> s
     writeln!(file)?;
     writeln!(
         file,
-        "This report details the validation of YFoil's amplification rate calculation (DAMPL)."
+        "This report details the validation of yFoil's amplification rate calculation (DAMPL)."
     )?;
     writeln!(file)?;
 
@@ -850,7 +850,7 @@ fn write_transition_report(results: &[ValidationResult], output_dir: &Path) -> s
 
         writeln!(file, "### Sample Cases")?;
         writeln!(file)?;
-        writeln!(file, "| Case | Inputs | Output | XFOIL | YFoil | Rel Error |")?;
+        writeln!(file, "| Case | Inputs | Output | XFOIL | yFoil | Rel Error |")?;
         writeln!(file, "|------|--------|--------|-------|-------|-----------|")?;
 
         for detail in r.details.iter().take(15) {

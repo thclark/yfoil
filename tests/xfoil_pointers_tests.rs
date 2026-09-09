@@ -1,7 +1,7 @@
 //! S2 gate: the BL pointer layer (STFIND, IBLPAN, XICALC, IBLSYS) and the inviscid velocity
 //! layer (QISET, UICALC) against `xfoil_pointers.dat` / `xfoil_uinv.dat` from the tracked
 //! reference case. Integer pointers must be exactly equal; pure-arithmetic reals bit-identical;
-//! quantities that pass through libm (`cos`, `sin`) or YFoil's own spline derivatives are
+//! quantities that pass through libm (`cos`, `sin`) or yFoil's own spline derivatives are
 //! held to `TOL_PURE`.
 
 mod fixtures;
@@ -37,7 +37,7 @@ fn state_from_fixture(f: &PointersFixture) -> SolverState {
     let gam = parse_inviscid_gam(&fixture_path("xfoil_inviscid.dat"));
     assert_eq!(gam.len(), f.n + 1, "GAM block length");
     st.gamma = gam;
-    // xp/yp only enter XICALC's wake-gap cubic; take YFoil's spline for those
+    // xp/yp only enter XICALC's wake-gap cubic; take yFoil's spline for those
     let geom = read_geometry_from_file(fixture_path("panels.json")).unwrap();
     let af = panel_foil(&geom);
     for i in 1..=f.n {
@@ -126,7 +126,7 @@ fn test_xicalc_matches_xfoil() {
             }
         }
     }
-    // WGAP goes through YFoil's XP/YP (spline derivatives): tolerance, scale = ANTE
+    // WGAP goes through yFoil's XP/YP (spline derivatives): tolerance, scale = ANTE
     for iw in 1..=f.nw {
         assert_within(st.wake_gap[iw], f.wgap[iw], TOL_PURE, f.ante, &format!("WGAP({iw})"));
     }
@@ -171,7 +171,7 @@ fn test_qiset_and_uicalc_match_xfoil() {
     }
 }
 
-/// The whole VISCAL prologue from YFoil's own geometry: TECALC → (wake nodes from XFOIL, until
+/// The whole VISCAL prologue from yFoil's own geometry: TECALC → (wake nodes from XFOIL, until
 /// XYWAKE lands in S3) → QISET → GAM=QINV → STFIND → IBLPAN → XICALC → IBLSYS → UICALC.
 #[test]
 fn test_prologue_from_yfoil_geometry_matches_xfoil() {
@@ -225,7 +225,7 @@ fn test_prologue_from_yfoil_geometry_matches_xfoil() {
     );
 }
 
-/// NCALC / APCALC: YFoil's node normals and panel angles for the airfoil against XFOIL's.
+/// NCALC / APCALC: yFoil's node normals and panel angles for the airfoil against XFOIL's.
 /// Normals come from spline derivatives, angles from atan2 — both held to TOL_PURE.
 #[test]
 fn test_airfoil_normals_and_panel_angles_match_xfoil() {

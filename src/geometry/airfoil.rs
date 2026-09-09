@@ -76,7 +76,7 @@ pub enum InvalidGeometryError {
     #[error("The minimum value in x_c array is < -0.05 or > 0.05, suggesting the input geometry is not a normalised aerofoil")]
     MinXExtent,
 
-    #[error("At least one value in y_c is < -1.0 or > 1.0. YFoil is not intended for bluff bodies!")]
+    #[error("At least one value in y_c is < -1.0 or > 1.0. yFoil is not intended for bluff bodies!")]
     MaxYExtent,
 
     #[error("All points are either above or below y_c=0. Perhaps your y_c has a nonzero y offset?")]

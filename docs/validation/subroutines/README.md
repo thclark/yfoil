@@ -1,6 +1,6 @@
 # Subroutine Validation
 
-This report validates YFoil's boundary layer closure functions against XFOIL reference values.
+This report validates yFoil's boundary layer closure functions against XFOIL reference values.
 
 ## Summary
 
@@ -12,11 +12,11 @@ This report validates YFoil's boundary layer closure functions against XFOIL ref
 | DIL | 200 | 200 | 0 | 6.00e-15 | ✓ |
 | HST | 200 | 200 | 0 | 6.51e-15 | ✓ |
 | CFT | 200 | 200 | 0 | 2.14e-15 | ✓ |
-| DAMPL | 200 | 200 | 0 | 2.11e-13 | ✓ |
+| DAMPL | 200 | 200 | 0 | 2.10e-13 | ✓ |
 
 ## Tolerance
 
-All tests use a relative tolerance of **1e-12**, ensuring at least 12 significant figures match between YFoil and XFOIL.
+All tests use a relative tolerance of **1e-12**, ensuring at least 12 significant figures match between yFoil and XFOIL.
 
 ## Test Fixtures
 

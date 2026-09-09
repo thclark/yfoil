@@ -1,7 +1,7 @@
 //! AXSET function validation tests against XFOIL
 //!
 //! These tests load fixtures generated from instrumented XFOIL and verify
-//! that YFoil's interval_amplification_rate function produces identical output.
+//! that yFoil's interval_amplification_rate function produces identical output.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -58,7 +58,7 @@ fn check_value(name: &str, case_num: usize, expected: f64, actual: f64) {
 
     if rel_err > REL_TOL && abs_err > ABS_TOL {
         panic!(
-            "Case {}: {} mismatch - XFOIL={:.16e}, YFoil={:.16e}, rel_err={:.2e}",
+            "Case {}: {} mismatch - XFOIL={:.16e}, yFoil={:.16e}, rel_err={:.2e}",
             case_num, name, expected, actual, rel_err
         );
     }
@@ -135,7 +135,7 @@ fn test_axset_against_xfoil_fixtures() {
             if rel_err > REL_TOL && abs_err > ABS_TOL {
                 case_passed = false;
                 eprintln!(
-                    "Case {}: {} FAIL - XFOIL={:.16e}, YFoil={:.16e}, rel_err={:.2e}",
+                    "Case {}: {} FAIL - XFOIL={:.16e}, yFoil={:.16e}, rel_err={:.2e}",
                     case_num, name, expected, actual, rel_err
                 );
             }

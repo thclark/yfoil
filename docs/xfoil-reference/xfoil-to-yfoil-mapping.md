@@ -1,6 +1,6 @@
-# XFOIL → YFoil mapping
+# XFOIL → yFoil mapping
 
-Every XFOIL name (COMMON variable, subroutine, local of note) and the YFoil name it became, with
+Every XFOIL name (COMMON variable, subroutine, local of note) and the yFoil name it became, with
 what the quantity is. The *rules* behind these names — symbols as names, the underscore
 meanings, the four index systems, the derivative tokens, and the interpretation notes on `AC`,
 `CTAU`, `US`, `RMSBL` and `GAMMA` — are in
@@ -10,11 +10,11 @@ kept current whenever a field, variable or function is added or renamed (CLAUDE.
 Indexing is unchanged from XFOIL: 1-based, side 1 = upper and 2 = lower, the wake appended to
 side 2 (`NBL(2) = IBLTE(2) + NW`), station arrays `[side][i_station]`. "—" in the XFOIL column
 means no Fortran counterpart. XFOIL's own dumps under `tests/fixtures/xfoil/` keep the Fortran
-names by design; everything YFoil writes uses the YFoil names.
+names by design; everything yFoil writes uses the yFoil names.
 
 ## Table 1: `BlState` → `SolverState` (`src/solver/blstate.rs`), panel-node section
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | N | `n_foil_nodes` | number of aerofoil panel nodes |
 | NW | `n_wake_nodes` | number of wake nodes |
@@ -51,7 +51,7 @@ names by design; everything YFoil writes uses the YFoil names.
 
 ## Table 2: `SolverState`, BL-station section (`[side][i_station]`)
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | NBL(IS) | `n_stations` | last station index on each side (side 2 includes the wake) |
 | IBLTE(IS) | `i_te_station` | station at the trailing edge |
@@ -86,7 +86,7 @@ names by design; everything YFoil writes uses the YFoil names.
 
 ## Table 3: `SolverState`, flow conditions, flags, forces
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | MINF1 | `mach_cl1` | freestream Mach at CL = 1 (the user's input) |
 | REINF1 | `re_cl1` | Reynolds number at CL = 1 (the user's input) |
@@ -121,7 +121,7 @@ The struct is instantiated as `station1` and `station2`, so the frame suffix liv
 instance (`station2.sqrtctau`), not on the fields. Sensitivities follow `<name>_d_<token>`;
 base names are listed with the sensitivities XFOIL carries.
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | X2 | `xi` | BL arc coordinate at the station |
 | U2, U2_UEI, U2_MS | `ue`, `ue_d_uei`, `ue_d_machsqd` | Kármán–Tsien-corrected edge velocity |
@@ -143,11 +143,11 @@ base names are listed with the sensitivities XFOIL carries.
 | CF2 (+…) | `cf`, … | |
 | DI2 (+_U2 _T2 _D2 _S2 _MS _RE) | `cdiss`, …, `cdiss_d_sqrtctau` | dissipation coefficient in XFOIL's form 2·CD/H* |
 | DE2 (+_U2 _T2 _D2 _MS) | `delta`, … | δ from Green's correlation |
-| — | `mass_defect` | Ue·δ* (YFoil-only cached copy) |
+| — | `mass_defect` | Ue·δ* (yFoil-only cached copy) |
 
 ## Table 5: `BLGlobalParams` → `FlowParameters` (`/V_VAR/`) and the closure constants (`/BLPAR/`, set in BLPINI)
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | IDAMPV | `amplification_model` | copy of IDAMP for the BL routines |
 | QINFBL | `qinf` | |
@@ -169,7 +169,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 6: interval-level types (`/V_SYS/`, `/V_VARA/`, `/V_INT/`)
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | /V_SYS/ | `IntervalSystem` | the 4×5 linearised system for one interval |
 | VS1, VS2 | `jacobian_station1`, `jacobian_station2` | ∂residual/∂(Cτ^½, θ, δ*, Ue, ξ) at each station |
@@ -193,7 +193,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 7: global Newton system and iteration records
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | VA/VB/VDEL/VM/VZ | `NewtonSystem` | the block system BLSOLV consumes by value |
 | NSYS | `n_rows` | |
@@ -226,7 +226,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 8: inviscid system
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | AIJ, BIJ, LADIJ | {`aij_lu`, `bij`, `dij_foil_built`} | dψ/dγ (LU-factored), dγ/dσ, flag |
 | LUDCMP output | {`n`, `lu`, `pivots`} | |
@@ -241,7 +241,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 9: session, flow conditions and results (`src/solver/analysis.rs`)
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | OPER settings | `FlowConditions` | inputs shared by every point of a polar; also the serialised `conditions` block |
 | REINF1, MINF1, ACRIT | `re` (`None` for inviscid), `mach`, `ncrit` | |
@@ -264,7 +264,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 10: functions (each carries `#[doc(alias = "XFOIL NAME")]`)
 
-| XFOIL | YFoil | What it does |
+| XFOIL | yFoil | What it does |
 |---|---|---|
 | BLPRV | `set_primary_variables` | loads ξ, N/Cτ^½, θ, δ*, wake gap, Ue and applies Kármán–Tsien |
 | BLKIN | `set_kinematic_variables` | H, Mₑ², ρ, ν, Hk, Rθ and sensitivities |
@@ -329,7 +329,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 11: geometry and output types, JSON keys
 
-| XFOIL | YFoil | What it is |
+| XFOIL | yFoil | What it is |
 |---|---|---|
 | XB, YB | `Geometry` {`x`, `y`, `cm_ref`} | buffer-geometry points, chord-normalised; `cm_ref: [x, y]` |
 | /CR05/ | `PanelledFoil` {`x`, `y`, `s`, `dxds`, `dyds`, `normal_x`, `normal_y`, `panel_angle`, `n_foil_nodes`, `s_le`, `i_le_node`, `chord`, `sharp_te`, `cm_ref`} | |
@@ -351,7 +351,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 12: CLI (no aliases; a short flag only where it is the same letter under every subcommand)
 
-| XFOIL | YFoil | Note |
+| XFOIL | yFoil | Note |
 |---|---|---|
 | OPER ALFA | `analyse` | |
 | ITER | `--max-iterations` | |
@@ -366,7 +366,7 @@ base names are listed with the sensitivities XFOIL carries.
 
 ## Table 13: tests and xtask
 
-| XFOIL | YFoil | Note |
+| XFOIL | yFoil | Note |
 |---|---|---|
 | ACRIT | `ncrit` | |
 | — | `FixtureStation`, `FixtureSide`; `delta_star` → `dstar` | |

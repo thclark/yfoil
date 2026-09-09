@@ -149,7 +149,7 @@ The coupling is achieved by:
 
 ---
 
-## YFoil Equivalent
+## yFoil Equivalent
 
 `src/solver/viscal.rs`
 

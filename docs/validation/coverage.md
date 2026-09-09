@@ -14,7 +14,7 @@ The fixture set is complete when every reachable branch in the translated subrou
 
 - **open** — never taken, no annotation. These are the objective for further cases and for the parameter/fuzz harness. "Numerically exact" is not yet claimable over them.
 - **loop entry** — the zero-trip edge of a `DO` loop whose body always ran (or a loop inside an unreached block). Listed separately because they are structurally impossible on the analysis path (`DO IBL=2,NBL(IS)` with `NBL ≥ 2`). A `DO` loop that is an iteration cap (a Newton loop that could be exhausted) carries a reach note and stays in the open list.
-- **unreachable** — annotated in `xtask/fixtures-config/coverage.toml` with a class and the reason: *structural* (impossible by construction on the analysis path), *mode* (a feature outside it: inverse design, image airfoil, flap hinge, interactive prompts), *guard* (array-bound or illegal-input STOP; YFoil has no fixed dimensions), *compiler* (no source-level decision).
+- **unreachable** — annotated in `xtask/fixtures-config/coverage.toml` with a class and the reason: *structural* (impossible by construction on the analysis path), *mode* (a feature outside it: inverse design, image airfoil, flap hinge, interactive prompts), *guard* (array-bound or illegal-input STOP; yFoil has no fixed dimensions), *compiler* (no source-level decision).
 
 Open branches with a known way to reach them carry a *reach* note; those are the next cases to add, and the rest are what the parameter/fuzz harness is for.
 
@@ -397,7 +397,7 @@ Never called:
 
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
-| 1281 | 0 (fallthrough) | 26 | `IF(NW.GT.IWX) THEN` | *guard* — NW > IWX array-bound STOP; NW = N/12 + 10*WAKLEN is within IWX for every case dimension (YFoil has no fixed dimensions) |
+| 1281 | 0 (fallthrough) | 26 | `IF(NW.GT.IWX) THEN` | *guard* — NW > IWX array-bound STOP; NW = N/12 + 10*WAKLEN is within IWX for every case dimension (yFoil has no fixed dimensions) |
 
 ### `xpanel.f` — IBLPAN
 
@@ -415,7 +415,7 @@ Never called:
 
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
-| 536 | 0 (fallthrough) | 22 | `IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'` | *guard* — NSYS > 2*IVX array-bound STOP (YFoil has no fixed dimensions) |
+| 536 | 0 (fallthrough) | 22 | `IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'` | *guard* — NSYS > 2*IVX array-bound STOP (yFoil has no fixed dimensions) |
 
 ### `xoper.f` — SPECAL
 
@@ -445,14 +445,14 @@ Never called:
 
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
-| 193 | 1 (jump) | 15 | `IF(N.GT.NVX) STOP 'LUDCMP: Array overflow. Increase NVX.'` | *guard* — N > NVX array-bound STOP (YFoil has no fixed dimensions) |
+| 193 | 1 (jump) | 15 | `IF(N.GT.NVX) STOP 'LUDCMP: Array overflow. Increase NVX.'` | *guard* — N > NVX array-bound STOP (yFoil has no fixed dimensions) |
 
 ### `xfoil.f` — MRCL
 
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
-| 795 | 0 (fallthrough) | 471 | `IF(RETYP.LT.1 .OR. RETYP.GT.3) THEN` | *guard* — illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; YFoil's type is an enum |
-| 800 | 0 (fallthrough) | 471 | `IF(MATYP.LT.1 .OR. MATYP.GT.3) THEN` | *guard* — illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; YFoil's type is an enum |
+| 795 | 0 (fallthrough) | 471 | `IF(RETYP.LT.1 .OR. RETYP.GT.3) THEN` | *guard* — illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; yFoil's type is an enum |
+| 800 | 0 (fallthrough) | 471 | `IF(MATYP.LT.1 .OR. MATYP.GT.3) THEN` | *guard* — illegal RETYP/MATYP: only 1..3 are producible through the TYPE command; yFoil's type is an enum |
 | 812 | 1 (jump) | 35 | `ELSE IF(MATYP.EQ.2) THEN` | *structural* — MATYP = 3 is never set: the TYPE command maps TYPE 3 to MATYP = 1, RETYP = 3 (xoper.f:362) |
 | 817 | 0 (fallthrough) | 0 | `ELSE IF(MATYP.EQ.3) THEN` | *structural* — MATYP = 3 is never set (see line 812) |
 | 817 | 1 (jump) | 0 | `ELSE IF(MATYP.EQ.3) THEN` | *structural* — MATYP = 3 is never set (see line 812) |
@@ -463,17 +463,17 @@ Never called:
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
 | 1574 | 0 (fallthrough) | 5 | `IF(IDES1 .LE. 0) THEN` | *mode* — NACA with no designation prompts interactively (ASKI) |
-| 1581 | 1 (jump) | 5 | `IF(IDES.LE.25099) ITYPE = 5` | *guard* — designation > 25099 is rejected; YFoil returns NacaError before PANGEN |
-| 1584 | 0 (fallthrough) | 1 | `IF(ITYPE.EQ.0) THEN` | *guard* — unrecognised designation; YFoil returns NacaError before PANGEN |
-| 1594 | 1 (jump) | 5 | `IF(IDES.EQ.0) RETURN` | *guard* — unrecognised designation; YFoil returns NacaError before PANGEN |
+| 1581 | 1 (jump) | 5 | `IF(IDES.LE.25099) ITYPE = 5` | *guard* — designation > 25099 is rejected; yFoil returns NacaError before PANGEN |
+| 1584 | 0 (fallthrough) | 1 | `IF(ITYPE.EQ.0) THEN` | *guard* — unrecognised designation; yFoil returns NacaError before PANGEN |
+| 1594 | 1 (jump) | 5 | `IF(IDES.EQ.0) RETURN` | *guard* — unrecognised designation; yFoil returns NacaError before PANGEN |
 
 ### `xfoil.f` — PANGEN
 
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
-| 1636 | 0 (fallthrough) | 10 | `IF(NB.LT.2) THEN` | *guard* — NB < 2: no buffer airfoil; YFoil's generator always supplies one |
-| 2025 | 0 (fallthrough) | 0 | `IF(N .GT. IQX-1)` | *guard* — N > IQX-1 array-bound STOP (YFoil has no fixed dimensions) |
-| 2025 | 1 (jump) | 0 | `IF(N .GT. IQX-1)` | *guard* — N > IQX-1 array-bound STOP (YFoil has no fixed dimensions) |
+| 1636 | 0 (fallthrough) | 10 | `IF(NB.LT.2) THEN` | *guard* — NB < 2: no buffer airfoil; yFoil's generator always supplies one |
+| 2025 | 0 (fallthrough) | 0 | `IF(N .GT. IQX-1)` | *guard* — N > IQX-1 array-bound STOP (yFoil has no fixed dimensions) |
+| 2025 | 1 (jump) | 0 | `IF(N .GT. IQX-1)` | *guard* — N > IQX-1 array-bound STOP (yFoil has no fixed dimensions) |
 | 2091 | 0 (fallthrough) | 10 | `IF(LBFLAP) THEN` | *mode* — LBFLAP: flap deflection is out of scope |
 
 ### `xutils.f` — SETEXP
@@ -506,7 +506,7 @@ Never called:
 
 | line | edge | other edges | source | why |
 |---:|---|---|---|---|
-| 85 | 1 (jump) | 258 | `IF(N.GT.NMAX) STOP 'SPLIND: array overflow, increase NMAX'` | *guard* — N > NMAX array-bound STOP (YFoil has no fixed dimensions) |
+| 85 | 1 (jump) | 258 | `IF(N.GT.NMAX) STOP 'SPLIND: array overflow, increase NMAX'` | *guard* — N > NMAX array-bound STOP (yFoil has no fixed dimensions) |
 | 96 | 0 (fallthrough) | 258 | `IF(XS1.EQ.999.0) THEN` | *structural* — SPLIND is reached only through SEGSPL (end conditions -999/-999) on the analysis path; the 999 (zero second derivative) and specified-slope conditions belong to SPLINE (plotting) and the design routines |
 | 101 | 1 (jump) | 258 | `ELSE IF(XS1.EQ.-999.0) THEN` | *structural* — see line 96 |
 | 113 | 0 (fallthrough) | 258 | `IF(XS2.EQ.999.0) THEN` | *structural* — SPLIND is reached only through SEGSPL (end conditions -999/-999) on the analysis path; the 999 (zero second derivative) and specified-slope conditions belong to SPLINE (plotting) and the design routines |

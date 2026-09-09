@@ -2,9 +2,9 @@
 //!
 //! Each case runs XFOIL's `NACA dddd` then `PPAR / N n`; the instrumented PANGEN dumps the
 //! 245-point buffer airfoil (XB/YB/SB), the paneling parameters and the N paneled nodes
-//! (X/Y/S) at ES24.16. YFoil's `naca_*digit_xfoil` must reproduce the buffer and
+//! (X/Y/S) at ES24.16. yFoil's `naca_*digit_xfoil` must reproduce the buffer and
 //! `repanel_by_curvature` the nodes, within `TOL_PURE`; the bitwise-identical counts are reported.
-//! (This is the optional track: the solver equivalence never depends on it, because YFoil
+//! (This is the optional track: the solver equivalence never depends on it, because yFoil
 //! generates the panels and XFOIL LOADs them — CLAUDE.md Rule 4.)
 
 mod fixtures;

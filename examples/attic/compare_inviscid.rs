@@ -13,7 +13,7 @@ fn main() {
     let qinv = solution.velocity_at_alpha(0.0);
     let gam = solution.gamma_at_alpha(0.0);
 
-    println!("YFOIL INVISCID SOLUTION");
+    println!("yFoil INVISCID SOLUTION");
     println!("N = {}", airfoil.n);
     println!("LE index = {}", airfoil.le_index);
     println!();

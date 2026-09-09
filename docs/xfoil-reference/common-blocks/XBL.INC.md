@@ -256,7 +256,7 @@ EQUIVALENCE (X1,COM1(1)), (X2,COM2(1))
 
 This allows copying all station variables with a single array operation.
 
-## YFoil mapping
+## yFoil mapping
 
 See [`xfoil-to-yfoil-mapping.md`](../xfoil-to-yfoil-mapping.md) (tables 1–4 cover this
 block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).

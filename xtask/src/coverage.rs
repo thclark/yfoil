@@ -500,7 +500,7 @@ fn render(
           - **unreachable** — annotated in `xtask/fixtures-config/coverage.toml` with a class and the reason: \
           *structural* (impossible by construction on the analysis path), *mode* (a feature outside it: \
           inverse design, image airfoil, flap hinge, interactive prompts), *guard* (array-bound or \
-          illegal-input STOP; YFoil has no fixed dimensions), *compiler* (no source-level decision).\n\n\
+          illegal-input STOP; yFoil has no fixed dimensions), *compiler* (no source-level decision).\n\n\
           Open branches with a known way to reach them carry a *reach* note; those are the next cases to \
           add, and the rest are what the parameter/fuzz harness is for.\n\n";
     s += "| | count |\n|---|---|\n";

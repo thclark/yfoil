@@ -1,6 +1,6 @@
-//! YFoil - Rust-based aerofoil analysis tool
+//! yFoil - Rust-based aerofoil analysis tool
 //!
-//! YFoil reproduces the core analysis functionality of XFOIL in Rust.
+//! yFoil reproduces the core analysis functionality of XFOIL in Rust.
 //! It provides viscous/inviscid analysis of 2D airfoil sections using:
 //! - Panel method for inviscid flow
 //! - Integral boundary layer solver with eN transition

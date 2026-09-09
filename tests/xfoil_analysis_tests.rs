@@ -1,8 +1,8 @@
-//! S9 end-to-end gate: from YFoil's own panels (the fixture pipeline's `panels.json`) through
+//! S9 end-to-end gate: from yFoil's own panels (the fixture pipeline's `panels.json`) through
 //! the inviscid solve, wake, pointers, DIJ and the VISCAL loop to the converged point, against
 //! the instrumented reference's `viscal_final.dat` / `viscal_iter.dat` on the same panels.
 //!
-//! Everything upstream of the Newton loop is YFoil's here (GGCALC, XYWAKE, QDCALC, MRCHUE), so
+//! Everything upstream of the Newton loop is yFoil's here (GGCALC, XYWAKE, QDCALC, MRCHUE), so
 //! this is the propagated-floor comparison: the S3/S4 gates put the wake position and DIJ at
 //! ~5e-11, which is what bounds the final forces (TOL_SOLVER is at the measured noise floor).
 

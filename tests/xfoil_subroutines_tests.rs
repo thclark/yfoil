@@ -1,6 +1,6 @@
 //! Subroutine-level validation tests
 //!
-//! These tests compare YFoil closure functions against XFOIL fixtures
+//! These tests compare yFoil closure functions against XFOIL fixtures
 //! generated from instrumented XFOIL runs.
 //!
 //! Tolerance: < 10ε where ε = 2.220446049250313e-16 (f64 machine epsilon)

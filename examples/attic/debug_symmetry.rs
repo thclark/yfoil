@@ -78,6 +78,6 @@ fn main() {
     println!("\n=== XFOIL Comparison ===");
     println!("XFOIL QINV at station 1 (upper TE): 0.7670558229");
     println!("XFOIL QINV at station 160 (lower TE): -0.7670558229");
-    println!("YFoil qinv[0] (upper TE): {:.10}", qinv[0]);
-    println!("YFoil qinv[{}] (lower TE): {:.10}", airfoil.n - 1, qinv[airfoil.n - 1]);
+    println!("yFoil qinv[0] (upper TE): {:.10}", qinv[0]);
+    println!("yFoil qinv[{}] (lower TE): {:.10}", airfoil.n - 1, qinv[airfoil.n - 1]);
 }

@@ -164,7 +164,7 @@
 //!
 //! ## JSON Format
 //!
-//! The native YFoil format stores geometry as a JSON object:
+//! The native yFoil format stores geometry as a JSON object:
 //!
 //! ```json
 //! {

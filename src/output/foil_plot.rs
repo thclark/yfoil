@@ -10,7 +10,7 @@
 //! `DSF1/DSF2` from the TE values, drawing the upper wake edge at `X - N*DSTR*DSF1` and the lower
 //! at `X + N*DSTR*DSF2` because the wake normal points to the lower side (`xplots.f:699-754`).
 //! XFOIL has no scale factor on δ* and marks no transition or separation on the airfoil plot; the
-//! scaling and the markers are YFoil's.
+//! scaling and the markers are yFoil's.
 
 use std::path::Path;
 

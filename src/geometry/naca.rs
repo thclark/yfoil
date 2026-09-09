@@ -8,7 +8,7 @@ use super::panel::{repanel_by_curvature, PaneConfig};
 /// How a NACA section's thickness distribution is applied to its camber line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum Thickness {
-    /// Perpendicular to the camber line: the NACA definition (YFoil's spacing)
+    /// Perpendicular to the camber line: the NACA definition (yFoil's spacing)
     #[default]
     Perpendicular,
     /// Vertical, as XFOIL's NACA4/NACA5 apply it (`naca.f:62`), on XFOIL's 245-point buffer

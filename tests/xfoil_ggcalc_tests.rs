@@ -1,5 +1,5 @@
 //! S4 gate: GGCALC (unit vorticity distributions through LUDCMP/BAKSUB) and QDCALC (the full
-//! (N+NW)×(N+NW) source influence matrix) from YFoil's own geometry, against the reference
+//! (N+NW)×(N+NW) source influence matrix) from yFoil's own geometry, against the reference
 //! run's QINVU and DIJ dumps. The whole VISCAL prologue is exercised: GGCALC → QISET →
 //! SPECAL's GAM → XYWAKE → QWCALC → QDCALC.
 //!
@@ -24,7 +24,7 @@ fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
-/// GGCALC on YFoil's geometry, then the alpha superposition of SPECAL.
+/// GGCALC on yFoil's geometry, then the alpha superposition of SPECAL.
 fn prologue_to_specal() -> (SolverState, InviscidSystem, fixtures::pointers_fixtures::UinvFixture) {
     let f = parse_pointers(&fixture_path("xfoil_pointers.dat"), 1);
     let u = parse_uinv(&fixture_path("xfoil_uinv.dat"), 1);
@@ -125,7 +125,7 @@ fn test_qdcalc_matches_xfoil_dij_given_xfoil_wake() {
     check_dij(&st, TOL_LINALG, "qdcalc (XFOIL wake)");
 }
 
-/// The whole prologue from YFoil's geometry. DIJ's sensitivity to a wake node position is
+/// The whole prologue from yFoil's geometry. DIJ's sensitivity to a wake node position is
 /// O(1/distance) ≈ 3e2 here, and XYWAKE places the nodes within ~1e-12 of XFOIL's (its input
 /// GAM is 4e-14 off after the LU solve), so the DIJ floor for this chained test is ~3e-10:
 /// gated at TOL_SOLVER, not TOL_LINALG. The isolated test above is the translation gate.
@@ -144,5 +144,5 @@ fn test_prologue_dij_from_yfoil_geometry() {
         );
     }
     build_dij(&mut st, &mut sys);
-    check_dij(&st, TOL_SOLVER, "qdcalc (YFoil wake)");
+    check_dij(&st, TOL_SOLVER, "qdcalc (yFoil wake)");
 }

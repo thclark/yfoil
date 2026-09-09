@@ -1,15 +1,15 @@
 # Naming
 
-How variables, fields, functions, types, JSON keys and CLI flags are named in YFoil, and why.
+How variables, fields, functions, types, JSON keys and CLI flags are named in yFoil, and why.
 This document holds the *rules*. The *application* of the rules, the table of every XFOIL
-name and the YFoil name it became, lives in
+name and the yFoil name it became, lives in
 [`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference/xfoil-to-yfoil-mapping.md);
 read that when you need to know what a particular XFOIL variable is called here, and read this
 when you need to name something new.
 
 ## Why the names were remapped
 
-YFoil is a line-for-line translation of XFOIL. The first translation kept XFOIL's identifiers,
+yFoil is a line-for-line translation of XFOIL. The first translation kept XFOIL's identifiers,
 lower-cased: `thet`, `dstr`, `tstr`, `sst_go`, `vsrez`, `iblte`. Those names come from an era
 when identifiers were six characters and every byte counted; they are opaque to anyone who does
 not have `XFOIL.INC` open, and several of them are wrong about what they hold (`CTAU` holds
@@ -203,5 +203,5 @@ turbulent Cf correlation (`CF_TURBULENT_FACTOR`).
 ## Related notes
 
 - [`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference/xfoil-to-yfoil-mapping.md)
-  — the remap table: every XFOIL name, the YFoil name, and what it is
+  — the remap table: every XFOIL name, the yFoil name, and what it is
 - [[git-commits-and-versioning]] — commit message form for the rename commits (`REF:`)

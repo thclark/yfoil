@@ -1,7 +1,7 @@
 //! S10 gate: the polar state machine against the reference.
 //!
 //! The tracked polar case runs XFOIL's OPER script `ALFA 0 / ASEQ 1 5 1 / INIT / ALFA -1 /
-//! ASEQ -2 -5 -1` on YFoil's panels; `viscal_points.dat` records every VISCAL call (ITMAX
+//! ASEQ -2 -5 -1` on yFoil's panels; `viscal_points.dat` records every VISCAL call (ITMAX
 //! passed, LBLINI on entry, iterations, LVCONV, CL/CM/CD/CDF/CDP/XOCTR/IST/ITRAN). The same
 //! sequence is replayed through one persistent `Session`, and every record must match:
 //! identical iteration counts, converged flags, IST and ITRAN; converged forces within TOL_SOLVER;

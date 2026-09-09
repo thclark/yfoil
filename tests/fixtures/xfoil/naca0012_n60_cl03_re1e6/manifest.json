@@ -1,15 +1,16 @@
 {
   "case": {
-    "foil": "naca4:0012",
     "alphas": [],
     "alphas_after_reinit": [],
     "cls": [
       0.3
     ],
+    "damp": false,
     "dump_calls": [],
-    "max_iterations": 20,
+    "foil": "naca4:0012",
     "mach": 0.0,
     "matyp": 0,
+    "max_iterations": 20,
     "n_panels": 60,
     "name": "naca0012_n60_cl03_re1e6",
     "ncrit": 9.0,
@@ -22,7 +23,7 @@
   "xfoil_ref": [
     "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
     "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
-    "series_instr_sha256:    8e2606b73891793a3b8368d003e9d7cc01bb036e8e51fdb6894e6f8bf7c267f5",
+    "series_instr_sha256:    30c6cccf49b9dc4e8941b61b24b74a2646bccf16b83a19be4be2998bfbbab02c",
     "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
     "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
     "host:                   arm64-Darwin-24.6.0",

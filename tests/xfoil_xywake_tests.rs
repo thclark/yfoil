@@ -2,7 +2,7 @@
 //! against the wake nodes and wake QINVU recorded by the instrumented reference.
 //!
 //! Inputs are XFOIL's own airfoil arrays (nodes, normals, panel angles, GAM/GAMU at the
-//! first VISCAL call) so that the wake code is tested in isolation; YFoil's spline provides
+//! first VISCAL call) so that the wake code is tested in isolation; yFoil's spline provides
 //! only XP/YP at the two TE nodes (the wake's initial direction). Everything goes through
 //! libm (log, atan2, sqrt) and a 100-iteration Newton in SETEXP, so the gate is TOL_PURE.
 

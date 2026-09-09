@@ -75,7 +75,7 @@ fn test_mach_0_3_matches_xfoil() {
 #[test]
 fn test_high_alpha_separated_matches_xfoil() {
     // The reference's own 1-ULP trajectory becomes hypersensitive from iteration 18 (floor 5e-5
-    // → 1.4e-3, see noise_floor.json); YFoil tracks it like a ~2-ULP perturbation through
+    // → 1.4e-3, see noise_floor.json); yFoil tracks it like a ~2-ULP perturbation through
     // iteration 18 and parts at 19. The two replay tests below show the steps themselves are
     // faithful, so the documented outcome is threshold-straddling at iteration 19.
     let outcomes = run_case("naca0012_n60_a12_re1e6", FlowConditions::default(), &[12.0]);
@@ -185,7 +185,7 @@ fn replay_iteration(case: &str, alpha_deg: f64, k: usize) {
     let u = apply_newton_update(st, &sol.deltas, st.mach_d_cl);
 
     // the reference's own 1-ULP spread of this iteration's values bounds what one step can be
-    // expected to reproduce (the replay's only foreign input is YFoil's DIJ, ~5e-11)
+    // expected to reproduce (the replay's only foreign input is yFoil's DIJ, ~5e-11)
     let rec = load(&dir);
     let fl = |name: &str| {
         rec.floor

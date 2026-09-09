@@ -1,6 +1,6 @@
 # XFOIL Instrumentation Guide
 
-This document describes how to instrument XFOIL to capture intermediate values for validation against YFoil.
+This document describes how to instrument XFOIL to capture intermediate values for validation against yFoil.
 
 ## Current Instrumentation
 
@@ -160,7 +160,7 @@ This gives 16 significant figures, matching IEEE double precision.
 
 ## Comparison Tolerance
 
-When comparing YFoil to XFOIL:
+When comparing yFoil to XFOIL:
 
 | Tolerance | Meaning |
 |-----------|---------|

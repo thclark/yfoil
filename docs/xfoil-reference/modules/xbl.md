@@ -275,7 +275,7 @@ RLX = min(1.0,
 
 ---
 
-## YFoil Equivalent
+## yFoil Equivalent
 
 `src/bl/mrchue.rs`, `src/bl/mrchdu.rs`, `src/solver/setbl.rs`, `src/solver/update.rs`
 

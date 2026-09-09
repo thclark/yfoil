@@ -1,6 +1,6 @@
 # Closure Functions Validation
 
-This report details the validation of YFoil's boundary layer closure relations.
+This report details the validation of yFoil's boundary layer closure relations.
 
 ## HKIN
 
@@ -12,7 +12,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 
 ### Sample Cases
 
-| Case | Inputs | Output | XFOIL | YFoil | Rel Error |
+| Case | Inputs | Output | XFOIL | yFoil | Rel Error |
 |------|--------|--------|-------|-------|-----------|
 | 1 | H=1.494087, MSQ=0.000000 | HK | 1.4940870544e0 | 1.4940870544e0 | 0.00e0 |
 | | | HK_H | 1.0000000000e0 | 1.0000000000e0 | 0.00e0 |
@@ -55,10 +55,10 @@ This report details the validation of YFoil's boundary layer closure relations.
 
 ### Sample Cases
 
-| Case | Inputs | Output | XFOIL | YFoil | Rel Error |
+| Case | Inputs | Output | XFOIL | yFoil | Rel Error |
 |------|--------|--------|-------|-------|-----------|
 | 1 | HK=1.494383, RT=2230.90 | CF | 8.0827434931e-4 | 8.0827434931e-4 | 9.39e-16 |
-| | | CF_HK | -9.6547279691e-4 | -9.6547279691e-4 | 8.98e-16 |
+| | | CF_HK | -9.6547279691e-4 | -9.6547279691e-4 | 7.86e-16 |
 | | | CF_RT | -3.6230833857e-7 | -3.6230833857e-7 | 8.77e-16 |
 | 2 | HK=1.528951, RT=3772.18 | CF | 4.5866233393e-4 | 4.5866233393e-4 | 2.36e-16 |
 | | | CF_HK | -5.4922627450e-4 | -5.4922627450e-4 | 1.97e-16 |
@@ -80,7 +80,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 | | | CF_RT | -2.8743624189e-4 | -2.8743624189e-4 | 9.43e-16 |
 | 8 | HK=1.668419, RT=5329.02 | CF | 2.7445020831e-4 | 2.7445020831e-4 | 3.95e-16 |
 | | | CF_HK | -3.3294396880e-4 | -3.3294396880e-4 | 3.26e-16 |
-| | | CF_RT | -5.1501088021e-8 | -5.1501088021e-8 | 3.85e-16 |
+| | | CF_RT | -5.1501088021e-8 | -5.1501088021e-8 | 2.57e-16 |
 | 9 | HK=2.665468, RT=121.41 | CF | 3.1439796524e-3 | 3.1439796524e-3 | 2.76e-16 |
 | | | CF_HK | -4.9527752800e-3 | -4.9527752800e-3 | 0.00e0 |
 | | | CF_RT | -2.5896347462e-5 | -2.5896347462e-5 | 2.62e-16 |
@@ -98,7 +98,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 
 ### Sample Cases
 
-| Case | Inputs | Output | XFOIL | YFoil | Rel Error |
+| Case | Inputs | Output | XFOIL | yFoil | Rel Error |
 |------|--------|--------|-------|-------|-----------|
 | 1 | HK=1.403694 | HS | 1.8604666546e0 | 1.8604666546e0 | 1.19e-16 |
 | | | HS_HK | -4.7069295585e-1 | -4.7069295585e-1 | 0.00e0 |
@@ -109,7 +109,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 | 4 | HK=2.281569 | HS | 1.6129873313e0 | 1.6129873313e0 | 1.38e-16 |
 | | | HS_HK | -1.4958076208e-1 | -1.4958076208e-1 | 3.71e-16 |
 | 5 | HK=2.564750 | HS | 1.5781036145e0 | 1.5781036145e0 | 1.41e-16 |
-| | | HS_HK | -9.9486828984e-2 | -9.9486828984e-2 | 1.39e-16 |
+| | | HS_HK | -9.9486828984e-2 | -9.9486828984e-2 | 0.00e0 |
 | 6 | HK=2.354716 | HS | 1.6025847790e0 | 1.6025847790e0 | 2.77e-16 |
 | | | HS_HK | -1.3505092247e-1 | -1.3505092247e-1 | 8.22e-16 |
 | 7 | HK=3.038336 | HS | 1.5450874199e0 | 1.5450874199e0 | 1.44e-16 |
@@ -131,7 +131,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 
 ### Sample Cases
 
-| Case | Inputs | Output | XFOIL | YFoil | Rel Error |
+| Case | Inputs | Output | XFOIL | yFoil | Rel Error |
 |------|--------|--------|-------|-------|-----------|
 | 1 | HK=2.369941, RT=162.29 | DI | 1.4610553529e-3 | 1.4610553529e-3 | 4.45e-16 |
 | | | DI_HK | -6.2622153501e-4 | -6.2622153501e-4 | 3.46e-16 |
@@ -174,11 +174,11 @@ This report details the validation of YFoil's boundary layer closure relations.
 
 ### Sample Cases
 
-| Case | Inputs | Output | XFOIL | YFoil | Rel Error |
+| Case | Inputs | Output | XFOIL | yFoil | Rel Error |
 |------|--------|--------|-------|-------|-----------|
 | 1 | HK=1.495197, RT=1618.55 | HS | 1.7298252700e0 | 1.7298252700e0 | 1.28e-16 |
 | | | HS_HK | -3.7349623969e-1 | -3.7349623969e-1 | 1.49e-16 |
-| | | HS_RT | -9.5623292939e-6 | -9.5623292939e-6 | 7.09e-16 |
+| | | HS_RT | -9.5623292939e-6 | -9.5623292939e-6 | 5.31e-16 |
 | 2 | HK=1.681704, RT=5424.79 | HS | 1.6554107638e0 | 1.6554107638e0 | 1.34e-16 |
 | | | HS_HK | -2.9312259377e-1 | -2.9312259377e-1 | 0.00e0 |
 | | | HS_RT | -1.0867784572e-6 | -1.0867784572e-6 | 5.85e-16 |
@@ -217,7 +217,7 @@ This report details the validation of YFoil's boundary layer closure relations.
 
 ### Sample Cases
 
-| Case | Inputs | Output | XFOIL | YFoil | Rel Error |
+| Case | Inputs | Output | XFOIL | yFoil | Rel Error |
 |------|--------|--------|-------|-------|-----------|
 | 1 | HK=1.598611, RT=4746.22 | CF | 1.9457871874e-3 | 1.9457871874e-3 | 0.00e0 |
 | | | CF_HK | -3.3844327022e-3 | -3.3844327022e-3 | 0.00e0 |

@@ -1,4 +1,4 @@
-# YFoil — XFOIL in Rust
+# yFoil — XFOIL in Rust
 
 ## Committing
 
@@ -9,7 +9,7 @@ When making commits in git, NEVER attribute Claude (yourself) as a contributor. 
 
 ## STOP. READ THIS FIRST.
 
-YFoil is a **translation** of XFOIL 6.99 into Rust. Not a reimplementation, not "something like XFOIL". The
+yFoil is a **translation** of XFOIL 6.99 into Rust. Not a reimplementation, not "something like XFOIL". The
 rules below are non-negotiable; the nuance in Rule 1 exists to make them *provable*, not to soften them.
 
 ### Rule 1: Numerical equivalence — defined, measured, then enforced
@@ -63,18 +63,18 @@ When something doesn't work the temptation is to "fix" it. **This is always wron
 
 Any such change masks the real bug and creates new ones. CI runs a `no-deviations` grep gate for the tell-tale
 vocabulary (`disable_`, `TEMPORARILY`, `simplified`, `causes divergence`, `coupling_scale`, bare `break` inside a
-Newton loop). If XFOIL does X, YFoil does X — including XFOIL's own bugs and quirks.
+Newton loop). If XFOIL does X, yFoil does X — including XFOIL's own bugs and quirks.
 
 **Deliberate divergences from XFOIL are allowed only when documented here.** Currently:
 
 | Divergence | Why | Where |
 |---|---|---|
-| NACA 4/5-digit thickness applied perpendicular to the camber line | XFOIL's `NACA4` (`naca.f:62`) applies it vertically, which is not the NACA definition. Irrelevant for validation because YFoil generates the panels and XFOIL consumes them (Rule 4). XFOIL's variant is available as `--thickness vertical`. | `src/geometry/naca.rs` |
+| NACA 4/5-digit thickness applied perpendicular to the camber line | XFOIL's `NACA4` (`naca.f:62`) applies it vertically, which is not the NACA definition. Irrelevant for validation because yFoil generates the panels and XFOIL consumes them (Rule 4). XFOIL's variant is available as `--thickness vertical`. | `src/geometry/naca.rs` |
 
 Adding a row to that table requires the same evidence standard as a bug report against XFOIL.
 
 Every XFOIL quirk, dated fix, silent self-correction, uninitialised variable and dead branch found during
-the translation, with how YFoil handles it (replicated / overcome / out of scope), is registered in
+the translation, with how yFoil handles it (replicated / overcome / out of scope), is registered in
 `docs/xfoil-known-issues.md`. Add to it whenever you find another.
 
 ### Rule 3: Debug by forward-stepping through XFOIL's execution
@@ -91,13 +91,13 @@ The only valid approach:
 4. Compare at that point. Values outside tolerance with an identical branch trace = bug. Fix it.
 5. Advance to the next computation **in XFOIL's execution order** (not panel order, not module order).
 
-Prefer the **replay harness**: seed YFoil with XFOIL's complete state at iteration *k* and require XFOIL's state at
+Prefer the **replay harness**: seed yFoil with XFOIL's complete state at iteration *k* and require XFOIL's state at
 *k+1*. That isolates one iteration of one subroutine from everything upstream. For a single subroutine, capture its
 inputs and outputs and test it in isolation.
 
 Progress is measured by fixture matches, never by an end-to-end number moving in the right direction.
 
-### Rule 4: Identical geometry — YFoil generates, XFOIL consumes
+### Rule 4: Identical geometry — yFoil generates, XFOIL consumes
 
 Different panels make any comparison meaningless. The workflow, and the only one:
 
@@ -113,7 +113,7 @@ digits, XFOIL dumps `X/Y` at `E24.16` immediately after `ABCOPY`, and the two mu
 fixture from that run is accepted.
 
 Consequences:
-- YFoil's PANE port only has to produce *good* panels, not XFOIL-identical ones. XFOIL-fidelity of `NACA4`/`PANGEN`
+- yFoil's PANE port only has to produce *good* panels, not XFOIL-identical ones. XFOIL-fidelity of `NACA4`/`PANGEN`
   is an optional quality goal, off the critical path.
 - **Never gate on XFOIL's formatted output files.** `PSAVE` is `G15.7`, `.pol` is `F9.4/F10.5`, `DUMP` is
   `F9.5/F10.6`, `CPWR` is `F11.5`. They cannot support anything below ~1e-5. Everything that gates comes from
@@ -125,7 +125,7 @@ Consequences:
 2. Isolate the smallest unit that could be wrong — a subroutine, a statement, one operation.
 3. Instrument XFOIL there; rebuild; capture a fixture.
 4. Write the test against the fixture.
-5. Fix YFoil to match. Check the branch trace matches too.
+5. Fix yFoil to match. Check the branch trace matches too.
 6. Advance.
 
 If you are looking at final CD/CL to understand a bug, you are doing it wrong. Go back to step 2.
@@ -167,7 +167,7 @@ XFOIL-independent invariants are also required, because two codes can share a mi
 
 ## Project intent
 
-It's XFoil, but in Rust, with unit and integration tests and easily-automated I/O. YFoil reproduces the core
+It's XFoil, but in Rust, with unit and integration tests and easily-automated I/O. yFoil reproduces the core
 analysis functionality of XFOIL (Mark Drela, MIT) exactly. The name follows the tradition: "y" comes after "x",
 but the true choice is a little more esoteric. "Why"?
 
@@ -179,7 +179,7 @@ flap hinge moments, `FCPMIN`, XFOIL-format output files, 3D effects.
 
 ## Architecture
 
-XFOIL uses Fortran COMMON blocks; YFoil passes state explicitly. Pure functions for closures, influence
+XFOIL uses Fortran COMMON blocks; yFoil passes state explicitly. Pure functions for closures, influence
 coefficients and splines; explicit data passing everywhere; plotting behind a cargo feature.
 
 **Inside `src/solver/` and `src/bl/`, the BL state mirrors XFOIL's data model exactly**: two sides with the wake
@@ -279,7 +279,7 @@ explicitly in every equivalence run because the two codes' defaults differ: `ITE
 ## Fixture pipeline
 
 `cargo xtask fixtures [--case NAME] [--verify] [--big]` reads `xtask/fixtures-config/cases.toml`, builds the reference if
-needed, generates panels **with YFoil**, runs instrumented XFOIL via `LOAD`, asserts the bitwise geometry
+needed, generates panels **with yFoil**, runs instrumented XFOIL via `LOAD`, asserts the bitwise geometry
 handoff, and keeps the raw dumps plus `manifest.json` under `tests/fixtures/xfoil/<case>/` (`track = true`,
 budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
 (drive with `ALFA a0 / ASEQ a1 aN da` like the polar procedure; ASEQ points get ITMAX+5), `cls` (OPER `CL x`
@@ -321,7 +321,7 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
   gfortran's inline expansion.
 - Temporary files go in `.tmp/`, never `/tmp`.
 - Naming: `docs/conventions/naming.md` (the rules) and `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` (the
-  XFOIL → YFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
+  XFOIL → yFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
 
 ## Polar sweep procedure
 

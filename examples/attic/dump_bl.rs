@@ -17,7 +17,7 @@ fn main() {
     let config = ViscalConfig::default();
     let result = solve_viscous(&airfoil, alpha_rad, &cond, &config);
 
-    println!("=== YFoil Viscous Solution at alpha={} deg, Re={:.0e} ===", alpha_deg, cond.reynolds);
+    println!("=== yFoil Viscous Solution at alpha={} deg, Re={:.0e} ===", alpha_deg, cond.reynolds);
     println!("CL = {:.6}", result.cl);
     println!("CD = {:.6}", result.cd);
     println!("CDf = {:.6}", result.cdf);

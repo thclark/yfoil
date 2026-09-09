@@ -11,7 +11,7 @@ fn main() {
     let geom: Geometry = serde_json::from_str(&json_str).expect("Failed to parse JSON");
     let airfoil = panel_foil(&geom);
 
-    println!("=== YFoil DIJ Matrix Check ===\n");
+    println!("=== yFoil DIJ Matrix Check ===\n");
     println!("N = {}", airfoil.n);
 
     // Solve inviscid

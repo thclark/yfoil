@@ -173,7 +173,7 @@ NY(I) = -XP(I) / sqrt(XP(I)² + YP(I)²)
 
 ---
 
-## YFoil Equivalent
+## yFoil Equivalent
 
 `src/geometry/spline.rs`
 

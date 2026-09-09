@@ -174,7 +174,7 @@ This is the primary COMMON block include file containing global state for XFOIL.
 | `YOCTR(ISX)` | (2) | Actual transition y/c |
 | `XSSITR(ISX)` | (2) | Actual transition xi locations |
 
-## YFoil mapping
+## yFoil mapping
 
 See [`xfoil-to-yfoil-mapping.md`](../xfoil-to-yfoil-mapping.md) (tables 1–4 cover this
 block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).

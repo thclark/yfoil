@@ -29,7 +29,7 @@ pub const TOL_TRANSIENT: f64 = 1e-9;
 pub const FLOOR_FACTOR: f64 = 4.0;
 /// Hypersensitivity threshold for the third outcome. When the reference's own +1-ULP twin moves a
 /// per-iteration value by more than this (absolute), the reference cannot reproduce itself there;
-/// a YFoil run that matched every earlier iteration within `FLOOR_FACTOR` × floor and departs at
+/// a yFoil run that matched every earlier iteration within `FLOOR_FACTOR` × floor and departs at
 /// such an iteration is classified **threshold-straddling** (reported, not passed or failed),
 /// provided the one-step replay from XFOIL's exact state at that iteration matches.
 pub const STRADDLE_FLOOR: f64 = 1e-6;

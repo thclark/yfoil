@@ -2,7 +2,7 @@
 //! Fixture loading utilities for validation tests
 //!
 //! This module provides structures and functions for loading XFOIL-generated
-//! test fixtures for numerical validation of YFoil.
+//! test fixtures for numerical validation of yFoil.
 
 use mrchdu_fixtures::{parse_bl_dump, BlDump};
 use mrchue_fixtures::parse_bl_state;
@@ -175,7 +175,7 @@ pub fn assert_xfoil_match(name: &str, yfoil_val: f64, xfoil_val: f64, rel_tol: f
 
     if rel_err > rel_tol && diff > abs_tol {
         panic!(
-            "{}: YFoil={:.10e}, XFOIL={:.10e}, rel_err={:.2e} (tol={:.2e})",
+            "{}: yFoil={:.10e}, XFOIL={:.10e}, rel_err={:.2e} (tol={:.2e})",
             name, yfoil_val, xfoil_val, rel_err, rel_tol
         );
     }

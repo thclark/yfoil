@@ -1,6 +1,6 @@
 //! Tests for panel geometry matching XFOIL
 //!
-//! These tests verify that YFoil produces identical panel coordinates to XFOIL,
+//! These tests verify that yFoil produces identical panel coordinates to XFOIL,
 //! and that both repaneling methods (XFOIL PANE and cosine) produce valid geometry.
 
 use std::fs::File;
@@ -43,14 +43,14 @@ fn test_naca_0012_te_coordinates() {
     let reader = BufReader::new(file);
     let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
-    // Generate YFoil geometry
+    // Generate yFoil geometry
     let geom = naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
     let airfoil = panel_foil(&geom);
 
     // Check panel count
     assert_eq!(
         airfoil.n_foil_nodes, fixture.n_panels,
-        "Panel count mismatch: YFoil={}, XFOIL={}",
+        "Panel count mismatch: yFoil={}, XFOIL={}",
         airfoil.n_foil_nodes, fixture.n_panels
     );
 
@@ -61,11 +61,11 @@ fn test_naca_0012_te_coordinates() {
     println!("=== TE Coordinates Comparison ===");
     println!("Upper TE:");
     println!("  XFOIL: x={:.10}, y={:.10}", xfoil_te_upper.x, xfoil_te_upper.y);
-    println!("  YFoil: x={:.10}, y={:.10}", airfoil.x[0], airfoil.y[0]);
+    println!("  yFoil: x={:.10}, y={:.10}", airfoil.x[0], airfoil.y[0]);
     println!("Lower TE:");
     println!("  XFOIL: x={:.10}, y={:.10}", xfoil_te_lower.x, xfoil_te_lower.y);
     println!(
-        "  YFoil: x={:.10}, y={:.10}",
+        "  yFoil: x={:.10}, y={:.10}",
         airfoil.x[airfoil.n_foil_nodes - 1],
         airfoil.y[airfoil.n_foil_nodes - 1]
     );
@@ -85,17 +85,17 @@ fn test_naca_0012_te_coordinates() {
     // TE y-coordinate should match XFOIL (blunt TE gap = 0.00252)
     let te_gap_yfoil = airfoil.y[0] - airfoil.y[airfoil.n_foil_nodes - 1];
     let te_gap_xfoil = fixture.te_gap;
-    println!("TE gap: YFoil={:.6}, XFOIL={:.6}", te_gap_yfoil, te_gap_xfoil);
+    println!("TE gap: yFoil={:.6}, XFOIL={:.6}", te_gap_yfoil, te_gap_xfoil);
 
     assert!(
         (te_gap_yfoil - te_gap_xfoil).abs() < 0.0001,
-        "TE gap mismatch: YFoil={}, XFOIL={}",
+        "TE gap mismatch: yFoil={}, XFOIL={}",
         te_gap_yfoil,
         te_gap_xfoil
     );
 }
 
-/// Test panel spacing comparison between YFoil and XFOIL
+/// Test panel spacing comparison between yFoil and XFOIL
 #[test]
 fn test_naca_0012_panel_spacing() {
     // Load XFOIL fixture
@@ -103,14 +103,14 @@ fn test_naca_0012_panel_spacing() {
     let reader = BufReader::new(file);
     let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
-    // Generate YFoil geometry
+    // Generate yFoil geometry
     let geom = naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
     let airfoil = panel_foil(&geom);
 
     println!("=== Panel Spacing Comparison (first 10 panels) ===");
     println!(
         "{:>4} {:>14} {:>14} {:>14} {:>14}",
-        "Idx", "XFOIL_x", "YFoil_x", "XFOIL_y", "YFoil_y"
+        "Idx", "XFOIL_x", "yFoil_x", "XFOIL_y", "yFoil_y"
     );
 
     for i in 0..10.min(fixture.n_panels) {
@@ -143,7 +143,7 @@ fn test_naca_0012_panel_spacing() {
     //   - TE/LE panel density ratio = 0.15 (coarser at TE)
     //   - Curvature smoothing
     //   - Refinement area specification
-    // YFoil uses simple cosine spacing which bunches equally at LE and TE.
+    // yFoil uses simple cosine spacing which bunches equally at LE and TE.
     //
     // This causes significant x-coordinate differences (RMS ~ 0.11).
     // Impact: BL integration depends on panel spacing, so BL results differ.
@@ -158,7 +158,7 @@ fn test_naca_0012_panel_spacing() {
     // Note: We allow up to 15% RMS error in x-coordinates due to different
     // panel distribution algorithms. Exact match requires implementing XFOIL's PANE.
     println!("\nNote: Panel spacing differs from XFOIL due to different algorithms.");
-    println!("      XFOIL uses curvature-based PANE, YFoil uses cosine spacing.");
+    println!("      XFOIL uses curvature-based PANE, yFoil uses cosine spacing.");
     println!("      To match exactly, use the repanel_xfoil() function.");
 }
 
@@ -313,7 +313,7 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     println!("\n=== First 10 Panel Coordinates ===");
     println!(
         "{:>4} {:>14} {:>14} {:>14} {:>14}",
-        "Idx", "XFOIL_x", "YFoil_x", "XFOIL_y", "YFoil_y"
+        "Idx", "XFOIL_x", "yFoil_x", "XFOIL_y", "yFoil_y"
     );
     for i in 0..10.min(n_compare) {
         let xf = &fixture.coordinates[i];

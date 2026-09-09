@@ -21,7 +21,7 @@ fn fixture_path(name: &str) -> PathBuf {
     fixtures::require_fixture(&format!("{}/{}", fixtures::REF_CASE, name))
 }
 
-/// Build the YFoil input exactly as XFOIL's BLSOLV sees it: VZ block enabled, IVTE1/IVZ from
+/// Build the yFoil input exactly as XFOIL's BLSOLV sees it: VZ block enabled, IVTE1/IVZ from
 /// IBLSYS, and — critically — `S(N)-S(1)` taken from the fixture, never estimated.
 fn yfoil_input(xi: &XfoilNewtonSystem) -> NewtonSystem {
     NewtonSystem {

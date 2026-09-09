@@ -1,4 +1,4 @@
-//! YFoil CLI - Aerofoil analysis tool
+//! yFoil CLI - Aerofoil analysis tool
 
 use std::path::PathBuf;
 use yfoil::geometry::Thickness;
@@ -18,7 +18,7 @@ use yfoil::output::{
     DesignPoint, FoilPlotConfig, ImageFormat, MarkerSet, OffsetScale, PanelStyle, PolarSeries, PolarsPlotConfig,
 };
 
-/// YFoil - Rust-based aerofoil analysis tool
+/// yFoil - Rust-based aerofoil analysis tool
 #[derive(Parser, Debug)]
 #[command(name = "yfoil")]
 #[command(version, about = "Rust-based aerofoil analysis tool", long_about = None)]
@@ -311,7 +311,7 @@ enum GeomAction {
         /// Close the trailing edge (zero TE gap; XFOIL's SHARP path)
         #[arg(long)]
         sharp: bool,
-        /// Thickness distribution: perpendicular to the camber line (the NACA definition, YFoil's
+        /// Thickness distribution: perpendicular to the camber line (the NACA definition, yFoil's
         /// spacing) or vertical (XFOIL's NACA4/NACA5 on its 245-point buffer, then PANGEN to the
         /// requested panel count)
         #[arg(long, value_enum, default_value_t = Thickness::Perpendicular)]
