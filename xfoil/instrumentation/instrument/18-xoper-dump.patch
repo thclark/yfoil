@@ -15,11 +15,10 @@
  C
  C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
        IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
-@@ -2811,6 +2818,34 @@
-        CALL CPCALC(N,QINV,QINF,MINF,CPI)
+@@ -2812,6 +2819,34 @@
        ENDIF
        IF(LFLAP) CALL MHINGE
-+C
+ C
 +C---- INSTRUMENTATION: Output inviscid solution to file
 +      OPEN(UNIT=98,FILE='xfoil_inviscid.dat',STATUS='REPLACE')
 +      WRITE(98,*) '=== INVISCID SOLUTION ==='
@@ -47,10 +46,11 @@
 +      CALL LOGREAL('ALFA_OUT', DBLE(ALFA))
 +      CALL LOGCOMMON1('SPECAL')
 +      CALL LOGEXIT('SPECAL')
- C
++C
        RETURN
        END ! SPECAL
-@@ -2888,11 +2923,44 @@
+  
+@@ -2888,11 +2923,45 @@
  C     Converges viscous operating point
  C----------------------------------------
        INCLUDE 'XFOIL.INC'
@@ -58,6 +58,7 @@
 +C---- INSTRUMENTATION: per-iteration record and final state (first call), point record (all)
 +      LOGICAL LVC, LBLIN0, LWAKE0
 +      INTEGER NITDONE, NVISCAL
++      CHARACTER*64 FNVS
 +      SAVE NVISCAL
 +      DATA NVISCAL / 0 /
 +      INCLUDE 'XLOG.INC'
@@ -95,7 +96,7 @@
  C
  C---- calculate wake trajectory from current inviscid solution if necessary
        IF(.NOT.LWAKE) THEN
-@@ -2926,6 +2994,28 @@
+@@ -2926,6 +2995,28 @@
  C---- set inviscid BL edge velocity UINV from QINV
        CALL UICALC
  C
@@ -124,7 +125,7 @@
        IF(.NOT.LBLINI) THEN
  C
  C----- set initial Ue from inviscid Ue
-@@ -2957,12 +3047,34 @@
+@@ -2957,12 +3048,34 @@
  C---- set up source influence matrix if it doesn't exist
        IF(.NOT.LWDIJ .OR. .NOT.LADIJ) CALL QDCALC
  C
@@ -159,7 +160,7 @@
  C------ fill Newton system for BL variables
          CALL SETBL
  C
-@@ -2989,6 +3101,7 @@
+@@ -2989,6 +3102,7 @@
          CALL GAMQV
  C
  C------ relocate stagnation point
@@ -167,7 +168,7 @@
          CALL STMOVE
  C
  C------ set updated CL,CD
-@@ -2996,6 +3109,40 @@
+@@ -2996,6 +3110,40 @@
       &              CL,CM,CDP,CL_ALF,CL_MSQ)
          CALL CDCALC
  C
@@ -208,7 +209,7 @@
  C------ display changes and test for convergence
          IF(RLX.LT.1.0) 
       &   WRITE(*,2000) ITER, RMSBL, RMXBL, VMXBL,IMXBL,ISMXBL,RLX
-@@ -3005,7 +3152,8 @@
+@@ -3005,7 +3153,8 @@
           WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDPDIF
  c         CDSURF = CDP + CDF
  c         WRITE(*,2025) CDSURF, CDF, CDP
@@ -218,7 +219,7 @@
          IF(RMSBL .LT. EPS1) THEN
           LVCONV = .TRUE.
           AVISC = ALFA
-@@ -3020,8 +3168,76 @@
+@@ -3020,8 +3169,117 @@
        CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
        CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
        IF(LFLAP) CALL MHINGE
@@ -259,6 +260,47 @@
 +      CLOSE(79)
 +      ENDIF
 +C
++C---- INSTRUMENTATION: final state of every VISCAL call (viscal_state_<call>.dat):
++C     the viscal_final.dat record plus, per station, the panel-node x and the
++C     wall shear TAU of the last SETBL (one iteration stale, as DUMP reports it)
++      WRITE(FNVS,'(A,I0,A)') 'viscal_state_', NVISCAL, '.dat'
++      OPEN(79, FILE=FNVS, STATUS='REPLACE')
++      WRITE(79,'(A,I5)') 'CALL=', NVISCAL
++      WRITE(79,'(A,I5)') 'NITDONE=', NITDONE
++      WRITE(79,'(A,L1)') 'LVCONV=', LVCONV
++      WRITE(79,'(A,ES24.16)') 'RMSBL=', RMSBL
++      WRITE(79,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(79,'(A,ES24.16)') 'CL=', CL
++      WRITE(79,'(A,ES24.16)') 'CM=', CM
++      WRITE(79,'(A,ES24.16)') 'CD=', CD
++      WRITE(79,'(A,ES24.16)') 'CDF=', CDF
++      WRITE(79,'(A,ES24.16)') 'CDP=', CDP
++      WRITE(79,'(A,ES24.16)') 'CL_ALF=', CL_ALF
++      WRITE(79,'(A,ES24.16)') 'CL_MSQ=', CL_MSQ
++      WRITE(79,'(A,ES24.16)') 'MINF=', MINF
++      WRITE(79,'(A,ES24.16)') 'REINF=', REINF
++      WRITE(79,'(A,I5)') 'IST=', IST
++      WRITE(79,'(A,I5)') 'IBLTE1=', IBLTE(1)
++      WRITE(79,'(A,I5)') 'IBLTE2=', IBLTE(2)
++      WRITE(79,'(A,I5)') 'NBL1=', NBL(1)
++      WRITE(79,'(A,I5)') 'NBL2=', NBL(2)
++      WRITE(79,'(A,I5)') 'ITRAN1=', ITRAN(1)
++      WRITE(79,'(A,I5)') 'ITRAN2=', ITRAN(2)
++      WRITE(79,'(A,ES24.16)') 'XOCTR1=', XOCTR(1)
++      WRITE(79,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
++      DO 8193 I=1, N+NW
++        WRITE(79,'(A,I4,A,5ES24.16)') 'NODE(',I,')=',
++     &    CPI(I), CPV(I), QINV(I), QVIS(I), GAM(I)
++ 8193 CONTINUE
++      DO 8194 IS=1, 2
++        DO 8195 IBL=1, NBL(IS)
++          WRITE(79,'(A,I2,A,I4,A,8ES24.16)') 'BL(',IS,',',IBL,')=',
++     &      XSSI(IBL,IS), X(IPAN(IBL,IS)), UEDG(IBL,IS), THET(IBL,IS),
++     &      DSTR(IBL,IS), CTAU(IBL,IS), MASS(IBL,IS), TAU(IBL,IS)
++ 8195   CONTINUE
++ 8194 CONTINUE
++      CLOSE(79)
++C
 +C---- INSTRUMENTATION: one record per VISCAL call (the polar state machine)
 +      IF(NVISCAL.EQ.1) THEN
 +       OPEN(79, FILE='viscal_points.dat', STATUS='REPLACE')
@@ -296,7 +338,7 @@
          is = 1
          hkmax = 0.
          hkm = 0.0
-@@ -3092,7 +3308,20 @@
+@@ -3092,7 +3350,20 @@
          close(lu)
  
  

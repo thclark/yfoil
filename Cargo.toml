@@ -36,7 +36,7 @@ default = []
 plotting = ["plotters", "resvg"]
 
 [workspace]
-members = [".", "xtask"]
+members = [".", "xtask", "scripts/xfoil-sensitivity"]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a
 # deliberate policy, not laziness; anything not listed here must be fixed, not allowed inline.

@@ -12,6 +12,7 @@ and the reports read those directories. Only Markdown and SVG are committed unde
 | [coverage.md](coverage.md) | Rule 6: gcov branch completeness of the reference over every tracked case, with the open/unreachable/loop-entry classification | `cargo xtask coverage` |
 | [noise-floor.md](noise-floor.md) | Rule 1: the reference's own 1-ULP sensitivity per stage and variable, from which `tests/utilities/tolerances.rs` is derived | `scripts/noise-floor.sh` |
 | [geometry/README.md](geometry/README.md) | Stage G: XFOIL-model NACA4/5 and PANGEN gated bitwise against `pangen_*` dumps; the bitwise LOAD handoff that every solver case asserts | `cargo xtask fixtures --case pangen_…`, `cargo test --test xfoil_pangen_tests` |
+| `scripts/xfoil-sensitivity/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the SVG sheet, JSON summaries and a LaTeX index) | The reference's own input sensitivity: NACA 0012 swept 0°–25° with node coordinates (1 ULP … 1e-7), panel count and alpha step perturbed; seven per-alpha quantities per family, base case in front (`scripts/xfoil-sensitivity/src/perturb.rs` for the node-perturbation method) | `cargo run --release -p xfoil-sensitivity` |
 | [subroutines/README.md](subroutines/README.md) | BL closure relations (HKIN, HSL, HST, CFL, CFT, DIL, DAMPL) against instrumented E24.16 samples in `tests/fixtures/subroutines/` | `cargo run --bin generate_subroutine_validation` |
 
 **Analysis (polar) validation** — the ±15° N=160 polar with per-alpha CL/CD/CM/XTR and BL-distribution

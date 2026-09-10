@@ -1,0 +1,15 @@
+[package]
+name = "xfoil-sensitivity"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "XFOIL input-sensitivity study: perturb geometry, panel count and alpha step; plot what the reference does"
+
+[lints]
+workspace = true
+
+[dependencies]
+yfoil = { path = "../..", default-features = false }
+plotters = "0.3"
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
