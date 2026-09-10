@@ -1,0 +1,3 @@
+
+# Ignore all runs (many 10s of mb). Run artifacts should be generated on release and attached to the release artifact.
+*

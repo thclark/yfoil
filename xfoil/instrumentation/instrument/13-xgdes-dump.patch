@@ -23,7 +23,7 @@
 +     &                          APANEL(I)
 +      ENDDO
 +      CLOSE(99)
-+      WRITE(*,*) '=== Wrote panels to /tmp/xfoil_panels.dat ==='
++      WRITE(*,*) '=== Wrote panels to xfoil_panels.dat ==='
  C
        LGAMU = .FALSE.
        LQINU = .FALSE.

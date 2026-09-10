@@ -1,16 +1,16 @@
 [package]
-name = "xfoil-sensitivity"
+name = "xfoil-instrumentation-check"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 publish = false
-description = "XFOIL input-sensitivity study: perturb geometry, panel count and alpha step; plot what the reference does"
+description = "Cross-check that the instrumented XFOIL reference behaves identically to the pristine build on a polar through stall, judged on XFOIL's standard outputs"
 
 [lints]
 workspace = true
 
 [dependencies]
-yfoil = { path = "../..", default-features = false }
 plotters = "0.3"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["float_roundtrip"] }
 figure-style = { path = "../figure-style" }

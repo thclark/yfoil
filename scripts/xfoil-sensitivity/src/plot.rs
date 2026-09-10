@@ -1,11 +1,18 @@
-//! The seven-row plot: one column per input family, base case in front, perturbation levels
+//! The seven-row figures: one column per input family, base case in front, perturbation levels
 //! stacked behind it coloured by perturbation size (smallest lightest, drawn nearest the base).
+//! The node and alpha-step families share a two-column sheet; the panel family has a one-column
+//! figure of the same column width. Publication conventions from `figure_style`: physical size,
+//! Times New Roman, math-style labels, no in-figure title (the caption carries it).
 
-use crate::run::{Point, RunResult};
-use crate::Family;
+use crate::run::{Ending, Point, RunResult};
+use crate::{perturb, Family, Level};
+use figure_style::{self as figure, pxi, pxu, Label, AXIS_LABEL_PT, LEGEND_PT, TEXT_WIDTH_PT, TICK_PT};
 use plotters::coord::types::RangedCoordf64;
 use plotters::prelude::*;
 use std::path::Path;
+
+/// The families drawn side by side on the sheet; the others get a figure each
+pub const SHEET: [Family; 2] = [Family::Geometry, Family::AlphaStep];
 
 /// plotly's YlGnBu colourscale stops (ColorBrewer), light to dark
 const YLGNBU: [(u8, u8, u8); 9] = [
@@ -31,82 +38,148 @@ fn ylgnbu(t: f64) -> RGBColor {
 }
 
 struct Row {
-    label: &'static str,
+    label: fn() -> Label,
     log: bool,
     get: fn(&Point) -> f64,
 }
 
+/// Rows, top to bottom. "Upper surface" and "trailing edge" are in the caption.
 const ROWS: [Row; 7] = [
     Row {
-        label: "CL",
+        label: || Label::new().i("C").subi("L"),
         log: false,
         get: |p| p.cl,
     },
     Row {
-        label: "CD",
+        label: || Label::new().i("C").subi("D"),
         log: false,
         get: |p| p.cd,
     },
     Row {
-        label: "δ* at TE, upper",
+        label: || Label::new().i("δ").sup("*").t(" at TE"),
         log: false,
         get: |p| p.dstar_te_upper,
     },
     Row {
-        label: "H at TE, upper",
+        label: || Label::new().i("H").t(" at TE"),
         log: false,
         get: |p| p.h_te_upper,
     },
     Row {
-        label: "x/c transition, upper",
+        label: || Label::new().i("x").t("/").i("c").t(" transition"),
         log: false,
         get: |p| p.xtr_upper,
     },
     Row {
-        label: "x/c TE separation, upper",
+        label: || Label::new().i("x").t("/").i("c").t(" separation"),
         log: false,
         get: |p| p.x_sep_upper,
     },
     Row {
-        label: "RMSBL, final iteration",
+        label: || Label::new().t("log").subt("10").t(" RMSBL"),
         log: true,
         get: |p| p.rmsbl,
     },
 ];
 
-const COL_W: u32 = 520;
-const ROW_H: u32 = 260;
-const LEGEND_H: u32 = 250;
-const TITLE_H: u32 = 40;
-const FOOT_H: u32 = 24;
+/// Layout, pt. The sheet is `TEXT_WIDTH_PT` wide: two columns and a gutter; a one-column figure
+/// is one column wide. Seven rows plus the legend fit an A4 text height (698 pt).
+const GUTTER_PT: f64 = 16.0;
+const ROW_H_PT: f64 = 82.0;
+const X_LABEL_AREA_PT: f64 = 28.0;
+const X_STUB_PT: f64 = 4.0;
+const Y_LABEL_AREA_PT: f64 = 34.0;
+const MARGIN_PT: f64 = 3.0;
+const LEGEND_TITLE_PT: f64 = 12.0;
+const LEGEND_ROW_PT: f64 = 10.0;
+const LEGEND_COLS: usize = 2;
+const MARKER_PT: f64 = 1.2;
+const OPEN_MARKER_PT: f64 = 2.2;
 
-/// Draw one column per family (a single family gives the per-family figure, all three the sheet)
-pub fn draw_families(
-    path: &Path,
-    foil: &str,
-    families: &[(Family, Vec<RunResult>)],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let ncol = families.len() as u32;
-    let width = COL_W * ncol + 20;
-    let height = TITLE_H + LEGEND_H + ROW_H * ROWS.len() as u32 + FOOT_H;
+pub fn column_width_pt() -> f64 {
+    (TEXT_WIDTH_PT - GUTTER_PT * (SHEET.len() - 1) as f64) / SHEET.len() as f64
+}
+
+/// Legend rows: the base entry on a row of its own, then the perturbation levels in
+/// `LEGEND_COLS` columns. The same for every figure (the largest family decides), so that a
+/// one-column figure and the sheet have the same height
+fn legend_rows() -> usize {
+    let n = Family::ALL.iter().map(|f| crate::levels(*f).len()).max().unwrap_or(1);
+    1 + (n - 1).div_ceil(LEGEND_COLS)
+}
+
+fn legend_height_pt() -> f64 {
+    LEGEND_TITLE_PT + LEGEND_ROW_PT * legend_rows() as f64 + 4.0
+}
+
+type Area<DB> = DrawingArea<DB, plotters::coord::Shift>;
+type Chart<'a, DB> = ChartContext<'a, DB, Cartesian2d<RangedCoordf64, RangedCoordf64>>;
+
+/// The level's legend text, typeset
+fn level_label(l: &Level) -> Label {
+    let exp = |v: f64| format!("−{}", -(v.log10().round() as i32));
+    if l.magnitude == 0.0 {
+        return Label::new()
+            .t("base: ")
+            .i("N")
+            .t(&format!(" = {}, Δ", crate::BASE_PANELS))
+            .i("α")
+            .t(&format!(" = {}°", crate::ALPHA_STEP_DEG));
+    }
+    match l.family {
+        Family::Geometry => {
+            if l.raw == perturb::ULP {
+                Label::new().t("nodes ± 1 ULP")
+            } else {
+                Label::new().t("nodes ± 10").sup(&exp(l.raw))
+            }
+        }
+        Family::Panels => {
+            let n = l.actual_panels.unwrap_or(l.panels);
+            let lab = Label::new().i("N").t(&format!(" = {n}"));
+            if n != l.panels {
+                lab.t(&format!(" (req. {})", l.panels))
+            } else {
+                lab
+            }
+        }
+        // the base row states Δα; the levels give only the increment
+        Family::AlphaStep => {
+            if l.raw == perturb::ULP {
+                Label::new().t("Δ").i("α").t(" + 1 ULP")
+            } else {
+                Label::new().t("Δ").i("α").t(" + 10").sup(&exp(l.raw)).t("°")
+            }
+        }
+    }
+}
+
+/// Draw one column per family (a single family gives its figure, the two `SHEET` families the
+/// sheet). Every column has the same width whatever the figure.
+pub fn draw_families(path: &Path, families: &[(Family, Vec<RunResult>)]) -> Result<(), Box<dyn std::error::Error>> {
+    let ncol = families.len();
+    let col_w = column_width_pt();
+    let width = pxu(col_w * ncol as f64 + GUTTER_PT * (ncol - 1) as f64);
+    let legend_h = legend_height_pt();
+    let height = pxu(legend_h + ROW_H_PT * ROWS.len() as f64 + X_LABEL_AREA_PT - X_STUB_PT);
     let root = SVGBackend::new(path, (width, height)).into_drawing_area();
     root.fill(&WHITE)?;
-    let (title_area, rest) = root.split_vertically(TITLE_H);
-    title_area.draw(&Text::new(
-        format!(
-            "XFOIL 6.99 DP input sensitivity — NACA {foil}, Re {:e}, M {}, Ncrit {}, ITER {}, ALFA per point",
-            crate::REYNOLDS,
-            crate::MACH,
-            crate::NCRIT,
-            crate::ITER
-        ),
-        (12, 12),
-        ("sans-serif", 18).into_font(),
-    ))?;
-    let (legend_area, rest) = rest.split_vertically(LEGEND_H);
-    let (grid, _foot) = rest.split_vertically(ROW_H * ROWS.len() as u32);
-    let legend_cols = legend_area.split_evenly((1, ncol as usize));
-    let cells = grid.split_evenly((ROWS.len(), ncol as usize));
+
+    // columns with gutters between them: breakpoints at every column edge, gutters left empty
+    let mut xs = Vec::new();
+    for c in 1..ncol {
+        let x = (col_w + GUTTER_PT) * c as f64;
+        xs.push(pxi(x - GUTTER_PT));
+        xs.push(pxi(x));
+    }
+    // rows: legend, then ROWS.len() rows, the last one taller by the x label area
+    let mut ys = vec![pxi(legend_h)];
+    for r in 1..ROWS.len() {
+        ys.push(pxi(legend_h + ROW_H_PT * r as f64));
+    }
+    let grid = root.split_by_breakpoints(xs, ys);
+    let stride = 2 * ncol - 1;
+    let cell = |row: usize, col: usize| &grid[row * stride + 2 * col];
 
     // common y range per row across the columns, so the columns are comparable. The range is
     // set by the converged points of every series (unconverged states can be anything, up to
@@ -136,17 +209,11 @@ pub fn draw_families(
             }
         })
         .collect();
-    root.draw(&Text::new(
-        "Axes span the converged points; off-scale values (unconverged states) are drawn on the axis edge. Open circles: RMSBL did not reach 1e-4 in ITER iterations.",
-        (12, (height - 16) as i32),
-        ("sans-serif", 12).into_font(),
-    ))?;
 
     for (c, (family, results)) in families.iter().enumerate() {
-        draw_legend(&legend_cols[c], family, results)?;
+        draw_legend(cell(0, c), family, results)?;
         for (r, row) in ROWS.iter().enumerate() {
-            let cell = &cells[r * ncol as usize + c];
-            draw_cell(cell, row, ranges[r], alpha_max, results, r == ROWS.len() - 1)?;
+            draw_cell(cell(r + 1, c), row, ranges[r], alpha_max, results, r == ROWS.len() - 1)?;
         }
     }
     root.present()?;
@@ -171,50 +238,49 @@ fn ordered(results: &[RunResult]) -> Vec<(&RunResult, RGBColor, bool)> {
 }
 
 fn draw_legend<DB: DrawingBackend>(
-    area: &DrawingArea<DB, plotters::coord::Shift>,
+    area: &Area<DB>,
     family: &Family,
     results: &[RunResult],
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     DB::ErrorType: 'static,
 {
-    area.draw(&Text::new(
-        family.title().to_string(),
-        (30, 6),
-        ("sans-serif", 16).into_font(),
-    ))?;
+    Label::new().t(family.title()).draw(
+        area,
+        (pxi(Y_LABEL_AREA_PT + MARGIN_PT), pxi(LEGEND_TITLE_PT - 2.0)),
+        AXIS_LABEL_PT,
+        false,
+    )?;
     let entries = ordered(results);
-    let line_h = ((LEGEND_H - 30) as f64 / entries.len().max(1) as f64).min(16.0) as i32;
+    let rows = legend_rows();
+    let (w, _) = area.dim_in_pixel();
+    let col_w = (w as i32 - pxi(Y_LABEL_AREA_PT + MARGIN_PT)) / LEGEND_COLS as i32;
     for (i, (r, colour, is_base)) in entries.iter().enumerate() {
-        let y = 30 + i as i32 * line_h;
-        let style = ShapeStyle {
-            color: colour.to_rgba(),
-            filled: true,
-            stroke_width: if *is_base { 2 } else { 1 },
-        };
-        area.draw(&PathElement::new(
-            vec![(30, y + line_h / 2), (60, y + line_h / 2)],
-            style,
-        ))?;
-        if *is_base {
-            area.draw(&Circle::new((45, y + line_h / 2), 3, style))?;
-        }
-        let note = if r.ending == crate::run::Ending::Completed {
-            ""
+        // entry 0 is the base on its own row; the rest fill the columns below it
+        let (col, row) = if i == 0 {
+            (0, 0)
         } else {
-            " (XFOIL hung; killed)"
+            ((i - 1) / (rows - 1), 1 + (i - 1) % (rows - 1))
         };
-        area.draw(&Text::new(
-            format!("{}{note}", r.level.label),
-            (68, y + 2),
-            ("sans-serif", 12).into_font(),
-        ))?;
+        let x = pxi(Y_LABEL_AREA_PT + MARGIN_PT) + col as i32 * col_w;
+        let y = pxi(LEGEND_TITLE_PT + LEGEND_ROW_PT * (row as f64 + 0.5) + 2.0);
+        let len = pxi(14.0);
+        let style = colour.stroke_width(if *is_base { 2 } else { 1 });
+        area.draw(&PathElement::new(vec![(x, y), (x + len, y)], style))?;
+        if *is_base {
+            area.draw(&Circle::new((x + len / 2, y), pxi(MARKER_PT), colour.filled()))?;
+        }
+        let mut label = level_label(&r.level);
+        if r.ending != Ending::Completed {
+            label = label.t(" (hung)");
+        }
+        label.draw(area, (x + len + pxi(3.0), y + pxi(3.0)), LEGEND_PT, false)?;
     }
     Ok(())
 }
 
 fn draw_cell<DB: DrawingBackend>(
-    area: &DrawingArea<DB, plotters::coord::Shift>,
+    area: &Area<DB>,
     row: &Row,
     (lo, hi): (f64, f64),
     alpha_max: f64,
@@ -225,93 +291,106 @@ where
     DB::ErrorType: 'static,
 {
     let x_range = -0.5..alpha_max + 0.5;
+    let (lo_axis, hi_axis) = if row.log { (lo.log10(), hi.log10()) } else { (lo, hi) };
+    let mut chart = ChartBuilder::on(area)
+        .margin(pxu(MARGIN_PT))
+        .margin_right(pxu(MARGIN_PT + 4.0))
+        .x_label_area_size(pxu(if bottom { X_LABEL_AREA_PT } else { X_STUB_PT }))
+        .y_label_area_size(pxu(Y_LABEL_AREA_PT))
+        .build_cartesian_2d(x_range, lo_axis..hi_axis)?;
+    let mut mesh = chart.configure_mesh();
+    mesh.label_style(figure::text(TICK_PT))
+        .axis_style(BLACK.stroke_width(1))
+        .light_line_style(TRANSPARENT)
+        .bold_line_style(RGBColor(228, 228, 228))
+        .x_labels(6)
+        .y_labels(4);
+    if !bottom {
+        mesh.x_label_formatter(&|_| String::new());
+    }
+    mesh.draw()?;
+
     // the stack, drawn largest perturbation first so the base lands on top
     let entries = ordered(results);
-    let series = |chart: &mut ChartContext<DB, Cartesian2d<RangedCoordf64, RangedCoordf64>>,
-                  points: Vec<(f64, f64)>,
-                  unconverged: Vec<(f64, f64)>,
-                  colour: RGBColor,
-                  is_base: bool|
-     -> Result<(), Box<dyn std::error::Error>> {
-        let style = colour.stroke_width(if is_base { 2 } else { 1 });
-        chart.draw_series(LineSeries::new(points.clone(), style))?;
-        if is_base {
-            chart.draw_series(points.iter().map(|&p| Circle::new(p, 3, colour.filled())))?;
-        }
-        chart.draw_series(unconverged.iter().map(|&p| {
-            Circle::new(
-                p,
-                4,
-                ShapeStyle {
-                    color: colour.to_rgba(),
-                    filled: false,
-                    stroke_width: 1,
-                },
-            )
-        }))?;
-        Ok(())
-    };
-    let mut builder = ChartBuilder::on(area);
-    builder
-        .margin(8)
-        .margin_left(12)
-        .x_label_area_size(if bottom { 32 } else { 18 })
-        .y_label_area_size(64);
-    if row.log {
-        // log axis: transform to log10 and label accordingly
-        let mut chart = builder.build_cartesian_2d(x_range, lo.log10()..hi.log10())?;
-        chart
-            .configure_mesh()
-            .x_desc(if bottom { "α (deg)" } else { "" })
-            .y_desc(format!("log10 {}", row.label))
-            .label_style(("sans-serif", 11))
-            .axis_desc_style(("sans-serif", 12))
-            .light_line_style(RGBColor(235, 235, 235))
-            .draw()?;
-        for (r, colour, is_base) in entries.iter().rev() {
-            let val = |p: &Point| (row.get)(p).log10().clamp(lo.log10(), hi.log10());
-            let ok = |p: &Point| (row.get)(p) > 0.0 && (row.get)(p).is_finite();
-            let pts: Vec<(f64, f64)> = r
-                .points
-                .iter()
-                .filter(|p| ok(p))
-                .map(|p| (p.alpha_deg, val(p)))
-                .collect();
-            let unc: Vec<(f64, f64)> = r
-                .points
-                .iter()
-                .filter(|p| !p.converged && ok(p))
-                .map(|p| (p.alpha_deg, val(p)))
-                .collect();
-            series(&mut chart, pts, unc, *colour, *is_base)?;
-        }
-    } else {
-        let mut chart = builder.build_cartesian_2d(x_range, lo..hi)?;
-        chart
-            .configure_mesh()
-            .x_desc(if bottom { "α (deg)" } else { "" })
-            .y_desc(row.label)
-            .label_style(("sans-serif", 11))
-            .axis_desc_style(("sans-serif", 12))
-            .light_line_style(RGBColor(235, 235, 235))
-            .draw()?;
-        for (r, colour, is_base) in entries.iter().rev() {
-            let val = |p: &Point| (row.get)(p).clamp(lo, hi);
-            let ok = |p: &Point| !(row.get)(p).is_nan();
-            let pts: Vec<(f64, f64)> = r
-                .points
-                .iter()
-                .filter(|p| ok(p))
-                .map(|p| (p.alpha_deg, val(p)))
-                .collect();
-            let unc: Vec<(f64, f64)> = r
-                .points
-                .iter()
-                .filter(|p| !p.converged && ok(p))
-                .map(|p| (p.alpha_deg, val(p)))
-                .collect();
-            series(&mut chart, pts, unc, *colour, *is_base)?;
-        }
+    for (r, colour, is_base) in entries.iter().rev() {
+        let value = |p: &Point| {
+            let v = (row.get)(p);
+            if row.log {
+                v.log10().clamp(lo_axis, hi_axis)
+            } else {
+                v.clamp(lo_axis, hi_axis)
+            }
+        };
+        let ok = |p: &Point| {
+            let v = (row.get)(p);
+            if row.log {
+                v > 0.0 && v.is_finite()
+            } else {
+                !v.is_nan()
+            }
+        };
+        let pts: Vec<(f64, f64)> = r
+            .points
+            .iter()
+            .filter(|p| ok(p))
+            .map(|p| (p.alpha_deg, value(p)))
+            .collect();
+        let unc: Vec<(f64, f64)> = r
+            .points
+            .iter()
+            .filter(|p| !p.converged && ok(p))
+            .map(|p| (p.alpha_deg, value(p)))
+            .collect();
+        series(&mut chart, pts, unc, *colour, *is_base)?;
     }
+
+    // axis descriptions, centred on the plotting area
+    let (ox, oy) = area.get_base_pixel();
+    let (xr, yr) = chart.plotting_area().get_pixel_range();
+    let (cx, cy) = ((xr.start + xr.end) / 2 - ox, (yr.start + yr.end) / 2 - oy);
+    if bottom {
+        let (_, h) = area.dim_in_pixel();
+        Label::new().i("α").t(" (°)").draw_centred(
+            area,
+            (cx, h as i32 - pxi(MARGIN_PT + 1.0)),
+            AXIS_LABEL_PT,
+            false,
+        )?;
+    }
+    (row.label)().draw_centred(
+        area,
+        (pxi(MARGIN_PT) + Label::height(AXIS_LABEL_PT), cy),
+        AXIS_LABEL_PT,
+        true,
+    )?;
+    Ok(())
+}
+
+fn series<DB: DrawingBackend>(
+    chart: &mut Chart<DB>,
+    points: Vec<(f64, f64)>,
+    unconverged: Vec<(f64, f64)>,
+    colour: RGBColor,
+    is_base: bool,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    DB::ErrorType: 'static,
+{
+    let style = colour.stroke_width(if is_base { 2 } else { 1 });
+    chart.draw_series(LineSeries::new(points.clone(), style))?;
+    if is_base {
+        chart.draw_series(points.iter().map(|&p| Circle::new(p, pxi(MARKER_PT), colour.filled())))?;
+    }
+    chart.draw_series(unconverged.iter().map(|&p| {
+        Circle::new(
+            p,
+            pxi(OPEN_MARKER_PT),
+            ShapeStyle {
+                color: colour.to_rgba(),
+                filled: false,
+                stroke_width: 1,
+            },
+        )
+    }))?;
     Ok(())
 }

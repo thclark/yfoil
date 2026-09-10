@@ -112,7 +112,7 @@
 +     &                          APANEL(I)
 +      ENDDO
 +      CLOSE(99)
-+      WRITE(*,*) '=== Wrote panel geometry to /tmp/xfoil_panels.dat ==='
++      WRITE(*,*) '=== Wrote panel geometry to xfoil_panels.dat ==='
 +C
        IF(SHARP) THEN
         WRITE(*,1090) 'Sharp trailing edge'

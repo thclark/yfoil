@@ -38,7 +38,7 @@
 +     &                          QINVU(I,1), QINVU(I,2)
 +      ENDDO
 +      CLOSE(98)
-+      WRITE(*,*) '=== Wrote inviscid to /tmp/xfoil_inviscid.dat ==='
++      WRITE(*,*) '=== Wrote inviscid to xfoil_inviscid.dat ==='
 +C
 +C---- INSTRUMENTATION: Log subroutine exit
 +      CALL LOGREAL('CL', DBLE(CL))
@@ -140,7 +140,7 @@
 +        ENDDO
 +      ENDDO
 +      CLOSE(97)
-+      WRITE(*,*) '=== Wrote DIJ matrix to /tmp/xfoil_dij.dat ==='
++      WRITE(*,*) '=== Wrote DIJ matrix to xfoil_dij.dat ==='
 +C
 +C
  C---- Newton iteration for entire BL solution
@@ -331,7 +331,7 @@
 +      WRITE(79,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
 +      CLOSE(79)
 +C
-+      WRITE(*,*) '=== Wrote viscal to /tmp/xfoil_viscal_iter.dat ==='
++      WRITE(*,*) '=== Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ==='
 +C
  
 -

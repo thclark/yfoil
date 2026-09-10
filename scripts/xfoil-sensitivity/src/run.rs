@@ -318,7 +318,12 @@ pub fn load(dir: &Path, level: &Level) -> RunResult {
                 .ok()
                 .and_then(|v| v["x"].as_array().map(|a| a.len()))
             {
-                level.label = format!("N = {n} (requested {})", level.panels);
+                level.label = if n == level.panels {
+                    format!("N = {n}")
+                } else {
+                    format!("N = {n} (requested {})", level.panels)
+                };
+                level.actual_panels = Some(n);
             }
         }
     }
@@ -415,15 +420,31 @@ pub fn write_index(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunResul
         crate::ALPHA_STEP_DEG
     )
     .unwrap();
-    writeln!(f, "| Sheet | Columns |\n|---|---|").unwrap();
+    writeln!(
+        f,
+        "Figures are drawn at the document's physical size ({} pt sheet width, {} at {}–{} pt) and come as SVG and \
+         PDF; include the PDF at natural size (`\\includegraphics{{...pdf}}`, no `width=`, no `\\resizebox`).\n",
+        figure_style::TEXT_WIDTH_PT,
+        figure_style::FONT,
+        figure_style::TICK_PT,
+        figure_style::AXIS_LABEL_PT
+    )
+    .unwrap();
+    writeln!(f, "| Figure | Columns |\n|---|---|").unwrap();
     writeln!(
         f,
         "| [naca{foil}_sheet.svg](naca{foil}_sheet.svg) | {} |",
-        Family::ALL
+        crate::plot::SHEET
             .iter()
             .map(|fm| format!("[{}](naca{foil}_{}.svg)", fm.title(), fm.slug()))
             .collect::<Vec<_>>()
             .join(", ")
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "| [naca{foil}_panels.svg](naca{foil}_panels.svg) | {} (same column width as the sheet) |",
+        Family::Panels.title()
     )
     .unwrap();
     for (family, results) in families {
@@ -504,8 +525,7 @@ pub fn write_index_tex(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunR
     let w = |f: &mut fs::File, s: &str| writeln!(f, "{s}").unwrap();
     w(&mut f, "\\documentclass[11pt,a4paper]{article}");
     w(&mut f, "\\usepackage[margin=20mm]{geometry}");
-    w(&mut f, "\\usepackage{amsmath,booktabs,longtable,siunitx,svg,url}");
-    w(&mut f, "\\svgpath{{./}}");
+    w(&mut f, "\\usepackage{amsmath,booktabs,longtable,siunitx,graphicx,url}");
     w(&mut f, &format!("\\title{{XFOIL input sensitivity --- NACA {foil}}}"));
     w(
         &mut f,
@@ -520,16 +540,24 @@ pub fn write_index_tex(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunR
          The node-perturbation method is documented in \\texttt{{src/perturb.rs}}.",
         crate::ALPHA_STEP_DEG
     ));
-    w(&mut f, "\n\\section*{Figures}\n\\begin{table}[h]\\centering\\begin{tabular}{@{}ll@{}}\\toprule\nFigure & Content \\\\ \\midrule");
+    w(&mut f, &format!(
+        "\n\\section*{{Figures}}\n\\noindent Figures are drawn at the document's physical size ({} pt sheet width, {} at \
+         {}--{} pt), so they are included at natural size: no \\texttt{{width=}} and no \\texttt{{\\resizebox}}, or the text \
+         no longer matches the document.\n\\begin{{table}}[h]\\centering\\begin{{tabular}}{{@{{}}ll@{{}}}}\\toprule\nFigure & Content \\\\ \\midrule",
+        figure_style::TEXT_WIDTH_PT,
+        figure_style::FONT,
+        figure_style::TICK_PT,
+        figure_style::AXIS_LABEL_PT
+    ));
     w(
         &mut f,
-        &format!("\\texttt{{naca{foil}\\_sheet.svg}} & all three families, one column each \\\\"),
+        &format!("\\texttt{{naca{foil}\\_sheet.pdf}} & node coordinates and alpha step, one column each \\\\"),
     );
     for fm in Family::ALL {
         w(
             &mut f,
             &format!(
-                "\\texttt{{naca{foil}\\_{}.svg}} & {} \\\\",
+                "\\texttt{{naca{foil}\\_{}.pdf}} & {} (one column) \\\\",
                 fm.slug().replace('-', "\\-"),
                 fm.title()
             ),
@@ -581,7 +609,8 @@ pub fn write_index_tex(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunR
         }
         w(&mut f, "\\bottomrule\\end{longtable}}");
     }
-    w(&mut f, "\n\\section*{Sheet}\n\\noindent Axes span the converged points; off-scale values (unconverged states) are drawn on the axis edge. Open circles: RMSBL did not reach $10^{-4}$ in \\texttt{ITER} iterations.\n");
-    w(&mut f, &format!("\\begin{{figure}}[p]\\centering\\includesvg[width=\\textwidth]{{naca{foil}_sheet}}\\caption{{XFOIL input sensitivity, NACA {foil}: node coordinates, panel count and alpha step perturbed.}}\\end{{figure}}"));
+    w(&mut f, "\n\\section*{Figures}\n\\noindent Axes span the converged points; off-scale values (unconverged states) are drawn on the axis edge. Open circles: RMSBL did not reach $10^{-4}$ in \\texttt{ITER} iterations. Rows, top to bottom: $C_L$, $C_D$, $\\delta^*$ and $H$ at the upper-surface trailing edge, upper-surface transition and trailing-edge separation $x/c$, and $\\log_{10}$ of the final RMSBL.\n");
+    w(&mut f, &format!("\\begin{{figure}}[p]\\centering\\includegraphics{{naca{foil}_sheet.pdf}}\\caption{{XFOIL input sensitivity, NACA {foil}: node coordinates (left) and alpha step (right) perturbed; base case black, perturbations behind it coloured by size.}}\\end{{figure}}"));
+    w(&mut f, &format!("\\begin{{figure}}[p]\\centering\\includegraphics{{naca{foil}_panels.pdf}}\\caption{{XFOIL input sensitivity, NACA {foil}: panel count reduced.}}\\end{{figure}}"));
     w(&mut f, "\\end{document}");
 }

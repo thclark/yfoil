@@ -4,14 +4,17 @@
 //! alpha sweep, once for the base case and once per perturbation level of three input families —
 //! node coordinates (1 ULP up to 1e-7 chord), panel count (160 down to 96) and alpha step
 //! (0.5° plus 1 ULP up to 1e-5°) — and plots seven per-alpha quantities per family, base case in
-//! front, perturbations stacked behind it coloured by perturbation size (YlGnBu).
+//! front, perturbations stacked behind it coloured by perturbation size (YlGnBu): the node and
+//! alpha-step families side by side as one sheet, the panel family as a figure of the same
+//! column width. Figures follow the shared publication conventions (`scripts/figure-style`):
+//! drawn at the document's physical width and font, exported as SVG and PDF.
 //!
 //! Every invocation creates a dated folder `runs/<UTC datetime>/` next to this crate holding
 //! `metadata.json` (git version tag or `untagged`, commit sha, dirty flag, the reference build's
 //! manifest and the study constants), one directory per XFOIL run under `<foil>/<family>/<level>/`
 //! with the panels (`panels.dat`, written at 17 significant digits and asserted bitwise against
 //! XFOIL's post-LOAD dump), the OPER script, XFOIL's stdout and the instrumented per-call records
-//! (`viscal_points.dat`, `viscal_state_<k>.dat`), and the post-processed products: the SVG plots,
+//! (`viscal_points.dat`, `viscal_state_<k>.dat`), and the post-processed products: the figures (SVG and PDF),
 //! `summary.json` (the per-level table), `metrics.json` (every per-alpha quantity) and the
 //! `README.md` / `README.tex` index. `runs/` is gitignored.
 //!
@@ -111,6 +114,9 @@ pub struct Level {
     pub panels: usize,
     pub geometry_eps: Option<f64>,
     pub alpha_step: f64,
+    /// Node count actually generated (yFoil's generator returns an even count), set when the
+    /// run is read back
+    pub actual_panels: Option<usize>,
 }
 
 pub fn levels(family: Family) -> Vec<Level> {
@@ -123,6 +129,7 @@ pub fn levels(family: Family) -> Vec<Level> {
         panels: BASE_PANELS,
         geometry_eps: None,
         alpha_step: ALPHA_STEP_DEG,
+        actual_panels: None,
     };
     let mut out = vec![base.clone()];
     match family {
@@ -346,16 +353,29 @@ fn main() {
         families.push((*family, results));
     }
 
-    // per-family columns and the sheet
+    // one figure per family (a single column), and the sheet: the node and alpha-step families
+    // side by side. The panel family stays on its own figure, at the same column width.
+    let figure = |path: std::path::PathBuf, fams: &[(Family, Vec<run::RunResult>)]| {
+        plot::draw_families(&path, fams).unwrap();
+        println!("wrote {}", path.display());
+        match figure_style::svg_to_pdf(&path) {
+            Ok(pdf) => println!("wrote {}", pdf.display()),
+            Err(e) => println!("no PDF: {e}"),
+        }
+    };
     for (family, results) in &families {
-        let path = run_dir.join(format!("naca{}_{}.svg", args.foil, family.slug()));
-        plot::draw_families(&path, &args.foil, std::slice::from_ref(&(*family, results.clone()))).unwrap();
-        println!("wrote {}", path.display());
+        figure(
+            run_dir.join(format!("naca{}_{}.svg", args.foil, family.slug())),
+            std::slice::from_ref(&(*family, results.clone())),
+        );
     }
-    if families.len() == Family::ALL.len() {
-        let path = run_dir.join(format!("naca{}_sheet.svg", args.foil));
-        plot::draw_families(&path, &args.foil, &families).unwrap();
-        println!("wrote {}", path.display());
+    let sheet: Vec<(Family, Vec<run::RunResult>)> = families
+        .iter()
+        .filter(|(f, _)| plot::SHEET.contains(f))
+        .cloned()
+        .collect();
+    if sheet.len() == plot::SHEET.len() {
+        figure(run_dir.join(format!("naca{}_sheet.svg", args.foil)), &sheet);
     }
     run::write_summary_json(&run_dir, &args.foil, &families);
     run::write_index(&run_dir, &args.foil, &families);
