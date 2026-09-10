@@ -257,3 +257,32 @@ ncrit = 9.0
 max_iterations = 20
 polar = true
 track = false
+
+[[case]]
+name = "naca0012_n160_polar_up22_re1e6_iter100"    # polar break point (ITER 100): 0.5° ASEQ to 22°; 20.5°–21.5° unconverged, 22° converges on the separated branch by chance (the +1-ULP twin does not)
+foil = "naca4:0012"
+n_panels = 160
+alphas = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5, 21.0, 21.5, 22.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 100
+polar = true
+minimal = true
+dump_calls = [237, 238]                  # replay harness: iterations 31 and 32 of the 20.5° call (call 42), where the runs part
+track = true
+
+[[case]]
+name = "naca4412_n160_polar_down16_re1e6_iter100"  # polar break point (ITER 100): INIT / ALFA 0 / ASEQ -0.5 -16 -0.5; -14.5°..-15.5° unconverged, -16° converges on the separated branch (the +1-ULP twin does not)
+foil = "naca4:4412"
+n_panels = 160
+alphas = [0.0]
+alphas_after_reinit = [-0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0, -3.5, -4.0, -4.5, -5.0, -5.5, -6.0, -6.5, -7.0, -7.5, -8.0, -8.5, -9.0, -9.5, -10.0, -10.5, -11.0, -11.5, -12.0, -12.5, -13.0, -13.5, -14.0, -14.5, -15.0, -15.5, -16.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 100
+polar = true
+minimal = true
+dump_calls = [181, 182]                  # replay harness: iterations 15 and 16 of the -14.5° call (call 31), where the runs part
+track = true

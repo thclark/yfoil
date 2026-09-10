@@ -146,8 +146,8 @@ threshold-straddling cases — not a single worst-case number.
 annotations: `[[unreachable]]` entries with a class (*structural*, *mode*, *guard*, *compiler*) and a reason,
 `[[note]]` entries recording how an open branch can be reached, `[[dead]]` entries for subroutines XFOIL never
 calls. Every never-taken branch that is not annotated is **open**; annotations that stop matching are reported
-as stale. Measured 2026-09-04 over 20 cases: 1320 branches, 1125 taken, 90 open (every one with a reach note,
-8 of them Newton-loop iteration caps), 84 annotated unreachable, 21 DO-loop zero-trip edges. The first
+as stale. Measured 2026-09-10 over 22 cases: 1320 branches, 1135 taken, 80 open (every one with a reach note,
+7 of them Newton-loop iteration caps), 84 annotated unreachable, 21 DO-loop zero-trip edges. The first
 measurement found one translation gap — OPER `DAMP` (IDAMPV=1, `DAMPL2`) was reachable and not translated — now
 closed and gated by the `naca0012_n60_a2_re1e6_damp` case.
 

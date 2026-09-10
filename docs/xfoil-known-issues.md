@@ -136,6 +136,17 @@ the previous iteration's value; the gate excludes it (`tests/xfoil_mrchue_tests.
 `xgeom.f:350`: LE curvature below `0.001/(S(N)-S(1))` leaves `RADLE = 0` (flat plate, wedge). Open
 branch with a reach note in `coverage.toml`.
 
+### 2.8 MASS is never written on side 1's wake slots — Replicated (harness note)
+
+UPDATE's final loop equates the "upper wake arrays" `(IBLTE(1)+K, 1)` to side 2's wake for CTAU,
+THET, DSTR, UEDG, TAU, DIS, CTQ, DELT and TSTR (`xbl.f:1546-1557`) but not MASS, and nothing else
+writes `MASS(IBL, 1)` beyond `NBL(1)` (MRCHUE/MRCHDU, UPDATE, DSSET and the SETBL/QVFUE sums all
+run to `NBL(IS)`, and `NBL(1) = IBLTE(1)`). Those slots hold whatever an earlier stagnation-point
+position left there and are read by nothing. yFoil's `mass_defect[1][..]` beyond `n_stations[1]` is
+the same dead storage with a different history, so the replay harness (`tests/utilities/replay.rs`)
+does not compare it; it surfaced in the polar break-point cases, where IST moves between iterations
+and the instrumented `update_output_<k>.dat` dumps every row up to `NBL(1) + NW`.
+
 ---
 
 ## 3. Drela's own dated fixes and flagged defects in the shipped source
@@ -178,6 +189,7 @@ replicates each (with the message as a code comment) so that its results and bra
 | `xpanel.f:1737` (UESET) | `tweak Ue so it's not zero, in case stag. point is right on node` (UEPS = 1e-7) | `pointers.rs:325` |
 | `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; threshold-straddling territory |
 | `xbl.f` (SETBL) | `SETBL: Xtr???  n1 n2:` diagnostic when the transition interval and ITRAN disagree | `setbl.rs:272` |
+| `xoper.f:719` (ASEQ → SEQPLT → PLNUMB → PLNUMBABS, `plotlib/plt_font.f`) | the sequence-plot label is formatted even with graphics off (`PLOP / G F`), and the digit-extraction loop never terminates on a non-finite CL/CM. Seen on the NACA 0012 downward leg at −21.5° with `ITER 100` (`CD = Infinity` from iteration ~100): XFOIL hangs at 100 % CPU instead of reporting the fourth failure and halting the sequence (`.tmp/polars/xfoil_naca0012.inp`, stack sampled 2026-09-10) | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
 
 ---
 

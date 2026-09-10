@@ -487,16 +487,6 @@ reach = "CTI <= 0 at the transition station on the first march: a trip where the
 
 [[note]]
 file = "xbl.f"
-line = 699
-reach = "inverse (prescribed-Hk) marching in the wake during MRCHUE: massive separation at the initial alpha"
-
-[[note]]
-file = "xbl.f"
-line = 717
-reach = "inverse (prescribed-Hk) marching in the wake during MRCHUE: massive separation at the initial alpha"
-
-[[note]]
-file = "xbl.f"
 line = 785
 reach = "MRCHUE Newton failure with residual > 0.1 (the garbage-solution extrapolation); the 6 failures so far all had DMAX <= 0.1"
 
@@ -562,27 +552,12 @@ reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback);
 
 [[note]]
 file = "xbl.f"
-line = 1112
-reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
-
-[[note]]
-file = "xbl.f"
 line = 1116
 reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
 
 [[note]]
 file = "xbl.f"
 line = 1135
-reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
-
-[[note]]
-file = "xbl.f"
-line = 1145
-reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
-
-[[note]]
-file = "xbl.f"
-line = 1149
 reach = "MRCHDU Newton failure with residual > 0.1 (the extrapolation fallback); the 70 failures so far all had DMAX <= 0.1"
 
 [[note]]
@@ -624,25 +599,9 @@ reach = "a laminar station with XIFORC <= X1: the trip moved upstream past a sti
 
 [[note]]
 file = "xblsys.f"
-line = 833
-branch = 2
-reach = "Us > 0.95 at an airfoil station: deep separation"
-
-[[note]]
-file = "xblsys.f"
 line = 843
 branch = 2
 reach = "Us > 0.99995 in the wake: deep separation"
-
-[[note]]
-file = "xblsys.f"
-line = 864
-reach = "Hk within 0.01 + GCC/Rtheta of 1: far wake (long WAKLEN) or very high Re"
-
-[[note]]
-file = "xblsys.f"
-line = 1712
-reach = "Hk within 0.01 + GCC/Rtheta of 1 at the mid-station: far wake (long WAKLEN) or very high Re"
 
 [[note]]
 file = "xoper.f"
@@ -914,12 +873,6 @@ line = 2784
 branch = 5
 class = "structural"
 why = "MINF_CLM = 0 with MATYP /= 1 and MINF /= 0 needs MATYP = 3, which the TYPE command never sets; for MATYP = 2, MINF_CLM = -0.5*MINF/CL is never 0"
-
-[[note]]
-file = "xblsys.f"
-line = 277
-branch = 1
-reach = "iteration cap: TRCHEK2's 30-iteration transition-location Newton exhausted (non-converged XT)"
 
 [[note]]
 file = "xoper.f"

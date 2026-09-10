@@ -9,11 +9,15 @@
 //! (CLAUDE.md Rule 1: tolerances are the measured floor times a safety factor).
 //!
 //! Third outcome — **threshold-straddling** — reported, never silently passed or failed:
-//! - the +1-ULP twin itself changes the branch trace (iteration count, convergence, IST, ITRAN):
-//!   the whole case is straddling;
+//! - the +1-ULP twin itself changes the branch trace (iteration count, convergence, IST, ITRAN)
+//!   in an earlier call: every later call starts from a state the reference cannot reproduce,
+//!   so the call is straddling from iteration 0 (a flip inside the call itself is left to the
+//!   per-iteration classification below, and a call that still matches to its end while the
+//!   twin flipped inside it is reported as straddling rather than passed);
 //! - every earlier iteration matched, and at this iteration the reference's own 1-ULP spread
-//!   exceeds `STRADDLE_FLOOR`: the runs are allowed to part here (the one-step replay from
-//!   XFOIL's exact state is the evidence that the step itself is faithful);
+//!   exceeds `STRADDLE_FLOOR`: the runs are allowed to part here — in RMSBL, in the branch trace
+//!   (IST/ITRAN) or in the reported limiter (the one-step replay from XFOIL's exact state is
+//!   the evidence that the step itself is faithful);
 //! - UPDATE's *reported* limiter (VMXBL/IMXBL: the largest normalised change) differs while
 //!   |RMXBL| agrees within the floor: two near-tied changes, RLX itself unaffected — a tie.
 
@@ -153,6 +157,14 @@ fn assert_value(a: f64, b: f64, tol: f64, scale: f64, floor: f64, what: &str) {
     );
 }
 
+/// The VISCAL call a twin flip line refers to (`call 42: …`, `call 42 iteration 17: …`); `None`
+/// for a line without one (`VISCAL call count …`), which concerns every call.
+pub fn flip_call(line: &str) -> Option<usize> {
+    line.strip_prefix("call ")
+        .and_then(|r| r.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|n| n.parse().ok())
+}
+
 /// Compare VISCAL call `k` (1-based) of the reference with a `Session` result.
 /// `transient_tol` is the base tolerance for the per-iteration values.
 pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, transient_tol: f64) -> Outcome {
@@ -160,19 +172,25 @@ pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, tr
     let ctx = format!("call {k} (alpha {:.3}°)", p.alpha.to_degrees());
     assert_eq!(k, x["CALL"].parse::<usize>().unwrap());
 
-    if let Some(f) = &rec.floor {
-        if !f.branch_identical {
-            let why = format!(
-                "the reference's own +1-ULP twin changes its branch trace: {}",
-                f.flips.join("; ")
-            );
-            println!(
-                "{ctx}: THRESHOLD-STRADDLING — {why}. yfoil: {} iterations, converged={}, CL {:.8}; reference: {} iterations, converged={}, CL {}",
-                p.iterations, p.converged, p.cl, x["NITDONE"], x["LVCONV"], x["CL"]
-            );
-            return Outcome::Straddling { at_iteration: 0, why };
-        }
+    let flips_at = |pred: &dyn Fn(Option<usize>) -> bool| -> Vec<String> {
+        rec.floor
+            .as_ref()
+            .map(|f| f.flips.iter().filter(|l| pred(flip_call(l))).cloned().collect())
+            .unwrap_or_default()
+    };
+    let earlier = flips_at(&|c| c.is_none_or(|c| c < k));
+    if !earlier.is_empty() {
+        let why = format!(
+            "the reference's own +1-ULP twin changes its branch trace before this call: {}",
+            earlier.join("; ")
+        );
+        println!(
+            "{ctx}: THRESHOLD-STRADDLING — {why}. yfoil: {} iterations, converged={}, CL {:.8}; reference: {} iterations, converged={}, CL {}",
+            p.iterations, p.converged, p.cl, x["NITDONE"], x["LVCONV"], x["CL"]
+        );
+        return Outcome::Straddling { at_iteration: 0, why };
     }
+    let within_call = flips_at(&|c| c == Some(k));
     let cf = rec.floor.as_ref().and_then(|f| f.calls.get(k - 1));
     let fl = |m: Option<&HashMap<String, f64>>, name: &str| m.and_then(|h| h.get(name)).copied().unwrap_or(0.0);
 
@@ -258,11 +276,22 @@ pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, tr
         }
 
         let rmsbl_ok = (y.residual - r[1]).abs() <= allowed(y.residual, r[1], transient_tol, 1.0, floor_rmsbl);
-        if (!rmsbl_ok || limiter_flip.is_some()) && floor_rmsbl > STRADDLE_FLOOR {
+        let trace_ok =
+            y.i_stagnation_node == r[7] as usize && y.i_transition_station[1..] == [r[8] as usize, r[9] as usize];
+        if (!rmsbl_ok || !trace_ok || limiter_flip.is_some()) && floor_rmsbl > STRADDLE_FLOOR {
+            let parted = if let Some(m) = limiter_flip.clone() {
+                m
+            } else if !trace_ok {
+                format!(
+                    "IST/ITRAN yfoil {}/{}/{} vs xfoil {}/{}/{}",
+                    y.i_stagnation_node, y.i_transition_station[1], y.i_transition_station[2], r[7], r[8], r[9]
+                )
+            } else {
+                format!("RMSBL yfoil {:.6e} vs xfoil {:.6e}", y.residual, r[1])
+            };
             let why = format!(
-                "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {STRADDLE_FLOOR:.0e}) under 1 ULP and the runs part ({})",
-                y.iteration,
-                limiter_flip.clone().unwrap_or_else(|| format!("RMSBL yfoil {:.6e} vs xfoil {:.6e}", y.residual, r[1]))
+                "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {STRADDLE_FLOOR:.0e}) under 1 ULP and the runs part ({parted})",
+                y.iteration
             );
             println!("{ictx}: THRESHOLD-STRADDLING — {why}. Values from here on are not gated; the one-step replay from XFOIL's state is the evidence that the step itself is faithful.");
             return Outcome::Straddling {
@@ -295,6 +324,15 @@ pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, tr
         if let Some(flip) = limiter_flip {
             panic!("{ictx}: {flip} (RLX values agree but the largest changes are not tied; floor {floor_rmsbl:.2e})");
         }
+    }
+
+    if !within_call.is_empty() {
+        let why = format!(
+            "yfoil matched the reference to the end of the call, but the reference's own +1-ULP twin changes its branch trace inside it: {}",
+            within_call.join("; ")
+        );
+        println!("{ctx}: THRESHOLD-STRADDLING — {why}");
+        return Outcome::Straddling { at_iteration: 0, why };
     }
 
     let fp = cf.map(|c| &c.point);
