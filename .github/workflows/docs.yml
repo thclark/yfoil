@@ -1,0 +1,42 @@
+name: Docs
+
+# Build the Zensical site and publish it to GitHub Pages as a deployment artefact: nothing
+# is committed anywhere. Manual for now; the release flow will trigger it later.
+#
+# One-time repository settings: Pages → Source: "GitHub Actions"; custom domain yfoil.net
+# (the CNAME lives in the settings, not in the repo, and zensical.toml's site_url must match).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# one deployment at a time; a newer dispatch supersedes one still queued
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build the site into site/
+        run: scripts/docs.sh build --clean
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
