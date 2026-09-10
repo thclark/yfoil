@@ -3,7 +3,7 @@
 How variables, fields, functions, types, JSON keys and CLI flags are named in yFoil, and why.
 This document holds the *rules*. The *application* of the rules, the table of every XFOIL
 name and the yFoil name it became, lives in
-[`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference/xfoil-to-yfoil-mapping.md);
+[`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference.md#xfoil-yfoil-mapping);
 read that when you need to know what a particular XFOIL variable is called here, and read this
 when you need to name something new.
 
@@ -202,6 +202,6 @@ turbulent Cf correlation (`CF_TURBULENT_FACTOR`).
 
 ## Related notes
 
-- [`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference/xfoil-to-yfoil-mapping.md)
+- [`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference.md#xfoil-yfoil-mapping)
   — the remap table: every XFOIL name, the yFoil name, and what it is
 - [[git-commits-and-versioning]] — commit message form for the rename commits (`REF:`)

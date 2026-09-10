@@ -68,6 +68,19 @@ Use of AI is not only acceptable but has been essential to the project. Whether 
 Claude Fable 5.1 was used heavily for the instrumentation of xfoil, translation of subroutines, and construction of the test harness. But not all at once and therein lies the tale.
 
 
+### Documentation
+
+The docs site is built with [Zensical](https://zensical.org/) (the successor to Material for MkDocs) from the
+markdown in `docs/`. The toolchain is pinned in `requirements-docs.txt` and fetched on demand by `uv`, so there
+is no virtualenv to manage:
+
+```
+scripts/docs.sh serve          # live preview on http://localhost:8000
+scripts/docs.sh build --clean  # static site into site/
+```
+
+Site configuration and navigation live in `zensical.toml`.
+
 ### Developer tools
 
 **Rust stack.** You'll need to make sure you have the latest stable version of rust and cargo tools installed.

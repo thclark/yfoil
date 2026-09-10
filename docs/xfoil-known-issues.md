@@ -1,4 +1,8 @@
-# XFOIL 6.99: known issues, quirks, and how yFoil handles each
+---
+icon: lucide/triangle-alert
+---
+
+# Known XFOIL issues
 
 XFOIL is the reference (CLAUDE.md Rule 1) and its algorithm is reproduced including its own bugs and
 quirks (Rule 2). This page is the register of everything found while translating it that a reader
@@ -49,7 +53,7 @@ Verified in the source, not inferred:
 computed *live* by running XFOIL's own BLPRV → BLKIN → BLVAR on the converged primaries, and the lagged
 arrays are emitted verbatim under `stored` (with `hs_dump`, `cf_dump` as DUMP prints them). A
 side-by-side of live `hs` against DUMP's `H*` will differ at the ~RMSBL level by construction;
-`tests/foil_output_tests.rs` bounds it. Column table: `docs/xfoil-reference/xfoil-to-yfoil-mapping.md`,
+`tests/foil_output_tests.rs` bounds it. Column table: `docs/xfoil-reference.md`,
 "Output" section.
 
 ### 1.2 DUMP's `Ue/Vinf` is signed by GAM — Overcome (output only)

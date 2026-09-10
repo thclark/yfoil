@@ -10,6 +10,10 @@
 target/
 .tmp/
 
+# Documentation site build output (Zensical)
+site/
+.zensical/
+
 # Editor / OS
 .idea/
 .DS_Store
@@ -40,3 +44,4 @@ xfoil/third-party/xfoil-6.99/plotlib/libPlt*.a
 !xfoil/third-party/*.sha256
 !xfoil/third-party/*.ORIGIN
 !docs/**/*.html
+!overrides/**

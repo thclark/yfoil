@@ -1,0 +1,88 @@
+---
+icon: lucide/braces
+---
+
+# The data model
+
+Everything yFoil reads and writes is JSON, and the keys **are** the variable
+names — no abbreviations, no serialisation aliases. There is one analysis shape,
+whether it comes from `yfoil analyse -o` or is embedded in a polar written with
+`--distributions`.
+
+## Geometry
+
+``` json
+{
+  "x": [1.0, 0.999, ...],
+  "y": [0.0013, 0.0014, ...],
+  "cm_ref": [0.25, 0.0]
+}
+```
+
+`x` and `y` are the panel nodes, trailing edge → upper → leading edge → lower →
+trailing edge. `cm_ref` is the moment reference point.
+
+## Analysis record
+
+``` text
+foil                 name of the section
+conditions           re, mach, ncrit, max_iterations, wake_length,
+                     elimination_threshold, x_trip, mach_cl_dependence,
+                     re_cl_dependence, amplification_model
+results              alpha_deg, cl, cm, cd, cd_friction, cd_pressure, ldratio,
+                     transition_upper, transition_lower, converged, iterations,
+                     residual
+geometry             x, y, s, normal_x, normal_y, chord, x_le, y_le, x_te, y_te,
+                     s_le, i_le_node, te_thickness_normal, sharp_te, wake{…}
+surface              q, cp                       (one value per panel node)
+boundary_layer       upper{…}, lower{…}, wake{…}, plus i_te_station,
+                     i_transition_station, n_wake_nodes, qinf, stagnation{…},
+                     transition[…], wake_split
+```
+
+Each boundary-layer side carries its station and node indices, the station
+coordinates (`x`, `y`, `xi`, `cp`), the **primaries** the solver actually marches
+
+``` text
+ue  theta  dstar  sqrtctau  mass_defect
+```
+
+and the **closures** evaluated on them
+
+``` text
+ue_compressible  h  hk  hstar  cf  cdiss  delta  sqrtctaueq  us  retheta
+machsqd_edge
+```
+
+!!! note "Lagged closures"
+
+    XFOIL also keeps lagged copies of some closure arrays. They are not written
+    by default, because they are an artefact of the solver rather than a result;
+    pass `--include-lagged-closures` to emit them under each side's
+    `lagged_closures`.
+
+## Polar record
+
+``` text
+foil          name of the section
+conditions    as above
+results       one entry per angle, each the same shape as an analysis `results`
+summary       cl_max, alpha_at_cl_max, ldratio_max, cl_at_ldratio_max, cd0,
+              n_converged, n_failed
+completed     whether the sweep ran to both limits
+```
+
+With `--distributions`, every entry also carries the full analysis record for
+that angle.
+
+## Why JSON, and why these names
+
+XFOIL's output formats are fixed-width Fortran (`G15.7`, `F9.4`, `F11.5`). They
+cannot represent a result to better than about 1e-5, which makes them useless as
+a validation gate and awkward as an automation interface. JSON with full
+round-tripping precision is both.
+
+The names follow [the naming conventions](../conventions/naming.md): symbols
+from the equations, not XFOIL's six-character Fortran abbreviations. The XFOIL
+name of every variable is recorded in the [mapping
+table](../xfoil-reference.md#xfoil-yfoil-mapping).

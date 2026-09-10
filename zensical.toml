@@ -1,0 +1,153 @@
+# Zensical configuration for the yFoil documentation site.
+#
+#   scripts/docs.sh serve     # live preview on http://localhost:8000
+#   scripts/docs.sh build     # static site into site/
+#
+# Zensical is https://zensical.org — the successor to Material for MkDocs, by the
+# same team. Full option reference: https://zensical.org/docs/
+
+[project]
+
+# Instant navigation, instant previews and the custom 404 page all need an absolute
+# site_url, so this has to be the real hostname the site is served from, not a
+# placeholder.
+site_url = "https://yfoil.net/"
+
+site_name = "yFoil"
+site_description = "An aerofoil solver that exactly reproduces XFOIL, in Rust."
+site_author = "Thomas Clark"
+
+copyright = "Copyright &copy; 2026 Thomas Clark and the yFoil contributors — GPL-3.0-or-later"
+
+repo_url = "https://github.com/thclark/yfoil"
+repo_name = "thclark/yfoil"
+edit_uri = "edit/main/docs/"
+
+extra_css = ["stylesheets/extra.css"]
+extra_javascript = [
+  "javascripts/hero.js",
+  "javascripts/mathjax.js",
+  "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
+]
+
+# The navigation is written out explicitly so that the ordering is a deliberate
+# reading order, not the alphabetical accident of the filesystem.
+nav = [
+  { "Home" = "index.md" },
+  { "User guide" = [
+    "guide/index.md",
+    { "Get started" = [
+      "guide/install.md",
+      "guide/first-analysis.md",
+    ] },
+    { "Commands" = [
+      "guide/geometry.md",
+      "guide/analyse.md",
+      "guide/polar.md",
+      "guide/plot.md",
+      "bindings.md",
+    ] },
+    { "Reference" = [
+      "guide/data.md",
+      "xfoil-known-issues.md",
+      "xfoil-reference.md",
+    ] },
+  ] },
+  { "Validation" = [
+    "validation/README.md",
+    "validation/coverage.md",
+    "validation/noise-floor.md",
+    { "Geometry" = "validation/geometry/README.md" },
+    { "Subroutines" = [
+      "validation/subroutines/README.md",
+      "validation/subroutines/closure.md",
+      "validation/subroutines/transition.md",
+    ] },
+  ] },
+]
+
+[project.theme]
+custom_dir = "overrides"
+language = "en"
+features = [
+  "announce.dismiss",
+  "content.action.edit",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.footnote.tooltips",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "search.suggest",
+  "toc.follow",
+]
+
+[project.theme.font]
+text = "Inter"
+code = "JetBrains Mono"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+accent = "cyan"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "black"
+accent = "cyan"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/thclark/yfoil"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}
