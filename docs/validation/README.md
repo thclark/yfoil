@@ -21,5 +21,26 @@ absent until then: an earlier version of this directory carried XFOIL's formatte
 files (F9.5, F11.5, F10.5 — about 1e-5) as committed reference data, which cannot support the project's
 tolerances (CLAUDE.md Rule 4), and was removed from history on 2026-09-04.
 
+**Polar break points (threshold-straddling)** — two tracked cases drive a 0.5° `ASEQ` sweep at `ITER 100`
+past CL_max, where the Newton iteration stops converging and both codes wander for the full 105 iterations
+per point. They are the worked examples of Rule 1's third outcome for a multi-point sequence, gated by
+`tests/xfoil_polar_break_tests.rs`:
+
+| Case (`tests/fixtures/xfoil/…`) | OPER script | Reference behaviour | Outcome |
+|---|---|---|---|
+| `naca0012_n160_polar_up22_re1e6_iter100` | `ALFA 0 / ASEQ 0.5 22 0.5` | 20.5°–21.5° unconverged; 22° converges on the separated branch (CL ≈ 0.35) in 7 iterations, its +1-ULP twin does not | calls 1–41 match; call 42 straddles at iteration 32; yFoil fails 22° and the sweep halts (NSEQEX = 4) |
+| `naca4412_n160_polar_down16_re1e6_iter100` | `ALFA 0 / INIT / ALFA 0 / ASEQ -0.5 -16 -0.5` | −14.5°–−15.5° unconverged; −16° converges on the separated branch (CL ≈ +0.05) in 39 iterations, its twin does not | calls 1–30 match; call 31 straddles at iteration 16 (IST/ITRAN); yFoil converges −16° in 17 iterations on the same branch |
+
+In both cases the reference's own +1-ULP twin parts from the reference, and flips its stagnation and
+transition stations, before yFoil does, and the one-step replays from XFOIL's dumped state at the parting
+iterations (`mrchdu_input_<k>.dat` → `update_output_<k>.dat`) reproduce the step to 2e-12 in every array.
+Whether the fourth attempt converges is therefore decided at the noise floor; a polar that "carries on"
+past the break in one code and halts in the other is not a gate difference and not a translation bug.
+The same cases wake the MRCHUE inverse wake march, the MRCHDU extrapolation fallback, BLVAR's Us and Hk
+clamps and TRCHEK2's iteration cap that every other case left open ([coverage.md](coverage.md)). Two
+XFOIL quirks surfaced here are registered in `docs/xfoil-known-issues.md` (§2.8, §4): MASS is never
+written on side 1's wake slots, and ASEQ's sequence-plot label loops forever on a non-finite CL/CM even
+with graphics off, so a reference sweep that blows up past the break hangs instead of halting.
+
 The gates themselves are the tests (`tests/xfoil_*_tests.rs`); these pages tabulate and plot what the
 tests assert, they do not add evidence of their own.
