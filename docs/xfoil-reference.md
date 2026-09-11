@@ -50,7 +50,8 @@ page.
 | `xbl.f`    | BL marching                  | SETBL, MRCHUE, MRCHDU, UPDATE       |
 | `xpanel.f` | Panel method                 | PSILIN, QDCALC, UICALC, QVFUE       |
 | `spline.f` | Cubic splines                | SPLINE, SEVAL, SPLIND               |
-| `xgeom.f`  | Geometry                     | PANGEN, LEFIND, TECALC              |
+| `xfoil.f`  | Panelling                    | PANGEN, GETPAN (PPAR), TECALC       |
+| `xgeom.f`  | Geometry                     | LEFIND, SCALC, SEGSPL               |
 | `naca.f`   | NACA generation              | NACA4, NACA5                        |
 
 ### Data Flow
@@ -663,7 +664,6 @@ PANGEN(SHOPAR)
 ├─ LEFIND(SLE, X, XP, Y, YP, S, N)
 ├─ SCALC(X, Y, S, N)
 ├─ NCALC(...)         → Computes normals NX, NY
-├─ NORM(...)          → Normalizes by chord
 └─ Output: N panels with X, Y, S, XP, YP, NX, NY, APANEL
 ```
 
@@ -683,7 +683,7 @@ PANGEN(SHOPAR)
 | SLE         | CR05         | LE arc length                    |
 | XLE, YLE    | CR05         | LE coordinates                   |
 | XTE, YTE    | CR05         | TE coordinates                   |
-| CHORD       | CR05         | Chord length (normalized to 1.0) |
+| CHORD       | CR05         | LE-point-to-TE-midpoint distance (slightly under 1 for a NACA section) |
 | SHARP       | CL01         | .TRUE. if sharp TE               |
 
 ### Control Flow: SPECAL (Inviscid Solve at Alpha)
@@ -1272,7 +1272,8 @@ base names are listed with the sensitivities XFOIL carries.
 | SEGSPL, CURV, LEFIND, SCALC | `spline_segmented`, `curvature`, `find_le`, `arc_coordinate` | `find_leading_edge` and `calculate_arc_length` duplicates merge into these |
 | TRISOL | `solve_tridiagonal` (one, XFOIL argument order) | |
 | NCALC, APCALC | `node_normals`, `panel_angles` | |
-| PANGEN | `repanel_by_curvature` | |
+| PANGEN | `repanel_by_curvature` (`PangenConfig`); `repanel` (`PanelConfig`) is PANE/PPAR with the trailing-edge treatment and the provenance record | |
+| GETPAN (PPAR menu) | `PanelConfig` / `PangenConfig` fields, `yfoil geometry repanel` flags | see table 12 |
 | TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/xfoil_tgap_tests.rs` |
 | — | keep | doc: no XFOIL equivalent |
 | NACA4/NACA5 | `naca_4digit`, `naca_5digit` with a `Thickness` {`Perpendicular`, `Vertical`} argument | the un-suffixed name currently holds the non-XFOIL algorithm; every NACA family (4, 4M, 5, 16, 6, 6A) is `series::Section`, which has no XFOIL equivalent |
@@ -1309,10 +1310,17 @@ base names are listed with the sensitivities XFOIL carries.
 | ITER | `--max-iterations` | |
 | VISC | keep | |
 | VPAR N | `--ncrit` (no short flag) | `-n` is `--panels` under `geometry` |
-| PANE N | keep | |
-| CTERAT | `--te-le-ratio` | the value *is* TE/LE; doc corrected |
-| PANGEN vs none |cosine` | `--method curvature\|cosine` | |
-| NACA4 thickness |xfoil` | `--thickness perpendicular\|vertical` | |
+| PANE, PPAR | `geometry repanel --method pangen` (the default; also on `naca` and `karman-trefftz`) | `--method cosine` is yFoil's own, no XFOIL equivalent |
+| NPAN (PPAR `N`) | `-n`, `--panels`; `PanelConfig::n_nodes` | |
+| CVPAR (PPAR `P`) | `--curvature-bunching`; `PangenConfig::curvature_bunching` | attraction coefficient 6·CVPAR |
+| CTERAT (PPAR `T`) | `--te-curvature-ratio`; `PangenConfig::te_curvature_ratio` | fictitious TE curvature / averaged LE curvature |
+| CTRRAT (PPAR `R`) | `--refined-curvature-ratio`; `PangenConfig::refined_curvature_ratio` | fictitious curvature in the windows / LE curvature |
+| XSREF1, XSREF2 (PPAR `XT`) | `--refine-upper X1,X2`; `PangenConfig::refine_upper` | `None` = XFOIL's 1.0 1.0 |
+| XPREF1, XPREF2 (PPAR `XB`) | `--refine-lower X1,X2`; `PangenConfig::refine_lower` | |
+| TGAP gap doc | `--te-gap`, `--te-blend`; `PanelConfig::te_gap` {`gap`, `blend`} | applied after panelling (XFOIL: to the buffer before PANE) |
+| — | `--cosine-te-bias`; `CosineConfig::te_bias` | yFoil's cosine method only |
+| — | `--panelling FILE` | the `generator.panelling` record as input |
+| NACA4/NACA5 vertical thickness | `--thickness vertical` | XFOIL's model, always PANGEN-panelled; `perpendicular` (default) is the NACA definition |
 | DUMP | keep | |
 | — | `--include-lagged-closures` | adds `lagged_closures` to the boundary-layer output |
 
@@ -1347,26 +1355,6 @@ with the variables it is formed from.
 | `lagged_closures.hstar_dump`, `cf_dump` | XFOIL DUMP's `H*` = TSTR/THET and `Cf` = TAU/(½q∞²) | reproductions of XFOIL's printed columns, diagnostics only |
 
 ---
-
-
-### JSON ↔ variable: keys that are not a one-to-one print of a variable
-
-Every other key in the analysis, polar and geometry-info JSON is the name of the variable it prints. These are the exceptions, each
-with the variables it is formed from.
-
-| Key | Formed from | Why it differs |
-|---|---|---|
-| `alpha_deg` | `alpha` (radians) | unit conversion, stated in the key |
-| `transition_upper`, `transition_lower` | `x_transition[side]`, `y_transition[side]` | a point printed as a pair, as `cm_ref` already is |
-| `cm_ref` | `cm_ref_x`, `cm_ref_y` | same |
-| `ldratio` | `cl / cd` | derived, not stored |
-| `residual` (in `results`) | `IterationRecord::residual` of the last iteration | the per-iteration records are not printed |
-| `surface.q`, `surface.cp`, per-station `cp` | `q_inviscid` / `cp_inviscid` when `conditions.re` is null, `q_viscous` / `cp_viscous` otherwise | the state holds both; the output holds the one the analysis produced |
-| `closures.us` | `us` (BLVAR), replacing `uslp` = 1.6/(1+Us) | prints the closure variable rather than XFOIL's plot scale of it |
-| `i_node` (per station) | `i_node[side][i_station]` | same name; the frame it is indexed by is the enclosing `upper`/`lower`/`wake` block |
-| `summary.cl_max`, `alpha_at_cl_max`, `ldratio_max`, `cl_at_ldratio_max`, `cd0`, `n_converged`, `n_failed` | polar post-processing | derived summary, no state variable |
-| `y_extent`, `x_range`, `y_range`, `max_curvature`, `first_point`, `last_point` | geometry post-processing | derived summary |
-| `lagged_closures.hstar_dump`, `cf_dump` | XFOIL DUMP's `H*` = TSTR/THET and `Cf` = TAU/(½q∞²) | reproductions of XFOIL's printed columns, diagnostics only |
 
 ## spline.f - Spline Utilities
 

@@ -334,6 +334,13 @@
       "m": 0.0,
       "p": 0.0
     },
+    "panelling": {
+      "method": "cosine",
+      "n_nodes": 160,
+      "sharp_te": false,
+      "te_bias": null,
+      "te_gap": null
+    },
     "references": [
       "jacobs1933",
       "abbott1959",

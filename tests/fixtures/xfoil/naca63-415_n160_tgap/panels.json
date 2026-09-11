@@ -334,6 +334,13 @@
       "cl": 0.4,
       "family": "6"
     },
+    "panelling": {
+      "method": "cosine",
+      "n_nodes": 160,
+      "sharp_te": false,
+      "te_bias": null,
+      "te_gap": null
+    },
     "references": [
       "abbott1945",
       "abbott1959",

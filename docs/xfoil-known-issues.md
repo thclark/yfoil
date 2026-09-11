@@ -164,7 +164,7 @@ and the instrumented `update_output_<k>.dat` dumps every row up to `NBL(1) + NW`
 | `xblsys.f:2458-2465` (HST) | `fudge HS slightly to make sure HS -> 2 as HK -> 1 (unnecessary with new correlation)` — left commented out | Replicated (omitted, as live code), `src/bl/closure.rs` |
 | `xblsys.f:944` | `CCC CALL DIT(...)` — the dissipation closure `DIT` is dead | Not translated; `[[dead]]` in `coverage.toml` |
 | `xfoil.f:1938` (PANGEN) | `fudge equations adjacent to TE to get TE panel length ratio RTF` | Replicated, `src/geometry/panel.rs:307` |
-| `xfoil.f:1837` (PANGEN) | `temporarily used for more reliable convergence` — IPFAC = 5 oversampling that was never removed | Replicated, `repanel_xfoil` |
+| `xfoil.f:1837` (PANGEN) | `temporarily used for more reliable convergence` — IPFAC = 5 oversampling that was never removed | Replicated, `repanel_by_curvature` |
 | `xblsys.f:1990` (DAMPL) | `NEW VERSION. March 1991 (latest bug fix July 93)`; other closures dated 1991–94 | Shipped versions ported |
 | `sort.f:244-247` | `Modified 4/24/01 HHY ... cures a bug for sharp LE foils where there were 3 LE points` | Out of scope (design path) |
 | `xtcam.f:1289` | `ccc TOL = 1.0E-3*(S(N)-S(1))  ! Bad bug -- was losing x=1.0 point` | Out of scope (design path) |
@@ -249,9 +249,13 @@ kept (`xqdes.f:497` only). The impossible flag combinations `LADIJ = F ∧ LWDIJ
 
 `naca.f:62`: `YB(IB) = YC(I) + YT(I)`, i.e. thickness added vertically rather than perpendicular to
 the camber line, which is not the NACA definition (irrelevant for symmetric sections). yFoil's
-default `naca_4digit`/`naca_5digit` use the NACA definition; `--naca-model xfoil` reproduces XFOIL's
-generator bitwise. This never enters a comparison because yFoil generates the panels and XFOIL
-consumes them (Rule 4). Recorded in CLAUDE.md's divergence table, the only row.
+generators lay the thickness perpendicular to the mean line by default, whatever the panelling
+method (`yfoil geometry naca …`, `Section`). XFOIL's model is `--thickness vertical`
+(`naca_4digit_vertical`, `naca_5digit_vertical`): XFOIL's own 245-point NACA4/NACA5 buffer, always
+PANGEN-panelled, and it exists only to replicate the output of XFOIL's `NACA` command bitwise
+(`tests/xfoil_pangen_tests.rs`); the geometry file records `thickness_applied: "vertical"`. This
+never enters a comparison because yFoil generates the panels and XFOIL consumes them (Rule 4).
+Recorded in CLAUDE.md's divergence table, the only row.
 
 ### 6.2 LOAD reverses clockwise input — Constraint
 

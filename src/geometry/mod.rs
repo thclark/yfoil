@@ -6,8 +6,8 @@
 //!
 //! # CLI Usage
 //!
-//! The geometry module is exposed through the `yfoil geom` subcommand, which provides
-//! five operations:
+//! The geometry module is exposed through the `yfoil geometry` subcommand (alias `geom`),
+//! which provides five operations, each printing its full help when run without arguments:
 //!
 //! ## `yfoil geom convert` - Format Conversion
 //!
@@ -36,85 +36,73 @@
 //!
 //! ## `yfoil geom naca` - NACA Aerofoil Generation
 //!
-//! Generate standard NACA 4-digit or 5-digit aerofoil profiles:
+//! Generate a NACA section from its designation — 4-digit (2412), 4-digit modified (0012-34),
+//! 5-digit (23012, 23112 reflex), 16-series (16-212), 6-series (63-415) and 6A-series (64A010),
+//! see [`series`] — panelled with XFOIL's PANGEN by default:
 //!
 //! ```text
 //! yfoil geom naca <spec> [OPTIONS]
 //!
-//! Arguments:
-//!   <spec>               NACA designation (e.g., "0012", "4412", "23015")
-//!
 //! Options:
-//!   -n, --panels <N>     Number of panels [default: 160]
-//!   --thickness <T>      perpendicular (the NACA definition) | vertical (XFOIL's NACA4/NACA5) [default: perpendicular]
-//!   --sharp              Close the trailing edge
-//!   --to <FORMAT>        Output format: json, dat [default: json]
-//!   -o, --output <PATH>  Output file path [default: naca<spec>.<format>]
+//!   --to <FORMAT>               Output format: json, dat [default: json]
+//!   --thickness <T>             perpendicular (the NACA definition, default) | vertical (XFOIL's NACA4/NACA5
+//!                               model, always PANGEN-panelled; 4- and 5-digit only)
+//!   --a <A>                     Extent of uniform loading of a 6-/16-series mean line, 0..1 [default: 1.0]
+//!   -n, --method, PPAR flags, --sharp, --te-gap, --te-blend, --panelling   as `repanel` below
+//!   -o, --output <PATH>         Output file path [default: naca<spec>.<format>]
 //! ```
 //!
-//! ### NACA 4-Digit Format (e.g., "4412")
-//! - 1st digit: Maximum camber as percentage of chord (0-9)
-//! - 2nd digit: Position of maximum camber in tenths of chord (0-9)
-//! - 3rd-4th digits: Maximum thickness as percentage of chord (00-99)
+//! ## `yfoil geom karman-trefftz` - Kármán–Trefftz Section
 //!
-//! ### NACA 5-Digit Format (e.g., "23012")
-//! - 1st digit: Design lift coefficient × (20/3)
-//! - 2nd digit: Position of maximum camber × 20
-//! - 3rd digit: 0 = standard camber, 1 = reflex camber
-//! - 4th-5th digits: Maximum thickness as percentage of chord
+//! The conformal map of a circle through ζ = 1 (`--x-centre`, `--y-centre`, `--te-angle`), an
+//! analytic section with an exact potential-flow solution; the same panelling options as
+//! `repanel`, `pangen` by default.
 //!
-//! Examples:
-//! ```text
-//! # Generate NACA 0012 with 160 panels
-//! yfoil geom naca 0012
+//! ## `yfoil geom repanel` - Redistribute panel nodes
 //!
-//! # Generate NACA 4412 with 200 panels as .dat
-//! yfoil geom naca 4412 -n 200 --to dat
-//!
-//! # Generate NACA 23015 (5-digit)
-//! yfoil geom naca 23015 -o my_airfoil.json
-//! ```
-//!
-//! ## `yfoil geom repanel` - Redistribute panel points
-//!
-//! Redistribute panel points on an existing geometry:
+//! XFOIL's `PANE`/`PPAR` on a loaded geometry (`.json` or `.dat`); the output is JSON only,
+//! `<input stem>_repanelled.json` beside the input by default, with the panelling recorded under
+//! `generator.panelling`.
 //!
 //! ```text
 //! yfoil geom repanel <input> [OPTIONS]
 //!
-//! Arguments:
-//!   <input>              Input file path (.json or .dat)
-//!
-//! Options:
-//!   -n, --panels <N>     Target number of panels [default: 160]
-//!   --method <METHOD>    Repanelling method: curvature | cosine [default: curvature]
-//!   --te-le-ratio <R>    TE/LE panel density ratio, XFOIL's CTERAT (cosine method only) [default: 0.15]
-//!   -o, --output <PATH>  Output file path [default: <input>_repanelled.json]
+//! Panelling (both methods):
+//!   -n, --panels <N>              Number of panel nodes, XFOIL's NPAN [default: 160]
+//!   --method <pangen|cosine>      pangen: XFOIL's PANGEN (default); cosine: yFoil's own, no XFOIL equivalent
+//!   --panelling <FILE>            The whole panelling from a JSON file in the record's shape (exclusive with the flags)
+//! PANGEN parameters (--method pangen only; an error with cosine):
+//!   --curvature-bunching <P>      CVPAR, PPAR menu P [default 1.0]
+//!   --te-curvature-ratio <T>      CTERAT, PPAR menu T: fictitious TE curvature / LE curvature [default 0.15]
+//!   --refined-curvature-ratio <R> CTRRAT, PPAR menu R [default 0.2]
+//!   --refine-upper <X1,X2>        XSREF1, XSREF2, PPAR menu XT (off by default)
+//!   --refine-lower <X1,X2>        XPREF1, XPREF2, PPAR menu XB (off by default)
+//! Cosine parameters (--method cosine only; an error with pangen):
+//!   --cosine-te-bias <B>          1 plain cosine; < 1 coarser at the TE, finer at the LE; > 1 finer at the TE [default 0.15]
+//! Trailing edge (both methods, applied after panelling):
+//!   --sharp                       Close the trailing edge (exclusive with --te-gap)
+//!   --te-gap <GAP> [--te-blend F] XFOIL's TGAP on the panelled nodes
 //! ```
 //!
-//! ### Repanelling Methods
+//! ### Methods
 //!
-//! **`curvature` (default)**: Uses XFOIL's curvature-based PANE algorithm (PANGEN subroutine).
-//! Distributes panels based on local surface curvature, placing more panels in
-//! high-curvature regions (leading edge) and fewer in low-curvature regions (mid-chord).
-//! This produces panel distributions that match XFOIL exactly.
+//! **`pangen` (default)**: XFOIL's PANGEN, line for line ([`repanel_by_curvature`], gated against the
+//! `pangen_*` fixtures). The curvature along the splined input is smoothed, a fictitious curvature
+//! is added at the trailing edge (CTERAT) and inside the refinement windows (CTRRAT), and the nodes
+//! are placed so that `(1 + 6·CVPAR·curvature)·Δs` is equal on every panel.
 //!
-//! **`cosine`**: Uses modified cosine spacing with a configurable TE/LE density ratio.
-//! The `--te-le-ratio` parameter controls panel clustering:
-//! - Values < 1.0: Finer panels at TE, coarser at LE
-//! - Value = 1.0: Symmetric cosine spacing
-//! - Values > 1.0: Finer panels at LE, coarser at TE
+//! **`cosine`**: yFoil's own arc-length cosine spacing ([`repanel_cosine`]), no XFOIL equivalent,
+//! its parameter warped by a power law set by `--cosine-te-bias`: 1 is a plain cosine, below 1
+//! coarser at the trailing edge and finer at the leading edge, above 1 finer at the trailing
+//! edge. It writes N + 1 nodes (historic behaviour, frozen by `tests/repanel_cosine_tests.rs`).
+//! On the generators `cosine` is the analytic sampling at cosine chord stations and has no bias.
 //!
 //! Examples:
 //! ```text
-//! # Repanel using XFOIL's PANE algorithm (default)
 //! yfoil geom repanel aerofoil.dat -n 180
-//!
-//! # Repanel using modified cosine spacing
-//! yfoil geom repanel aerofoil.json --method cosine --te-le-ratio 0.2
-//!
-//! # Explicit XFOIL method
-//! yfoil geom repanel aerofoil.dat --method curvature -n 200 -o repanelled.json
+//! yfoil geom repanel aerofoil.dat -n 200 --curvature-bunching 1.5 --refine-upper 0.2,0.4
+//! yfoil geom repanel aerofoil.json --method cosine --cosine-te-bias 0.2
+//! yfoil geom repanel aerofoil.dat --panelling panelling.json
 //! ```
 //!
 //! ## `yfoil geom info` - Display Geometry Information
@@ -168,9 +156,10 @@
 //!
 //! ```json
 //! {
-//!   "reference": [0.25, 0.0],
-//!   "x_c": [1.0, 0.8, 0.5, 0.2, 0.0, 0.2, 0.5, 0.8, 1.0],
-//!   "y_c": [0.0, 0.02, 0.04, 0.03, 0.0, -0.03, -0.04, -0.02, 0.0]
+//!   "cm_ref": [0.25, 0.0],
+//!   "x": [1.0, 0.8, 0.5, 0.2, 0.0, 0.2, 0.5, 0.8, 1.0],
+//!   "y": [0.0, 0.02, 0.04, 0.03, 0.0, -0.03, -0.04, -0.02, 0.0],
+//!   "generator": { "...": "how it was generated and panelled, when yFoil made it" }
 //! }
 //! ```
 //!
@@ -206,8 +195,9 @@
 //!
 //! - [`panel_foil`]: Convert raw geometry to analysis-ready form
 //! - [`naca_4digit`], [`naca_5digit`]: generate NACA aerofoil profiles
-//! - [`repanel_by_curvature`]: XFOIL's curvature-based PANE algorithm (default repanelling method)
-//! - [`repanel_cosine`]: modified cosine spacing (alternative method)
+//! - [`repanel`] with a [`PanelConfig`]: the one entry point — method ([`PangenConfig`] for XFOIL's
+//!   PANGEN, [`CosineConfig`] for yFoil's cosine), trailing-edge treatment, provenance record
+//! - [`repanel_by_curvature`]: XFOIL's PANGEN itself; [`repanel_cosine`]: yFoil's cosine spacing itself
 //! - [`spline_derivatives`], [`spline_value`], [`spline_slope`], [`spline_second_derivative`]: cubic spline interpolation
 
 mod airfoil;
@@ -226,8 +216,9 @@ pub use naca::{
     naca_4digit, naca_4digit_vertical, naca_5digit, naca_5digit_vertical, NacaError, Thickness, XFOIL_NACA_NSIDE,
 };
 pub use panel::{
-    arc_coordinate, curvature, find_le, panel_foil, repanel_by_curvature, repanel_cosine, set_te_gap,
-    solve_tridiagonal, spline_segmented, PaneConfig,
+    arc_coordinate, curvature, find_le, panel_foil, repanel, repanel_by_curvature, repanel_cosine, set_te_gap,
+    solve_tridiagonal, spline_segmented, CosineConfig, PanelConfig, PanelMethod, PangenConfig, RepanelError, TeGap,
+    PANGEN_BUFFER_NODES,
 };
 pub use series::{KarmanTrefftz, KarmanTrefftzError, MeanLine, Section, Series, SixSeriesFamily, ThicknessForm};
 pub use spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};

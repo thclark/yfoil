@@ -26,8 +26,10 @@ A geometry yFoil generated also carries `generator`, the record of how: the
 series, the designation, the thickness form and mean line with their parameter
 values, how the thickness was applied, whether the trailing edge is sharp, any
 trailing-edge adjustment, the yFoil version and the keys of the
-[references](../references.md) that define the family. It survives
-`yfoil geometry repanel` and is absent from files converted from `.dat`.
+[references](../references.md) that define the family — and, under
+`panelling`, how the nodes were distributed. `yfoil geometry repanel` keeps the
+section record and replaces `panelling`; a repanelled `.dat` carries only
+`yfoil` and `panelling`, since a `.dat` says nothing about its section.
 
 ``` json
 "generator": {
@@ -38,9 +40,27 @@ trailing-edge adjustment, the yFoil version and the keys of the
   "mean_line": { "family": "6", "cl": 0.4, "a": 1.0 },
   "thickness_applied": "perpendicular",
   "sharp_te": true,
-  "references": ["abbott1945", "abbott1959", "ladson1974", "ladson1996", "carmichael2001"]
+  "references": ["abbott1945", "abbott1959", "ladson1974", "ladson1996", "carmichael2001"],
+  "panelling": {
+    "method": "pangen", "n_nodes": 160, "buffer_nodes": 246,
+    "sharp_te": false, "te_gap": null,
+    "curvature_bunching": 1.0, "te_curvature_ratio": 0.15, "refined_curvature_ratio": 0.2,
+    "refine_upper": null, "refine_lower": null
+  }
 }
 ```
+
+`panelling` is the complete recipe from the section (or the loaded nodes) to
+the output nodes: `method` is `pangen` (XFOIL's PANGEN, with its `PPAR`
+parameters as the following keys) or `cosine` (yFoil's own, with `te_bias`,
+`null` when a generator's analytic sampling was used); `n_nodes`; `sharp_te` and
+`te_gap` (`{"gap", "blend"}` or `null`) are the trailing-edge treatment applied
+after the distribution; `buffer_nodes` appears when a generator sampled its
+section before PANGEN. The same JSON is what `--panelling FILE` accepts, so a
+record can be lifted from one geometry and applied to another (see
+[repanel](geometry.md#repanel)). `sharp_te` at the top level is the section
+*definition's* property (the 6-series closes); `panelling.sharp_te` says what was
+done to the nodes.
 
 `series` is one of `naca_4_digit`, `naca_4_digit_modified`, `naca_5_digit`,
 `naca_16`, `naca_6`, `naca_6a` or `karman_trefftz` (which carries `x_centre`,

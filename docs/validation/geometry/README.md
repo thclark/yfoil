@@ -10,8 +10,8 @@ and the fixture pipeline asserts XFOIL's `X/Y` after `ABCOPY` are identical to w
 **Stage G** is the optional question: can yFoil reproduce what XFOIL itself produces from a bare
 `NACA dddd` command? That needs XFOIL's own generator (`naca.f`, thickness applied vertically,
 NSIDE = 123 points per side, TE-bunched spacing with AN = 1.5) and `PANGEN`. Both are translated
-line for line (`naca_4digit_xfoil`, `naca_5digit_xfoil`, `repanel_xfoil`; CLI `yfoil geom naca
---naca-model xfoil`).
+line for line (`naca_4digit_vertical`, `naca_5digit_vertical`, `repanel_by_curvature`; CLI
+`yfoil geometry naca <spec> --thickness vertical`).
 
 ## Gate (2026-09-04)
 
@@ -26,6 +26,15 @@ the buffer airfoil `XB/YB/SB`, the paneled `X/Y/S`, `SBLE`, `SLE` and `SHARP` at
 | NACA 4412, NPAN 160 | 245 | 735 / 735 | 160 | 38 / 480 | 1.6e-15 |
 | NACA 4412, NPAN 81 | 245 | 735 / 735 | 81 | 48 / 243 | 8.3e-16 |
 | NACA 23012, NPAN 160 | 245 | 735 / 735 | 160 | 96 / 480 | 8.9e-16 |
+| NACA 4412, NPAN 160, PPAR `P 1.5 / T 0.3 / R 0.5 / XT 0.2 0.4 / XB 0.3 0.6` | 245 | 735 / 735 | 160 | 116 / 480 | 1.0e-15 |
+| NACA 0012, NPAN 120, PPAR `P 0.5 / T 0.05` | 245 | 735 / 735 | 120 | 96 / 360 | 8.9e-16 |
+
+The last two cases (2026-09-11) run `PPAR` with its parameters off default — `P` (CVPAR), `T`
+(CTERAT), `R` (CTRRAT) and both refinement windows `XT`/`XB` (XSREF/XPREF), which are the branches
+of PANGEN no default case reaches — and the test builds its `PangenConfig` from the values the dump
+header records rather than assuming defaults. On the CLI these are `yfoil geometry repanel`'s
+`--curvature-bunching`, `--te-curvature-ratio`, `--refined-curvature-ratio`, `--refine-upper` and
+`--refine-lower`.
 
 The buffer airfoils are bit-identical (same `pow`/`sqrt` on the same host). The PANGEN nodes
 differ at the last ULP or two — the spline evaluations in the node-placement Newton iteration
@@ -47,12 +56,12 @@ things were stacked in those numbers:
    thickness-application difference, not a paneling error.
 
 Neither generator is "wrong"; they answer different questions. The default stays the exact
-NACA definition; `--naca-model xfoil` reproduces XFOIL's.
+NACA definition; `--thickness vertical` reproduces XFOIL's.
 
 ## Reproducing
 
 ```bash
 cargo xtask fixtures --case pangen_naca0012_n160 --case pangen_naca4412_n81   # regenerate the dumps
 cargo test --test xfoil_pangen_tests -- --nocapture                            # the gate, with counts
-yfoil geom naca 4412 -n 160 --naca-model xfoil -o naca4412_xfoil.json          # XFOIL's panels from yFoil
+yfoil geom naca 4412 -n 160 --thickness vertical -o naca4412_xfoil.json          # XFOIL's panels from yFoil
 ```

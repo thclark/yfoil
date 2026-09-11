@@ -2,7 +2,7 @@
 //!
 //! Each case runs XFOIL's `NACA dddd` then `PPAR / N n`; the instrumented PANGEN dumps the
 //! 245-point buffer airfoil (XB/YB/SB), the paneling parameters and the N paneled nodes
-//! (X/Y/S) at ES24.16. yFoil's `naca_*digit_xfoil` must reproduce the buffer and
+//! (X/Y/S) at ES24.16. yFoil's `naca_*digit_vertical` must reproduce the buffer and
 //! `repanel_by_curvature` the nodes, within `TOL_PURE`; the bitwise-identical counts are reported.
 //! (This is the optional track: the solver equivalence never depends on it, because yFoil
 //! generates the panels and XFOIL LOADs them — CLAUDE.md Rule 4.)
@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use utilities::tolerances::{assert_within, TOL_PURE};
 use yfoil::geometry::{
     arc_coordinate, find_le, naca_4digit_vertical, naca_5digit_vertical, panel_foil, repanel_by_curvature,
-    spline_segmented, PaneConfig, XFOIL_NACA_NSIDE,
+    spline_segmented, PangenConfig, XFOIL_NACA_NSIDE,
 };
 
 struct PangenDump {
@@ -66,9 +66,22 @@ fn check(case: &str, spec: &str, npan: usize) {
         npan,
         "{case}: N (no corners inserted)"
     );
-    for (k, v) in [("CVPAR", 1.0), ("CTERAT", 0.15), ("CTRRAT", 0.2)] {
-        assert_eq!(d.header[k].parse::<f64>().unwrap(), v, "{case}: {k} default");
-    }
+    // the PPAR parameters XFOIL ran with, from the dump header (XREF = XSREF1 XSREF2 XPREF1 XPREF2;
+    // a window of 1.0 1.0 is XFOIL's "off")
+    let xref: Vec<f64> = d.header["XREF"]
+        .split_whitespace()
+        .map(|t| t.parse().unwrap())
+        .collect();
+    assert_eq!(xref.len(), 4, "{case}: XREF");
+    let window = |a: f64, b: f64| if a == 1.0 && b == 1.0 { None } else { Some([a, b]) };
+    let config = PangenConfig {
+        curvature_bunching: d.header["CVPAR"].parse().unwrap(),
+        te_curvature_ratio: d.header["CTERAT"].parse().unwrap(),
+        refined_curvature_ratio: d.header["CTRRAT"].parse().unwrap(),
+        refine_upper: window(xref[0], xref[1]),
+        refine_lower: window(xref[2], xref[3]),
+    };
+    println!("{case}: PPAR {config:?}");
 
     // the buffer airfoil
     let buffer = if spec.len() == 4 {
@@ -110,7 +123,7 @@ fn check(case: &str, spec: &str, npan: usize) {
         &format!("{case}: SBLE"),
     );
 
-    let paneled = repanel_by_curvature(&buffer, npan, &PaneConfig::default());
+    let paneled = repanel_by_curvature(&buffer, npan, &config);
     assert_eq!(paneled.x.len(), d.panels.len(), "{case}: node count");
     let af = panel_foil(&paneled);
     let (mut bits, mut worst) = (0usize, 0.0_f64);
@@ -161,4 +174,17 @@ fn test_naca4412_n81_matches_xfoil() {
 #[test]
 fn test_naca23012_n160_matches_xfoil() {
     check("pangen_naca23012_n160", "23012", 160);
+}
+
+#[test]
+fn test_naca4412_n160_refined_ppar_matches_xfoil() {
+    // PPAR off default with both refinement windows: CVPAR 1.5, CTERAT 0.3, CTRRAT 0.5,
+    // XT 0.2 0.4, XB 0.3 0.6 — the XSREF/XPREF branches of PANGEN
+    check("pangen_naca4412_n160_refined", "4412", 160);
+}
+
+#[test]
+fn test_naca0012_n120_bunching_ppar_matches_xfoil() {
+    // CVPAR 0.5, CTERAT 0.05, no windows
+    check("pangen_naca0012_n120_bunching", "0012", 120);
 }

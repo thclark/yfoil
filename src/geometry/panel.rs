@@ -2,36 +2,292 @@
 //!
 //! Functions for redistributing panel points on an airfoil surface.
 
-use super::airfoil::{Geometry, PanelledFoil};
+use super::airfoil::{Geometry, InvalidGeometryError, PanelledFoil};
 use super::spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};
+use serde::{Deserialize, Serialize};
 
-/// Configuration for XFOIL PANE algorithm
-#[derive(Debug, Clone, Copy)]
-pub struct PaneConfig {
-    /// Curvature bunching parameter (default 1.0)
-    /// Higher values = more bunching in high-curvature regions
-    pub cvpar: f64,
-    /// TE/LE panel density ratio (default 0.15)
-    /// Ratio of artificial curvature at TE to LE curvature
-    pub cterat: f64,
-    /// Refinement area panel density ratio (default 0.2)
-    pub ctrrat: f64,
-    /// Refinement region on top surface (x/c range)
-    pub xsref: Option<(f64, f64)>,
-    /// Refinement region on bottom surface (x/c range)
-    pub xpref: Option<(f64, f64)>,
+/// XFOIL's `PPAR` parameters of PANGEN (menu keys `P`, `T`, `R`, `XT`, `XB`). The JSON keys of the
+/// provenance record and of a `--panelling` file are these field names; the XFOIL variable of
+/// each is in its doc comment and in `docs/xfoil-reference.md`.
+#[doc(alias = "PPAR")]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PangenConfig {
+    /// Curvature bunching parameter (XFOIL CVPAR, menu `P`): the curvature attraction
+    /// coefficient is 6 × this; 0 gives uniform arc-length spacing. Default 1.0
+    pub curvature_bunching: f64,
+    /// Fictitious trailing-edge curvature as a fraction of the averaged leading-edge curvature
+    /// (XFOIL CTERAT, menu `T`, "TE/LE panel density ratio"): bunches nodes at the trailing
+    /// edge. Default 0.15
+    pub te_curvature_ratio: f64,
+    /// Fictitious curvature inside the refinement windows as a fraction of the leading-edge
+    /// curvature (XFOIL CTRRAT, menu `R`). Default 0.2
+    pub refined_curvature_ratio: f64,
+    /// Upper-surface refinement window in x/c (XFOIL XSREF1, XSREF2, menu `XT`);
+    /// `None` is XFOIL's `1.0 1.0`, refinement off
+    pub refine_upper: Option<[f64; 2]>,
+    /// Lower-surface refinement window in x/c (XFOIL XPREF1, XPREF2, menu `XB`)
+    pub refine_lower: Option<[f64; 2]>,
 }
 
-impl Default for PaneConfig {
+impl Default for PangenConfig {
     fn default() -> Self {
         Self {
-            cvpar: 1.0,
-            cterat: 0.15,
-            ctrrat: 0.2,
-            xsref: None,
-            xpref: None,
+            curvature_bunching: 1.0,
+            te_curvature_ratio: 0.15,
+            refined_curvature_ratio: 0.2,
+            refine_upper: None,
+            refine_lower: None,
         }
     }
+}
+
+/// yFoil's own arc-length cosine spacing (`repanel_cosine`), no XFOIL equivalent. `te_bias`
+/// warps the cosine parameter: 1 is a plain cosine, below 1 coarser at the trailing edge and
+/// finer at the leading edge, above 1 finer at the trailing edge; clamped to 0.05…2. The method
+/// writes n + 1 nodes (its historic behaviour, frozen by `tests/repanel_cosine_tests.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct CosineConfig {
+    /// `None` in a request means the default 0.15 when repanelling existing nodes; a generator's
+    /// cosine sampling has no bias and records `null`
+    pub te_bias: Option<f64>,
+}
+
+impl CosineConfig {
+    pub const DEFAULT_TE_BIAS: f64 = 0.15;
+}
+
+/// The node-distribution method and its parameters
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "method", rename_all = "lowercase")]
+pub enum PanelMethod {
+    /// XFOIL's PANGEN (`PANE` / `PPAR`), the default
+    Pangen(PangenConfig),
+    /// yFoil's own cosine spacing
+    Cosine(CosineConfig),
+}
+
+/// The trailing-edge gap set with XFOIL's `TGAP` after the nodes are distributed: `gap` in
+/// chord units, `blend` the blending distance/c (TGAP's second argument, default 1.0)
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TeGap {
+    pub gap: f64,
+    #[serde(default = "TeGap::default_blend")]
+    pub blend: f64,
+}
+
+impl TeGap {
+    fn default_blend() -> f64 {
+        1.0
+    }
+}
+
+/// How a geometry is panelled: the complete recipe from a section definition or a loaded set of
+/// nodes to the output nodes, and the one structure the CLI flags, a `--panelling` JSON file and
+/// the `generator.panelling` provenance record share. It serialises flat:
+///
+/// ```json
+/// {"method": "pangen", "n_nodes": 160, "sharp_te": false, "te_gap": null,
+///  "curvature_bunching": 1.0, "te_curvature_ratio": 0.15, "refined_curvature_ratio": 0.2,
+///  "refine_upper": null, "refine_lower": null}
+/// {"method": "cosine", "n_nodes": 160, "sharp_te": false, "te_gap": null, "te_bias": 0.15}
+/// ```
+///
+/// The trailing-edge treatment (`sharp_te`, or `te_gap`; they are exclusive) is applied to the
+/// panelled nodes, after the distribution, so that the TGAP blend profile
+/// ½Δ·(x/c)·exp(−(1 − x/c)(1/blend − 1)) is evaluated exactly at every output node rather than
+/// splined through a possibly coarse input. XFOIL applies TGAP to the buffer airfoil and PANE
+/// follows; the two orders differ by PANGEN's spline interpolation of the displaced buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PanelConfig {
+    /// Number of panel nodes (XFOIL NPAN)
+    pub n_nodes: usize,
+    /// Move the two trailing-edge nodes to their midpoint (a closed edge; XFOIL's SHARP path)
+    #[serde(default)]
+    pub sharp_te: bool,
+    /// Set the trailing-edge gap with TGAP; `None` leaves the edge as it is
+    #[serde(default)]
+    pub te_gap: Option<TeGap>,
+    #[serde(flatten)]
+    pub method: PanelMethod,
+    /// Generators only: the number of nodes at which the analytic section is sampled before
+    /// PANGEN (default [`PANGEN_BUFFER_NODES`]). Rejected by [`repanel`] of an existing geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub buffer_nodes: Option<usize>,
+}
+
+impl Default for PanelConfig {
+    /// PANGEN with XFOIL's defaults, 160 nodes, no trailing-edge treatment
+    fn default() -> Self {
+        Self {
+            n_nodes: 160,
+            sharp_te: false,
+            te_gap: None,
+            method: PanelMethod::Pangen(PangenConfig::default()),
+            buffer_nodes: None,
+        }
+    }
+}
+
+/// Nodes at which a generator samples its analytic section before PANGEN: 123 per side, the
+/// density of XFOIL's own NACA buffer (`XFOIL_NACA_NSIDE`), leading edge straddled
+pub const PANGEN_BUFFER_NODES: usize = 246;
+
+/// The keys a panelling record may carry, per method (`method`, `n_nodes`, `sharp_te`, `te_gap`,
+/// `buffer_nodes` are common)
+const PANEL_KEYS_COMMON: [&str; 5] = ["method", "n_nodes", "sharp_te", "te_gap", "buffer_nodes"];
+const PANEL_KEYS_PANGEN: [&str; 5] = [
+    "curvature_bunching",
+    "te_curvature_ratio",
+    "refined_curvature_ratio",
+    "refine_upper",
+    "refine_lower",
+];
+const PANEL_KEYS_COSINE: [&str; 1] = ["te_bias"];
+
+#[derive(thiserror::Error, Debug)]
+pub enum RepanelError {
+    #[error("a sharp trailing edge (sharp_te) and a trailing-edge gap (te_gap) are contradictory")]
+    SharpWithGap,
+    #[error("refinement window {0}: two x/c values are needed, the first smaller than the second")]
+    RefinementWindow(&'static str),
+    #[error("the {key} key belongs to the {method} method, not {given}")]
+    KeyOfOtherMethod {
+        key: String,
+        method: &'static str,
+        given: &'static str,
+    },
+    #[error("unknown panelling key {0}")]
+    UnknownKey(String),
+    #[error("panelling has no method: {0}")]
+    Malformed(String),
+    #[error("buffer_nodes applies to generated sections only, not to repanelling an existing geometry")]
+    BufferNodesOnRepanel,
+    #[error(transparent)]
+    InvalidGeometry(#[from] InvalidGeometryError),
+}
+
+impl PanelConfig {
+    /// The method's name as the record writes it
+    pub fn method_name(&self) -> &'static str {
+        match self.method {
+            PanelMethod::Pangen(_) => "pangen",
+            PanelMethod::Cosine(_) => "cosine",
+        }
+    }
+
+    /// The conflicts a set of flags or a file can express: a closed edge with a gap, and a
+    /// refinement window that is not two increasing values
+    pub fn validate(&self) -> Result<(), RepanelError> {
+        if self.sharp_te && self.te_gap.is_some() {
+            return Err(RepanelError::SharpWithGap);
+        }
+        if let PanelMethod::Pangen(p) = &self.method {
+            for (name, window) in [("refine_upper", p.refine_upper), ("refine_lower", p.refine_lower)] {
+                if let Some([a, b]) = window {
+                    // an error unless a < b (so NaN fails too)
+                    if a.partial_cmp(&b) != Some(std::cmp::Ordering::Less) {
+                        return Err(RepanelError::RefinementWindow(name));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Read a record (the shape [`PanelConfig`] serialises to), rejecting keys that belong to
+    /// the other method and unknown keys by name — serde's `deny_unknown_fields` cannot do this
+    /// through the flattened method — then validating the combination
+    pub fn from_json(value: &serde_json::Value) -> Result<Self, RepanelError> {
+        let obj = value
+            .as_object()
+            .ok_or_else(|| RepanelError::Malformed("not a JSON object".into()))?;
+        let method = obj
+            .get("method")
+            .and_then(|m| m.as_str())
+            .ok_or_else(|| RepanelError::Malformed("no \"method\" key (pangen or cosine)".into()))?;
+        let (allowed, other, other_name): (&[&str], &[&str], &'static str) = match method {
+            "pangen" => (&PANEL_KEYS_PANGEN, &PANEL_KEYS_COSINE, "cosine"),
+            "cosine" => (&PANEL_KEYS_COSINE, &PANEL_KEYS_PANGEN, "pangen"),
+            m => {
+                return Err(RepanelError::Malformed(format!(
+                    "method {m:?} is neither pangen nor cosine"
+                )))
+            }
+        };
+        let given: &'static str = if method == "pangen" { "pangen" } else { "cosine" };
+        for key in obj.keys() {
+            if PANEL_KEYS_COMMON.contains(&key.as_str()) || allowed.contains(&key.as_str()) {
+                continue;
+            }
+            if other.contains(&key.as_str()) {
+                return Err(RepanelError::KeyOfOtherMethod {
+                    key: key.clone(),
+                    method: other_name,
+                    given,
+                });
+            }
+            return Err(RepanelError::UnknownKey(key.clone()));
+        }
+        let config: PanelConfig =
+            serde_json::from_value(value.clone()).map_err(|e| RepanelError::Malformed(e.to_string()))?;
+        config.validate()?;
+        Ok(config)
+    }
+}
+
+/// Apply the trailing-edge treatment of `config` to panelled nodes
+pub(crate) fn apply_te_treatment(geometry: Geometry, config: &PanelConfig) -> Geometry {
+    if config.sharp_te {
+        return geometry.sharpen();
+    }
+    match config.te_gap {
+        Some(TeGap { gap, blend }) => set_te_gap(&geometry, gap, blend),
+        None => geometry,
+    }
+}
+
+/// Write `config` into the geometry's provenance record as `panelling` (creating the record
+/// when the geometry has none, as a loaded `.dat` has not)
+pub(crate) fn record_panelling(geometry: &mut Geometry, config: &PanelConfig) {
+    let panelling = serde_json::to_value(config).expect("PanelConfig serialises");
+    match geometry.generator.as_mut() {
+        Some(rec) => {
+            rec["panelling"] = panelling;
+        }
+        None => {
+            geometry.generator = Some(serde_json::json!({
+                "yfoil": env!("CARGO_PKG_VERSION"),
+                "panelling": panelling,
+            }));
+        }
+    }
+}
+
+/// Redistribute the nodes of an existing geometry with `config` — XFOIL's `PANE`/`PPAR` on a
+/// LOADed airfoil — then apply its trailing-edge treatment, validate the result and record the
+/// panelling in `generator.panelling`.
+#[doc(alias = "PANE")]
+#[doc(alias = "PPAR")]
+pub fn repanel(geometry: &Geometry, config: &PanelConfig) -> Result<Geometry, RepanelError> {
+    config.validate()?;
+    if config.buffer_nodes.is_some() {
+        return Err(RepanelError::BufferNodesOnRepanel);
+    }
+    // the record states the bias actually used
+    let mut used = *config;
+    let distributed = match &mut used.method {
+        PanelMethod::Pangen(p) => repanel_by_curvature(geometry, config.n_nodes, p),
+        PanelMethod::Cosine(c) => {
+            let bias = c.te_bias.unwrap_or(CosineConfig::DEFAULT_TE_BIAS);
+            c.te_bias = Some(bias);
+            repanel_cosine(geometry, config.n_nodes, bias)
+        }
+    };
+    let mut out = apply_te_treatment(distributed, &used);
+    out.validate()?;
+    record_panelling(&mut out, &used);
+    Ok(out)
 }
 
 /// PANGEN (xfoil.f), line for line: the curvature-based panel distribution XFOIL generates
@@ -41,15 +297,16 @@ impl Default for PaneConfig {
 /// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `panel_foil` exactly as
 /// PANGEN's tail does.
 #[doc(alias = "PANGEN")]
-pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneConfig) -> Geometry {
+pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PangenConfig) -> Geometry {
     let nb = geometry.x.len();
     if nb < 2 {
         return geometry.clone();
     }
     let xb = &geometry.x;
     let yb = &geometry.y;
-    let (xsref1, xsref2) = config.xsref.unwrap_or((1.0, 1.0));
-    let (xpref1, xpref2) = config.xpref.unwrap_or((1.0, 1.0));
+    // XSREF/XPREF: a window of 1.0 1.0 is XFOIL's "refinement off"
+    let [xsref1, xsref2] = config.refine_upper.unwrap_or([1.0, 1.0]);
+    let [xpref1, xpref2] = config.refine_lower.unwrap_or([1.0, 1.0]);
 
     // Number of temporary nodes for panel distribution calculation exceeds the specified
     // panel number by factor of IPFAC.
@@ -108,10 +365,10 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneC
     }
 
     // set curvature attraction coefficient actually used
-    let cc = 6.0 * config.cvpar;
+    let cc = 6.0 * config.curvature_bunching;
 
     // set artificial curvature at TE to bunch panels there
-    let cvte = cvavg * config.cterat;
+    let cvte = cvavg * config.te_curvature_ratio;
     w5[0] = cvte;
     w5[nb - 1] = cvte;
 
@@ -185,7 +442,7 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneC
                 w1[i] = 0.0;
                 w2[i] = 1.0;
                 w3[i] = 0.0;
-                w5[i] = cvle * config.ctrrat;
+                w5[i] = cvle * config.refined_curvature_ratio;
             }
         } else {
             // check if bottom side point is in refinement area
@@ -193,7 +450,7 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneC
                 w1[i] = 0.0;
                 w2[i] = 1.0;
                 w3[i] = 0.0;
-                w5[i] = cvle * config.ctrrat;
+                w5[i] = cvle * config.refined_curvature_ratio;
             }
         }
     }
@@ -546,20 +803,12 @@ pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64])
     }
 }
 
-/// Repanel an airfoil with a new number of panels using modified cosine spacing
-///
-/// Redistributes points along the airfoil surface with higher density
-/// near the leading edge. This is a simpler alternative to the XFOIL PANE
-/// algorithm (use [`repanel_by_curvature`] for exact XFOIL matching).
-///
-/// # Arguments
-/// * `geometry` - Input geometry
-/// * `n_panels` - Target number of panels
-/// * `te_le_ratio` - Ratio of TE panel density to LE panel density (XFOIL default: 0.15).
-///   Values < 1.0 mean coarser panels at TE, finer at LE; 1.0 gives symmetric cosine spacing
-///
-/// # Returns
-/// New geometry with redistributed points
+/// yFoil's own repanelling, no XFOIL equivalent: cosine spacing in arc length on each surface,
+/// the cosine parameter warped by a power law set by `te_bias` (1 is a plain cosine; below 1
+/// coarser at the trailing edge and finer at the leading edge; above 1 finer at the trailing
+/// edge; clamped to 0.05…2). Writes `n_panels + 1` nodes. The numerics are frozen —
+/// `tests/repanel_cosine_tests.rs` gates every node against golden fixtures — because test
+/// fixtures were derived with them; new work goes through [`repanel`] with [`PanelMethod::Pangen`].
 pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) -> Geometry {
     let n = geometry.x.len();
 
@@ -852,6 +1101,132 @@ fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn source() -> Geometry {
+        crate::geometry::naca_4digit("2412", 80, crate::geometry::Thickness::Perpendicular).unwrap()
+    }
+
+    #[test]
+    fn repanel_with_the_default_config_is_pangen_with_xfoil_defaults() {
+        let g = source();
+        let via_config = repanel(&g, &PanelConfig::default()).unwrap();
+        let direct = repanel_by_curvature(&g, 160, &PangenConfig::default());
+        assert_eq!(via_config.x.len(), 160);
+        for i in 0..160 {
+            assert_eq!(via_config.x[i].to_bits(), direct.x[i].to_bits());
+            assert_eq!(via_config.y[i].to_bits(), direct.y[i].to_bits());
+        }
+        let rec = via_config.generator.unwrap();
+        assert_eq!(rec["panelling"]["method"], "pangen");
+        assert_eq!(rec["panelling"]["n_nodes"], 160);
+        assert_eq!(rec["panelling"]["curvature_bunching"], 1.0);
+        assert!(rec["panelling"]["refine_upper"].is_null());
+        assert!(rec["panelling"].get("buffer_nodes").is_none());
+        // the section's own record is kept underneath
+        assert_eq!(rec["designation"], "NACA 2412");
+    }
+
+    #[test]
+    fn repanel_records_on_a_geometry_without_provenance() {
+        let mut g = source();
+        g.generator = None;
+        let out = repanel(
+            &g,
+            &PanelConfig {
+                n_nodes: 100,
+                method: PanelMethod::Cosine(CosineConfig { te_bias: None }),
+                ..PanelConfig::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(out.x.len(), 101, "the cosine method writes n + 1 nodes");
+        let rec = out.generator.unwrap();
+        assert_eq!(rec["yfoil"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(rec["panelling"]["method"], "cosine");
+        assert_eq!(
+            rec["panelling"]["te_bias"],
+            CosineConfig::DEFAULT_TE_BIAS,
+            "the bias actually used"
+        );
+    }
+
+    #[test]
+    fn panel_config_round_trips_flat_json_and_rejects_conflicts() {
+        let cfg = PanelConfig {
+            n_nodes: 120,
+            te_gap: Some(TeGap { gap: 0.002, blend: 0.8 }),
+            method: PanelMethod::Pangen(PangenConfig {
+                refine_upper: Some([0.2, 0.4]),
+                ..PangenConfig::default()
+            }),
+            ..PanelConfig::default()
+        };
+        let v = serde_json::to_value(cfg).unwrap();
+        assert_eq!(v["method"], "pangen");
+        assert_eq!(v["te_gap"]["gap"], 0.002);
+        assert_eq!(v["refine_upper"], serde_json::json!([0.2, 0.4]));
+        assert!(v.get("buffer_nodes").is_none());
+        assert_eq!(PanelConfig::from_json(&v).unwrap(), cfg);
+
+        // a file may omit PPAR keys: XFOIL's defaults apply
+        let sparse = serde_json::json!({ "method": "pangen", "n_nodes": 90 });
+        assert_eq!(
+            PanelConfig::from_json(&sparse).unwrap().method,
+            PanelMethod::Pangen(PangenConfig::default())
+        );
+        let err = |v: serde_json::Value| PanelConfig::from_json(&v).unwrap_err().to_string();
+        assert!(
+            err(serde_json::json!({ "method": "cosine", "n_nodes": 90, "curvature_bunching": 2.0 }))
+                .contains("belongs to the pangen method")
+        );
+        assert!(
+            err(serde_json::json!({ "method": "pangen", "n_nodes": 90, "te_bias": 0.3 }))
+                .contains("belongs to the cosine method")
+        );
+        assert!(err(serde_json::json!({ "method": "pangen", "n_nodes": 90, "typo": 1 }))
+            .contains("unknown panelling key typo"));
+        assert!(err(
+            serde_json::json!({ "method": "pangen", "n_nodes": 90, "sharp_te": true, "te_gap": { "gap": 0.002 } })
+        )
+        .contains("contradictory"));
+        assert!(
+            err(serde_json::json!({ "method": "pangen", "n_nodes": 90, "refine_upper": [0.4, 0.2] }))
+                .contains("refinement window")
+        );
+        assert!(err(serde_json::json!({ "n_nodes": 90 })).contains("no \"method\" key"));
+    }
+
+    #[test]
+    fn te_treatment_follows_the_distribution() {
+        let g = source();
+        let cfg = PanelConfig {
+            n_nodes: 100,
+            sharp_te: true,
+            ..PanelConfig::default()
+        };
+        let out = repanel(&g, &cfg).unwrap();
+        assert_eq!(
+            (out.x[0], out.y[0]),
+            (out.x[99], out.y[99]),
+            "sharpened after panelling"
+        );
+        let gap = PanelConfig {
+            n_nodes: 100,
+            te_gap: Some(TeGap { gap: 0.006, blend: 1.0 }),
+            ..PanelConfig::default()
+        };
+        let out = repanel(&g, &gap).unwrap();
+        let d = (out.x[0] - out.x[99]).hypot(out.y[0] - out.y[99]);
+        assert!((d - 0.006).abs() < 1e-12, "gap {d}");
+        assert!(repanel(
+            &g,
+            &PanelConfig {
+                buffer_nodes: Some(246),
+                ..PanelConfig::default()
+            }
+        )
+        .is_err());
+    }
     use crate::geometry::Thickness;
     use approx::assert_relative_eq;
 

@@ -10,7 +10,7 @@ use yfoil::geometry::Thickness;
 use approx::assert_relative_eq;
 use serde::Deserialize;
 
-use yfoil::geometry::{naca_4digit, panel_foil, repanel_by_curvature, repanel_cosine, PaneConfig};
+use yfoil::geometry::{naca_4digit, panel_foil, repanel_by_curvature, repanel_cosine, PangenConfig};
 
 #[derive(Debug, Deserialize)]
 struct Coordinate {
@@ -159,7 +159,7 @@ fn test_naca_0012_panel_spacing() {
     // panel distribution algorithms. Exact match requires implementing XFOIL's PANE.
     println!("\nNote: Panel spacing differs from XFOIL due to different algorithms.");
     println!("      XFOIL uses curvature-based PANE, yFoil uses cosine spacing.");
-    println!("      To match exactly, use the repanel_xfoil() function.");
+    println!("      To match exactly, use repanel_by_curvature (XFOIL's PANGEN).");
 }
 
 /// Test PANE algorithm produces coordinates closer to XFOIL than cosine spacing
@@ -175,7 +175,7 @@ fn test_naca_0012_pane_algorithm() {
     let buffer_geom = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create buffer airfoil");
 
     // Apply PANE algorithm with XFOIL defaults
-    let config = PaneConfig::default();
+    let config = PangenConfig::default();
     let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_panels, &config);
     let paned_airfoil = panel_foil(&paned_geom);
 
@@ -275,11 +275,12 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     let buffer_geom = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create buffer airfoil");
 
     // Apply PANE algorithm with specific CTERAT
-    let config = PaneConfig {
-        cterat,
-        cvpar: fixture.cvpar.unwrap_or(1.0),
-        ctrrat: fixture.ctrrat.unwrap_or(0.2),
-        ..PaneConfig::default()
+    // the fixture keys are XFOIL's dump names; the yFoil fields are the descriptive ones
+    let config = PangenConfig {
+        te_curvature_ratio: cterat,
+        curvature_bunching: fixture.cvpar.unwrap_or(1.0),
+        refined_curvature_ratio: fixture.ctrrat.unwrap_or(0.2),
+        ..PangenConfig::default()
     };
     let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_panels, &config);
     let paned_airfoil = panel_foil(&paned_geom);
@@ -376,7 +377,7 @@ fn test_pane_cterat_0_50() {
 #[test]
 fn test_pane_method_produces_valid_paneled_airfoil() {
     let original = naca_4digit("0012", 100, Thickness::Perpendicular).expect("Failed to create airfoil");
-    let config = PaneConfig::default();
+    let config = PangenConfig::default();
     let paned = repanel_by_curvature(&original, 160, &config);
     let paneled = panel_foil(&paned);
 
@@ -447,7 +448,7 @@ fn test_cosine_method_produces_valid_paneled_airfoil() {
 #[test]
 fn test_pane_and_cosine_methods_differ() {
     let original = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create airfoil");
-    let config = PaneConfig::default();
+    let config = PangenConfig::default();
 
     let paned = repanel_by_curvature(&original, 160, &config);
     let cosined = repanel_cosine(&original, 160, 0.15);
@@ -481,7 +482,7 @@ fn test_pane_and_cosine_methods_differ() {
 fn test_both_methods_preserve_shape() {
     let original = naca_4digit("4412", 120, Thickness::Perpendicular).expect("Failed to create cambered airfoil");
 
-    let config = PaneConfig::default();
+    let config = PangenConfig::default();
     let paned = repanel_by_curvature(&original, 160, &config);
     let cosined = repanel_cosine(&original, 160, 0.15);
 
@@ -520,7 +521,7 @@ fn test_both_methods_preserve_shape() {
 #[test]
 fn test_pane_clusters_at_leading_edge() {
     let original = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create airfoil");
-    let config = PaneConfig::default();
+    let config = PangenConfig::default();
     let paned = repanel_by_curvature(&original, 160, &config);
 
     // Calculate average panel spacing in different regions
@@ -560,12 +561,12 @@ fn test_pane_clusters_at_leading_edge() {
 fn test_pane_config_affects_output() {
     let original = naca_4digit("0012", 200, Thickness::Perpendicular).expect("Failed to create airfoil");
 
-    let config_low_te = PaneConfig {
-        cterat: 0.10,
+    let config_low_te = PangenConfig {
+        te_curvature_ratio: 0.10,
         ..Default::default()
     };
-    let config_high_te = PaneConfig {
-        cterat: 0.50,
+    let config_high_te = PangenConfig {
+        te_curvature_ratio: 0.50,
         ..Default::default()
     };
 
