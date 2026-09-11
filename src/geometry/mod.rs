@@ -68,7 +68,7 @@
 //! yfoil geom repanel <input> [OPTIONS]
 //!
 //! Panelling (both methods):
-//!   -n, --panels <N>              Number of panel nodes, XFOIL's NPAN [default: 160]
+//!   -n, --nodes <N>               Number of panel nodes, XFOIL's NPAN [default: 160]
 //!   --method <pangen|cosine>      pangen: XFOIL's PANGEN (default); cosine: yFoil's own, no XFOIL equivalent
 //!   --panelling <FILE>            The whole panelling from a JSON file in the record's shape (exclusive with the flags)
 //! PANGEN parameters (--method pangen only; an error with cosine):

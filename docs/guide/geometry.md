@@ -59,7 +59,7 @@ low-drag-range subscript (`64(1)-212`).
 | `--to` | `json` | Output format: `json` or `dat` |
 | `--a` | 1.0 | Extent of uniform loading of a 6-series or 16-series mean line, 0…1 |
 | `--thickness` | `perpendicular` | `perpendicular` or `vertical` — see below |
-| `-n`, `--method`, PPAR flags, `--sharp`, `--te-gap`, `--te-blend`, `--panelling` | as [`repanel`](#repanel) | The panelling: `pangen` (default) samples the section at 246 stations and runs XFOIL's PANGEN on them; `cosine` is the analytic cosine sampling in \(x\) (no bias applies) |
+| `-n`/`--nodes`, `--method`, PPAR flags, `--sharp`, `--te-gap`, `--te-blend`, `--panelling` | as [`repanel`](#repanel) | The panelling: `pangen` (default) samples the section at `n_buffer_nodes` stations (246, XFOIL's own buffer density; settable in a `--panelling` file) and runs XFOIL's PANGEN on them; `cosine` is the analytic cosine sampling in \(x\) (no bias applies) |
 | `-o`, `--output` | `naca<designation>.<format>` | Output file |
 
 !!! info "Thickness distribution"
@@ -100,7 +100,7 @@ yfoil geometry karman-trefftz --x-centre -0.1 --y-centre 0.05 --te-angle 10 -o k
 | `--y-centre` | 0.05 | Circle centre y (sets the camber) |
 | `--te-angle` | 10 | Trailing-edge angle in degrees, 0 ≤ τ < 180 |
 | `--to` | `json` | Output format: `json` or `dat` |
-| `-n`, `--method`, PPAR flags, `--sharp`, `--te-gap`, `--te-blend`, `--panelling` | as [`repanel`](#repanel) | The panelling, `pangen` by default |
+| `-n`/`--nodes`, `--method`, PPAR flags, `--sharp`, `--te-gap`, `--te-blend`, `--panelling` | as [`repanel`](#repanel) | The panelling, `pangen` by default |
 | `-o`, `--output` | `karman-trefftz.<format>` | Output file |
 
 ## convert
@@ -145,7 +145,7 @@ panel. Its parameters are XFOIL's `PPAR` menu, here by descriptive names:
 
 | `PPAR` key | XFOIL variable | Flag | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `N` | `NPAN` | `-n`, `--panels` | 160 | Number of panel nodes |
+| `N` | `NPAN` | `-n`, `--nodes` | 160 | Number of panel nodes, trailing edge round to trailing edge (N − 1 surface panels plus the trailing-edge panel) |
 | `P` | `CVPAR` | `--curvature-bunching` | 1.0 | Curvature attraction; 0 gives uniform arc-length spacing |
 | `T` | `CTERAT` | `--te-curvature-ratio` | 0.15 | Fictitious trailing-edge curvature as a fraction of the leading-edge curvature ("TE/LE panel density ratio") |
 | `R` | `CTRRAT` | `--refined-curvature-ratio` | 0.2 | Fictitious curvature inside the refinement windows as a fraction of the leading-edge curvature |
