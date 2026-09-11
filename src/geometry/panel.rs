@@ -44,8 +44,7 @@ impl Default for PangenConfig {
 
 /// yFoil's own arc-length cosine spacing (`repanel_cosine`), no XFOIL equivalent. `te_bias`
 /// warps the cosine parameter: 1 is a plain cosine, below 1 coarser at the trailing edge and
-/// finer at the leading edge, above 1 finer at the trailing edge; clamped to 0.05…2. The method
-/// writes n + 1 nodes (its historic behaviour, frozen by `tests/repanel_cosine_tests.rs`).
+/// finer at the leading edge, above 1 finer at the trailing edge; clamped to 0.05…2.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct CosineConfig {
     /// `None` in a request means the default 0.15 when repanelling existing nodes; a generator's
@@ -806,9 +805,11 @@ pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64])
 /// yFoil's own repanelling, no XFOIL equivalent: cosine spacing in arc length on each surface,
 /// the cosine parameter warped by a power law set by `te_bias` (1 is a plain cosine; below 1
 /// coarser at the trailing edge and finer at the leading edge; above 1 finer at the trailing
-/// edge; clamped to 0.05…2). Writes `n_nodes + 1` nodes. The numerics are frozen —
-/// `tests/repanel_cosine_tests.rs` gates every node against golden fixtures — because test
-/// fixtures were derived with them; new work goes through [`repanel`] with [`PanelMethod::Pangen`].
+/// edge; clamped to 0.05…2). Writes exactly `n_nodes` nodes: the upper surface from the trailing
+/// edge to a node at the leading edge, then the lower surface back to the trailing edge (the
+/// upper half carries the leading-edge node, so it has one node more than the lower). The node
+/// positions are gated against golden fixtures by `tests/repanel_cosine_tests.rs`; new work goes
+/// through [`repanel`] with [`PanelMethod::Pangen`].
 pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> Geometry {
     let n = geometry.x.len();
 
@@ -826,7 +827,7 @@ pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> 
 
     // Generate new parameter values using modified cosine spacing
     // with different densities at TE vs LE
-    let mut s_new = Vec::with_capacity(n_nodes + 1);
+    let mut s_new = Vec::with_capacity(n_nodes);
 
     // Clamp te_le_ratio to reasonable range
     let ratio = te_le_ratio.clamp(0.05, 2.0);
@@ -857,10 +858,12 @@ pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> 
         s_new.push(s[0] + s_upper_total * s_frac);
     }
 
-    // Lower surface: from LE (s=sle) to TE (s=s_total)
+    // Lower surface: from LE (s=sle, already placed) to TE (s=s_total). The upper surface used
+    // n_half + 1 nodes including the LE, so n_nodes − n_half − 1 remain, the last exactly at the TE
     let s_lower_total = s_total - sle;
-    for i in 1..=(n_nodes - n_half) {
-        let t = i as f64 / (n_nodes - n_half) as f64;
+    let n_lower = n_nodes - n_half - 1;
+    for i in 1..=n_lower {
+        let t = i as f64 / n_lower as f64;
         let t_mod = if ratio < 1.0 {
             // Finer at LE (t=0), coarser at TE (t=1)
             1.0 - (1.0 - t).powf(1.0 / (1.0 + ratio))
@@ -1139,7 +1142,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(out.x.len(), 101, "the cosine method writes n + 1 nodes");
+        assert_eq!(out.x.len(), 100);
         let rec = out.generator.unwrap();
         assert_eq!(rec["yfoil"], env!("CARGO_PKG_VERSION"));
         assert_eq!(rec["panelling"]["method"], "cosine");

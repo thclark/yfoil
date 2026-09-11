@@ -58,7 +58,7 @@
     "mach": 0.0,
     "matyp": 0,
     "max_iterations": 100,
-    "n_panels": 160,
+    "n_nodes": 160,
     "name": "naca0012_n160_polar_up22_re1e6_iter100",
     "ncrit": 9.0,
     "polar": true,

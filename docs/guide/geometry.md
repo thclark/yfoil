@@ -156,8 +156,8 @@ panel. Its parameters are XFOIL's `PPAR` menu, here by descriptive names:
 arc length on each surface, its parameter warped by a power law set by
 `--cosine-te-bias` (1 is a plain cosine; below 1 coarser at the trailing edge
 and finer at the leading edge; above 1 finer at the trailing edge; default 0.15,
-clamped to 0.05…2). It writes N + 1 nodes, its historic behaviour, which is frozen
-because test fixtures were derived with it.
+clamped to 0.05…2). It places a node at the leading edge, so the upper surface
+carries one node more than the lower.
 
 ### Trailing edge
 

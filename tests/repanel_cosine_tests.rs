@@ -1,8 +1,8 @@
 //! yFoil's own arc-length cosine repanelling (`repanel_cosine`), frozen. It has no XFOIL
 //! equivalent and no external reference; what it must do is keep producing exactly what it
-//! produced when the tracked fixtures were derived with it. The golden files under
-//! `tests/fixtures/repanel_cosine/` were written once by this test (`UPDATE_GOLDEN=1`), and every
-//! node is gated at `TOL_PURE`; the node count (n + 1, its historic behaviour) is asserted too.
+//! produces today. The golden files under `tests/fixtures/repanel_cosine/` were written by this
+//! test (`UPDATE_GOLDEN=1`; last on 2026-09-11, when the historic extra node was removed so that
+//! it writes exactly n nodes), and every node is gated at `TOL_PURE`.
 
 mod fixtures;
 mod utilities;
@@ -33,7 +33,7 @@ fn cosine_repanelling_is_frozen() {
     let source = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
     for (bias, tag) in [(0.15, "015"), (1.0, "100"), (1.8, "180")] {
         let g = repanel_cosine(&source, 100, bias);
-        assert_eq!(g.x.len(), 101, "bias {bias}: the cosine method writes n + 1 nodes");
+        assert_eq!(g.x.len(), 100, "bias {bias}: exactly n nodes");
         golden(&format!("naca0012_n100_bias{tag}"), &g);
     }
 }

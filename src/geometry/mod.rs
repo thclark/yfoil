@@ -94,7 +94,7 @@
 //! **`cosine`**: yFoil's own arc-length cosine spacing ([`repanel_cosine`]), no XFOIL equivalent,
 //! its parameter warped by a power law set by `--cosine-te-bias`: 1 is a plain cosine, below 1
 //! coarser at the trailing edge and finer at the leading edge, above 1 finer at the trailing
-//! edge. It writes N + 1 nodes (historic behaviour, frozen by `tests/repanel_cosine_tests.rs`).
+//! edge; its node positions are gated by `tests/repanel_cosine_tests.rs`.
 //! On the generators `cosine` is the analytic sampling at cosine chord stations and has no bias.
 //!
 //! Examples:

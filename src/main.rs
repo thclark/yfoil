@@ -297,8 +297,7 @@ enum PanellingMethod {
 #[derive(clap::Args, Debug, Clone)]
 struct PanellingArgs {
     /// Number of panel nodes, trailing edge round to trailing edge (XFOIL's NPAN, "number of
-    /// panel nodes"). The cosine repanelling of an existing geometry writes N + 1 nodes, its
-    /// historic behaviour. [both methods]
+    /// panel nodes") [both methods]
     #[arg(
         short = 'n',
         long = "nodes",

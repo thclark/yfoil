@@ -181,7 +181,7 @@ fn ppar_flags_are_recorded_and_a_file_reproduces_them_bitwise() {
 }
 
 #[test]
-fn cosine_method_writes_n_plus_one_nodes_and_records_its_bias() {
+fn cosine_method_writes_n_nodes_and_records_its_bias() {
     let c = Case::new();
     let src = c.source_dat();
     let out = ok(&[
@@ -197,7 +197,7 @@ fn cosine_method_writes_n_plus_one_nodes_and_records_its_bias() {
         "-o",
         &c.p("c.json"),
     ]);
-    assert!(out.contains("Repanelled from 60 to 161 nodes with cosine"));
+    assert!(out.contains("Repanelled from 60 to 160 nodes with cosine"));
     let p = json(&c.path("c.json"))["generator"]["panelling"].clone();
     assert_eq!(p["method"], "cosine");
     assert_eq!(p["te_bias"], 0.3);
@@ -387,6 +387,8 @@ fn generators_default_to_pangen_and_cosine_is_the_analytic_sampling() {
     assert_eq!(p["n_buffer_nodes"], 246);
     assert_eq!(p["te_curvature_ratio"], 0.25);
     assert_eq!(g["generator"]["designation"], "NACA 63-415");
+    // PANGEN panels the NACA-definition section: perpendicular thickness, whatever the method
+    assert_eq!(g["generator"]["thickness_applied"], "perpendicular");
 
     ok(&[
         "geometry",
