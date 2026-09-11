@@ -1,0 +1,42 @@
+{#-
+  Landing page.
+
+  The structure below mirrors the one Zensical uses for its own home page: an
+  empty, absolutely-positioned `.mdx-hero` that the animation mounts into, and an
+  `.mdx-teaser` pinned to the bottom of the viewport carrying the headline, the
+  lede, the attribution line and the two buttons. The article itself is hidden,
+  and the page is exactly one viewport tall.
+-#}
+{% extends "main.html" %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ 'stylesheets/home.css' | url }}">
+{% endblock %}
+
+{% block hero %}
+  <div class="mdx-hero" id="hero"></div>
+  <div class="mdx-teaser">
+    <div class="md-typeset md-grid">
+      <h1>XFOIL, rebuilt for the modern world</h1>
+      <p>
+        A 2D aerodynamic solver for robust automation, digital twins, edge
+        computing and building with AI
+      </p>
+      <p>
+        <small>
+          <em>
+            yFoil is built by researchers at
+            <a href="https://www.ost.ch/de/forschung-und-dienstleistungen/technik/erneuerbare-energien-und-umwelttechnik/iet-institut-fuer-energietechnik">OST</a>
+            and precisely validated against XFOIL
+          </em>
+        </small>
+      </p>
+      <a class="md-button md-button--primary" href="{{ 'guide/' | url }}">Get started</a>
+      {#- The Learn more button leads to the Validation section, which is hidden from the
+          navigation until its pages are presentable (see zensical.toml). Restore it together
+          with the nav entry. -#}
+      {#- <a class="md-button" href="{{ 'validation/' | url }}">Learn more</a> -#}
+    </div>
+  </div>
+{% endblock %}

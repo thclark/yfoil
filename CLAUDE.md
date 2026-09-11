@@ -188,7 +188,7 @@ appended to side 2 (`NBL(2) = IBLTE(2) + NW`), explicit station→node and stati
 slot 0, so a translated statement corresponds one-for-one to its Fortran line. There is no third "wake surface".
 **Names are not XFOIL's**: they follow `docs/conventions/naming.md` (symbols from the equations, the four index
 systems, `_d_<token>` sensitivities), and the XFOIL name of every variable and routine is recorded in
-`docs/xfoil-reference/xfoil-to-yfoil-mapping.md` and in `#[doc(alias = "SETBL")]` on the translating function.
+`docs/xfoil-reference.md` and in `#[doc(alias = "SETBL")]` on the translating function.
 Inside a translated body, short locals bound at the top from the named fields (`let hk1 = station1.hk;`) keep the
 formula lines diffable against the Fortran. Elsewhere in the crate, idiomatic Rust.
 
@@ -202,7 +202,7 @@ solver/     - Pointer layer (IBLPAN/XICALC/IBLSYS/STFIND/STMOVE), velocity layer
 output/     - Results serialisation, optional plotting
 ```
 
-The variable mapping in `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` must be kept current whenever a struct
+The variable mapping in `docs/xfoil-reference.md` must be kept current whenever a struct
 field or state variable is added, renamed or re-represented.
 
 ## CLI
@@ -320,7 +320,7 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
 - Integer powers written as explicit multiplications where bit-exactness matters (`x*x*x`, not `powi(3)`) to match
   gfortran's inline expansion.
 - Temporary files go in `.tmp/`, never `/tmp`.
-- Naming: `docs/conventions/naming.md` (the rules) and `docs/xfoil-reference/xfoil-to-yfoil-mapping.md` (the
+- Naming: `docs/conventions/naming.md` (the rules) and `docs/xfoil-reference.md` (the
   XFOIL → yFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
 
 ## Polar sweep procedure

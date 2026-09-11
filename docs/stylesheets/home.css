@@ -1,0 +1,151 @@
+/* Landing page.
+ *
+ * Layout, metrics and treatment follow Zensical's own home page: one viewport,
+ * no scroll, the animation filling the whole container, and the text pinned to
+ * the bottom left over it. The page is dark whatever the site palette is set to,
+ * because the flow field is drawn for a dark ground.
+ */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: #0b0c0f;
+}
+
+/* The animation fills the container and sits behind everything else. */
+.mdx-hero {
+  /* The ground the flow field is drawn against, read by the canvas. */
+  --yf-hero-ground: #0b0c0f;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mdx-hero canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Nothing on the canvas responds to the pointer. */
+  pointer-events: none;
+}
+
+/* ----------------------------------------------------------------- teaser --- */
+
+.mdx-teaser {
+  position: absolute;
+  bottom: 96px;
+  width: 100%;
+  z-index: 3;
+}
+
+.mdx-teaser .md-grid {
+  padding: 0 16px;
+}
+
+.mdx-teaser h1 {
+  max-width: 520px;
+  margin-bottom: 0;
+  color: #fff;
+  font-size: 48px;
+  line-height: 1.2;
+  letter-spacing: -0.05em;
+  text-shadow: 0 0 16px #000;
+}
+
+.mdx-teaser p {
+  max-width: 500px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.5;
+  text-shadow: 0 0 8px #000;
+}
+
+.mdx-teaser small {
+  color: hsla(var(--md-hue), 15%, 90%, 0.82);
+  opacity: 1;
+}
+
+.mdx-teaser a {
+  color: inherit;
+}
+
+.mdx-teaser a:focus,
+.mdx-teaser a:hover {
+  color: #fff;
+}
+
+.mdx-teaser .md-button {
+  backdrop-filter: blur(4px);
+  background-color: hsla(var(--md-hue), 15%, 90%, 0.12);
+  color: #fff;
+  transition: all 0.25s;
+}
+
+.mdx-teaser .md-button:focus,
+.mdx-teaser .md-button:hover {
+  color: #fff;
+}
+
+.mdx-teaser .md-button--primary {
+  backdrop-filter: blur(4px);
+  /* tailwind sky-500 -> emerald-400 */
+  background: linear-gradient(35deg, rgba(14, 165, 233, 0.92), rgba(52, 211, 153, 0.82));
+  border-color: transparent;
+  color: #fff;
+}
+
+.mdx-teaser .md-button--primary:focus,
+.mdx-teaser .md-button--primary:hover {
+  color: #fff;
+}
+
+@media (max-width: 480px) {
+  .mdx-teaser h1 {
+    font-size: 36px;
+  }
+
+  .mdx-teaser p {
+    font-size: 14px;
+  }
+}
+
+/* -------------------------------------------------------------- furniture --- */
+
+.md-main__inner {
+  margin-top: 0;
+}
+
+.md-header {
+  backdrop-filter: none;
+  background-color: transparent;
+  box-shadow: none;
+  color: #fff;
+}
+
+/* The page is dark regardless of the palette, so the palette toggle is hidden
+ * here rather than lying about what it does. */
+.md-header__option {
+  display: none;
+}
+
+.md-tabs {
+  box-shadow: inset 0 -0.05rem 0 hsla(0, 0%, 100%, 0.1);
+}
+
+.md-tabs__item {
+  color: #fff;
+}
+
+.md-tabs__item--active {
+  border-bottom: 0.05rem solid #fff;
+}
+
+.md-content,
+.md-footer {
+  display: none;
+}

@@ -1,0 +1,13 @@
+/* yFoil documentation theme overrides.
+ *
+ * Site-wide only. The landing page has its own stylesheet, docs/stylesheets/home.css,
+ * loaded by the home template.
+ */
+
+:root {
+  /* Streak opacity ramp, read by the hero canvas: base + gain * (speed ratio)^2. */
+  --yf-hero-glow-a: #38bdf8;  /* tailwind sky-400: the slow end of the ramp */
+  --yf-hero-glow-b: #34d399;  /* tailwind emerald-400: the fast end */
+  --yf-hero-streak-base: 0.13;
+  --yf-hero-streak-gain: 0.50;
+}

@@ -68,13 +68,53 @@ Use of AI is not only acceptable but has been essential to the project. Whether 
 Claude Fable 5.1 was used heavily for the instrumentation of xfoil, translation of subroutines, and construction of the test harness. But not all at once and therein lies the tale.
 
 
-### Developer tools
+### Developing
 
-**Rust stack.** You'll need to make sure you have the latest stable version of rust and cargo tools installed.
+**Prerequisites.** A current stable Rust toolchain (`rustup`), plus [`uv`](https://docs.astral.sh/uv/) for the docs
+site and `pre-commit` for the QA hooks. Rebuilding the XFOIL reference additionally needs `gfortran` and X11 headers.
 
-**Precommit.** Make sure the precommit tools are installed. They're a useful QA gate prior to committing and pushing code. If using an AI agent, ensure it's instructed to run these checks prior to making any commit (this helps reduce token consumption through churn, and helps constrain the agent to improve performance, so double win).
+**Build, test, lint.** These are exactly what CI runs:
+
+```
+cargo build --all-targets
+cargo test --all-targets --no-fail-fast                       # fixtures are tracked, so this needs no XFOIL build
+cargo test --all-targets --features plotting --no-fail-fast   # plotting is behind a cargo feature
+cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
+ci/no-deviations.sh                                           # Rule 2 grep gate (see CLAUDE.md)
+ci/ignore-drift.sh                                            # every #[ignore] is tagged and listed in tests/IGNORED.txt
+```
+
+**Run the CLI.** `cargo run -- <args>`, or `cargo install --path .` for a `yfoil` binary; add `--features plotting`
+for `yfoil plot`. See `yfoil --help` and the [user guide](docs/guide/index.md).
+
+**XFOIL reference and fixtures.** Only needed when changing the translation, instrumentation or fixture set:
+
+```
+cargo xtask xfoil-build [--verify] [--snan]        # build the DP reference into target/xfoil-ref/ (and prove
+                                                   #   instrumentation is inert / no uninitialised reads)
+cargo xtask fixtures [--case NAME] [--verify] [--big]   # regenerate fixtures from xtask/fixtures-config/cases.toml
+cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/validation/coverage.md
+```
+
+**Documentation.** The docs site is built with [Zensical](https://zensical.org/) (the successor to Material for MkDocs)
+from the markdown in `docs/`. The Zensical version is pinned inside `scripts/docs.sh` and fetched on demand by `uv`,
+so there is no virtualenv or requirements file to manage:
+
+```
+scripts/docs.sh serve                  # live preview on http://localhost:8000
+scripts/docs.sh serve -a localhost:8001 # ... on another port, if 8000 is taken
+scripts/docs.sh build --clean          # static site into site/
+python3 scripts/docs-linkcheck.py      # report internal links in site/ that do not resolve
+```
+
+Site configuration and navigation live in `zensical.toml`.
+
+**Pre-commit.** Install the hooks once; they mirror the CI `lint`, `no-deviations` and `ignore-drift` jobs and check
+the commit message and branch name. If using an AI agent, instruct it to run these before any commit (this reduces
+token churn and constrains the agent, so double win).
 
 ```
 pre-commit install && pre-commit install -t commit-msg
 pre-commit install-hooks
+pre-commit run --all-files
 ```

@@ -1,0 +1,15 @@
+{#-
+  Site-wide template override. Every page (including home.html, which extends this
+  file) inherits from here, so anything that must appear on all pages goes here.
+
+  The site is a prototype and not yet open for indexing: robots.txt disallows crawling,
+  and this meta tag is the belt to that pair of braces, because a Disallow alone does
+  not remove pages a search engine already knows about. Remove the tag together with
+  the Disallow in docs/robots.txt when the site opens.
+-#}
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  <meta name="robots" content="noindex, nofollow">
+{% endblock %}
