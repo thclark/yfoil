@@ -175,16 +175,46 @@ delivers \(\cos(\tau/2)\) times the requested gap
 ### One file instead of flags
 
 `--panelling FILE` reads every option from a JSON file in exactly the shape a
-geometry file records under `generator.panelling`, so a record can be copied
-out of one geometry and applied to another. It cannot be combined with any
-other panelling flag; keys of the other method and unknown keys are errors, and
-PPAR keys left out take XFOIL's defaults.
+geometry file records under `generator.panelling`, so a configuration can be
+kept with a study, applied to any section or loaded geometry, and lifted back
+out of a geometry that was made with it. It cannot be combined with any other
+panelling flag; keys of the other method and unknown keys are errors, and keys
+left out take the defaults.
+
+A complete configuration, `fine-te.json` — 200 nodes, stronger curvature
+bunching, a denser trailing edge, refinement windows over the region where
+transition is expected on both surfaces, a 0.2% chord trailing-edge gap blended
+over 80% of the chord, and the analytic section sampled at 400 stations before
+PANGEN:
 
 ``` json
-{"method": "pangen", "n_nodes": 160, "sharp_te": false, "te_gap": {"gap": 0.002, "blend": 1.0},
- "curvature_bunching": 1.5, "te_curvature_ratio": 0.3, "refined_curvature_ratio": 0.5,
- "refine_upper": [0.2, 0.4], "refine_lower": [0.3, 0.6]}
+{
+  "method": "pangen",
+  "n_nodes": 200,
+  "n_buffer_nodes": 400,
+  "sharp_te": false,
+  "te_gap": {"gap": 0.002, "blend": 0.8},
+  "curvature_bunching": 1.3,
+  "te_curvature_ratio": 0.3,
+  "refined_curvature_ratio": 0.5,
+  "refine_upper": [0.25, 0.45],
+  "refine_lower": [0.35, 0.6]
+}
 ```
+
+Generating from it needs no other flag, and the same file repanels a loaded
+geometry (drop `n_buffer_nodes` for that: an existing geometry has no section
+to sample):
+
+``` sh
+yfoil geometry naca 63-415 --panelling fine-te.json -o naca63-415_fine-te.json
+yfoil geometry karman-trefftz --te-angle 12 --panelling fine-te.json -o kt_fine-te.json
+yfoil geometry repanel e387.dat --panelling fine-te-repanel.json -o e387_fine-te.json
+```
+
+The output's `generator.panelling` is the file's contents again (with
+`te_bias: null` and `n_buffer_nodes` filled in as applicable), which is what
+makes a run reproducible from its result alone.
 
 ### Conflicts
 
