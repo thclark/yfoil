@@ -29,7 +29,8 @@ SKIP_PREFIXES = ("http://", "https://", "//", "#", "mailto:", "data:", "javascri
 
 def resolve(site_dir: str, page: str, link: str) -> str:
     """Return the filesystem path a link points at, as a directory index if needed."""
-    target = unquote(urldefrag(link)[0])
+    # drop the query too: docs-cachebust.py stamps assets with ?v=<hash>
+    target = unquote(urldefrag(link)[0].split("?", 1)[0])
     if target.startswith("/"):
         full = os.path.join(site_dir, target.lstrip("/"))
     else:

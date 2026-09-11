@@ -24,6 +24,13 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-exec uv run --no-project --quiet \
+uv run --no-project --quiet \
     --with "zensical==$zensical_version" \
     zensical "$@"
+
+# Zensical does not fingerprint the site's own stylesheets, scripts and images, so a
+# browser could pair a freshly deployed page with ones it cached from the last deploy.
+# Stamp every reference to them with a content hash (see scripts/docs-cachebust.py).
+if [[ "${1:-}" == "build" ]]; then
+    uv run --no-project --quiet python scripts/docs-cachebust.py site
+fi
