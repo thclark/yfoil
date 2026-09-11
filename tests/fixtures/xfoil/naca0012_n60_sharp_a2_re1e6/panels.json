@@ -126,5 +126,15 @@
     -0.0028342619990759737,
     -0.001656746340950274,
     0.0
-  ]
+  ],
+  "generator": {
+    "panelling": {
+      "method": "cosine",
+      "n_nodes": 60,
+      "sharp_te": true,
+      "te_bias": null,
+      "te_gap": null
+    },
+    "yfoil": "0.1.0"
+  }
 }

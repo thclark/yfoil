@@ -19,7 +19,8 @@ fn golden(name: &str, produced: &Geometry) {
         std::fs::write(&path, serde_json::to_string_pretty(&plain).unwrap()).unwrap();
         eprintln!("wrote {}", path.display());
     }
-    let expected: Geometry = serde_json::from_str(&std::fs::read_to_string(fixtures::require_fixture(&rel)).unwrap()).unwrap();
+    let expected: Geometry =
+        serde_json::from_str(&std::fs::read_to_string(fixtures::require_fixture(&rel)).unwrap()).unwrap();
     assert_eq!(produced.x.len(), expected.x.len(), "{name}: node count");
     for i in 0..expected.x.len() {
         assert_within(produced.x[i], expected.x[i], TOL_PURE, 1.0, &format!("{name}: x[{i}]"));

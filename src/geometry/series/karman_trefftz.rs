@@ -17,6 +17,10 @@
 //! `SHARP` branch of the panel method.
 
 use super::super::airfoil::Geometry;
+use super::super::panel::{
+    apply_te_treatment, record_panelling, repanel, CosineConfig, PanelConfig, PanelMethod, RepanelError,
+    PANGEN_BUFFER_NODES,
+};
 use super::cosine_stations;
 use serde_json::{json, Value};
 use std::f64::consts::PI;
@@ -238,6 +242,36 @@ impl KarmanTrefftz {
             x,
             y,
             generator: Some(self.record()),
+        }
+    }
+
+    /// The section panelled as `config` says: `cosine` is the analytic sampling of
+    /// [`Self::geometry`] at `n_nodes` chord stations (no bias applies; the record says so);
+    /// `pangen` samples the section at `buffer_nodes` (default [`PANGEN_BUFFER_NODES`]) and runs
+    /// XFOIL's PANGEN on that buffer. The trailing-edge treatment follows the distribution, and
+    /// the record gains `panelling`.
+    pub fn panelled(&self, config: &PanelConfig) -> Result<Geometry, RepanelError> {
+        config.validate()?;
+        match config.method {
+            PanelMethod::Cosine(_) => {
+                let mut used = *config;
+                used.method = PanelMethod::Cosine(CosineConfig { te_bias: None });
+                let mut out = apply_te_treatment(self.geometry(config.n_nodes), &used);
+                out.validate()?;
+                record_panelling(&mut out, &used);
+                Ok(out)
+            }
+            PanelMethod::Pangen(_) => {
+                let buffer_nodes = config.buffer_nodes.unwrap_or(PANGEN_BUFFER_NODES);
+                let buffer = self.geometry(buffer_nodes);
+                let mut on_buffer = *config;
+                on_buffer.buffer_nodes = None;
+                let mut out = repanel(&buffer, &on_buffer)?;
+                let mut used = *config;
+                used.buffer_nodes = Some(buffer_nodes);
+                record_panelling(&mut out, &used);
+                Ok(out)
+            }
         }
     }
 

@@ -102,7 +102,7 @@ Progress is measured by fixture matches, never by an end-to-end number moving in
 Different panels make any comparison meaningless. The workflow, and the only one:
 
 ```bash
-yfoil geometry naca 0012 -n 160 -o geometry.json      # or repanel: yfoil geometry repanel --method curvature
+yfoil geometry naca 0012 -n 160 --method cosine -o geometry.json   # the fixtures' sampling; repanel: yfoil geometry repanel foil.dat -n 160
 yfoil geometry convert geometry.json --to dat -o geometry.dat
 # XFOIL:  PLOP / G F / LOAD geometry.dat / ...      never NACA, never PANE, never PPAR
 ```
@@ -146,8 +146,9 @@ threshold-straddling cases — not a single worst-case number.
 annotations: `[[unreachable]]` entries with a class (*structural*, *mode*, *guard*, *compiler*) and a reason,
 `[[note]]` entries recording how an open branch can be reached, `[[dead]]` entries for subroutines XFOIL never
 calls. Every never-taken branch that is not annotated is **open**; annotations that stop matching are reported
-as stale. Measured 2026-09-10 over 22 cases: 1320 branches, 1135 taken, 80 open (every one with a reach note,
-7 of them Newton-loop iteration caps), 84 annotated unreachable, 21 DO-loop zero-trip edges. The first
+as stale. Measured 2026-09-11 over 26 cases: 1320 branches, 1141 taken, 74 open (every one with a reach note,
+7 of them Newton-loop iteration caps), 84 annotated unreachable, 21 DO-loop zero-trip edges; the two
+`pangen_*` PPAR cases closed PANGEN's six refinement-window branches. The first
 measurement found one translation gap — OPER `DAMP` (IDAMPV=1, `DAMPL2`) was reachable and not translated — now
 closed and gated by the `naca0012_n60_a2_re1e6_damp` case.
 
@@ -213,8 +214,13 @@ field or state variable is added, renamed or re-represented.
 yfoil geometry - convert | naca | karman-trefftz | repanel | info   (alias: geom)
                  naca takes every family with a public definition: 4-digit, 4-digit modified
                  (0012-34), 5-digit (23012, 23112 reflex), 16-series (16-212), 6-series
-                 (63-415, --a for the loading extent) and 6A-series (64A010); --te-gap is
-                 XFOIL's TGAP; every generated file carries a `generator` provenance record
+                 (63-415, --a for the loading extent) and 6A-series (64A010). Panelling options are
+                 shared by naca, karman-trefftz and repanel: --method pangen (XFOIL's PANGEN, default;
+                 PPAR parameters by descriptive flags) | cosine (yFoil's own), --sharp / --te-gap
+                 (XFOIL's TGAP, applied after panelling), --panelling FILE (the record as input).
+                 Every generated file carries a `generator` provenance record with `panelling`.
+                 The fixture pipeline pins `--method cosine`, the analytic sampling the tracked
+                 fixtures were made with.
 yfoil analyse  - single operating point (--alpha or --cl, --inviscid); -o writes conditions, results,
                  geometry (+ wake), surface q/Cp and every per-station BL quantity (primaries and the
                  closures evaluated on them; --include-lagged-closures adds XFOIL's lagged arrays)

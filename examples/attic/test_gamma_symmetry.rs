@@ -1,6 +1,6 @@
 //! Debug test for gamma symmetry at LE
 
-use yfoil::geometry::{naca_4digit, repanel_by_curvature, panel_foil, PaneConfig};
+use yfoil::geometry::{naca_4digit, repanel_by_curvature, panel_foil, PangenConfig};
 use yfoil::panel::solve_inviscid;
 
 /// Find stagnation point (copy of the logic from viscal.rs)
@@ -50,7 +50,7 @@ fn main() {
                  i, geom.x_c[i], geom.y_c[i], marker);
     }
 
-    let config = PaneConfig::default();
+    let config = PangenConfig::default();
     let repaneled = repanel_by_curvature(&geom, 160, &config);
     let airfoil = panel_foil(&repaneled);
 

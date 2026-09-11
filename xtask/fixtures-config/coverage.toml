@@ -709,42 +709,6 @@ reach = "a buffer airfoil with a corner (doubled node): the corner-insertion loo
 
 [[note]]
 file = "xfoil.f"
-line = 1794
-branch = 0
-reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
-
-[[note]]
-file = "xfoil.f"
-line = 1794
-branch = 2
-reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
-
-[[note]]
-file = "xfoil.f"
-line = 1794
-branch = 3
-reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
-
-[[note]]
-file = "xfoil.f"
-line = 1802
-branch = 0
-reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
-
-[[note]]
-file = "xfoil.f"
-line = 1802
-branch = 2
-reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
-
-[[note]]
-file = "xfoil.f"
-line = 1802
-branch = 3
-reach = "PPAR refinement limits XT/XB (XSREF/XPREF /= 1)"
-
-[[note]]
-file = "xfoil.f"
 line = 1883
 branch = 1
 reach = "zero curvature at two consecutive nodes: a flat-sided section (flat plate, diamond)"

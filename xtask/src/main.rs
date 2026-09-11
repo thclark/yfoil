@@ -58,6 +58,10 @@ struct Case {
     /// OPER never entered); the gate is the PANGEN dump against yFoil's XFOIL-model generator
     #[serde(default)]
     geometry_only: bool,
+    /// PPAR parameters of a geometry-only case (GETPAN menu P, T, R, XT, XB), by their XFOIL
+    /// names; absent = XFOIL's defaults, and the script is then unchanged
+    #[serde(default)]
+    ppar: Option<Ppar>,
     /// GDES `TGAP gap blend` on the LOADed panels (OPER never entered): the instrumented TGAP
     /// dumps the buffer airfoil before and after into `xfoil_tgap.dat`, the gate of
     /// `set_te_gap` (tests/xfoil_tgap_tests.rs)
@@ -74,6 +78,39 @@ struct Case {
     #[serde(default)]
     track: bool,
 }
+/// XFOIL's PPAR menu values for a geometry-only case
+#[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
+struct Ppar {
+    cvpar: Option<f64>,
+    cterat: Option<f64>,
+    ctrrat: Option<f64>,
+    xsref: Option<[f64; 2]>,
+    xpref: Option<[f64; 2]>,
+}
+
+impl Ppar {
+    /// The GETPAN lines that set the parameters, before the blank that runs PANGEN
+    fn script_lines(&self) -> String {
+        let mut s = String::new();
+        if let Some(v) = self.cvpar {
+            s += &format!("P {v}\n");
+        }
+        if let Some(v) = self.cterat {
+            s += &format!("T {v}\n");
+        }
+        if let Some(v) = self.ctrrat {
+            s += &format!("R {v}\n");
+        }
+        if let Some([a, b]) = self.xsref {
+            s += &format!("XT {a} {b}\n");
+        }
+        if let Some([a, b]) = self.xpref {
+            s += &format!("XB {a} {b}\n");
+        }
+        s
+    }
+}
+
 fn default_ncrit() -> f64 {
     9.0
 }
@@ -198,7 +235,11 @@ fn fixtures(flags: &[String]) {
             // default NPAN) then `PPAR / N n` to repanel at the case's n_panels
             let (kind, spec) = case.foil.split_once(':').expect("airfoil = \"xfoil-naca:0012\"");
             assert_eq!(kind, "xfoil-naca", "geometry_only cases use xfoil-naca:<digits>");
-            let script = format!("PLOP\nG F\n\nNACA {spec}\nPPAR\nN {}\n\n\n\nQUIT\n", case.n_panels);
+            let ppar = case.ppar.as_ref().map(Ppar::script_lines).unwrap_or_default();
+            let script = format!(
+                "PLOP\nG F\n\nNACA {spec}\nPPAR\nN {}\n{ppar}\n\n\nQUIT\n",
+                case.n_panels
+            );
             fs::write(work.join("xfoil.inp"), &script).unwrap();
             let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
             let out = fs::File::create(work.join("stdout.txt")).unwrap();
@@ -215,7 +256,7 @@ fn fixtures(flags: &[String]) {
                 continue;
             }
             let manifest = serde_json::json!({
-                "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "geometry_only": true },
+                "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "geometry_only": true, "ppar": case.ppar },
                 "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
                 "generated_by": "cargo xtask fixtures",
             });
@@ -267,8 +308,20 @@ fn fixtures(flags: &[String]) {
             kind == "naca4" || kind == "naca",
             "foil kinds: naca4:<4 digits>, naca:<designation>, xfoil-naca:<digits> (geometry_only)"
         );
+        // `--method cosine`: the analytic cosine sampling every tracked fixture was generated
+        // with (the CLI's default is now PANGEN)
         let npan = case.n_panels.to_string();
-        let mut gargs = vec!["geometry", "naca", spec, "-n", &npan, "-o", "panels.json"];
+        let mut gargs = vec![
+            "geometry",
+            "naca",
+            spec,
+            "-n",
+            &npan,
+            "--method",
+            "cosine",
+            "-o",
+            "panels.json",
+        ];
         if sharp {
             gargs.push("--sharp");
         }

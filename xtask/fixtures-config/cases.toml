@@ -302,3 +302,21 @@ n_panels = 60
 alphas = []
 tgap = [0.005, 0.8]
 track = true
+
+[[case]]
+name = "pangen_naca4412_n160_refined"      # PPAR off default with both refinement windows: PANGEN's XSREF/XPREF branches (coverage)
+foil = "xfoil-naca:4412"
+n_panels = 160
+alphas = []
+geometry_only = true
+ppar = { cvpar = 1.5, cterat = 0.3, ctrrat = 0.5, xsref = [0.2, 0.4], xpref = [0.3, 0.6] }
+track = true
+
+[[case]]
+name = "pangen_naca0012_n120_bunching"     # PPAR bunching and TE ratio off default, no windows
+foil = "xfoil-naca:0012"
+n_panels = 120
+alphas = []
+geometry_only = true
+ppar = { cvpar = 0.5, cterat = 0.05 }
+track = true

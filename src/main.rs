@@ -6,8 +6,9 @@ use yfoil::geometry::Thickness;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use yfoil::geometry::{
-    naca_4digit, naca_5digit, panel_foil, read_dat_file, read_geometry_from_file, repanel_by_curvature, repanel_cosine,
-    set_te_gap, write_dat_file, write_geometry_to_json, Geometry, KarmanTrefftz, PaneConfig, Section, Series,
+    naca_4digit_vertical, naca_5digit_vertical, panel_foil, read_dat_file, read_geometry_from_file, repanel,
+    write_dat_file, write_geometry_to_json, CosineConfig, Geometry, KarmanTrefftz, PanelConfig, PanelMethod,
+    PangenConfig, RepanelError, Section, Series, TeGap,
 };
 use yfoil::output::{AnalysisOutput, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
@@ -22,6 +23,7 @@ use yfoil::output::{
 #[derive(Parser, Debug)]
 #[command(name = "yfoil")]
 #[command(version, about = "Rust-based aerofoil analysis tool", long_about = None)]
+#[command(arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -30,13 +32,14 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Geometry operations (convert, generate, repanel)
-    #[command(visible_alias = "geom")]
+    #[command(visible_alias = "geom", arg_required_else_help = true)]
     Geometry {
         #[command(subcommand)]
         action: GeomAction,
     },
 
     /// Analyse an aerofoil at a single operating point
+    #[command(arg_required_else_help = true)]
     Analyse {
         /// Path to geometry file (JSON)
         file: PathBuf,
@@ -77,6 +80,7 @@ enum Commands {
     },
 
     /// Generate polar sweep
+    #[command(arg_required_else_help = true)]
     Polar {
         /// Path to geometry file (JSON)
         file: PathBuf,
@@ -131,6 +135,7 @@ enum Commands {
     },
 
     /// Plot results (analysis distributions or polars)
+    #[command(arg_required_else_help = true)]
     Plot {
         #[command(subcommand)]
         action: PlotAction,
@@ -161,6 +166,7 @@ enum PlotAction {
     /// stagnation, transition and separation points. Input: geometry files (panels only, overlaid),
     /// point analysis JSONs (one design point each; same panels), or one polar JSON written with
     /// `--distributions` (one design point per alpha)
+    #[command(arg_required_else_help = true)]
     Foil {
         /// Geometry (.json/.dat), analysis JSON (`yfoil analyse -o`) or polar JSON (`yfoil polar --distributions -o`)
         #[arg(required = true)]
@@ -230,6 +236,7 @@ enum PlotAction {
     },
 
     /// Plot Cp and Ue distributions from a single-point analysis
+    #[command(arg_required_else_help = true)]
     Analysis {
         /// Path to analysis results JSON file
         file: PathBuf,
@@ -252,6 +259,7 @@ enum PlotAction {
     },
 
     /// Plot one or more polars (CL–α, CL–CD, CM–α, CD–α); several files are overlaid for comparison
+    #[command(arg_required_else_help = true)]
     Polar {
         /// Polar JSON files (from `yfoil polar -o`)
         #[arg(required = true)]
@@ -275,9 +283,211 @@ enum PlotAction {
     },
 }
 
+/// The node-distribution methods of `yfoil geometry`
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum PanellingMethod {
+    /// XFOIL's PANGEN, the algorithm behind its PANE and PPAR commands (the default)
+    Pangen,
+    /// yFoil's own cosine spacing: no XFOIL equivalent
+    Cosine,
+}
+
+/// How the nodes are distributed: the same options on `repanel` and on the generators, either as
+/// flags or as one JSON file (`--panelling`) in the shape the geometry file records them.
+#[derive(clap::Args, Debug, Clone)]
+struct PanellingArgs {
+    /// Number of panel nodes (XFOIL's NPAN). The cosine repanelling of an existing geometry
+    /// writes N + 1 nodes, its historic behaviour. [both methods]
+    #[arg(
+        short = 'n',
+        long = "panels",
+        value_name = "N",
+        default_value_t = 160,
+        conflicts_with = "panelling",
+        help_heading = "Panelling (both methods)"
+    )]
+    panels: usize,
+
+    /// Node-distribution method. `pangen` is XFOIL's PANGEN (its PANE / PPAR commands), a
+    /// curvature-weighted spacing tuned by the PPAR parameters below. `cosine` is yFoil's own
+    /// cosine spacing and has no XFOIL equivalent: on a generator it samples the analytic
+    /// section at cosine chord stations; on `repanel` it is an arc-length cosine with the
+    /// --cosine-te-bias warp. [both methods]
+    #[arg(long, value_enum, default_value_t = PanellingMethod::Pangen, conflicts_with = "panelling", help_heading = "Panelling (both methods)")]
+    method: PanellingMethod,
+
+    /// Read the whole panelling from a JSON file instead of flags: the same shape a geometry
+    /// file records under generator.panelling, e.g. {"method": "pangen", "n_nodes": 160,
+    /// "sharp_te": false, "te_gap": null, "curvature_bunching": 1.0, ...}. Cannot be combined
+    /// with any other panelling flag. [both methods]
+    #[arg(long, value_name = "FILE", help_heading = "Panelling (both methods)")]
+    panelling: Option<PathBuf>,
+
+    /// Curvature bunching parameter (XFOIL's CVPAR, PPAR menu P): the curvature attraction
+    /// coefficient is 6 × this, 0 gives uniform arc-length spacing; default 1.0 [pangen]
+    #[arg(
+        long,
+        value_name = "P",
+        conflicts_with = "panelling",
+        help_heading = "PANGEN parameters (--method pangen only; an error with cosine)"
+    )]
+    curvature_bunching: Option<f64>,
+
+    /// Fictitious trailing-edge curvature as a fraction of the leading-edge curvature, bunching
+    /// nodes at the trailing edge (XFOIL's CTERAT, PPAR menu T, "TE/LE panel density ratio");
+    /// default 0.15 [pangen]
+    #[arg(
+        long,
+        value_name = "T",
+        conflicts_with = "panelling",
+        help_heading = "PANGEN parameters (--method pangen only; an error with cosine)"
+    )]
+    te_curvature_ratio: Option<f64>,
+
+    /// Fictitious curvature inside the refinement windows as a fraction of the leading-edge
+    /// curvature (XFOIL's CTRRAT, PPAR menu R); default 0.2 [pangen]
+    #[arg(
+        long,
+        value_name = "R",
+        conflicts_with = "panelling",
+        help_heading = "PANGEN parameters (--method pangen only; an error with cosine)"
+    )]
+    refined_curvature_ratio: Option<f64>,
+
+    /// Upper-surface refinement window as two x/c limits, e.g. 0.2,0.4 (XFOIL's XSREF1 and
+    /// XSREF2, PPAR menu XT); off by default [pangen]
+    #[arg(long, value_name = "X1,X2", value_delimiter = ',', num_args = 1.., conflicts_with = "panelling", help_heading = "PANGEN parameters (--method pangen only; an error with cosine)")]
+    refine_upper: Option<Vec<f64>>,
+
+    /// Lower-surface refinement window as two x/c limits, e.g. 0.3,0.6 (XFOIL's XPREF1 and
+    /// XPREF2, PPAR menu XB); off by default [pangen]
+    #[arg(long, value_name = "X1,X2", value_delimiter = ',', num_args = 1.., conflicts_with = "panelling", help_heading = "PANGEN parameters (--method pangen only; an error with cosine)")]
+    refine_lower: Option<Vec<f64>>,
+
+    /// Warp of the arc-length cosine when repanelling an existing geometry: 1 is a plain cosine,
+    /// below 1 coarser at the trailing edge and finer at the leading edge, above 1 finer at the
+    /// trailing edge (clamped 0.05…2); default 0.15. A generator's cosine sampling has no bias,
+    /// so this is an error there. [cosine]
+    #[arg(
+        long,
+        value_name = "B",
+        conflicts_with = "panelling",
+        help_heading = "Cosine parameters (--method cosine only; an error with pangen)"
+    )]
+    cosine_te_bias: Option<f64>,
+
+    /// After panelling, move the two trailing-edge nodes to their midpoint: a closed edge,
+    /// XFOIL's SHARP path. Cannot be combined with --te-gap. [both methods]
+    #[arg(long, conflicts_with_all = ["te_gap", "te_blend", "panelling"], help_heading = "Trailing edge (both methods, applied after panelling)")]
+    sharp: bool,
+
+    /// After panelling, set the trailing-edge gap in chord units with XFOIL's TGAP: the surfaces
+    /// move apart along the gap direction by ½Δ·(x/c)·exp(−(1 − x/c)(1/blend − 1)) each. Note
+    /// XFOIL applies TGAP to the buffer airfoil before PANE; yFoil applies it to the panelled
+    /// nodes so the blend profile is exact at every node. [both methods]
+    #[arg(
+        long,
+        value_name = "GAP",
+        conflicts_with = "panelling",
+        help_heading = "Trailing edge (both methods, applied after panelling)"
+    )]
+    te_gap: Option<f64>,
+
+    /// Blending distance/c of --te-gap, 0..1 (TGAP's second argument); default 1.0 [both methods]
+    #[arg(
+        long,
+        value_name = "F",
+        requires = "te_gap",
+        conflicts_with = "panelling",
+        help_heading = "Trailing edge (both methods, applied after panelling)"
+    )]
+    te_blend: Option<f64>,
+}
+
+impl PanellingArgs {
+    /// The panelling these flags (or the file) describe. `generator` says whether the caller
+    /// samples an analytic section (where a cosine bias does not apply and `buffer_nodes` may)
+    /// or repanels an existing geometry.
+    fn config(&self, generator: bool) -> Result<PanelConfig, String> {
+        if let Some(file) = &self.panelling {
+            let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+            let value: serde_json::Value =
+                serde_json::from_str(&text).map_err(|e| format!("{}: {e}", file.display()))?;
+            let config = PanelConfig::from_json(&value).map_err(|e| format!("{}: {e}", file.display()))?;
+            if !generator && config.buffer_nodes.is_some() {
+                return Err(format!("{}: {}", file.display(), RepanelError::BufferNodesOnRepanel));
+            }
+            if generator && matches!(config.method, PanelMethod::Cosine(CosineConfig { te_bias: Some(_) })) {
+                return Err(format!(
+                    "{}: te_bias applies to repanelling an existing geometry; a generator's cosine sampling has no bias",
+                    file.display()
+                ));
+            }
+            return Ok(config);
+        }
+        let pangen_flags = [
+            ("--curvature-bunching", self.curvature_bunching.is_some()),
+            ("--te-curvature-ratio", self.te_curvature_ratio.is_some()),
+            ("--refined-curvature-ratio", self.refined_curvature_ratio.is_some()),
+            ("--refine-upper", self.refine_upper.is_some()),
+            ("--refine-lower", self.refine_lower.is_some()),
+        ];
+        let window = |name: &str, v: &Option<Vec<f64>>| -> Result<Option<[f64; 2]>, String> {
+            match v {
+                None => Ok(None),
+                Some(v) if v.len() == 2 => Ok(Some([v[0], v[1]])),
+                Some(v) => Err(format!("{name}: two x/c values are needed (X1,X2), got {}", v.len())),
+            }
+        };
+        let method = match self.method {
+            PanellingMethod::Pangen => {
+                if self.cosine_te_bias.is_some() {
+                    return Err("--cosine-te-bias belongs to --method cosine, not pangen".into());
+                }
+                let d = PangenConfig::default();
+                PanelMethod::Pangen(PangenConfig {
+                    curvature_bunching: self.curvature_bunching.unwrap_or(d.curvature_bunching),
+                    te_curvature_ratio: self.te_curvature_ratio.unwrap_or(d.te_curvature_ratio),
+                    refined_curvature_ratio: self.refined_curvature_ratio.unwrap_or(d.refined_curvature_ratio),
+                    refine_upper: window("--refine-upper", &self.refine_upper)?,
+                    refine_lower: window("--refine-lower", &self.refine_lower)?,
+                })
+            }
+            PanellingMethod::Cosine => {
+                if let Some((flag, _)) = pangen_flags.iter().find(|(_, given)| *given) {
+                    return Err(format!("{flag} belongs to --method pangen, not cosine"));
+                }
+                if generator && self.cosine_te_bias.is_some() {
+                    return Err(
+                        "--cosine-te-bias applies to repanelling an existing geometry; a generator's cosine sampling has no bias"
+                            .into(),
+                    );
+                }
+                PanelMethod::Cosine(CosineConfig {
+                    te_bias: self.cosine_te_bias,
+                })
+            }
+        };
+        let config = PanelConfig {
+            n_nodes: self.panels,
+            sharp_te: self.sharp,
+            te_gap: self.te_gap.map(|gap| TeGap {
+                gap,
+                blend: self.te_blend.unwrap_or(1.0),
+            }),
+            method,
+            buffer_nodes: None,
+        };
+        config.validate().map_err(|e| e.to_string())?;
+        Ok(config)
+    }
+}
+
 #[derive(Subcommand, Debug)]
 enum GeomAction {
-    /// Convert between geometry formats
+    /// Convert between geometry formats: yFoil's JSON (with its provenance record) and the
+    /// Selig `.dat` XFOIL loads. Coordinates round-trip bit-exactly (17 significant figures).
+    #[command(arg_required_else_help = true)]
     Convert {
         /// Input file path
         input: PathBuf,
@@ -295,26 +505,28 @@ enum GeomAction {
         name: String,
     },
 
-    /// Generate a NACA section: 4-digit (2412), 4-digit modified (0012-34), 5-digit (23012,
-    /// 23112 reflex), 16-series (16-212), 6-series (63-415) or 6A-series (64A010)
+    /// Generate a NACA section from its designation, panelled with XFOIL's PANGEN by default.
+    ///
+    /// Every family with a public definition: 4-digit (2412), 4-digit modified (0012-34),
+    /// 5-digit (23012; 23112 reflex), 16-series (16-212), 6-series (63-415, --a for the loading
+    /// extent) and 6A-series (64A010). The thickness is laid perpendicular to the mean line, the
+    /// NACA definition; --thickness vertical is XFOIL's own NACA4/NACA5 model and exists only to
+    /// replicate XFOIL's NACA command. The panelling flags are shared with `repanel`; the output
+    /// file records the section and the panelling under "generator".
+    #[command(arg_required_else_help = true)]
     Naca {
         /// NACA designation (e.g., "0012", "4412", "23015", "16-212", "63-415", "64A010")
         spec: String,
-
-        /// Number of panels
-        #[arg(short = 'n', long, default_value_t = 160)]
-        panels: usize,
 
         /// Output format: json, dat
         #[arg(long, default_value = "json")]
         to: String,
 
-        /// Close the trailing edge (zero TE gap; XFOIL's SHARP path)
-        #[arg(long)]
-        sharp: bool,
-        /// Thickness distribution: perpendicular to the camber line (the NACA definition, yFoil's
-        /// spacing) or vertical (XFOIL's NACA4/NACA5 on its 245-point buffer, then PANGEN to the
-        /// requested panel count; 4- and 5-digit only)
+        /// How the thickness form is laid on the mean line. perpendicular: the NACA definition,
+        /// the default with either panelling method. vertical: XFOIL's NACA4/NACA5 model (XFOIL
+        /// adds the thickness vertically, docs/xfoil-known-issues.md §6.1) on XFOIL's own
+        /// 245-point buffer, always PANGEN-panelled; 4- and 5-digit only, and only for replicating
+        /// XFOIL's NACA command output
         #[arg(long, value_enum, default_value_t = Thickness::Perpendicular)]
         thickness: Thickness,
 
@@ -322,23 +534,21 @@ enum GeomAction {
         #[arg(long)]
         a: Option<f64>,
 
-        /// Set the trailing-edge gap (chord units) with XFOIL's TGAP blending; the section's own
-        /// trailing edge is kept when absent (sharp for the 6-series and Kármán–Trefftz)
-        #[arg(long)]
-        te_gap: Option<f64>,
+        #[command(flatten)]
+        panelling: PanellingArgs,
 
-        /// Blending distance/c of --te-gap, 0..1 (XFOIL's TGAP second argument)
-        #[arg(long, default_value_t = 1.0)]
-        te_blend: f64,
-
-        /// Output file path
+        /// Output file path (default naca<designation>.<format>)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 
-    /// Generate a Kármán–Trefftz section (Joukowski when the trailing-edge angle is 0): the
-    /// conformal map of a circle through ζ = 1, an analytic section with an exact potential-flow
-    /// solution and a sharp trailing edge
+    /// Generate a Kármán–Trefftz section, panelled with XFOIL's PANGEN by default.
+    ///
+    /// The conformal map of a circle through ζ = 1 (Joukowski when the trailing-edge angle is
+    /// 0): an analytic section with an exact potential-flow solution and a sharp trailing edge.
+    /// The circle centre sets thickness (x) and camber (y). The panelling flags are shared with
+    /// `repanel`; the output file records the parameters and the panelling under "generator".
+    #[command(arg_required_else_help = true)]
     KarmanTrefftz {
         /// Circle centre x in the ζ-plane (negative; sets the thickness)
         #[arg(long, default_value_t = -0.1)]
@@ -352,50 +562,44 @@ enum GeomAction {
         #[arg(long, default_value_t = 10.0)]
         te_angle: f64,
 
-        /// Number of panels
-        #[arg(short = 'n', long, default_value_t = 160)]
-        panels: usize,
-
         /// Output format: json, dat
         #[arg(long, default_value = "json")]
         to: String,
 
-        /// Set the trailing-edge gap (chord units) with XFOIL's TGAP blending
-        #[arg(long)]
-        te_gap: Option<f64>,
+        #[command(flatten)]
+        panelling: PanellingArgs,
 
-        /// Blending distance/c of --te-gap, 0..1
-        #[arg(long, default_value_t = 1.0)]
-        te_blend: f64,
-
-        /// Output file path
+        /// Output file path (default karman-trefftz.<format>)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 
-    /// Repanel aerofoil with new point distribution
+    /// Redistribute the nodes of an existing geometry: XFOIL's PANE / PPAR on a loaded airfoil.
+    ///
+    /// The default method is XFOIL's PANGEN, translated line for line: nodes are placed so that
+    /// (1 + 6·CVPAR·curvature)·Δs is the same on every panel, with a fictitious curvature added at
+    /// the trailing edge (CTERAT) and inside optional refinement windows (CTRRAT, XSREF, XPREF)
+    /// and the curvature field smoothed first. The PPAR parameters are the flags below, by
+    /// descriptive names with the XFOIL names in their help. `--method cosine` is yFoil's own
+    /// arc-length cosine spacing with no XFOIL equivalent. The input is a `.json` or `.dat`
+    /// geometry; the output is JSON only, <stem>_repanelled.json beside the input by default,
+    /// carrying the panelling under "generator".
+    #[command(arg_required_else_help = true)]
     Repanel {
-        /// Input file path
+        /// Input geometry file (.json or .dat)
         input: PathBuf,
 
-        /// Target number of panels
-        #[arg(short = 'n', long, default_value_t = 160)]
-        panels: usize,
+        #[command(flatten)]
+        panelling: PanellingArgs,
 
-        /// Repanelling method: curvature (XFOIL's PANE) or cosine (modified cosine spacing)
-        #[arg(long, default_value = "curvature")]
-        method: String,
-
-        /// TE/LE panel density ratio (XFOIL's CTERAT; cosine method only)
-        #[arg(long, default_value_t = 0.15)]
-        te_le_ratio: f64,
-
-        /// Output file path
+        /// Output file path (JSON; default <input stem>_repanelled.json beside the input)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 
-    /// Display geometry information
+    /// Display geometry information: node count, chord, extents, thickness, trailing-edge gap,
+    /// leading edge, arc length and curvature; with -o the full per-node distributions as JSON
+    #[command(arg_required_else_help = true)]
     Info {
         /// Input file path
         input: PathBuf,
@@ -927,36 +1131,15 @@ fn handle_plot(_action: PlotAction) {
     std::process::exit(1);
 }
 
-/// Apply the optional trailing-edge treatments of the generators: `--sharp` (move both TE nodes
-/// to their midpoint) and `--te-gap` (XFOIL's TGAP), recording each in the provenance record.
-fn finish_geometry(geometry: Geometry, sharp: bool, te_gap: Option<f64>, te_blend: f64) -> Geometry {
-    let mut geometry = geometry;
-    if sharp {
-        geometry = geometry.sharpen();
-        if let Some(rec) = geometry.generator.as_mut() {
-            rec["sharp_te"] = serde_json::Value::Bool(true);
-            rec["sharpened"] = serde_json::Value::Bool(true);
-        }
-    }
-    if let Some(gap) = te_gap {
-        geometry = set_te_gap(&geometry, gap, te_blend);
-        if let Some(rec) = geometry.generator.as_mut() {
-            rec["te_gap"] = serde_json::json!({ "gap": gap, "blend": te_blend, "method": "TGAP" });
-            rec["sharp_te"] = serde_json::Value::Bool(gap == 0.0);
-        }
-    }
-    geometry
-}
-
-/// Write a generated section as JSON or `.dat`
-fn write_generated(geometry: &Geometry, name: &str, panels: usize, to: &str, output_path: &Path) {
+/// Write a generated or repanelled geometry as JSON or `.dat`
+fn write_geometry(geometry: &Geometry, name: &str, verb: &str, to: &str, output_path: &Path) {
     match to {
         "json" => {
             if let Err(e) = write_geometry_to_json(geometry, output_path) {
                 eprintln!("Error writing JSON: {}", e);
                 std::process::exit(1);
             }
-            println!("Generated {} with {} panels", name, panels);
+            println!("{verb} {} with {} nodes", name, geometry.x.len());
             println!("Wrote JSON to {}", output_path.display());
         }
         "dat" => {
@@ -964,7 +1147,7 @@ fn write_generated(geometry: &Geometry, name: &str, panels: usize, to: &str, out
                 eprintln!("Error writing DAT: {}", e);
                 std::process::exit(1);
             }
-            println!("Generated {} with {} panels", name, panels);
+            println!("{verb} {} with {} nodes", name, geometry.x.len());
             println!("Wrote DAT to {}", output_path.display());
         }
         _ => {
@@ -972,6 +1155,11 @@ fn write_generated(geometry: &Geometry, name: &str, panels: usize, to: &str, out
             std::process::exit(1);
         }
     }
+}
+
+fn fail_with(context: &str, e: impl std::fmt::Display) -> ! {
+    eprintln!("{context}: {e}");
+    std::process::exit(1);
 }
 
 fn handle_geom(action: GeomAction) {
@@ -1015,33 +1203,42 @@ fn handle_geom(action: GeomAction) {
 
         GeomAction::Naca {
             spec,
-            panels,
             to,
-            sharp,
             thickness,
             a,
-            te_gap,
-            te_blend,
+            panelling,
             output,
         } => {
-            let fail = |e: &dyn std::fmt::Display| -> ! {
-                eprintln!("Error generating NACA aerofoil: {}", e);
-                std::process::exit(1);
-            };
-            let section = Section::from_designation(&spec).unwrap_or_else(|e| fail(&e));
+            let context = "Error generating NACA aerofoil";
+            let section = Section::from_designation(&spec).unwrap_or_else(|e| fail_with(context, e));
             let section = match a {
-                Some(a) => section.with_a(a).unwrap_or_else(|e| fail(&e)),
+                Some(a) => section.with_a(a).unwrap_or_else(|e| fail_with(context, e)),
                 None => section,
             };
+            let config = panelling.config(true).unwrap_or_else(|e| fail_with(context, e));
             let geometry = match thickness {
-                Thickness::Perpendicular => section.geometry(panels),
-                Thickness::Vertical => match section.series {
-                    Series::FourDigit => naca_4digit(&spec, panels, thickness).unwrap_or_else(|e| fail(&e)),
-                    Series::FiveDigit => naca_5digit(&spec, panels, thickness).unwrap_or_else(|e| fail(&e)),
-                    _ => fail(&"--thickness vertical is XFOIL's NACA4/NACA5 model: 4- and 5-digit sections only"),
-                },
+                Thickness::Perpendicular => section.panelled(&config).unwrap_or_else(|e| fail_with(context, e)),
+                Thickness::Vertical => {
+                    // XFOIL's own model: its 245-point NACA4/NACA5 buffer, always PANGEN-panelled
+                    if matches!(config.method, PanelMethod::Cosine(_)) {
+                        fail_with(context, "--thickness vertical is XFOIL's NACA4/NACA5 model and is always panelled with PANGEN (--method pangen)");
+                    }
+                    let buffer = match section.series {
+                        Series::FourDigit => naca_4digit_vertical(&spec),
+                        Series::FiveDigit => naca_5digit_vertical(&spec),
+                        _ => fail_with(
+                            context,
+                            "--thickness vertical is XFOIL's NACA4/NACA5 model: 4- and 5-digit sections only",
+                        ),
+                    }
+                    .unwrap_or_else(|e| fail_with(context, e));
+                    let mut g = repanel(&buffer, &config).unwrap_or_else(|e| fail_with(context, e));
+                    if let Some(rec) = g.generator.as_mut() {
+                        rec["panelling"]["buffer_nodes"] = serde_json::json!(buffer.x.len());
+                    }
+                    g
+                }
             };
-            let geometry = finish_geometry(geometry, sharp, te_gap, te_blend);
 
             let name = section.designation.clone();
             let file_stem: String = spec
@@ -1050,72 +1247,51 @@ fn handle_geom(action: GeomAction) {
                 .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
                 .collect();
             let output_path = output.unwrap_or_else(|| PathBuf::from(format!("naca{}.{}", file_stem, to)));
-            write_generated(&geometry, &name, panels, &to, &output_path);
+            write_geometry(&geometry, &name, "Generated", &to, &output_path);
         }
 
         GeomAction::KarmanTrefftz {
             x_centre,
             y_centre,
             te_angle,
-            panels,
             to,
-            te_gap,
-            te_blend,
+            panelling,
             output,
         } => {
-            let section = KarmanTrefftz::new(x_centre, y_centre, te_angle).unwrap_or_else(|e| {
-                eprintln!("Error generating Kármán–Trefftz aerofoil: {}", e);
-                std::process::exit(1);
-            });
-            let geometry = finish_geometry(section.geometry(panels), false, te_gap, te_blend);
+            let context = "Error generating Kármán–Trefftz aerofoil";
+            let section = KarmanTrefftz::new(x_centre, y_centre, te_angle).unwrap_or_else(|e| fail_with(context, e));
+            let config = panelling.config(true).unwrap_or_else(|e| fail_with(context, e));
+            let geometry = section.panelled(&config).unwrap_or_else(|e| fail_with(context, e));
             let output_path = output.unwrap_or_else(|| PathBuf::from(format!("karman-trefftz.{}", to)));
-            write_generated(&geometry, &section.designation(), panels, &to, &output_path);
+            write_geometry(&geometry, &section.designation(), "Generated", &to, &output_path);
         }
 
         GeomAction::Repanel {
             input,
-            panels,
-            method,
-            te_le_ratio,
+            panelling,
             output,
         } => {
+            let context = "Error repanelling";
+            let config = panelling.config(false).unwrap_or_else(|e| fail_with(context, e));
             let geometry = read_geometry_auto(&input);
-
-            let repanelled = match method.to_lowercase().as_str() {
-                "curvature" => {
-                    // XFOIL's curvature-based PANE algorithm
-                    let config = PaneConfig::default();
-                    repanel_by_curvature(&geometry, panels, &config)
-                }
-                "cosine" => {
-                    // Modified cosine spacing
-                    repanel_cosine(&geometry, panels, te_le_ratio)
-                }
-                _ => {
-                    eprintln!("Unknown repanelling method: {}. Use 'curvature' or 'cosine'", method);
-                    std::process::exit(1);
-                }
-            };
+            let repanelled = repanel(&geometry, &config).unwrap_or_else(|e| fail_with(context, e));
 
             let output_path = output.unwrap_or_else(|| {
                 let mut p = input.clone();
-                let stem = p.file_stem().unwrap().to_str().unwrap();
-                p.set_file_name(format!("{}_repaneled.json", stem));
+                let stem = p.file_stem().unwrap().to_str().unwrap().to_string();
+                p.set_file_name(format!("{stem}_repanelled.json"));
                 p
             });
-
             if let Err(e) = write_geometry_to_json(&repanelled, &output_path) {
-                eprintln!("Error writing output: {}", e);
-                std::process::exit(1);
+                fail_with("Error writing output", e);
             }
-
             println!(
-                "Repanelled from {} to {} points using {} method",
+                "Repanelled from {} to {} nodes with {}",
                 geometry.x.len(),
                 repanelled.x.len(),
-                method
+                config.method_name()
             );
-            println!("Wrote to {}", output_path.display());
+            println!("Wrote JSON to {}", output_path.display());
         }
 
         GeomAction::Info { input, output } => {

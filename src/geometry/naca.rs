@@ -4,7 +4,7 @@
 //! delegate to it.
 
 use super::airfoil::Geometry;
-use super::panel::{repanel_by_curvature, PaneConfig};
+use super::panel::{repanel_by_curvature, PangenConfig};
 use super::series::Section;
 
 /// How a NACA section's thickness distribution is applied to its camber line.
@@ -39,7 +39,7 @@ pub enum Thickness {
 pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
     if thickness == Thickness::Vertical {
         let buffer = naca_4digit_vertical(designation)?;
-        return Ok(repanel_by_curvature(&buffer, n_panels, &PaneConfig::default()));
+        return Ok(repanel_by_curvature(&buffer, n_panels, &PangenConfig::default()));
     }
     if designation.len() != 4 {
         return Err(NacaError::InvalidDesignation(
@@ -68,7 +68,7 @@ pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
 pub fn naca_5digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
     if thickness == Thickness::Vertical {
         let buffer = naca_5digit_vertical(designation)?;
-        return Ok(repanel_by_curvature(&buffer, n_panels, &PaneConfig::default()));
+        return Ok(repanel_by_curvature(&buffer, n_panels, &PangenConfig::default()));
     }
     if designation.len() != 5 {
         return Err(NacaError::InvalidDesignation(
@@ -135,6 +135,21 @@ fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
     }
 }
 
+/// The provenance record of XFOIL's own NACA model: the divergence from the NACA definition
+/// (thickness applied vertically, `docs/xfoil-known-issues.md` §6.1) is stated in the file
+fn xfoil_naca_record(series: &str, designation: &str, buffer: &str) -> serde_json::Value {
+    serde_json::json!({
+        "yfoil": env!("CARGO_PKG_VERSION"),
+        "series": series,
+        "designation": format!("NACA {designation}"),
+        "thickness_applied": "vertical",
+        "buffer": buffer,
+        "buffer_nodes": 2 * XFOIL_NACA_NSIDE - 1,
+        "sharp_te": false,
+        "references": ["jacobs1933", "jacobs1935"],
+    })
+}
+
 /// `NACA4` as XFOIL runs it (vertical thickness, AN = 1.5 spacing, 2·NSIDE − 1 = 245 points).
 #[doc(alias = "NACA4")]
 pub fn naca_4digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
@@ -164,7 +179,9 @@ pub fn naca_4digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
             }
         })
         .collect();
-    Ok(xfoil_naca_assemble(&xx, &yt, &yc))
+    let mut g = xfoil_naca_assemble(&xx, &yt, &yc);
+    g.generator = Some(xfoil_naca_record("naca_4_digit", designation, "NACA4"));
+    Ok(g)
 }
 
 /// `NACA5` as XFOIL runs it (210xx … 250xx camber lines by its M/C table, vertical thickness).
@@ -208,7 +225,9 @@ pub fn naca_5digit_vertical(designation: &str) -> Result<Geometry, NacaError> {
             }
         })
         .collect();
-    Ok(xfoil_naca_assemble(&xx, &yt, &yc))
+    let mut g = xfoil_naca_assemble(&xx, &yt, &yc);
+    g.generator = Some(xfoil_naca_record("naca_5_digit", designation, "NACA5"));
+    Ok(g)
 }
 
 #[cfg(test)]
