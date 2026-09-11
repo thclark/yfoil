@@ -2,7 +2,7 @@
   "case": {
     "foil": "xfoil-naca:0012",
     "geometry_only": true,
-    "n_panels": 120,
+    "n_nodes": 120,
     "name": "pangen_naca0012_n120_bunching",
     "ppar": {
       "cterat": 0.05,

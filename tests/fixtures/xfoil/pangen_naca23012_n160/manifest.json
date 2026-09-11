@@ -2,8 +2,9 @@
   "case": {
     "foil": "xfoil-naca:23012",
     "geometry_only": true,
-    "n_panels": 160,
-    "name": "pangen_naca23012_n160"
+    "n_nodes": 160,
+    "name": "pangen_naca23012_n160",
+    "ppar": null
   },
   "generated_by": "cargo xtask fixtures",
   "xfoil_ref": [

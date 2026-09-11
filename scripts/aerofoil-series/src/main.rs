@@ -123,7 +123,7 @@ pub fn write_metadata(run_dir: &Path, series: &[&str]) {
         "dirty": dirty,
         "yfoil": env!("CARGO_PKG_VERSION"),
         "series": series,
-        "n_panels": study::N_PANELS,
+        "n_nodes": study::N_NODES,
         "axes": { "x": X_RANGE, "y": Y_RANGE },
         "naca456_fixtures": naca456_manifest,
     });

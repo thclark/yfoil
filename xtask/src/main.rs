@@ -25,7 +25,7 @@ struct Cases {
 struct Case {
     name: String,
     foil: String,
-    n_panels: usize,
+    n_nodes: usize,
     alphas: Vec<f64>,
     #[serde(default)]
     alphas_after_reinit: Vec<f64>,
@@ -232,14 +232,11 @@ fn fixtures(flags: &[String]) {
 
         if case.geometry_only {
             // XFOIL's own NACA generator and PANGEN: `NACA dddd` (which calls PANGEN with the
-            // default NPAN) then `PPAR / N n` to repanel at the case's n_panels
+            // default NPAN) then `PPAR / N n` to repanel at the case's n_nodes
             let (kind, spec) = case.foil.split_once(':').expect("airfoil = \"xfoil-naca:0012\"");
             assert_eq!(kind, "xfoil-naca", "geometry_only cases use xfoil-naca:<digits>");
             let ppar = case.ppar.as_ref().map(Ppar::script_lines).unwrap_or_default();
-            let script = format!(
-                "PLOP\nG F\n\nNACA {spec}\nPPAR\nN {}\n{ppar}\n\n\nQUIT\n",
-                case.n_panels
-            );
+            let script = format!("PLOP\nG F\n\nNACA {spec}\nPPAR\nN {}\n{ppar}\n\n\nQUIT\n", case.n_nodes);
             fs::write(work.join("xfoil.inp"), &script).unwrap();
             let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
             let out = fs::File::create(work.join("stdout.txt")).unwrap();
@@ -256,7 +253,7 @@ fn fixtures(flags: &[String]) {
                 continue;
             }
             let manifest = serde_json::json!({
-                "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "geometry_only": true, "ppar": case.ppar },
+                "case": { "name": case.name, "foil": case.foil, "n_nodes": case.n_nodes, "geometry_only": true, "ppar": case.ppar },
                 "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
                 "generated_by": "cargo xtask fixtures",
             });
@@ -310,7 +307,7 @@ fn fixtures(flags: &[String]) {
         );
         // `--method cosine`: the analytic cosine sampling every tracked fixture was generated
         // with (the CLI's default is now PANGEN)
-        let npan = case.n_panels.to_string();
+        let npan = case.n_nodes.to_string();
         let mut gargs = vec![
             "geometry",
             "naca",
@@ -464,7 +461,7 @@ fn fixtures(flags: &[String]) {
 
         // 4. manifest
         let manifest = serde_json::json!({
-            "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "alphas": case.alphas,
+            "case": { "name": case.name, "foil": case.foil, "n_nodes": case.n_nodes, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
                       "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls, "tgap": case.tgap },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),

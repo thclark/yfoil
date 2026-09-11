@@ -5,7 +5,7 @@
 
 use yfoil::geometry::{Geometry, KarmanTrefftz, Section};
 
-pub const N_PANELS: usize = 160;
+pub const N_NODES: usize = 160;
 
 /// One curve of a panel
 pub struct Member {
@@ -62,7 +62,7 @@ fn naca(designation: &str, value: f64, label: String) -> Member {
         label,
         slug: slugify(&s.designation),
         designation: s.designation.clone(),
-        geometry: s.geometry(N_PANELS),
+        geometry: s.geometry(N_NODES),
     }
 }
 
@@ -76,7 +76,7 @@ fn naca_a(designation: &str, a: f64, value: f64, label: String) -> Member {
         label,
         slug: slugify(&s.designation),
         designation: s.designation.clone(),
-        geometry: s.geometry(N_PANELS),
+        geometry: s.geometry(N_NODES),
     }
 }
 
@@ -87,7 +87,7 @@ fn kt(x_centre: f64, y_centre: f64, te_angle: f64, value: f64, label: String) ->
         label,
         slug: format!("kt_xc{x_centre}_yc{y_centre}_tau{te_angle}").replace('-', "m"),
         designation: k.designation(),
-        geometry: k.geometry(N_PANELS),
+        geometry: k.geometry(N_NODES),
     }
 }
 
