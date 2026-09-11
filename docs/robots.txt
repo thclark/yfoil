@@ -11,3 +11,15 @@
 User-agent: *
 Disallow: /
 Allow: /llms.txt
+
+# Link-preview crawlers fetch a page only when someone shares its URL, to read the
+# Open Graph tags and the card image (overrides/main.html). They do not index, and the
+# ones that honour robots.txt would otherwise show a bare link.
+User-agent: Twitterbot
+User-agent: facebookexternalhit
+User-agent: LinkedInBot
+User-agent: Slackbot
+User-agent: Slackbot-LinkExpanding
+User-agent: Discordbot
+User-agent: TelegramBot
+Allow: /
