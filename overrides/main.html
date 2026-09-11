@@ -6,10 +6,53 @@
   and this meta tag is the belt to that pair of braces, because a Disallow alone does
   not remove pages a search engine already knows about. Remove the tag together with
   the Disallow in docs/robots.txt when the site opens.
+
+  The Open Graph and Twitter card tags give every page a link preview when it is
+  shared. There are two cards, both stills of the landing-page hero with the whole
+  section in frame, and rasters because no platform renders an SVG card:
+
+    assets/social-card.jpg         1200 x 630, the 1.91:1 large card; listed first,
+                                   so it is the one most platforms take
+    assets/social-card-square.jpg  1200 x 1200, for the square thumbnails, where a
+                                   centre crop of the wide card would cut the section
+                                   off at both ends; hero.js re-framed with the section
+                                   centred (FOIL_X = FOIL_Y = 0.5, CHORD_FRACTION = 0.72)
+
+  The preview crawlers are let through robots.txt, which search engines still are not.
 -#}
 {% extends "base.html" %}
 
 {% block extrahead %}
   {{ super() }}
   <meta name="robots" content="noindex, nofollow">
+  {%- if page.meta and page.meta.title %}
+    {%- set card_title = page.meta.title ~ " - " ~ config.site_name %}
+  {%- elif page.title and not page.is_homepage %}
+    {%- set card_title = (page.title | striptags) ~ " - " ~ config.site_name %}
+  {%- else %}
+    {%- set card_title = config.site_name %}
+  {%- endif %}
+  {%- if page.meta and page.meta.description %}
+    {%- set card_description = page.meta.description %}
+  {%- else %}
+    {%- set card_description = config.site_description %}
+  {%- endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ card_title }}">
+  <meta property="og:description" content="{{ card_description }}">
+  {%- if page.canonical_url %}
+  <meta property="og:url" content="{{ page.canonical_url }}">
+  {%- endif %}
+  <meta property="og:image" content="{{ config.site_url }}assets/social-card.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Streamlines of potential flow past a cambered aerofoil, on a dark ground">
+  <meta property="og:image" content="{{ config.site_url }}assets/social-card-square.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="1200">
+  <meta property="og:image:alt" content="Streamlines of potential flow past a cambered aerofoil, on a dark ground">
+  <meta name="twitter:card" content="summary_large_image">
 {% endblock %}
