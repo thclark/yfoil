@@ -53,17 +53,19 @@ nav = [
       "xfoil-reference.md",
     ] },
   ] },
-  { "Validation" = [
-    "validation/README.md",
-    "validation/coverage.md",
-    "validation/noise-floor.md",
-    { "Geometry" = "validation/geometry/README.md" },
-    { "Subroutines" = [
-      "validation/subroutines/README.md",
-      "validation/subroutines/closure.md",
-      "validation/subroutines/transition.md",
-    ] },
-  ] },
+  # The Validation tab is hidden until its pages are presentable. The pages are still
+  # built and reachable by URL, just not listed in the navigation. Uncomment to restore.
+  # { "Validation" = [
+  #   "validation/README.md",
+  #   "validation/coverage.md",
+  #   "validation/noise-floor.md",
+  #   { "Geometry" = "validation/geometry/README.md" },
+  #   { "Subroutines" = [
+  #     "validation/subroutines/README.md",
+  #     "validation/subroutines/closure.md",
+  #     "validation/subroutines/transition.md",
+  #   ] },
+  # ] },
 ]
 
 [project.theme]
