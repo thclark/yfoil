@@ -1,0 +1,13 @@
+# yFoil documentation (https://yfoil.net/)
+#
+# The project is a PROTOTYPE and the site is not yet open for crawling or indexing.
+# The one exception is llms.txt, which exists precisely to tell automated readers what
+# this is and to check back later.
+#
+# Zensical copies this file verbatim from docs/ to the site root; it does not generate
+# or rewrite it (https://github.com/zensical/zensical/issues/263). When the site opens,
+# replace the Disallow with a Sitemap line: the sitemap is already built at /sitemap.xml.
+
+User-agent: *
+Disallow: /
+Allow: /llms.txt
