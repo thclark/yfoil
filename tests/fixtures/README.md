@@ -47,7 +47,7 @@ Test case parameters:
   "alpha_deg": 2.0,
   "reynolds": 1000000.0,
   "mach": 0.0,
-  "n_panels": 160,
+  "n_nodes": 160,
   "n_crit": 9.0
 }
 ```

@@ -1,7 +1,7 @@
 {
   "description": "NACA 0012 panel coordinates from XFOIL PANE with 160 panels, CTERAT=0.5",
   "airfoil": "NACA 0012",
-  "n_panels": 160,
+  "n_nodes": 160,
   "source": "XFOIL 6.99 - NACA 0012 -> PPAR T 0.5 -> PANE",
   "te_gap": 0.00252,
   "cterat": 0.5,

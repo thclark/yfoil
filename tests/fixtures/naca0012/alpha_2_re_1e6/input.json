@@ -3,6 +3,6 @@
   "alpha_deg": 2.0,
   "reynolds": 1000000.0,
   "mach": 0.0,
-  "n_panels": 160,
+  "n_nodes": 160,
   "ncrit": 9.0
 }
