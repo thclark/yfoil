@@ -223,8 +223,8 @@ impl KarmanTrefftz {
 
     /// The panelled section: cosine stations in x, trailing edge → upper → leading edge →
     /// lower → trailing edge, with the provenance record attached
-    pub fn geometry(&self, n_panels: usize) -> Geometry {
-        let stations = cosine_stations(n_panels);
+    pub fn geometry(&self, n_nodes: usize) -> Geometry {
+        let stations = cosine_stations(n_nodes);
         let pts = self.surface_at(&stations);
         let n = pts.len();
         let mut x = Vec::with_capacity(2 * n);
@@ -247,7 +247,7 @@ impl KarmanTrefftz {
 
     /// The section panelled as `config` says: `cosine` is the analytic sampling of
     /// [`Self::geometry`] at `n_nodes` chord stations (no bias applies; the record says so);
-    /// `pangen` samples the section at `buffer_nodes` (default [`PANGEN_BUFFER_NODES`]) and runs
+    /// `pangen` samples the section at `n_buffer_nodes` (default [`PANGEN_BUFFER_NODES`]) and runs
     /// XFOIL's PANGEN on that buffer. The trailing-edge treatment follows the distribution, and
     /// the record gains `panelling`.
     pub fn panelled(&self, config: &PanelConfig) -> Result<Geometry, RepanelError> {
@@ -262,13 +262,13 @@ impl KarmanTrefftz {
                 Ok(out)
             }
             PanelMethod::Pangen(_) => {
-                let buffer_nodes = config.buffer_nodes.unwrap_or(PANGEN_BUFFER_NODES);
-                let buffer = self.geometry(buffer_nodes);
+                let n_buffer_nodes = config.n_buffer_nodes.unwrap_or(PANGEN_BUFFER_NODES);
+                let buffer = self.geometry(n_buffer_nodes);
                 let mut on_buffer = *config;
-                on_buffer.buffer_nodes = None;
+                on_buffer.n_buffer_nodes = None;
                 let mut out = repanel(&buffer, &on_buffer)?;
                 let mut used = *config;
-                used.buffer_nodes = Some(buffer_nodes);
+                used.n_buffer_nodes = Some(n_buffer_nodes);
                 record_panelling(&mut out, &used);
                 Ok(out)
             }

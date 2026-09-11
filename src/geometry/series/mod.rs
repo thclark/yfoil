@@ -323,10 +323,10 @@ impl Section {
         )
     }
 
-    /// The panelled section: `n_panels` nodes (even) at cosine stations in x, trailing edge →
+    /// The panelled section: `n_nodes` nodes (even) at cosine stations in x, trailing edge →
     /// upper → leading edge (straddled) → lower → trailing edge, with the provenance record
-    pub fn geometry(&self, n_panels: usize) -> Geometry {
-        let stations = cosine_stations(n_panels);
+    pub fn geometry(&self, n_nodes: usize) -> Geometry {
+        let stations = cosine_stations(n_nodes);
         let n_half = stations.len();
         let mut x_upper = Vec::with_capacity(n_half);
         let mut y_upper = Vec::with_capacity(n_half);
@@ -359,7 +359,7 @@ impl Section {
 
     /// The section panelled as `config` says: `cosine` is the analytic sampling of
     /// [`Self::geometry`] at `n_nodes` chord stations (no bias applies; the record says so);
-    /// `pangen` samples the section at `buffer_nodes` (default [`PANGEN_BUFFER_NODES`]) and runs
+    /// `pangen` samples the section at `n_buffer_nodes` (default [`PANGEN_BUFFER_NODES`]) and runs
     /// XFOIL's PANGEN on that buffer. The trailing-edge treatment follows the distribution, and
     /// the record gains `panelling`.
     pub fn panelled(&self, config: &PanelConfig) -> Result<Geometry, RepanelError> {
@@ -374,13 +374,13 @@ impl Section {
                 Ok(out)
             }
             PanelMethod::Pangen(_) => {
-                let buffer_nodes = config.buffer_nodes.unwrap_or(PANGEN_BUFFER_NODES);
-                let buffer = self.geometry(buffer_nodes);
+                let n_buffer_nodes = config.n_buffer_nodes.unwrap_or(PANGEN_BUFFER_NODES);
+                let buffer = self.geometry(n_buffer_nodes);
                 let mut on_buffer = *config;
-                on_buffer.buffer_nodes = None;
+                on_buffer.n_buffer_nodes = None;
                 let mut out = repanel(&buffer, &on_buffer)?;
                 let mut used = *config;
-                used.buffer_nodes = Some(buffer_nodes);
+                used.n_buffer_nodes = Some(n_buffer_nodes);
                 record_panelling(&mut out, &used);
                 Ok(out)
             }
@@ -410,12 +410,12 @@ fn four_digit_parameters(s: &str) -> (f64, f64, f64) {
     (m, p, t)
 }
 
-/// The chord stations of one surface for an `n_panels`-node section, leading edge first: the
+/// The chord stations of one surface for an `n_nodes`-node section, leading edge first: the
 /// cosine distribution `x = ½(1 − cos β)` with β = π(i + ½)/(n/2 − ½), which puts a node exactly
 /// at the trailing edge and straddles the leading edge (no node at x = 0, as XFOIL's `PANE`
 /// does; a node there has zero vortex strength and the boundary layer fails to start).
-pub fn cosine_stations(n_panels: usize) -> Vec<f64> {
-    let n_half = n_panels / 2;
+pub fn cosine_stations(n_nodes: usize) -> Vec<f64> {
+    let n_half = n_nodes / 2;
     (0..n_half)
         .map(|i| {
             let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 - 0.5);

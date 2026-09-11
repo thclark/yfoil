@@ -24,7 +24,7 @@ pub enum Thickness {
 ///
 /// # Arguments
 /// * `designation` - 4-digit string (e.g., "0012", "4412")
-/// * `n_panels` - Number of panel points to generate
+/// * `n_nodes` - Number of panel nodes to generate
 ///
 /// * `thickness` - perpendicular to the camber line (the NACA definition) or vertical (XFOIL's)
 ///
@@ -36,17 +36,17 @@ pub enum Thickness {
 /// - Second digit: position of maximum camber in tenths of chord
 /// - Last two digits: maximum thickness as percentage of chord
 #[doc(alias = "NACA4")]
-pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
+pub fn naca_4digit(designation: &str, n_nodes: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
     if thickness == Thickness::Vertical {
         let buffer = naca_4digit_vertical(designation)?;
-        return Ok(repanel_by_curvature(&buffer, n_panels, &PangenConfig::default()));
+        return Ok(repanel_by_curvature(&buffer, n_nodes, &PangenConfig::default()));
     }
     if designation.len() != 4 {
         return Err(NacaError::InvalidDesignation(
             "NACA 4-digit designation must be exactly 4 characters".to_string(),
         ));
     }
-    Ok(Section::from_designation(designation)?.geometry(n_panels))
+    Ok(Section::from_designation(designation)?.geometry(n_nodes))
 }
 
 /// Translates XFOIL's `NACA5`.
@@ -55,7 +55,7 @@ pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
 ///
 /// # Arguments
 /// * `designation` - 5-digit string (e.g., "23012", "23015")
-/// * `n_panels` - Number of panel points to generate
+/// * `n_nodes` - Number of panel nodes to generate
 ///
 /// # Format
 /// - First digit: design lift coefficient * (2/3) * 10
@@ -65,17 +65,17 @@ pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
 ///
 /// Common examples: 23012, 23015, 24112 (reflex)
 #[doc(alias = "NACA5")]
-pub fn naca_5digit(designation: &str, n_panels: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
+pub fn naca_5digit(designation: &str, n_nodes: usize, thickness: Thickness) -> Result<Geometry, NacaError> {
     if thickness == Thickness::Vertical {
         let buffer = naca_5digit_vertical(designation)?;
-        return Ok(repanel_by_curvature(&buffer, n_panels, &PangenConfig::default()));
+        return Ok(repanel_by_curvature(&buffer, n_nodes, &PangenConfig::default()));
     }
     if designation.len() != 5 {
         return Err(NacaError::InvalidDesignation(
             "NACA 5-digit designation must be exactly 5 characters".to_string(),
         ));
     }
-    Ok(Section::from_designation(designation)?.geometry(n_panels))
+    Ok(Section::from_designation(designation)?.geometry(n_nodes))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -144,7 +144,7 @@ fn xfoil_naca_record(series: &str, designation: &str, buffer: &str) -> serde_jso
         "designation": format!("NACA {designation}"),
         "thickness_applied": "vertical",
         "buffer": buffer,
-        "buffer_nodes": 2 * XFOIL_NACA_NSIDE - 1,
+        "n_buffer_nodes": 2 * XFOIL_NACA_NSIDE - 1,
         "sharp_te": false,
         "references": ["jacobs1933", "jacobs1935"],
     })

@@ -1309,9 +1309,10 @@ base names are listed with the sensitivities XFOIL carries.
 | OPER ALFA | `analyse` | |
 | ITER | `--max-iterations` | |
 | VISC | keep | |
-| VPAR N | `--ncrit` (no short flag) | `-n` is `--panels` under `geometry` |
+| VPAR N | `--ncrit` (no short flag) | `-n` is `--nodes` under `geometry` |
 | PANE, PPAR | `geometry repanel --method pangen` (the default; also on `naca` and `karman-trefftz`) | `--method cosine` is yFoil's own, no XFOIL equivalent |
-| NPAN (PPAR `N`) | `-n`, `--panels`; `PanelConfig::n_nodes` | |
+| NPAN (PPAR `N`) | `-n`, `--nodes`; `PanelConfig::n_nodes` | XFOIL's "number of panel nodes"; N nodes = N − 1 surface panels + the TE panel |
+| — | `PanelConfig::n_buffer_nodes` | generators only: the analytic section is sampled at this many nodes before PANGEN (default 246, XFOIL's own NACA buffer density) |
 | CVPAR (PPAR `P`) | `--curvature-bunching`; `PangenConfig::curvature_bunching` | attraction coefficient 6·CVPAR |
 | CTERAT (PPAR `T`) | `--te-curvature-ratio`; `PangenConfig::te_curvature_ratio` | fictitious TE curvature / averaged LE curvature |
 | CTRRAT (PPAR `R`) | `--refined-curvature-ratio`; `PangenConfig::refined_curvature_ratio` | fictitious curvature in the windows / LE curvature |

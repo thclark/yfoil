@@ -355,11 +355,14 @@ fn panelling_conflicts_are_rejected_by_flags_and_by_file() {
             "repanel",
             &src,
             "--panelling",
-            &file("d.json", r#"{"method": "pangen", "n_nodes": 100, "buffer_nodes": 246}"#),
+            &file(
+                "d.json",
+                r#"{"method": "pangen", "n_nodes": 100, "n_buffer_nodes": 246}"#,
+            ),
             "-o",
             &x,
         ],
-        "buffer_nodes applies to generated sections only",
+        "n_buffer_nodes applies to generated sections only",
     );
 }
 
@@ -381,7 +384,7 @@ fn generators_default_to_pangen_and_cosine_is_the_analytic_sampling() {
     assert_eq!(g["x"].as_array().unwrap().len(), 120);
     let p = &g["generator"]["panelling"];
     assert_eq!(p["method"], "pangen");
-    assert_eq!(p["buffer_nodes"], 246);
+    assert_eq!(p["n_buffer_nodes"], 246);
     assert_eq!(p["te_curvature_ratio"], 0.25);
     assert_eq!(g["generator"]["designation"], "NACA 63-415");
 
@@ -454,7 +457,7 @@ fn vertical_thickness_is_xfoil_model_always_pangen() {
     let g = json(&c.path("v.json"));
     assert_eq!(g["generator"]["thickness_applied"], "vertical");
     assert_eq!(g["generator"]["buffer"], "NACA4");
-    assert_eq!(g["generator"]["panelling"]["buffer_nodes"], 245);
+    assert_eq!(g["generator"]["panelling"]["n_buffer_nodes"], 245);
     assert_eq!(g["generator"]["panelling"]["te_curvature_ratio"], 0.3);
     fails(
         &[

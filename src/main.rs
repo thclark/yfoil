@@ -296,17 +296,18 @@ enum PanellingMethod {
 /// flags or as one JSON file (`--panelling`) in the shape the geometry file records them.
 #[derive(clap::Args, Debug, Clone)]
 struct PanellingArgs {
-    /// Number of panel nodes (XFOIL's NPAN). The cosine repanelling of an existing geometry
-    /// writes N + 1 nodes, its historic behaviour. [both methods]
+    /// Number of panel nodes, trailing edge round to trailing edge (XFOIL's NPAN, "number of
+    /// panel nodes"). The cosine repanelling of an existing geometry writes N + 1 nodes, its
+    /// historic behaviour. [both methods]
     #[arg(
         short = 'n',
-        long = "panels",
+        long = "nodes",
         value_name = "N",
         default_value_t = 160,
         conflicts_with = "panelling",
         help_heading = "Panelling (both methods)"
     )]
-    panels: usize,
+    nodes: usize,
 
     /// Node-distribution method. `pangen` is XFOIL's PANGEN (its PANE / PPAR commands), a
     /// curvature-weighted spacing tuned by the PPAR parameters below. `cosine` is yFoil's own
@@ -406,7 +407,7 @@ struct PanellingArgs {
 
 impl PanellingArgs {
     /// The panelling these flags (or the file) describe. `generator` says whether the caller
-    /// samples an analytic section (where a cosine bias does not apply and `buffer_nodes` may)
+    /// samples an analytic section (where a cosine bias does not apply and `n_buffer_nodes` may)
     /// or repanels an existing geometry.
     fn config(&self, generator: bool) -> Result<PanelConfig, String> {
         if let Some(file) = &self.panelling {
@@ -414,7 +415,7 @@ impl PanellingArgs {
             let value: serde_json::Value =
                 serde_json::from_str(&text).map_err(|e| format!("{}: {e}", file.display()))?;
             let config = PanelConfig::from_json(&value).map_err(|e| format!("{}: {e}", file.display()))?;
-            if !generator && config.buffer_nodes.is_some() {
+            if !generator && config.n_buffer_nodes.is_some() {
                 return Err(format!("{}: {}", file.display(), RepanelError::BufferNodesOnRepanel));
             }
             if generator && matches!(config.method, PanelMethod::Cosine(CosineConfig { te_bias: Some(_) })) {
@@ -469,14 +470,14 @@ impl PanellingArgs {
             }
         };
         let config = PanelConfig {
-            n_nodes: self.panels,
+            n_nodes: self.nodes,
             sharp_te: self.sharp,
             te_gap: self.te_gap.map(|gap| TeGap {
                 gap,
                 blend: self.te_blend.unwrap_or(1.0),
             }),
             method,
-            buffer_nodes: None,
+            n_buffer_nodes: None,
         };
         config.validate().map_err(|e| e.to_string())?;
         Ok(config)
@@ -1234,7 +1235,7 @@ fn handle_geom(action: GeomAction) {
                     .unwrap_or_else(|e| fail_with(context, e));
                     let mut g = repanel(&buffer, &config).unwrap_or_else(|e| fail_with(context, e));
                     if let Some(rec) = g.generator.as_mut() {
-                        rec["panelling"]["buffer_nodes"] = serde_json::json!(buffer.x.len());
+                        rec["panelling"]["n_buffer_nodes"] = serde_json::json!(buffer.x.len());
                     }
                     g
                 }

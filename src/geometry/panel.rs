@@ -113,7 +113,7 @@ pub struct PanelConfig {
     /// Generators only: the number of nodes at which the analytic section is sampled before
     /// PANGEN (default [`PANGEN_BUFFER_NODES`]). Rejected by [`repanel`] of an existing geometry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub buffer_nodes: Option<usize>,
+    pub n_buffer_nodes: Option<usize>,
 }
 
 impl Default for PanelConfig {
@@ -124,7 +124,7 @@ impl Default for PanelConfig {
             sharp_te: false,
             te_gap: None,
             method: PanelMethod::Pangen(PangenConfig::default()),
-            buffer_nodes: None,
+            n_buffer_nodes: None,
         }
     }
 }
@@ -134,8 +134,8 @@ impl Default for PanelConfig {
 pub const PANGEN_BUFFER_NODES: usize = 246;
 
 /// The keys a panelling record may carry, per method (`method`, `n_nodes`, `sharp_te`, `te_gap`,
-/// `buffer_nodes` are common)
-const PANEL_KEYS_COMMON: [&str; 5] = ["method", "n_nodes", "sharp_te", "te_gap", "buffer_nodes"];
+/// `n_buffer_nodes` are common)
+const PANEL_KEYS_COMMON: [&str; 5] = ["method", "n_nodes", "sharp_te", "te_gap", "n_buffer_nodes"];
 const PANEL_KEYS_PANGEN: [&str; 5] = [
     "curvature_bunching",
     "te_curvature_ratio",
@@ -161,7 +161,7 @@ pub enum RepanelError {
     UnknownKey(String),
     #[error("panelling has no method: {0}")]
     Malformed(String),
-    #[error("buffer_nodes applies to generated sections only, not to repanelling an existing geometry")]
+    #[error("n_buffer_nodes applies to generated sections only, not to repanelling an existing geometry")]
     BufferNodesOnRepanel,
     #[error(transparent)]
     InvalidGeometry(#[from] InvalidGeometryError),
@@ -271,7 +271,7 @@ pub(crate) fn record_panelling(geometry: &mut Geometry, config: &PanelConfig) {
 #[doc(alias = "PPAR")]
 pub fn repanel(geometry: &Geometry, config: &PanelConfig) -> Result<Geometry, RepanelError> {
     config.validate()?;
-    if config.buffer_nodes.is_some() {
+    if config.n_buffer_nodes.is_some() {
         return Err(RepanelError::BufferNodesOnRepanel);
     }
     // the record states the bias actually used
@@ -291,13 +291,13 @@ pub fn repanel(geometry: &Geometry, config: &PanelConfig) -> Result<Geometry, Re
 }
 
 /// PANGEN (xfoil.f), line for line: the curvature-based panel distribution XFOIL generates
-/// from the buffer airfoil (`PANE`, and the `NACA` command). `n_panels` is NPAN;
+/// from the buffer airfoil (`PANE`, and the `NACA` command). `n_nodes` is NPAN;
 /// `config` carries CVPAR/CTERAT/CTRRAT/XSREF/XPREF. Includes the sharp-LE (IBLE) and
 /// corner (doubled-point) paths. The returned geometry is the N node coordinates; SCALC,
 /// SEGSPL, LEFIND, TECALC, NCALC and APCALC then run in `panel_foil` exactly as
 /// PANGEN's tail does.
 #[doc(alias = "PANGEN")]
-pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PangenConfig) -> Geometry {
+pub fn repanel_by_curvature(geometry: &Geometry, n_nodes: usize, config: &PangenConfig) -> Geometry {
     let nb = geometry.x.len();
     if nb < 2 {
         return geometry.clone();
@@ -312,7 +312,7 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &Pange
     // panel number by factor of IPFAC.
     let ipfac = 5;
     // number of airfoil panel points
-    let mut n = n_panels;
+    let mut n = n_nodes;
 
     // set arc length spline parameter; spline raw airfoil coordinates
     let sb = arc_coordinate(xb, yb);
@@ -374,7 +374,7 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &Pange
 
     // set smoothing length = 1 / averaged LE curvature, but no more than 5% of chord and no
     // less than 1/4 average panel spacing
-    let smool = (1.0 / cvavg.max(20.0)).max(0.25 / ((n_panels / 2) as f64));
+    let smool = (1.0 / cvavg.max(20.0)).max(0.25 / ((n_nodes / 2) as f64));
     let smoosq = (smool * sbref) * (smool * sbref);
 
     // set up tri-diagonal system for smoothed curvatures
@@ -806,10 +806,10 @@ pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64])
 /// yFoil's own repanelling, no XFOIL equivalent: cosine spacing in arc length on each surface,
 /// the cosine parameter warped by a power law set by `te_bias` (1 is a plain cosine; below 1
 /// coarser at the trailing edge and finer at the leading edge; above 1 finer at the trailing
-/// edge; clamped to 0.05…2). Writes `n_panels + 1` nodes. The numerics are frozen —
+/// edge; clamped to 0.05…2). Writes `n_nodes + 1` nodes. The numerics are frozen —
 /// `tests/repanel_cosine_tests.rs` gates every node against golden fixtures — because test
 /// fixtures were derived with them; new work goes through [`repanel`] with [`PanelMethod::Pangen`].
-pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) -> Geometry {
+pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> Geometry {
     let n = geometry.x.len();
 
     // Calculate arc length along the surface
@@ -826,13 +826,13 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
 
     // Generate new parameter values using modified cosine spacing
     // with different densities at TE vs LE
-    let mut s_new = Vec::with_capacity(n_panels + 1);
+    let mut s_new = Vec::with_capacity(n_nodes + 1);
 
     // Clamp te_le_ratio to reasonable range
     let ratio = te_le_ratio.clamp(0.05, 2.0);
 
     // Split panels roughly evenly between upper and lower surfaces
-    let n_half = n_panels / 2;
+    let n_half = n_nodes / 2;
 
     // Upper surface: from TE (s=0) to LE (s=sle)
     // Use ratio to control panel density at TE relative to LE
@@ -859,8 +859,8 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
 
     // Lower surface: from LE (s=sle) to TE (s=s_total)
     let s_lower_total = s_total - sle;
-    for i in 1..=(n_panels - n_half) {
-        let t = i as f64 / (n_panels - n_half) as f64;
+    for i in 1..=(n_nodes - n_half) {
+        let t = i as f64 / (n_nodes - n_half) as f64;
         let t_mod = if ratio < 1.0 {
             // Finer at LE (t=0), coarser at TE (t=1)
             1.0 - (1.0 - t).powf(1.0 / (1.0 + ratio))
@@ -1121,7 +1121,7 @@ mod tests {
         assert_eq!(rec["panelling"]["n_nodes"], 160);
         assert_eq!(rec["panelling"]["curvature_bunching"], 1.0);
         assert!(rec["panelling"]["refine_upper"].is_null());
-        assert!(rec["panelling"].get("buffer_nodes").is_none());
+        assert!(rec["panelling"].get("n_buffer_nodes").is_none());
         // the section's own record is kept underneath
         assert_eq!(rec["designation"], "NACA 2412");
     }
@@ -1165,7 +1165,7 @@ mod tests {
         assert_eq!(v["method"], "pangen");
         assert_eq!(v["te_gap"]["gap"], 0.002);
         assert_eq!(v["refine_upper"], serde_json::json!([0.2, 0.4]));
-        assert!(v.get("buffer_nodes").is_none());
+        assert!(v.get("n_buffer_nodes").is_none());
         assert_eq!(PanelConfig::from_json(&v).unwrap(), cfg);
 
         // a file may omit PPAR keys: XFOIL's defaults apply
@@ -1221,7 +1221,7 @@ mod tests {
         assert!(repanel(
             &g,
             &PanelConfig {
-                buffer_nodes: Some(246),
+                n_buffer_nodes: Some(246),
                 ..PanelConfig::default()
             }
         )

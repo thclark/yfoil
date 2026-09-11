@@ -42,7 +42,7 @@ section record and replaces `panelling`; a repanelled `.dat` carries only
   "sharp_te": true,
   "references": ["abbott1945", "abbott1959", "ladson1974", "ladson1996", "carmichael2001"],
   "panelling": {
-    "method": "pangen", "n_nodes": 160, "buffer_nodes": 246,
+    "method": "pangen", "n_nodes": 160, "n_buffer_nodes": 246,
     "sharp_te": false, "te_gap": null,
     "curvature_bunching": 1.0, "te_curvature_ratio": 0.15, "refined_curvature_ratio": 0.2,
     "refine_upper": null, "refine_lower": null
@@ -53,10 +53,10 @@ section record and replaces `panelling`; a repanelled `.dat` carries only
 `panelling` is the complete recipe from the section (or the loaded nodes) to
 the output nodes: `method` is `pangen` (XFOIL's PANGEN, with its `PPAR`
 parameters as the following keys) or `cosine` (yFoil's own, with `te_bias`,
-`null` when a generator's analytic sampling was used); `n_nodes`; `sharp_te` and
+`null` when a generator's analytic sampling was used); `n_nodes` (panel nodes, trailing edge round to trailing edge); `sharp_te` and
 `te_gap` (`{"gap", "blend"}` or `null`) are the trailing-edge treatment applied
-after the distribution; `buffer_nodes` appears when a generator sampled its
-section before PANGEN. The same JSON is what `--panelling FILE` accepts, so a
+after the distribution; `n_buffer_nodes` appears when a generator sampled its
+section before PANGEN (default 246; a `--panelling` file may set it). The same JSON is what `--panelling FILE` accepts, so a
 record can be lifted from one geometry and applied to another (see
 [repanel](geometry.md#repanel)). `sharp_te` at the top level is the section
 *definition's* property (the 6-series closes); `panelling.sharp_te` says what was
