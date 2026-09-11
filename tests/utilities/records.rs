@@ -15,8 +15,8 @@
 //!   per-iteration classification below, and a call that still matches to its end while the
 //!   twin flipped inside it is reported as straddling rather than passed);
 //! - every earlier iteration matched, and at this iteration the reference's own 1-ULP spread
-//!   exceeds `STRADDLE_FLOOR`: the runs are allowed to part here — in RMSBL, in the branch trace
-//!   (IST/ITRAN) or in the reported limiter (the one-step replay from XFOIL's exact state is
+//!   exceeds `STRADDLE_FLOOR`: the runs are allowed to part here — in any gated transient (RMSBL,
+//!   RLX, CL, …), in the branch trace (IST/ITRAN) or in the reported limiter (the one-step replay from XFOIL's exact state is
 //!   the evidence that the step itself is faithful);
 //! - UPDATE's *reported* limiter (VMXBL/IMXBL: the largest normalised change) differs while
 //!   |RMXBL| agrees within the floor: two near-tied changes, RLX itself unaffected — a tie.
@@ -275,10 +275,23 @@ pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, tr
             }
         }
 
-        let rmsbl_ok = (y.residual - r[1]).abs() <= allowed(y.residual, r[1], transient_tol, 1.0, floor_rmsbl);
+        // every gated transient of this iteration, in the order they are reported
+        let gated = [
+            ("RMSBL", y.residual, r[1], 1.0),
+            ("RLX", y.relaxation, r[2], 1.0),
+            ("CL", y.cl, r[3], 1.0),
+            ("CD", y.cd, r[4], 1.0),
+            ("CM", y.cm, r[5], 1.0),
+            ("ALFA", y.alpha, r[10], 1.0),
+            ("MINF", y.mach, r[11], 1.0),
+            ("REINF", y.re, r[12], r[12]),
+        ];
+        let parted_value = gated.iter().find(|(name, ours, theirs, scale)| {
+            (ours - theirs).abs() > allowed(*ours, *theirs, transient_tol, *scale, fl(fi, name))
+        });
         let trace_ok =
             y.i_stagnation_node == r[7] as usize && y.i_transition_station[1..] == [r[8] as usize, r[9] as usize];
-        if (!rmsbl_ok || !trace_ok || limiter_flip.is_some()) && floor_rmsbl > STRADDLE_FLOOR {
+        if (parted_value.is_some() || !trace_ok || limiter_flip.is_some()) && floor_rmsbl > STRADDLE_FLOOR {
             let parted = if let Some(m) = limiter_flip.clone() {
                 m
             } else if !trace_ok {
@@ -287,7 +300,8 @@ pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, tr
                     y.i_stagnation_node, y.i_transition_station[1], y.i_transition_station[2], r[7], r[8], r[9]
                 )
             } else {
-                format!("RMSBL yfoil {:.6e} vs xfoil {:.6e}", y.residual, r[1])
+                let (name, ours, theirs, _) = parted_value.unwrap();
+                format!("{name} yfoil {ours:.6e} vs xfoil {theirs:.6e}")
             };
             let why = format!(
                 "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {STRADDLE_FLOOR:.0e}) under 1 ULP and the runs part ({parted})",
@@ -299,16 +313,7 @@ pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, tr
                 why,
             };
         }
-        for (name, ours, theirs, scale) in [
-            ("RMSBL", y.residual, r[1], 1.0),
-            ("RLX", y.relaxation, r[2], 1.0),
-            ("CL", y.cl, r[3], 1.0),
-            ("CD", y.cd, r[4], 1.0),
-            ("CM", y.cm, r[5], 1.0),
-            ("ALFA", y.alpha, r[10], 1.0),
-            ("MINF", y.mach, r[11], 1.0),
-            ("REINF", y.re, r[12], r[12]),
-        ] {
+        for (name, ours, theirs, scale) in gated {
             let floor = fl(fi, name);
             assert_value(ours, theirs, transient_tol, scale, floor, &format!("{ictx}: {name}"));
             if floor > 0.0 {

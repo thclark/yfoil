@@ -21,6 +21,16 @@ pub const TOL_SOLVER: f64 = 1e-10;
 /// absolute while the converged per-point CL/CD/CM move by ≤ 8e-14 and XTR by ≤ 1e-12. Converged
 /// points therefore stay at `TOL_SOLVER`; transients are gated at floor × 2.
 pub const TOL_TRANSIENT: f64 = 1e-9;
+/// One SETBL/UPDATE step replayed from XFOIL's dumped state on a host other than the one the
+/// fixture was generated on (`tests/utilities/host.rs`). Both codes take their transcendentals
+/// from the host libm, and Apple libSystem and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`,
+/// `powf`) to 18 % (`tanh`) of inputs (measured 2026-09-11, 20 000 inputs per function).
+/// Measured on the same date from identical dumped inputs, the yFoil step on glibc 2.39 differs
+/// from the yFoil step on libSystem 1345.120.2 by 1.2e-10 and 3.6e-10 relative in RMXBL (the
+/// largest Newton delta, at the polar break points' near-singular iterations) — while the same
+/// step on the fixture's own host reproduces XFOIL to ≤ 2e-12. Cross-host gates are that
+/// measured spread × ~3; same-host stays at `TOL_SOLVER`.
+pub const TOL_CROSS_HOST: f64 = 1e-9;
 /// Safety factor applied to a case's own measured 1-ULP floor (`noise_floor.json`, written by the
 /// fixture pipeline from the +1-ULP twin run): a value is accepted when it is within the base
 /// tolerance *or* within `FLOOR_FACTOR` × the reference's own spread of that value. Chaotic

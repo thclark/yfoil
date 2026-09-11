@@ -16,6 +16,17 @@
 //! on the same separated branch at −16° (4412) are both consistent with the reference, and
 //! neither is a gate difference nor a translation bug.
 //!
+//! **Host.** Both codes take their transcendentals from the host libm, so the pins above — the
+//! iteration at which the runs part, whether the fourth attempt converges, the one-step replay at
+//! `TOL_SOLVER` — hold on the host that generated the fixture (`tests/utilities/host.rs`) and are
+//! reported on any other. Measured 2026-09-11 with the same two cases regenerated on glibc: the
+//! reference's own converged points move by ≤ 1.4e-11 in CL between libms, the unconverged
+//! wanderings by O(1), and the fourth attempt's chance convergence does not survive the change of
+//! libm (on glibc XFOIL fails 22° and −16° too). What is gated on every host: every converged call before
+//! the break matches iteration by iteration, the break call is threshold-straddling by the
+//! reference's own floor, the replay stays within `TOL_CROSS_HOST`, and the polar driver's
+//! bookkeeping agrees with the sweep's own outcomes.
+//!
 //! Rule 6: the 105-iteration wanderings also take branches every other case left open —
 //! MRCHUE's inverse (prescribed-Hk) marching in the wake, MRCHDU's extrapolation fallback for a
 //! Newton failure with residual > 0.1, BLVAR's Us > 0.95 and Hk → 1 clamps, and TRCHEK2's
@@ -26,10 +37,11 @@ mod utilities;
 
 use fixtures::mrchdu_fixtures::parse_bl_dump;
 use std::path::PathBuf;
+use utilities::host::same_host;
 use utilities::records::{check_call, load, transient_tol, Outcome, Records};
 use utilities::replay::{replay_iteration, DumpView};
 use yfoil::geometry::{panel_foil, read_geometry_from_file, PanelledFoil};
-use yfoil::solver::analysis::{compute_polar, FlowConditions, PointResult, PolarConfig, Session};
+use yfoil::solver::analysis::{compute_polar, FlowConditions, PointResult, PolarConfig, PolarResult, Session};
 use yfoil::solver::specal::sequence_command;
 use yfoil::solver::viscal::solve_viscous;
 
@@ -115,9 +127,16 @@ fn lvconv(rec: &Records, k: usize) -> bool {
 
 /// The sweep up to and including the break call: every call before it matches, the break call
 /// straddles at `expected_iteration`, and every call after it starts from a state the reference
-/// cannot reproduce (straddling from iteration 0).
-fn check_break(case: &str, break_call: usize, expected_iteration: usize) -> (Records, Vec<(PointResult, Outcome)>) {
+/// cannot reproduce (straddling from iteration 0). Returns whether this is the fixture's host:
+/// on any other, the iteration at which the runs part and yFoil's own outcomes past it are
+/// reported, not asserted.
+fn check_break(
+    case: &str,
+    break_call: usize,
+    expected_iteration: usize,
+) -> (Records, Vec<(PointResult, Outcome)>, bool) {
     let dir = case_dir(case);
+    let same = same_host(&dir);
     let rec = load(&dir);
     let (alphas, after) = script(&dir);
     assert_eq!(
@@ -134,7 +153,12 @@ fn check_break(case: &str, break_call: usize, expected_iteration: usize) -> (Rec
             std::cmp::Ordering::Equal => match o {
                 Outcome::Straddling { at_iteration, why } => {
                     println!("{case} call {k}: straddling at iteration {at_iteration}: {why}");
-                    assert_eq!(*at_iteration, expected_iteration, "{case} call {k}: straddle iteration");
+                    if same {
+                        assert_eq!(*at_iteration, expected_iteration, "{case} call {k}: straddle iteration");
+                    } else {
+                        assert!(*at_iteration > 0, "{case} call {k}: straddling inside the call");
+                        println!("{case} call {k}: CROSS-HOST — parted at iteration {at_iteration}; the same-host pin is iteration {expected_iteration}");
+                    }
                 }
                 Outcome::Match => panic!("{case} call {k} now matches to the end (the straddle closed): pin it"),
             },
@@ -144,7 +168,8 @@ fn check_break(case: &str, break_call: usize, expected_iteration: usize) -> (Rec
             ),
         }
     }
-    // the break call and the two after it ran out of iterations in both codes
+    // the break call and the two after it ran out of iterations in both codes (on the fixture's
+    // host; elsewhere yFoil's outcome past the straddle is decided at the noise floor)
     for k in break_call..break_call + 3 {
         assert_eq!(
             nitdone(&rec, k),
@@ -152,12 +177,22 @@ fn check_break(case: &str, break_call: usize, expected_iteration: usize) -> (Rec
             "{case} call {k}: reference NITDONE"
         );
         assert!(!lvconv(&rec, k), "{case} call {k}: reference LVCONV");
-        assert_eq!(
-            run[k - 1].0.iterations,
-            spec().max_iterations + 5,
-            "{case} call {k}: yFoil iterations"
-        );
-        assert!(!run[k - 1].0.converged, "{case} call {k}: yFoil converged");
+        let p = &run[k - 1].0;
+        if same {
+            assert_eq!(
+                p.iterations,
+                spec().max_iterations + 5,
+                "{case} call {k}: yFoil iterations"
+            );
+            assert!(!p.converged, "{case} call {k}: yFoil converged");
+        } else {
+            println!(
+                "{case} call {k}: CROSS-HOST — yFoil {} iterations, converged={} (same-host: {} iterations, unconverged)",
+                p.iterations,
+                p.converged,
+                spec().max_iterations + 5
+            );
+        }
     }
     // the fourth attempt: the reference converged, its +1-ULP twin did not
     let k4 = break_call + 3;
@@ -167,17 +202,53 @@ fn check_break(case: &str, break_call: usize, expected_iteration: usize) -> (Rec
         flips.iter().any(|f| f == &format!("call {k4}: LVCONV T vs F")),
         "{case} call {k4}: the reference's +1-ULP twin did not converge; flips: {flips:?}"
     );
-    (rec, run)
+    (rec, run, same)
+}
+
+/// The polar driver's bookkeeping against the sweep's own point outcomes, on any host: converged
+/// points are kept (the re-solved 0° that seeds the second leg is not a polar point), unconverged
+/// alphas are listed as failed, and a leg halts after NSEQEX = 4 consecutive failures.
+fn assert_polar_consistent(case: &str, polar: &PolarResult, run: &[(PointResult, Outcome)], n_first_leg: usize) {
+    let (mut kept, mut failed, mut completed) = (0, Vec::new(), true);
+    for (leg, points) in [&run[..n_first_leg], &run[n_first_leg..]].into_iter().enumerate() {
+        let mut consecutive = 0;
+        for (i, (p, _)) in points.iter().enumerate() {
+            if leg == 1 && i == 0 {
+                continue; // the seed
+            }
+            if p.converged {
+                kept += 1;
+                consecutive = 0;
+            } else {
+                failed.push(p.alpha);
+                consecutive += 1;
+                if consecutive == 4 {
+                    completed = false;
+                    break;
+                }
+            }
+        }
+    }
+    let half = |a: &f64| (a.to_degrees() * 2.0).round() / 2.0;
+    assert_eq!(polar.results.len(), kept, "{case}: polar points kept");
+    assert_eq!(
+        polar.failed_alphas.iter().map(half).collect::<Vec<_>>(),
+        failed.iter().map(half).collect::<Vec<_>>(),
+        "{case}: failed alphas"
+    );
+    assert_eq!(polar.completed, completed, "{case}: completed");
 }
 
 #[test]
 fn test_naca0012_upward_break_matches_then_straddles() {
-    let (rec, run) = check_break(UP_CASE, UP_BREAK_CALL, UP_STRADDLE_ITERATION);
+    let (rec, run, same) = check_break(UP_CASE, UP_BREAK_CALL, UP_STRADDLE_ITERATION);
     // 22°: the reference lands on the separated branch in 7 iterations; yFoil, like the twin,
     // runs out, which is its fourth consecutive failure
     let k4 = UP_BREAK_CALL + 3;
     assert_eq!(nitdone(&rec, k4), 7);
-    assert!(!run[k4 - 1].0.converged);
+    if same {
+        assert!(!run[k4 - 1].0.converged);
+    }
     // … so the polar halts as XFOIL's ASEQ would (NSEQEX = 4): 41 points, 20.5°–22° failed
     let polar = compute_polar(
         &foil(&case_dir(UP_CASE)),
@@ -189,26 +260,31 @@ fn test_naca0012_upward_break_matches_then_straddles() {
             ..PolarConfig::default()
         },
     );
-    assert_eq!(polar.results.len(), UP_BREAK_CALL - 1);
-    assert_eq!(
-        polar
-            .failed_alphas
-            .iter()
-            .map(|a| (a.to_degrees() * 2.0).round() / 2.0)
-            .collect::<Vec<_>>(),
-        [20.5, 21.0, 21.5, 22.0]
-    );
-    assert!(!polar.completed, "halted by NSEQEX consecutive failures");
+    assert_polar_consistent(UP_CASE, &polar, &run, run.len());
+    if same {
+        assert_eq!(polar.results.len(), UP_BREAK_CALL - 1);
+        assert_eq!(
+            polar
+                .failed_alphas
+                .iter()
+                .map(|a| (a.to_degrees() * 2.0).round() / 2.0)
+                .collect::<Vec<_>>(),
+            [20.5, 21.0, 21.5, 22.0]
+        );
+        assert!(!polar.completed, "halted by NSEQEX consecutive failures");
+    }
 }
 
 #[test]
 fn test_naca4412_downward_break_matches_then_straddles() {
-    let (rec, run) = check_break(DOWN_CASE, DOWN_BREAK_CALL, DOWN_STRADDLE_ITERATION);
+    let (rec, run, same) = check_break(DOWN_CASE, DOWN_BREAK_CALL, DOWN_STRADDLE_ITERATION);
     // −16°: both codes land on the separated branch (CL ≈ +0.05 against ≈ −0.9 at −14°), by
     // different paths and within the RMSBL < 1e-4 convergence band of each other
     let k4 = DOWN_BREAK_CALL + 3;
     let p = &run[k4 - 1].0;
-    assert!(p.converged, "{DOWN_CASE} call {k4}: yFoil converged");
+    if same {
+        assert!(p.converged, "{DOWN_CASE} call {k4}: yFoil converged");
+    }
     let cl_ref: f64 = rec.points[k4 - 1]["CL"].parse().unwrap();
     let cl_attached: f64 = rec.points[DOWN_BREAK_CALL - 2]["CL"].parse().unwrap();
     println!(
@@ -217,11 +293,13 @@ fn test_naca4412_downward_break_matches_then_straddles() {
         p.iterations,
         nitdone(&rec, k4)
     );
-    assert!(
-        (p.cl - cl_ref).abs() < (cl_attached - cl_ref).abs() / 2.0,
-        "{DOWN_CASE} call {k4}: yFoil CL {} is not on the reference's separated branch (CL {cl_ref}, attached {cl_attached})",
-        p.cl
-    );
+    if same {
+        assert!(
+            (p.cl - cl_ref).abs() < (cl_attached - cl_ref).abs() / 2.0,
+            "{DOWN_CASE} call {k4}: yFoil CL {} is not on the reference's separated branch (CL {cl_ref}, attached {cl_attached})",
+            p.cl
+        );
+    }
     // the polar keeps −16° and carries on: 30 points, three failed, not halted
     let polar = compute_polar(
         &foil(&case_dir(DOWN_CASE)),
@@ -233,9 +311,12 @@ fn test_naca4412_downward_break_matches_then_straddles() {
             ..PolarConfig::default()
         },
     );
-    assert_eq!(polar.results.len(), rec.points.len() - 1 - 3, "0°, −0.5°…−14°, −16°");
-    assert_eq!(polar.failed_alphas.len(), 3);
-    assert!(polar.completed);
+    assert_polar_consistent(DOWN_CASE, &polar, &run, 1);
+    if same {
+        assert_eq!(polar.results.len(), rec.points.len() - 1 - 3, "0°, −0.5°…−14°, −16°");
+        assert_eq!(polar.failed_alphas.len(), 3);
+        assert!(polar.completed);
+    }
 }
 
 /// Replay SETBL/UPDATE call `k` of a polar case from XFOIL's dumped state: the session is

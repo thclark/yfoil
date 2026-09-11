@@ -38,11 +38,11 @@ stage() { # stage <name> <extra-fflags> <series...>
     done < "$PATCHES/$s"
   done
   if [ -n "$extra" ]; then
-    sed -i '' "s|^DBL = \(.*\)$|DBL = \1 $extra|" "$dir/bin/Makefile"
+    sed -i.bak "s|^DBL = \(.*\)$|DBL = \1 $extra|" "$dir/bin/Makefile" && rm -f "$dir/bin/Makefile.bak"
   fi
   case "$extra" in *profile-arcs*)
     # the link step has no FFLAGS; libgcov must be linked in explicitly
-    sed -i '' 's|^	$(FC) -o xfoil |	$(FC) --coverage -o xfoil |' "$dir/bin/Makefile";;
+    sed -i.bak 's|^	$(FC) -o xfoil |	$(FC) --coverage -o xfoil |' "$dir/bin/Makefile" && rm -f "$dir/bin/Makefile.bak";;
   esac
   # plotlib (double precision), then xfoil. The Makefile's final `cp ./xfoil xfoil`
   # install step fails with BINDIR=. even though the link succeeded, so success is
