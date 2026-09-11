@@ -27,7 +27,7 @@ pub struct TestInput {
     pub alpha_deg: f64,
     pub reynolds: f64,
     pub mach: f64,
-    pub n_panels: usize,
+    pub n_nodes: usize,
     pub ncrit: f64,
 }
 

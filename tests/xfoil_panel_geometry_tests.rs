@@ -23,7 +23,7 @@ struct Coordinate {
 struct PanelFixture {
     description: String,
     airfoil: String,
-    n_panels: usize,
+    n_nodes: usize,
     source: String,
     te_gap: f64,
     #[serde(default)]
@@ -44,19 +44,19 @@ fn test_naca_0012_te_coordinates() {
     let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
     // Generate yFoil geometry
-    let geom = naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
+    let geom = naca_4digit("0012", fixture.n_nodes, Thickness::Perpendicular).expect("Failed to create airfoil");
     let airfoil = panel_foil(&geom);
 
     // Check panel count
     assert_eq!(
-        airfoil.n_foil_nodes, fixture.n_panels,
+        airfoil.n_foil_nodes, fixture.n_nodes,
         "Panel count mismatch: yFoil={}, XFOIL={}",
-        airfoil.n_foil_nodes, fixture.n_panels
+        airfoil.n_foil_nodes, fixture.n_nodes
     );
 
     // Check TE coordinates (first and last nodes)
     let xfoil_te_upper = &fixture.coordinates[0];
-    let xfoil_te_lower = &fixture.coordinates[fixture.n_panels - 1];
+    let xfoil_te_lower = &fixture.coordinates[fixture.n_nodes - 1];
 
     println!("=== TE Coordinates Comparison ===");
     println!("Upper TE:");
@@ -104,7 +104,7 @@ fn test_naca_0012_panel_spacing() {
     let fixture: PanelFixture = serde_json::from_reader(reader).expect("Failed to parse panel fixture");
 
     // Generate yFoil geometry
-    let geom = naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
+    let geom = naca_4digit("0012", fixture.n_nodes, Thickness::Perpendicular).expect("Failed to create airfoil");
     let airfoil = panel_foil(&geom);
 
     println!("=== Panel Spacing Comparison (first 10 panels) ===");
@@ -113,7 +113,7 @@ fn test_naca_0012_panel_spacing() {
         "Idx", "XFOIL_x", "yFoil_x", "XFOIL_y", "yFoil_y"
     );
 
-    for i in 0..10.min(fixture.n_panels) {
+    for i in 0..10.min(fixture.n_nodes) {
         let xfoil = &fixture.coordinates[i];
         println!(
             "{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
@@ -122,7 +122,7 @@ fn test_naca_0012_panel_spacing() {
     }
 
     println!("\n=== Panel Spacing (last 5 panels) ===");
-    for i in (fixture.n_panels - 5)..fixture.n_panels {
+    for i in (fixture.n_nodes - 5)..fixture.n_nodes {
         let xfoil = &fixture.coordinates[i];
         println!(
             "{:>4} {:>14.10} {:>14.10} {:>14.10} {:>14.10}",
@@ -132,11 +132,11 @@ fn test_naca_0012_panel_spacing() {
 
     // Calculate RMS error in x-coordinates
     let mut sum_sq = 0.0;
-    for i in 0..fixture.n_panels {
+    for i in 0..fixture.n_nodes {
         let dx = airfoil.x[i] - fixture.coordinates[i].x;
         sum_sq += dx * dx;
     }
-    let rms_x_error = (sum_sq / fixture.n_panels as f64).sqrt();
+    let rms_x_error = (sum_sq / fixture.n_nodes as f64).sqrt();
     println!("\nRMS x-coordinate error: {:.6}", rms_x_error);
 
     // XFOIL uses curvature-based PANE with:
@@ -153,7 +153,7 @@ fn test_naca_0012_panel_spacing() {
 
     // For now, just check that both have the same number of panels
     // and document the spacing difference.
-    assert_eq!(airfoil.n_foil_nodes, fixture.n_panels);
+    assert_eq!(airfoil.n_foil_nodes, fixture.n_nodes);
 
     // Note: We allow up to 15% RMS error in x-coordinates due to different
     // panel distribution algorithms. Exact match requires implementing XFOIL's PANE.
@@ -176,12 +176,11 @@ fn test_naca_0012_pane_algorithm() {
 
     // Apply PANE algorithm with XFOIL defaults
     let config = PangenConfig::default();
-    let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_panels, &config);
+    let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_nodes, &config);
     let paned_airfoil = panel_foil(&paned_geom);
 
     // Also generate with cosine spacing for comparison
-    let cosine_geom =
-        naca_4digit("0012", fixture.n_panels, Thickness::Perpendicular).expect("Failed to create airfoil");
+    let cosine_geom = naca_4digit("0012", fixture.n_nodes, Thickness::Perpendicular).expect("Failed to create airfoil");
     let cosine_airfoil = panel_foil(&cosine_geom);
 
     // Calculate RMS errors
@@ -189,7 +188,7 @@ fn test_naca_0012_pane_algorithm() {
     let mut cosine_sum_sq = 0.0;
 
     for i in 0..fixture
-        .n_panels
+        .n_nodes
         .min(paned_airfoil.n_foil_nodes)
         .min(cosine_airfoil.n_foil_nodes)
     {
@@ -200,7 +199,7 @@ fn test_naca_0012_pane_algorithm() {
     }
 
     let n_compare = fixture
-        .n_panels
+        .n_nodes
         .min(paned_airfoil.n_foil_nodes)
         .min(cosine_airfoil.n_foil_nodes) as f64;
     let pane_rms = (pane_sum_sq / n_compare).sqrt();
@@ -214,7 +213,7 @@ fn test_naca_0012_pane_algorithm() {
     // Print first 10 coordinates for comparison
     println!("\n=== First 10 Panel Coordinates ===");
     println!("{:>4} {:>12} {:>12} {:>12}", "Idx", "XFOIL_x", "PANE_x", "Cosine_x");
-    for i in 0..10.min(fixture.n_panels) {
+    for i in 0..10.min(fixture.n_nodes) {
         let xfoil_x = fixture.coordinates[i].x;
         let pane_x = if i < paned_airfoil.n_foil_nodes {
             paned_airfoil.x[i]
@@ -230,9 +229,9 @@ fn test_naca_0012_pane_algorithm() {
     }
 
     // Print near LE (around midpoint)
-    let le_idx = fixture.n_panels / 2;
+    let le_idx = fixture.n_nodes / 2;
     println!("\n=== Near LE (idx {}-{}) ===", le_idx - 2, le_idx + 2);
-    for i in le_idx.saturating_sub(2)..(le_idx + 3).min(fixture.n_panels) {
+    for i in le_idx.saturating_sub(2)..(le_idx + 3).min(fixture.n_nodes) {
         let xfoil_x = fixture.coordinates[i].x;
         let pane_x = if i < paned_airfoil.n_foil_nodes {
             paned_airfoil.x[i]
@@ -282,7 +281,7 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
         refined_curvature_ratio: fixture.ctrrat.unwrap_or(0.2),
         ..PangenConfig::default()
     };
-    let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_panels, &config);
+    let paned_geom = repanel_by_curvature(&buffer_geom, fixture.n_nodes, &config);
     let paned_airfoil = panel_foil(&paned_geom);
 
     // Calculate RMS errors in x and y coordinates
@@ -291,7 +290,7 @@ fn test_pane_with_cterat(cterat: f64, fixture_path: &str) {
     let mut max_dx = 0.0_f64;
     let mut max_dy = 0.0_f64;
 
-    let n_compare = fixture.n_panels.min(paned_airfoil.n_foil_nodes);
+    let n_compare = fixture.n_nodes.min(paned_airfoil.n_foil_nodes);
     for i in 0..n_compare {
         let dx = paned_airfoil.x[i] - fixture.coordinates[i].x;
         let dy = paned_airfoil.y[i] - fixture.coordinates[i].y;
