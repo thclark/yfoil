@@ -97,8 +97,8 @@ cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -
 ```
 
 **Documentation.** The docs site is built with [Zensical](https://zensical.org/) (the successor to Material for MkDocs)
-from the markdown in `docs/`. The toolchain is pinned in `requirements-docs.txt` and fetched on demand by `uv`, so
-there is no virtualenv to manage:
+from the markdown in `docs/`. The Zensical version is pinned inside `scripts/docs.sh` and fetched on demand by `uv`,
+so there is no virtualenv or requirements file to manage:
 
 ```
 scripts/docs.sh serve                  # live preview on http://localhost:8000

@@ -9,17 +9,22 @@
 # Zensical is a Python package with a compiled Rust core. It is not installed
 # into the repo: uv fetches the pinned version into its own cache on first run,
 # so there is no virtualenv to manage and no Python state in the working tree.
+#
+# The version is pinned here, and only here, so that a build is reproducible.
+# Bump it deliberately, and check the rendered site before committing the bump.
 set -euo pipefail
+
+zensical_version="0.0.60"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "error: uv is not installed. See https://docs.astral.sh/uv/" >&2
-    echo "       (or install Zensical yourself: pip install -r requirements-docs.txt)" >&2
+    echo "       (or install Zensical yourself: pip install zensical==$zensical_version)" >&2
     exit 1
 fi
 
 exec uv run --no-project --quiet \
-    --with-requirements requirements-docs.txt \
+    --with "zensical==$zensical_version" \
     zensical "$@"

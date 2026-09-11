@@ -1,5 +1,0 @@
-# Documentation toolchain. Pinned so that a build is reproducible; bump
-# deliberately, and check the rendered site before committing the bump.
-#
-#   scripts/docs.sh serve
-zensical==0.0.60
