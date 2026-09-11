@@ -114,6 +114,46 @@ body {
   }
 }
 
+/* --------------------------------------------------------------- licence --- */
+
+/* The licence mark sits at the bottom right of the teaser grid, so it shares
+ * the call to action's 16px side padding and its distance from the bottom of
+ * the viewport, mirrored. The grid is made the positioning context for it. */
+.mdx-teaser .md-grid {
+  position: relative;
+}
+
+.mdx-licence {
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  display: block;
+  line-height: 0;
+  opacity: 1;
+  transition: opacity 0.25s;
+}
+
+/* Dims on hover so that it reads as a link. */
+.mdx-licence:focus,
+.mdx-licence:hover {
+  opacity: 0.9;
+}
+
+.mdx-licence img {
+  display: block;
+  height: 40px;
+  width: auto;
+  filter: drop-shadow(0 0 8px #000);
+}
+
+/* Below this width the teaser text spans the viewport and the mark would sit
+ * on top of it. */
+@media (max-width: 720px) {
+  .mdx-licence {
+    display: none;
+  }
+}
+
 /* -------------------------------------------------------------- furniture --- */
 
 .md-main__inner {
