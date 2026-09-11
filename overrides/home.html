@@ -33,7 +33,10 @@
         </small>
       </p>
       <a class="md-button md-button--primary" href="{{ 'guide/' | url }}">Get started</a>
-      <a class="md-button" href="{{ 'validation/' | url }}">Learn more</a>
+      {#- The Learn more button leads to the Validation section, which is hidden from the
+          navigation until its pages are presentable (see zensical.toml). Restore it together
+          with the nav entry. -#}
+      {#- <a class="md-button" href="{{ 'validation/' | url }}">Learn more</a> -#}
     </div>
   </div>
 {% endblock %}
