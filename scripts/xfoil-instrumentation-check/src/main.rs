@@ -25,7 +25,6 @@
 //!                                                       [--resume RUN_DIR] [--plot-only RUN_DIR]
 //! ```
 
-mod plot;
 mod run;
 mod summary;
 
@@ -285,15 +284,19 @@ fn main() {
     // summary.json → plot and index (the only inputs of this stage)
     let s: summary::Summary =
         serde_json::from_str(&std::fs::read_to_string(run_dir.join("summary.json")).unwrap()).unwrap();
-    let svg = run_dir.join(format!("naca{}_check.svg", s.foil));
-    plot::draw(&svg, &s).unwrap();
-    println!("wrote {}", svg.display());
-    match figure_style::svg_to_pdf(&svg) {
-        Ok(pdf) => println!("wrote {}", pdf.display()),
-        Err(e) => println!("no PDF: {e}"),
-    }
     summary::write_index(&run_dir, &s);
     summary::write_index_tex(&run_dir, &s);
+    // summary.json → figure, by plot.py (matplotlib through scripts/figures/render.sh)
+    let status = std::process::Command::new(repo_root().join("scripts/figures/render.sh"))
+        .arg("xfoil-instrumentation-check")
+        .arg(&run_dir)
+        .status();
+    if !matches!(status, Ok(st) if st.success()) {
+        eprintln!(
+            "figure not drawn: run `scripts/figures/render.sh xfoil-instrumentation-check {}`",
+            run_dir.display()
+        );
+    }
     println!(
         "polar file identical: {}; BL dumps identical: {} of {}; stdout identical: {}",
         s.comparison.polar_identical,

@@ -3,11 +3,12 @@
 //! Runs the instrumented double-precision XFOIL 6.99 reference on one aerofoil over an upward
 //! alpha sweep, once for the base case and once per perturbation level of three input families —
 //! node coordinates (1 ULP up to 1e-7 chord), panel count (160 down to 96) and alpha step
-//! (0.5° plus 1 ULP up to 1e-5°) — and plots seven per-alpha quantities per family, base case in
-//! front, perturbations stacked behind it coloured by perturbation size (YlGnBu): the node and
-//! alpha-step families side by side as one sheet, the panel family as a figure of the same
-//! column width. Figures follow the shared publication conventions (`scripts/figure-style`):
-//! drawn at the document's physical width and font, exported as SVG and PDF.
+//! (0.5° plus 1 ULP up to 1e-5°) — and records seven per-alpha quantities per level. `plot.py`
+//! (matplotlib, through `scripts/figures/render.sh`) draws them from `metrics.json` alone: base
+//! case in front, perturbations stacked behind it coloured by perturbation size (YlGnBu), the node
+//! and alpha-step families side by side as one sheet, every family as a figure of the same column
+//! width. Every number in a figure — including the axis extents — is written by this program;
+//! the script only presents them.
 //!
 //! Every invocation creates a dated folder `runs/<UTC datetime>/` next to this crate holding
 //! `metadata.json` (git version tag or `untagged`, commit sha, dirty flag, the reference build's
@@ -26,7 +27,6 @@
 //! ```
 
 mod perturb;
-mod plot;
 mod run;
 
 use std::path::{Path, PathBuf};
@@ -176,6 +176,24 @@ pub fn levels(family: Family) -> Vec<Level> {
         }
     }
     out
+}
+
+/// The families drawn side by side on the sheet (`plot.py`); the others get a figure each
+pub const SHEET: [Family; 2] = [Family::Geometry, Family::AlphaStep];
+
+/// Draw the run folder's figures with `scripts/figures/render.sh xfoil-sensitivity <run_dir>`
+/// (matplotlib through uv); on failure the data are complete and the command is printed.
+pub fn render(run_dir: &Path) {
+    let status = std::process::Command::new(repo_root().join("scripts/figures/render.sh"))
+        .arg("xfoil-sensitivity")
+        .arg(run_dir)
+        .status();
+    if !matches!(status, Ok(st) if st.success()) {
+        eprintln!(
+            "figures not drawn: run `scripts/figures/render.sh xfoil-sensitivity {}`",
+            run_dir.display()
+        );
+    }
 }
 
 /// Repository root: this crate lives at scripts/xfoil-sensitivity
@@ -353,32 +371,9 @@ fn main() {
         families.push((*family, results));
     }
 
-    // one figure per family (a single column), and the sheet: the node and alpha-step families
-    // side by side. The panel family stays on its own figure, at the same column width.
-    let figure = |path: std::path::PathBuf, fams: &[(Family, Vec<run::RunResult>)]| {
-        plot::draw_families(&path, fams).unwrap();
-        println!("wrote {}", path.display());
-        match figure_style::svg_to_pdf(&path) {
-            Ok(pdf) => println!("wrote {}", pdf.display()),
-            Err(e) => println!("no PDF: {e}"),
-        }
-    };
-    for (family, results) in &families {
-        figure(
-            run_dir.join(format!("naca{}_{}.svg", args.foil, family.slug())),
-            std::slice::from_ref(&(*family, results.clone())),
-        );
-    }
-    let sheet: Vec<(Family, Vec<run::RunResult>)> = families
-        .iter()
-        .filter(|(f, _)| plot::SHEET.contains(f))
-        .cloned()
-        .collect();
-    if sheet.len() == plot::SHEET.len() {
-        figure(run_dir.join(format!("naca{}_sheet.svg", args.foil)), &sheet);
-    }
     run::write_summary_json(&run_dir, &args.foil, &families);
     run::write_index(&run_dir, &args.foil, &families);
     run::write_index_tex(&run_dir, &args.foil, &families);
+    render(&run_dir);
     println!("run folder: {}", run_dir.display());
 }

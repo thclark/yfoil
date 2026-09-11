@@ -20,6 +20,8 @@ pub struct BuildSeries {
     /// Last angle of the unbroken converged run from the start of the sweep: the plotted series
     /// ends here (one unconverged point ends it; nothing beyond is plotted)
     pub series_end_alpha_deg: Option<f64>,
+    /// The plotted series: the points of the unbroken converged run, in sweep order
+    pub series: Vec<Point>,
 }
 
 impl BuildSeries {
@@ -64,12 +66,23 @@ pub struct Conditions {
     pub npoints: usize,
 }
 
+/// Extent of a quantity over the plotted series of every build
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Extent {
+    pub min: f64,
+    pub max: f64,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Summary {
     pub foil: String,
     pub conditions: Conditions,
     pub builds: Vec<BuildSeries>,
     pub comparison: Comparison,
+    /// Extents of `alpha_deg` and every metric over the plotted series of both builds (positive
+    /// values only for the trailing-edge BL variables, which are plotted on a log axis): what a
+    /// plot's axis range is set from
+    pub extents: std::collections::BTreeMap<String, Extent>,
 }
 
 /// A named accessor on a point
@@ -107,15 +120,46 @@ fn series_end(points: &[Point], missing: &[f64]) -> Option<f64> {
 pub fn build(foil: &str, npoints: usize, results: &[BuildResult]) -> Summary {
     let builds: Vec<BuildSeries> = results
         .iter()
-        .map(|r| BuildSeries {
-            build: r.build,
-            label: r.build.label().to_string(),
-            ending: r.ending,
-            points: r.points.clone(),
-            missing_alpha_deg: r.missing_alpha_deg.clone(),
-            series_end_alpha_deg: series_end(&r.points, &r.missing_alpha_deg),
+        .map(|r| {
+            let end = series_end(&r.points, &r.missing_alpha_deg);
+            BuildSeries {
+                build: r.build,
+                label: r.build.label().to_string(),
+                ending: r.ending,
+                points: r.points.clone(),
+                missing_alpha_deg: r.missing_alpha_deg.clone(),
+                series_end_alpha_deg: end,
+                series: r
+                    .points
+                    .iter()
+                    .filter(|p| p.alpha_deg <= end.unwrap_or(f64::NEG_INFINITY))
+                    .cloned()
+                    .collect(),
+            }
         })
         .collect();
+    let mut extents = std::collections::BTreeMap::new();
+    let extent = |name: &str, get: &dyn Fn(&Point) -> f64, positive: bool| -> Extent {
+        let (lo, hi) = builds
+            .iter()
+            .flat_map(|b| b.series.iter())
+            .map(get)
+            .filter(|v| v.is_finite() && (!positive || *v > 0.0))
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v), b.max(v)));
+        let _ = name;
+        Extent { min: lo, max: hi }
+    };
+    // a quantity with no admissible value (a BL variable that is never positive) has no extent
+    let mut insert = |name: &str, e: Extent| {
+        if e.min.is_finite() && e.max.is_finite() {
+            extents.insert(name.to_string(), e);
+        }
+    };
+    insert("alpha_deg", extent("alpha_deg", &|p| p.alpha_deg, false));
+    for (name, get) in METRICS {
+        let positive = name.starts_with("te_");
+        insert(name, extent(name, get, positive));
+    }
     let (a, b) = (&results[0], &results[1]);
     fn file<'r>(r: &'r BuildResult, name: &str) -> Option<&'r Vec<u8>> {
         r.files.iter().find(|(n, _)| n == name).map(|(_, b)| b)
@@ -155,6 +199,7 @@ pub fn build(foil: &str, npoints: usize, results: &[BuildResult]) -> Summary {
         });
     }
     Summary {
+        extents,
         foil: foil.to_string(),
         conditions: Conditions {
             panels: PANELS,
@@ -208,14 +253,11 @@ pub fn write_index(run_dir: &Path, s: &Summary) {
     .unwrap();
     writeln!(
         f,
-        "Figure: [naca{0}_check.svg](naca{0}_check.svg), and `naca{0}_check.pdf` for LaTeX (drawn at {1} pt wide in \
-         {2} at {3}–{4} pt, so include it at natural size: `\\includegraphics{{naca{0}_check.pdf}}`, no `width=`, no \
-         `\\resizebox`; with the `svg` package, `\\includesvg[inkscapelatex=false]{{naca{0}_check}}`).\n",
+        "Figure: [naca{0}_check.svg](naca{0}_check.svg), and `naca{0}_check.pdf` for LaTeX, drawn by `plot.py` \
+         (matplotlib, via `scripts/figures/render.sh`) from `summary.json` alone at the document's physical size in \
+         its font (`scripts/figures/style.py`); include it at natural size: `\\includegraphics{{naca{0}_check.pdf}}`, \
+         no `width=`, no `\\resizebox`.\n",
         s.foil,
-        figure_style::TEXT_WIDTH_PT,
-        figure_style::FONT,
-        figure_style::TICK_PT,
-        figure_style::AXIS_LABEL_PT
     )
     .unwrap();
     writeln!(f, "## Files\n\n| File | Result |\n|---|---|").unwrap();
@@ -434,16 +476,10 @@ pub fn write_index_tex(run_dir: &Path, s: &Summary) {
     w(&mut f, "\\bottomrule\\end{tabular}\\end{table}");
     w(
         &mut f,
-        &format!(
-            "\n\\section*{{Figure}}\n\\noindent The figure is drawn at {} pt wide in {} at {}--{} pt, so it is included at \
-         natural size: no \\texttt{{width=}} and no \\texttt{{\\resizebox}}, or the text no longer matches the \
-         document. With the \\texttt{{svg}} package, \\texttt{{\\includesvg[inkscapelatex=false]}} of the SVG gives \
-         the same figure.\n",
-            figure_style::TEXT_WIDTH_PT,
-            figure_style::FONT,
-            figure_style::TICK_PT,
-            figure_style::AXIS_LABEL_PT
-        ),
+        "\n\\section*{Figure}\n\\noindent The figure is drawn by \\texttt{plot.py} (matplotlib) from \
+         \\texttt{summary.json} at the document's physical size in its font (\\texttt{scripts/figures/style.py}), \
+         so it is included at natural size: no \\texttt{width=} and no \\texttt{\\resizebox}, or the text no \
+         longer matches the document.\n",
     );
     w(&mut f, &format!(
         "\\begin{{figure}}[h]\\centering\\includegraphics{{naca{}_check.pdf}}\\caption{{XFOIL 6.99 DP, pristine (red, \

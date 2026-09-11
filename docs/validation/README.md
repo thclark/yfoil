@@ -7,6 +7,12 @@ live under `tests/fixtures/xfoil/<case>/` (tracked) or `target/fixtures/<case>/`
 and the reports read those directories. Only Markdown and SVG are committed under `docs/validation/`;
 `.gitignore` refuses everything else.
 
+Figures are drawn by matplotlib from each study's JSON outputs (`scripts/<study>/plot.py`, presentation only;
+`scripts/figures/style.py` holds the publication conventions, `scripts/figures/render.sh` pins the version and runs it
+through uv, so running any of the studies needs [`uv`](https://docs.astral.sh/uv/) installed). Every number in a figure,
+including axis extents, is computed by the Rust study and is in its run folder, so the plots can be redrawn by anyone
+from the JSON alone.
+
 | Page | What it shows | Regenerate with |
 |---|---|---|
 | [coverage.md](coverage.md) | Rule 6: gcov branch completeness of the reference over every tracked case, with the open/unreachable/loop-entry classification | `cargo xtask coverage` |

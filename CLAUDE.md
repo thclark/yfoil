@@ -309,7 +309,11 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `scripts/noise-floor.sh` (noise-floor.md),
-`generate_subroutine_validation` (subroutines/). The analysis report (BL-distribution difference tables and
+`generate_subroutine_validation` (subroutines/).
+The studies' figures are drawn by matplotlib from their JSON outputs (`scripts/<study>/plot.py`, presentation
+only: every number, including axis extents, is computed in Rust and written to the run folder) through
+`scripts/figures/render.sh`, which needs **`uv` installed** (it fetches the pinned matplotlib itself, as
+`scripts/docs.sh` does for zensical). `scripts/figures/style.py` holds the publication figure conventions. The analysis report (BL-distribution difference tables and
 plots for the ±15° N=160 polar) is generated from the `--big` fixture case and is the remaining validation stage.
 
 ## Conventions

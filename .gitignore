@@ -45,3 +45,7 @@ xfoil/third-party/xfoil-6.99/plotlib/libPlt*.a
 !xfoil/third-party/*.ORIGIN
 !docs/**/*.html
 !overrides/**
+
+# Python bytecode from the figure scripts
+__pycache__/
+*.pyc
