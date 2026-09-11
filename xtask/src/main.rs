@@ -58,6 +58,11 @@ struct Case {
     /// OPER never entered); the gate is the PANGEN dump against yFoil's XFOIL-model generator
     #[serde(default)]
     geometry_only: bool,
+    /// GDES `TGAP gap blend` on the LOADed panels (OPER never entered): the instrumented TGAP
+    /// dumps the buffer airfoil before and after into `xfoil_tgap.dat`, the gate of
+    /// `set_te_gap` (tests/xfoil_tgap_tests.rs)
+    #[serde(default)]
+    tgap: Vec<f64>,
     #[serde(default)]
     re: f64,
     #[serde(default)]
@@ -104,6 +109,7 @@ const RAW_KEEP: &[&str] = &[
     "viscal_iters_all.dat",
     "noise_floor.json",
     "xfoil_pangen.dat",
+    "xfoil_tgap.dat",
     "blsolv_input.dat",
     "blsolv_output.dat",
     "blsolv_trace.dat",
@@ -251,12 +257,16 @@ fn fixtures(flags: &[String]) {
             continue;
         }
 
-        // 1. geometry, by yFoil only
+        // 1. geometry, by yFoil only: `naca4:dddd[:sharp]` (the original 4-digit cases) or
+        // `naca:<designation>[:sharp]` for any NACA family (`yfoil geometry naca`)
         let mut parts = case.foil.split(':');
         let kind = parts.next().unwrap();
         let spec = parts.next().expect("airfoil = \"naca4:0012[:sharp]\"");
         let sharp = matches!(parts.next(), Some("sharp"));
-        assert_eq!(kind, "naca4", "only naca4 supported so far");
+        assert!(
+            kind == "naca4" || kind == "naca",
+            "foil kinds: naca4:<4 digits>, naca:<designation>, xfoil-naca:<digits> (geometry_only)"
+        );
         let npan = case.n_panels.to_string();
         let mut gargs = vec!["geometry", "naca", spec, "-n", &npan, "-o", "panels.json"];
         if sharp {
@@ -283,60 +293,74 @@ fn fixtures(flags: &[String]) {
             "yfoil geometry convert",
         );
 
-        // 2. XFOIL script: LOAD (never NACA/PANE/PPAR), pinned defaults, alpha sequence
-        let mut s = String::from("PLOP\nG F\n\nLOAD panels.dat\nOPER\n");
-        let xtr = if case.xtr.is_empty() {
-            String::new()
-        } else {
-            assert_eq!(case.xtr.len(), 2, "xtr = [xu, xl]");
-            format!("XTR {} {}\n", case.xtr[0], case.xtr[1])
-        };
-        s += &format!(
-            "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
-            case.re, case.mach, case.ncrit, case.max_iterations
-        );
-        if case.matyp != 0 {
-            s += &format!("TYPE {}\n", case.matyp);
+        // 2. XFOIL script: LOAD (never NACA/PANE/PPAR), pinned defaults, alpha sequence.
+        // A TGAP case enters GDES instead of OPER and leaves after the one command.
+        let mut s = String::from("PLOP\nG F\n\nLOAD panels.dat\n");
+        if !case.tgap.is_empty() {
+            assert_eq!(case.tgap.len(), 2, "tgap = [gap, blend]");
+            s += &format!("GDES\nTGAP {} {}\n\nQUIT\n", case.tgap[0], case.tgap[1]);
         }
-        if case.damp {
-            s += "DAMP\n";
+        let geometry_case = !case.tgap.is_empty();
+        if !geometry_case {
+            s += "OPER\n";
         }
-        let seq = |s: &mut String, alphas: &[f64]| {
-            // ALFA for the first point, ASEQ for the rest (uniform step asserted)
-            s.push_str(&format!("ALFA {}\n", alphas[0]));
-            if alphas.len() > 1 {
-                let da = alphas[1] - alphas[0];
-                for w in alphas.windows(2) {
-                    assert!(
-                        ((w[1] - w[0]) - da).abs() < 1e-12,
-                        "polar alphas must be uniformly spaced"
-                    );
+        if geometry_case {
+            fs::write(work.join("xfoil.inp"), &s).unwrap();
+        }
+        if !geometry_case {
+            let xtr = if case.xtr.is_empty() {
+                String::new()
+            } else {
+                assert_eq!(case.xtr.len(), 2, "xtr = [xu, xl]");
+                format!("XTR {} {}\n", case.xtr[0], case.xtr[1])
+            };
+            s += &format!(
+                "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
+                case.re, case.mach, case.ncrit, case.max_iterations
+            );
+            if case.matyp != 0 {
+                s += &format!("TYPE {}\n", case.matyp);
+            }
+            if case.damp {
+                s += "DAMP\n";
+            }
+            let seq = |s: &mut String, alphas: &[f64]| {
+                // ALFA for the first point, ASEQ for the rest (uniform step asserted)
+                s.push_str(&format!("ALFA {}\n", alphas[0]));
+                if alphas.len() > 1 {
+                    let da = alphas[1] - alphas[0];
+                    for w in alphas.windows(2) {
+                        assert!(
+                            ((w[1] - w[0]) - da).abs() < 1e-12,
+                            "polar alphas must be uniformly spaced"
+                        );
+                    }
+                    s.push_str(&format!("ASEQ {} {} {}\n", alphas[1], alphas[alphas.len() - 1], da));
                 }
-                s.push_str(&format!("ASEQ {} {} {}\n", alphas[1], alphas[alphas.len() - 1], da));
-            }
-        };
-        if case.polar {
-            seq(&mut s, &case.alphas);
-            if !case.alphas_after_reinit.is_empty() {
-                s += "INIT\n";
-                seq(&mut s, &case.alphas_after_reinit);
-            }
-        } else {
-            for a in &case.alphas {
-                s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
-            }
-            if !case.alphas_after_reinit.is_empty() {
-                s += "INIT\n";
-                for a in &case.alphas_after_reinit {
+            };
+            if case.polar {
+                seq(&mut s, &case.alphas);
+                if !case.alphas_after_reinit.is_empty() {
+                    s += "INIT\n";
+                    seq(&mut s, &case.alphas_after_reinit);
+                }
+            } else {
+                for a in &case.alphas {
                     s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
                 }
+                if !case.alphas_after_reinit.is_empty() {
+                    s += "INIT\n";
+                    for a in &case.alphas_after_reinit {
+                        s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
+                    }
+                }
             }
+            for c in &case.cls {
+                s += &format!("CL {c}\n");
+            }
+            s += "\nQUIT\n";
+            fs::write(work.join("xfoil.inp"), &s).unwrap();
         }
-        for c in &case.cls {
-            s += &format!("CL {c}\n");
-        }
-        s += "\nQUIT\n";
-        fs::write(work.join("xfoil.inp"), &s).unwrap();
         if !case.dump_calls.is_empty() {
             let list: Vec<String> = case.dump_calls.iter().map(|k| k.to_string()).collect();
             fs::write(work.join("dump_calls.txt"), list.join("\n") + "\n").unwrap();
@@ -366,13 +390,22 @@ fn fixtures(flags: &[String]) {
             }
         }
 
-        // 3b. the +1-ULP twin: the reference's own noise floor for this case (CLAUDE.md Rule 1)
-        match ulp_twin(&xfoil, &work) {
-            Ok(summary) => println!("  noise floor: {summary}"),
-            Err(e) => {
-                eprintln!("  NOISE FLOOR FAILED: {e}");
+        // 3b. the +1-ULP twin: the reference's own noise floor for this case (CLAUDE.md Rule 1).
+        // A geometry (TGAP) case has no solver state to perturb.
+        if geometry_case {
+            if !work.join("xfoil_tgap.dat").exists() {
+                eprintln!("  xfoil_tgap.dat missing (TGAP dump)");
                 failures += 1;
                 continue;
+            }
+        } else {
+            match ulp_twin(&xfoil, &work) {
+                Ok(summary) => println!("  noise floor: {summary}"),
+                Err(e) => {
+                    eprintln!("  NOISE FLOOR FAILED: {e}");
+                    failures += 1;
+                    continue;
+                }
             }
         }
 
@@ -380,7 +413,7 @@ fn fixtures(flags: &[String]) {
         let manifest = serde_json::json!({
             "case": { "name": case.name, "foil": case.foil, "n_panels": case.n_panels, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls },
+                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls, "tgap": case.tgap },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",

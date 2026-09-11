@@ -1,0 +1,8 @@
+PLOP
+G F
+
+LOAD panels.dat
+GDES
+TGAP 0.002 1
+
+QUIT

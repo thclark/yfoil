@@ -1,0 +1,14 @@
+[package]
+name = "aerofoil-series"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "Aerofoil series study: every generator family drawn one panel per parameter, and the generators against the naca456 reference"
+
+[lints]
+workspace = true
+
+[dependencies]
+yfoil = { path = "../..", default-features = false }
+serde_json = { version = "1.0", features = ["float_roundtrip"] }

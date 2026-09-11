@@ -19,6 +19,13 @@ pub struct Geometry {
     pub x: Vec<f64>,
     /// Y-coordinates normalized by chord
     pub y: Vec<f64>,
+    /// How the coordinates were generated, when yFoil generated them: the series, designation,
+    /// thickness form and mean line with their parameter values, and the defining references
+    /// (`geometry::series`). Absent for coordinates read from a file that carries none. Kept
+    /// through repanelling and trailing-edge adjustment, which change the nodes but not the
+    /// section they sample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generator: Option<serde_json::Value>,
 }
 
 /// Paneled airfoil ready for aerodynamic analysis
@@ -118,6 +125,7 @@ impl Geometry {
             cm_ref: self.cm_ref,
             x: x_c,
             y: y_c,
+            generator: None,
         }
     }
 
@@ -157,6 +165,7 @@ impl Geometry {
             cm_ref: self.cm_ref,
             x: x_c,
             y: y_c,
+            generator: None,
         }
     }
 
@@ -233,6 +242,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![0.0; 150],
             y: vec![0.0; 151],
+            generator: None,
         };
         assert!(matches!(
             geom.validate(),
@@ -246,6 +256,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![0.0; 10],
             y: vec![0.0; 10],
+            generator: None,
         };
         assert!(matches!(geom.validate(), Err(InvalidGeometryError::TooFewPanels(_))));
     }
@@ -257,6 +268,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![1.0, 0.5, 0.0, 0.5, 1.0],       // TE at x=1, LE at x=0
             y: vec![0.01, 0.05, 0.0, -0.05, -0.01], // Gap of 0.02 at TE
+            generator: None,
         };
 
         assert!(!geom.is_sharp_te());
@@ -281,6 +293,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![1.0, 0.5, 0.0, 0.5, 1.0],
             y: vec![0.0, 0.05, 0.0, -0.05, 0.0], // Closed TE
+            generator: None,
         };
 
         assert!(geom.is_sharp_te());
@@ -302,6 +315,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![1.0, 0.5, 0.0, 0.5, 1.0],
             y: vec![0.01, 0.05, 0.0, -0.05, -0.01],
+            generator: None,
         };
 
         let sharpened = geom.sharpen();
@@ -319,6 +333,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![1.0, 0.5, 0.0, 0.5, 1.0],
             y: vec![0.000025, 0.05, 0.0, -0.05, -0.000025],
+            generator: None,
         };
         assert!(sharp.is_sharp_te());
 
@@ -327,6 +342,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![1.0, 0.5, 0.0, 0.5, 1.0],
             y: vec![0.0001, 0.05, 0.0, -0.05, -0.0001],
+            generator: None,
         };
         assert!(!blunt.is_sharp_te());
     }

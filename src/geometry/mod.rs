@@ -214,6 +214,7 @@ mod airfoil;
 mod io;
 mod naca;
 mod panel;
+pub mod series;
 mod spline;
 
 pub use airfoil::{Geometry, InvalidGeometryError, PanelledFoil};
@@ -225,7 +226,8 @@ pub use naca::{
     naca_4digit, naca_4digit_vertical, naca_5digit, naca_5digit_vertical, NacaError, Thickness, XFOIL_NACA_NSIDE,
 };
 pub use panel::{
-    arc_coordinate, curvature, find_le, panel_foil, repanel_by_curvature, repanel_cosine, solve_tridiagonal,
-    spline_segmented, PaneConfig,
+    arc_coordinate, curvature, find_le, panel_foil, repanel_by_curvature, repanel_cosine, set_te_gap,
+    solve_tridiagonal, spline_segmented, PaneConfig,
 };
+pub use series::{KarmanTrefftz, KarmanTrefftzError, MeanLine, Section, Series, SixSeriesFamily, ThicknessForm};
 pub use spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};

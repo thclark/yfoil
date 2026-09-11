@@ -27,3 +27,45 @@
  C
        LGAMU = .FALSE.
        LQINU = .FALSE.
+@@ -1262,6 +1282,26 @@
+       DOC = MIN( MAX( DOC , 0.0 ) , 1.0 )
+ C
+       DGAP = GAPNEW - GAP
++C
++C---- INSTRUMENTATION: buffer airfoil and TGAP inputs before the change
++      OPEN(UNIT=99,FILE='xfoil_tgap.dat',STATUS='REPLACE')
++      WRITE(99,*) '=== TGAP ==='
++      WRITE(99,*) 'NB =', NB
++      WRITE(99,'(A,ES24.16)') 'SBLE =', SBLE
++      WRITE(99,'(A,ES24.16)') 'XBLE =', XBLE
++      WRITE(99,'(A,ES24.16)') 'YBLE =', YBLE
++      WRITE(99,'(A,ES24.16)') 'XBTE =', XBTE
++      WRITE(99,'(A,ES24.16)') 'YBTE =', YBTE
++      WRITE(99,'(A,ES24.16)') 'GAP =', GAP
++      WRITE(99,'(A,ES24.16)') 'GAPNEW =', GAPNEW
++      WRITE(99,'(A,ES24.16)') 'DOC =', DOC
++      WRITE(99,'(A,ES24.16)') 'DXU =', DXU
++      WRITE(99,'(A,ES24.16)') 'DYU =', DYU
++      WRITE(99,*) '--- before: I, XB, YB, SB, XBP, YBP ---'
++      DO I = 1, NB
++        WRITE(99,'(A,I5,5ES24.16)') 'B', I, XB(I), YB(I), SB(I),
++     &                             XBP(I), YBP(I)
++      ENDDO
+ C
+ C---- go over each point, changing the y-thickness appropriately
+       DO 30 I=1, NB
+@@ -1289,6 +1329,14 @@
+    30 CONTINUE
+       LGSAME = .FALSE.
+ C
++C---- INSTRUMENTATION: buffer airfoil after the change (before re-splining)
++      WRITE(99,*) '--- after: I, XB, YB ---'
++      DO I = 1, NB
++        WRITE(99,'(A,I5,2ES24.16)') 'A', I, XB(I), YB(I)
++      ENDDO
++      CLOSE(99)
++      WRITE(*,*) '=== Wrote TGAP buffer airfoil to xfoil_tgap.dat ==='
++C
+       CALL SCALC(XB,YB,SB,NB)
+       CALL SEGSPL(XB,XBP,SB,NB)
+       CALL SEGSPL(YB,YBP,SB,NB)

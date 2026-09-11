@@ -193,7 +193,9 @@ Inside a translated body, short locals bound at the top from the named fields (`
 formula lines diffable against the Fortran. Elsewhere in the crate, idiomatic Rust.
 
 ```
-geometry/   - Aerofoil coordinates, splines, panelling, NACA generation
+geometry/   - Aerofoil coordinates, splines, panelling (PANGEN, TGAP), the series generators
+              (geometry/series/: every NACA family after NASA TM-4741 / PDAS naca456, and
+              Kármán–Trefftz; gated against tests/fixtures/naca456/, scripts/naca456-fixtures.sh)
 panel/      - Inviscid panel method, influence matrices, wake geometry, DIJ
 bl/         - BL closures, BLDIF/TRDIF/TESYS, MRCHUE, MRCHDU, BLSOLV
 solver/     - Pointer layer (IBLPAN/XICALC/IBLSYS/STFIND/STMOVE), velocity layer (UESET/QVFUE/GAMQV…),
@@ -208,7 +210,11 @@ field or state variable is added, renamed or re-represented.
 ## CLI
 
 ```
-yfoil geometry - convert | naca | repanel | info                (alias: geom)
+yfoil geometry - convert | naca | karman-trefftz | repanel | info   (alias: geom)
+                 naca takes every family with a public definition: 4-digit, 4-digit modified
+                 (0012-34), 5-digit (23012, 23112 reflex), 16-series (16-212), 6-series
+                 (63-415, --a for the loading extent) and 6A-series (64A010); --te-gap is
+                 XFOIL's TGAP; every generated file carries a `generator` provenance record
 yfoil analyse  - single operating point (--alpha or --cl, --inviscid); -o writes conditions, results,
                  geometry (+ wake), surface q/Cp and every per-station BL quantity (primaries and the
                  closures evaluated on them; --include-lagged-closures adds XFOIL's lagged arrays)
@@ -309,7 +315,8 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `scripts/noise-floor.sh` (noise-floor.md),
-`generate_subroutine_validation` (subroutines/).
+`generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
+(aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison).
 The studies' figures are drawn by matplotlib from their JSON outputs (`scripts/<study>/plot.py`, presentation
 only: every number, including axis extents, is computed in Rust and written to the run folder) through
 `scripts/figures/render.sh`, which needs **`uv` installed** (it fetches the pinned matplotlib itself, as
@@ -372,6 +379,9 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
 - NACA 0012, α=0 — symmetry, base viscous case, XFOIL-independent invariants
 - NACA 0012, 0°→+1° and 0°→−1° — initialisation from a previous solution, sign checks
 - NACA 4412, full ±15° polar — beyond the limits of convergence
+- One section per further generator family (docs/validation/aerofoil-series/): NACA 0012-34
+  (4-digit modified), 23018 (5-digit), 16-212 (16-series, compressible), 63-415 (6-series,
+  closed TE, wind turbine), 64A010 (6A-series) and a Kármán–Trefftz section (analytic, sharp TE)
 - Plus the branch-coverage cases of Rule 6: sharpened TE, M=0.3, high-α separated, low-Re laminar separation,
   `XSTRIP`, `MATYP≠1`
 

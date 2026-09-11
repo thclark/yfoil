@@ -326,5 +326,26 @@
     -0.0014787804695482964,
     -0.0013147561169769284,
     -0.0012599999999999777
-  ]
+  ],
+  "generator": {
+    "designation": "NACA 0012",
+    "mean_line": {
+      "family": "2",
+      "m": 0.0,
+      "p": 0.0
+    },
+    "references": [
+      "jacobs1933",
+      "abbott1959",
+      "ladson1996"
+    ],
+    "series": "naca_4_digit",
+    "sharp_te": false,
+    "thickness_applied": "perpendicular",
+    "thickness_form": {
+      "family": "4",
+      "t": 0.12
+    },
+    "yfoil": "0.1.0"
+  }
 }

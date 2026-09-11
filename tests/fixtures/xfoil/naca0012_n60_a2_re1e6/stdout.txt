@@ -87,7 +87,7 @@
 
   LE  x,y  =   0.00004   0.00000  |   Chord =   0.99996
   TE  x,y  =   1.00000   0.00000  |
- === Wrote panels to /tmp/xfoil_panels.dat ===
+ === Wrote panels to xfoil_panels.dat ===
 
  Current airfoil nodes set from buffer airfoil nodes (  60 )
 
@@ -117,7 +117,7 @@
  === DZDM at I=1 saved to file ===
  DZDM(1) =    2.2139431542146735E-002
  DZDM(N) =   0.17173413588878006     
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
 === STFIND OUTPUT ===
 IST =    31
@@ -191,7 +191,7 @@ LOWER SURFACE (IS=2):
 ... (    10 more stations)
 === END XICALC ===
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -547,7 +547,7 @@ LOWER SURFACE (IS=2):
    5   rms: 0.2395E-04   max: -.1645E-03   D at   32  1
        a =  2.000      CL =  0.2149
       Cm =  0.0027     CD =  0.00572   =>   CDf =  0.00426    CDp =  0.00147
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.2157   0.005725   0.000000   0.000000   0.000000    0.4709     #
 
 .OPERv   c>  
