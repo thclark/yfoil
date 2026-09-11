@@ -37,6 +37,16 @@
           navigation until its pages are presentable (see zensical.toml). Restore it together
           with the nav entry. -#}
       {#- <a class="md-button" href="{{ 'validation/' | url }}">Learn more</a> -#}
+      {#- Licence mark, bottom right, with the same side and bottom margins as the
+          call to action on the left (it lives in the same grid, so it shares its
+          horizontal padding, and it is pinned to the grid's bottom edge). The
+          dark-theme variant is used unconditionally because this page is dark
+          whatever the palette; assets/gpl-v3-logo-light-theme.svg is the one for
+          light grounds elsewhere. -#}
+      <a class="mdx-licence" href="https://www.gnu.org/licenses/gpl-3.0.html"
+         title="yFoil is free software, licensed under the GNU GPL v3 or later">
+        <img src="{{ 'assets/gpl-v3-logo-dark-theme.svg' | url }}" alt="GNU GPL v3">
+      </a>
     </div>
   </div>
 {% endblock %}
