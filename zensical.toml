@@ -49,6 +49,8 @@ nav = [
     ] },
     { "Reference" = [
       "guide/data.md",
+      "guide/aerofoil-series.md",
+      "references.md",
       "xfoil-known-issues.md",
       "xfoil-reference.md",
     ] },
@@ -60,6 +62,7 @@ nav = [
   #   "validation/coverage.md",
   #   "validation/noise-floor.md",
   #   { "Geometry" = "validation/geometry/README.md" },
+  #   { "Aerofoil series" = "validation/aerofoil-series/README.md" },
   #   { "Subroutines" = [
   #     "validation/subroutines/README.md",
   #     "validation/subroutines/closure.md",

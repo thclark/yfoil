@@ -1,0 +1,13 @@
+{
+  "reference": "PDAS naca456 (Carmichael 2001), NASA TM-4741 algorithm",
+  "source_url": "https://www.pdas.com/packages/naca456.zip",
+  "source_sha256": "327f9dae5552803990d0b683dd0e1d6c777562e4e3695b50d8cee80eb412f2c9",
+  "driver": "scripts/naca456-fixtures/driver.f90",
+  "driver_sha256": "9f97ee92c64b0d22c624ae180060d2dd78c22548d1c0cdc5ad89f5177c5a66d5",
+  "cases_sha256": "235298dbfade8f7ec8ed867aff5bf8d36e5e69773284192370ac8a17ed239a5b",
+  "gfortran": "GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
+  "fflags": "-fdefault-real-8 -ffp-contract=off -O0",
+  "host": "Darwin arm64",
+  "generated_by": "scripts/naca456-fixtures.sh",
+  "cases": ["naca0012","naca4412","naca2412","naca6409","naca0012-34","naca0010-64","naca0012-63","naca2412-34","naca0015-05","naca23012","naca23018","naca21012","naca25012","naca44012","naca23112","naca22112","naca25112","naca16-212","naca16-009","naca16-521","naca63-415","naca63-415-a05","naca63-415-a00","naca63-206","naca64-010","naca64-212","naca65-410","naca66-021","naca67-021","naca64A010","naca63A415","naca65A210"]
+}

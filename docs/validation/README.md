@@ -7,6 +7,11 @@ live under `tests/fixtures/xfoil/<case>/` (tracked) or `target/fixtures/<case>/`
 and the reports read those directories. Only Markdown and SVG are committed under `docs/validation/`;
 `.gitignore` refuses everything else.
 
+Figures are drawn by matplotlib from each study's JSON outputs (`scripts/<study>/plot.py`, presentation only;
+`scripts/figures/style.py` holds the publication conventions, `scripts/figures/render.sh` pins the version and runs it
+through uv, so running any of the studies needs [`uv`](https://docs.astral.sh/uv/) installed). Every number in a figure, including axis extents, is computed by the Rust study and is in its run folder,
+so the plots can be redrawn by anyone from the JSON alone.
+
 | Page | What it shows | Regenerate with |
 |---|---|---|
 | [coverage.md](coverage.md) | Rule 6: gcov branch completeness of the reference over every tracked case, with the open/unreachable/loop-entry classification | `cargo xtask coverage` |
@@ -15,6 +20,7 @@ and the reports read those directories. Only Markdown and SVG are committed unde
 | `scripts/xfoil-sensitivity/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the SVG sheet, JSON summaries and a LaTeX index) | The reference's own input sensitivity: NACA 0012 swept 0°–25° with node coordinates (1 ULP … 1e-7), panel count and alpha step perturbed; seven per-alpha quantities per family, base case in front (`scripts/xfoil-sensitivity/src/perturb.rs` for the node-perturbation method) | `cargo run --release -p xfoil-sensitivity` |
 | `scripts/xfoil-instrumentation-check/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the 2×2 SVG, `summary.json` and a LaTeX index) | The instrumentation is inert on a polar through stall: pristine and instrumented DP builds run one identical OPER script (XFOIL's own `NACA 0012`, `PPAR N 160`, Re 1e6, 0°–25° by 0.5°, `ALFA` + `DUMP` per point) and are compared byte-for-byte on XFOIL's standard `PACC` polar and `DUMP` files only, at XFOIL's own output precision | `cargo run --release -p xfoil-instrumentation-check` |
 | [subroutines/README.md](subroutines/README.md) | BL closure relations (HKIN, HSL, HST, CFL, CFT, DIL, DAMPL) against instrumented E24.16 samples in `tests/fixtures/subroutines/` | `cargo run --bin generate_subroutine_validation` |
+| [aerofoil-series/README.md](aerofoil-series/README.md) | The selection of aerofoils the equivalence cases run on (one per family, with why), every generator family drawn one panel per parameter, and the NACA generators against the public-domain NASA/PDAS `naca456` ordinates (`tests/fixtures/naca456/`, written by `scripts/naca456-fixtures.sh`; gated by `tests/naca456_series_tests.rs`) | `cargo run --release -p aerofoil-series -- --docs` |
 
 **Analysis (polar) validation** — the ±15° N=160 polar with per-alpha CL/CD/CM/XTR and BL-distribution
 difference tables against the instrumented per-alpha dumps of the `naca0012_n160_polar_re1e6` case — is

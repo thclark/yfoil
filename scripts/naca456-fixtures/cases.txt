@@ -1,0 +1,42 @@
+# One reference case per line: <slug> <NAMELIST /NACA/ body>. The slug names the fixture file
+# tests/fixtures/naca456/<slug>.dat; `name` is the designation yFoil is asked for (with `a`
+# when it is not 1). Lines starting with # are ignored.
+#
+# NACA 4-digit (Report 460)
+naca0012        name='NACA 0012', profile='4', toc=0.12, camber='0'
+naca4412        name='NACA 4412', profile='4', toc=0.12, camber='2', cmax=0.04, xmaxc=0.4
+naca2412        name='NACA 2412', profile='4', toc=0.12, camber='2', cmax=0.02, xmaxc=0.4
+naca6409        name='NACA 6409', profile='4', toc=0.09, camber='2', cmax=0.06, xmaxc=0.4
+# NACA 4-digit modified (Report 492)
+naca0012-34     name='NACA 0012-34', profile='4M', toc=0.12, leindex=3, xmaxt=0.4, camber='0'
+naca0010-64     name='NACA 0010-64', profile='4M', toc=0.10, leindex=6, xmaxt=0.4, camber='0'
+naca0012-63     name='NACA 0012-63', profile='4M', toc=0.12, leindex=6, xmaxt=0.3, camber='0'
+naca2412-34     name='NACA 2412-34', profile='4M', toc=0.12, leindex=3, xmaxt=0.4, camber='2', cmax=0.02, xmaxc=0.4
+naca0015-05     name='NACA 0015-05', profile='4M', toc=0.15, leindex=0, xmaxt=0.5, camber='0'
+# NACA 5-digit (Report 537)
+naca23012       name='NACA 23012', profile='4', toc=0.12, camber='3', cl=0.3, xmaxc=0.15
+naca23018       name='NACA 23018', profile='4', toc=0.18, camber='3', cl=0.3, xmaxc=0.15
+naca21012       name='NACA 21012', profile='4', toc=0.12, camber='3', cl=0.3, xmaxc=0.05
+naca25012       name='NACA 25012', profile='4', toc=0.12, camber='3', cl=0.3, xmaxc=0.25
+naca44012       name='NACA 44012', profile='4', toc=0.12, camber='3', cl=0.6, xmaxc=0.2
+naca23112       name='NACA 23112', profile='4', toc=0.12, camber='3R', cl=0.3, xmaxc=0.15
+naca22112       name='NACA 22112', profile='4', toc=0.12, camber='3R', cl=0.3, xmaxc=0.1
+naca25112       name='NACA 25112', profile='4', toc=0.12, camber='3R', cl=0.3, xmaxc=0.25
+# NACA 16-series (Report 763): the 0012-45 thickness with the a = 1 mean line
+naca16-212      name='NACA 16-212', profile='4M', toc=0.12, leindex=4, xmaxt=0.5, camber='6', a=1.0, cl=0.2
+naca16-009      name='NACA 16-009', profile='4M', toc=0.09, leindex=4, xmaxt=0.5, camber='0'
+naca16-521      name='NACA 16-521', profile='4M', toc=0.21, leindex=4, xmaxt=0.5, camber='6', a=1.0, cl=0.5
+# NACA 6-series (Report 824)
+naca63-415      name='NACA 63-415', profile='63', toc=0.15, camber='6', a=1.0, cl=0.4
+naca63-415-a05  name='NACA 63-415', profile='63', toc=0.15, camber='6', a=0.5, cl=0.4
+naca63-415-a00  name='NACA 63-415', profile='63', toc=0.15, camber='6', a=0.0, cl=0.4
+naca63-206      name='NACA 63-206', profile='63', toc=0.06, camber='6', a=1.0, cl=0.2
+naca64-010      name='NACA 64-010', profile='64', toc=0.10, camber='0'
+naca64-212      name='NACA 64-212', profile='64', toc=0.12, camber='6', a=1.0, cl=0.2
+naca65-410      name='NACA 65-410', profile='65', toc=0.10, camber='6', a=1.0, cl=0.4
+naca66-021      name='NACA 66-021', profile='66', toc=0.21, camber='0'
+naca67-021      name='NACA 67-021', profile='67', toc=0.21, camber='0'
+# NACA 6A-series (Report 903)
+naca64A010      name='NACA 64A010', profile='64A', toc=0.10, camber='0'
+naca63A415      name='NACA 63A415', profile='63A', toc=0.15, camber='6A', cl=0.4
+naca65A210      name='NACA 65A210', profile='65A', toc=0.10, camber='6A', cl=0.2

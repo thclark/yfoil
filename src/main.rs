@@ -1,13 +1,13 @@
 //! yFoil CLI - Aerofoil analysis tool
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use yfoil::geometry::Thickness;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
 use yfoil::geometry::{
     naca_4digit, naca_5digit, panel_foil, read_dat_file, read_geometry_from_file, repanel_by_curvature, repanel_cosine,
-    write_dat_file, write_geometry_to_json, Geometry, PaneConfig,
+    set_te_gap, write_dat_file, write_geometry_to_json, Geometry, KarmanTrefftz, PaneConfig, Section, Series,
 };
 use yfoil::output::{AnalysisOutput, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
@@ -295,9 +295,10 @@ enum GeomAction {
         name: String,
     },
 
-    /// Generate NACA aerofoil
+    /// Generate a NACA section: 4-digit (2412), 4-digit modified (0012-34), 5-digit (23012,
+    /// 23112 reflex), 16-series (16-212), 6-series (63-415) or 6A-series (64A010)
     Naca {
-        /// NACA designation (e.g., "0012", "4412", "23015")
+        /// NACA designation (e.g., "0012", "4412", "23015", "16-212", "63-415", "64A010")
         spec: String,
 
         /// Number of panels
@@ -313,9 +314,59 @@ enum GeomAction {
         sharp: bool,
         /// Thickness distribution: perpendicular to the camber line (the NACA definition, yFoil's
         /// spacing) or vertical (XFOIL's NACA4/NACA5 on its 245-point buffer, then PANGEN to the
-        /// requested panel count)
+        /// requested panel count; 4- and 5-digit only)
         #[arg(long, value_enum, default_value_t = Thickness::Perpendicular)]
         thickness: Thickness,
+
+        /// Extent of uniform loading of a 6-series (or 16-series) mean line, 0..1 (default 1.0)
+        #[arg(long)]
+        a: Option<f64>,
+
+        /// Set the trailing-edge gap (chord units) with XFOIL's TGAP blending; the section's own
+        /// trailing edge is kept when absent (sharp for the 6-series and Kármán–Trefftz)
+        #[arg(long)]
+        te_gap: Option<f64>,
+
+        /// Blending distance/c of --te-gap, 0..1 (XFOIL's TGAP second argument)
+        #[arg(long, default_value_t = 1.0)]
+        te_blend: f64,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Generate a Kármán–Trefftz section (Joukowski when the trailing-edge angle is 0): the
+    /// conformal map of a circle through ζ = 1, an analytic section with an exact potential-flow
+    /// solution and a sharp trailing edge
+    KarmanTrefftz {
+        /// Circle centre x in the ζ-plane (negative; sets the thickness)
+        #[arg(long, default_value_t = -0.1)]
+        x_centre: f64,
+
+        /// Circle centre y in the ζ-plane (sets the camber)
+        #[arg(long, default_value_t = 0.05)]
+        y_centre: f64,
+
+        /// Trailing-edge angle in degrees, 0 ≤ τ < 180
+        #[arg(long, default_value_t = 10.0)]
+        te_angle: f64,
+
+        /// Number of panels
+        #[arg(short = 'n', long, default_value_t = 160)]
+        panels: usize,
+
+        /// Output format: json, dat
+        #[arg(long, default_value = "json")]
+        to: String,
+
+        /// Set the trailing-edge gap (chord units) with XFOIL's TGAP blending
+        #[arg(long)]
+        te_gap: Option<f64>,
+
+        /// Blending distance/c of --te-gap, 0..1
+        #[arg(long, default_value_t = 1.0)]
+        te_blend: f64,
 
         /// Output file path
         #[arg(short, long)]
@@ -876,6 +927,53 @@ fn handle_plot(_action: PlotAction) {
     std::process::exit(1);
 }
 
+/// Apply the optional trailing-edge treatments of the generators: `--sharp` (move both TE nodes
+/// to their midpoint) and `--te-gap` (XFOIL's TGAP), recording each in the provenance record.
+fn finish_geometry(geometry: Geometry, sharp: bool, te_gap: Option<f64>, te_blend: f64) -> Geometry {
+    let mut geometry = geometry;
+    if sharp {
+        geometry = geometry.sharpen();
+        if let Some(rec) = geometry.generator.as_mut() {
+            rec["sharp_te"] = serde_json::Value::Bool(true);
+            rec["sharpened"] = serde_json::Value::Bool(true);
+        }
+    }
+    if let Some(gap) = te_gap {
+        geometry = set_te_gap(&geometry, gap, te_blend);
+        if let Some(rec) = geometry.generator.as_mut() {
+            rec["te_gap"] = serde_json::json!({ "gap": gap, "blend": te_blend, "method": "TGAP" });
+            rec["sharp_te"] = serde_json::Value::Bool(gap == 0.0);
+        }
+    }
+    geometry
+}
+
+/// Write a generated section as JSON or `.dat`
+fn write_generated(geometry: &Geometry, name: &str, panels: usize, to: &str, output_path: &Path) {
+    match to {
+        "json" => {
+            if let Err(e) = write_geometry_to_json(geometry, output_path) {
+                eprintln!("Error writing JSON: {}", e);
+                std::process::exit(1);
+            }
+            println!("Generated {} with {} panels", name, panels);
+            println!("Wrote JSON to {}", output_path.display());
+        }
+        "dat" => {
+            if let Err(e) = write_dat_file(geometry, name, output_path) {
+                eprintln!("Error writing DAT: {}", e);
+                std::process::exit(1);
+            }
+            println!("Generated {} with {} panels", name, panels);
+            println!("Wrote DAT to {}", output_path.display());
+        }
+        _ => {
+            eprintln!("Unknown output format: {}", to);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn handle_geom(action: GeomAction) {
     match action {
         GeomAction::Convert {
@@ -921,55 +1019,57 @@ fn handle_geom(action: GeomAction) {
             to,
             sharp,
             thickness,
+            a,
+            te_gap,
+            te_blend,
             output,
         } => {
-            let geometry = if spec.len() == 4 {
-                match naca_4digit(&spec, panels, thickness) {
-                    Ok(g) => g,
-                    Err(e) => {
-                        eprintln!("Error generating NACA aerofoil: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else if spec.len() == 5 {
-                match naca_5digit(&spec, panels, thickness) {
-                    Ok(g) => g,
-                    Err(e) => {
-                        eprintln!("Error generating NACA aerofoil: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                eprintln!("Invalid NACA specification: {} (must be 4 or 5 digits)", spec);
+            let fail = |e: &dyn std::fmt::Display| -> ! {
+                eprintln!("Error generating NACA aerofoil: {}", e);
                 std::process::exit(1);
             };
-            let geometry = if sharp { geometry.sharpen() } else { geometry };
+            let section = Section::from_designation(&spec).unwrap_or_else(|e| fail(&e));
+            let section = match a {
+                Some(a) => section.with_a(a).unwrap_or_else(|e| fail(&e)),
+                None => section,
+            };
+            let geometry = match thickness {
+                Thickness::Perpendicular => section.geometry(panels),
+                Thickness::Vertical => match section.series {
+                    Series::FourDigit => naca_4digit(&spec, panels, thickness).unwrap_or_else(|e| fail(&e)),
+                    Series::FiveDigit => naca_5digit(&spec, panels, thickness).unwrap_or_else(|e| fail(&e)),
+                    _ => fail(&"--thickness vertical is XFOIL's NACA4/NACA5 model: 4- and 5-digit sections only"),
+                },
+            };
+            let geometry = finish_geometry(geometry, sharp, te_gap, te_blend);
 
-            let name = format!("NACA {}", spec);
-            let output_path = output.unwrap_or_else(|| PathBuf::from(format!("naca{}.{}", spec, to)));
+            let name = section.designation.clone();
+            let file_stem: String = spec
+                .to_ascii_lowercase()
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .collect();
+            let output_path = output.unwrap_or_else(|| PathBuf::from(format!("naca{}.{}", file_stem, to)));
+            write_generated(&geometry, &name, panels, &to, &output_path);
+        }
 
-            match to.as_str() {
-                "json" => {
-                    if let Err(e) = write_geometry_to_json(&geometry, &output_path) {
-                        eprintln!("Error writing JSON: {}", e);
-                        std::process::exit(1);
-                    }
-                    println!("Generated NACA {} with {} panels", spec, panels);
-                    println!("Wrote JSON to {}", output_path.display());
-                }
-                "dat" => {
-                    if let Err(e) = write_dat_file(&geometry, &name, &output_path) {
-                        eprintln!("Error writing DAT: {}", e);
-                        std::process::exit(1);
-                    }
-                    println!("Generated NACA {} with {} panels", spec, panels);
-                    println!("Wrote DAT to {}", output_path.display());
-                }
-                _ => {
-                    eprintln!("Unknown output format: {}", to);
-                    std::process::exit(1);
-                }
-            }
+        GeomAction::KarmanTrefftz {
+            x_centre,
+            y_centre,
+            te_angle,
+            panels,
+            to,
+            te_gap,
+            te_blend,
+            output,
+        } => {
+            let section = KarmanTrefftz::new(x_centre, y_centre, te_angle).unwrap_or_else(|e| {
+                eprintln!("Error generating Kármán–Trefftz aerofoil: {}", e);
+                std::process::exit(1);
+            });
+            let geometry = finish_geometry(section.geometry(panels), false, te_gap, te_blend);
+            let output_path = output.unwrap_or_else(|| PathBuf::from(format!("karman-trefftz.{}", to)));
+            write_generated(&geometry, &section.designation(), panels, &to, &output_path);
         }
 
         GeomAction::Repanel {

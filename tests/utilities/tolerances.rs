@@ -49,3 +49,24 @@ pub fn assert_within(a: f64, b: f64, tol: f64, scale: f64, what: &str) {
         "{what}: yfoil={a:.17e} xfoil={b:.17e} err={err:.3e} > tol={tol:.1e} (scale {scale:.1e})"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Geometry generators against the NASA/PDAS `naca456` reference (tests/fixtures/naca456/,
+// `scripts/naca456-fixtures.sh`). These are not XFOIL equivalence gates: naca456 is an
+// independent implementation of the NACA definitions, and its own precision sets the floor.
+// ---------------------------------------------------------------------------------------------
+
+/// Closed-form families (4-digit, 4-digit modified, 2-, 3- and 3-reflex mean lines): the same
+/// polynomials evaluated in a different association; expected agreement is round-off.
+pub const TOL_NACA456_CLOSED_FORM: f64 = 1e-12;
+/// The 6-series and 6A mean lines: naca456 evaluates them with `PI = 3.141592654` (a 10-digit
+/// literal, 1.1e-10 relative from π), which yFoil does not reproduce; the gate is 10 × that.
+pub const TOL_NACA456_SIX_SERIES_MEAN_LINE: f64 = 1e-9;
+/// The 6-series thickness forms are looked up in naca456 by inverting the arc-length spline
+/// with Brent's method at `TOL = 1E-6` on the arc coordinate, and the ordinate is reported at
+/// the station reached, not the one requested; its ordinate is therefore in error by up to
+/// `NACA456_ROOT_TOL × |dy_t/dx|`. yFoil inverts to round-off, so the gate on `y_t` is that
+/// slope-scaled bound plus the mapping's own noise (`3.14159265` for π in the φ grid: 1.1e-9
+/// relative, through a unit-scale mapping and a spline).
+pub const NACA456_ROOT_TOL: f64 = 1e-6;
+pub const TOL_NACA456_SIX_SERIES_THICKNESS: f64 = 1e-8;

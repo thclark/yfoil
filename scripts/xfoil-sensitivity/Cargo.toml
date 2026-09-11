@@ -11,6 +11,4 @@ workspace = true
 
 [dependencies]
 yfoil = { path = "../..", default-features = false }
-plotters = "0.3"
 serde_json = { version = "1.0", features = ["float_roundtrip"] }
-figure-style = { path = "../figure-style" }

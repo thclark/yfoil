@@ -87,7 +87,7 @@
 
   LE  x,y  =   0.00004   0.00000  |   Chord =   0.99996
   TE  x,y  =   1.00000   0.00000  |
- === Wrote panels to /tmp/xfoil_panels.dat ===
+ === Wrote panels to xfoil_panels.dat ===
 
  Current airfoil nodes set from buffer airfoil nodes (  60 )
 
@@ -117,7 +117,7 @@
  === DZDM at I=1 saved to file ===
  DZDM(1) =    2.2139431542146735E-002
  DZDM(N) =   0.17173413588878006     
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
 === STFIND OUTPUT ===
 IST =    30
@@ -191,7 +191,7 @@ LOWER SURFACE (IS=2):
 ... (    11 more stations)
 === END XICALC ===
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -618,13 +618,13 @@ LOWER SURFACE (IS=2):
    6   rms: 0.1324E-06   max: -.8350E-06   D at   31  2
        a =  0.000      CL =  0.0000
       Cm = -0.0000     CD =  0.00530   =>   CDf =  0.00413    CDp =  0.00117
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.2661   0.005299   0.000000   0.000000   0.000000    0.6840     #
 
-.OPERv   c>   === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+.OPERv   c>   === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -1041,12 +1041,12 @@ LOWER SURFACE (IS=2):
    6   rms: 0.5798E-06   max: -.4697E-05   D at   22  2
        a =  1.000      CL =  0.1076
       Cm =  0.0013     CD =  0.00541   =>   CDf =  0.00417    CDp =  0.00124
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.2354   0.005407   0.000000   0.000000   0.000000    0.5774     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -1472,12 +1472,12 @@ LOWER SURFACE (IS=2):
    6   rms: 0.3125E-05   max: -.3749E-04   C at   17  1
        a =  2.000      CL =  0.2149
       Cm =  0.0027     CD =  0.00572   =>   CDf =  0.00426    CDp =  0.00147
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.2157   0.005725   0.000000   0.000000   0.000000    0.4709     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -1825,12 +1825,12 @@ LOWER SURFACE (IS=2):
    5   rms: 0.5372E-05   max: -.5950E-04   D at   15  1
        a =  3.000      CL =  0.3193
       Cm =  0.0047     CD =  0.00647   =>   CDf =  0.00465    CDp =  0.00182
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.1250   0.006467   0.000000   0.000000   0.000000    0.3346     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -2182,12 +2182,12 @@ LOWER SURFACE (IS=2):
    5   rms: 0.6068E-06   max: -.5084E-05   C at   27  2
        a =  4.000      CL =  0.4294
       Cm =  0.0053     CD =  0.00731   =>   CDf =  0.00499    CDp =  0.00231
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.1469   0.007306   0.000000   0.000000   0.000000    0.2342     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -2604,12 +2604,12 @@ LOWER SURFACE (IS=2):
    6   rms: 0.2843E-06   max: -.1810E-05   D at   30  2
        a =  5.000      CL =  0.5562
       Cm =  0.0017     CD =  0.00838   =>   CDf =  0.00539    CDp =  0.00299
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.3504   0.008382   0.000000   0.000000   0.000000    0.1456     #
 
 .OPERv   c>   BLs will be initialized on next point
 
-.OPERv   c>   === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+.OPERv   c>   === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
 === STFIND OUTPUT ===
 IST =    30
@@ -2683,7 +2683,7 @@ LOWER SURFACE (IS=2):
 ... (    11 more stations)
 === END XICALC ===
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -3110,13 +3110,13 @@ LOWER SURFACE (IS=2):
    6   rms: 0.1324E-06   max: -.8350E-06   D at   31  2
        a =  0.000      CL =  0.0000
       Cm = -0.0000     CD =  0.00530   =>   CDf =  0.00413    CDp =  0.00117
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.2661   0.005299   0.000000   0.000000   0.000000    0.6840     #
 
-.OPERv   c>   === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+.OPERv   c>   === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -3533,12 +3533,12 @@ LOWER SURFACE (IS=2):
    6   rms: 0.5831E-06   max: -.4693E-05   D at   22  1
        a = -1.000      CL = -0.1076
       Cm = -0.0013     CD =  0.00541   =>   CDf =  0.00417    CDp =  0.00124
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.3176   0.005407   0.000000   0.000000   0.000000    0.7816     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -3964,12 +3964,12 @@ LOWER SURFACE (IS=2):
    6   rms: 0.3099E-05   max: -.3771E-04   C at   17  2
        a = -2.000      CL = -0.2149
       Cm = -0.0027     CD =  0.00572   =>   CDf =  0.00426    CDp =  0.00147
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.4497   0.005725   0.000000   0.000000   0.000000    0.8642     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -4317,12 +4317,12 @@ LOWER SURFACE (IS=2):
    5   rms: 0.5387E-05   max: -.6128E-04   D at   15  2
        a = -3.000      CL = -0.3193
       Cm = -0.0047     CD =  0.00647   =>   CDf =  0.00465    CDp =  0.00182
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    3.7539   0.006467   0.000000   0.000000   0.000000    0.9266     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -4674,12 +4674,12 @@ LOWER SURFACE (IS=2):
    5   rms: 0.6894E-06   max: -.5253E-05   C at   27  1
        a = -4.000      CL = -0.4294
       Cm = -0.0053     CD =  0.00731   =>   CDf =  0.00499    CDp =  0.00231
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    4.3853   0.007306   0.001370   0.001473   0.000103    0.9652     #
- === Wrote inviscid to /tmp/xfoil_inviscid.dat ===
+ === Wrote inviscid to xfoil_inviscid.dat ===
  Calculating wake trajectory ...
  Calculating source influence matrix ...
- === Wrote DIJ matrix to /tmp/xfoil_dij.dat ===
+ === Wrote DIJ matrix to xfoil_dij.dat ===
 
  Solving BL system ...
 
@@ -5096,7 +5096,7 @@ LOWER SURFACE (IS=2):
    6   rms: 0.4292E-06   max: -.1679E-05   T at   28  1
        a = -5.000      CL = -0.5562
       Cm = -0.0017     CD =  0.00838   =>   CDf =  0.00539    CDp =  0.00299
- === Wrote viscal to /tmp/xfoil_viscal_iter.dat ===
+ === Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ===
       9.000    5.4394   0.008382   0.001302   0.001709   0.000407    0.9840     #
 
 .OPERv   c>  

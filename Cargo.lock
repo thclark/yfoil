@@ -9,6 +9,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aerofoil-series"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "yfoil",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -415,13 +423,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
-]
-
-[[package]]
-name = "figure-style"
-version = "0.1.0"
-dependencies = [
- "plotters",
 ]
 
 [[package]]
@@ -1723,8 +1724,6 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 name = "xfoil-instrumentation-check"
 version = "0.1.0"
 dependencies = [
- "figure-style",
- "plotters",
  "serde",
  "serde_json",
 ]
@@ -1733,8 +1732,6 @@ dependencies = [
 name = "xfoil-sensitivity"
 version = "0.1.0"
 dependencies = [
- "figure-style",
- "plotters",
  "serde_json",
  "yfoil",
 ]

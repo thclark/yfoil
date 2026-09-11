@@ -102,6 +102,7 @@ pub fn read_dat_file<P: AsRef<Path>>(path: P) -> Result<(String, Geometry), Geom
             cm_ref: [0.25, 0.0], // Default quarter-chord reference
             x: x_coords,
             y: y_coords,
+            generator: None,
         }
     };
 
@@ -194,6 +195,7 @@ fn convert_lednicer_to_selig(x: &[f64], y: &[f64]) -> Result<Geometry, GeometryR
         cm_ref: [0.25, 0.0],
         x: x_c,
         y: y_c,
+        generator: None,
     })
 }
 
@@ -262,6 +264,7 @@ mod tests {
             cm_ref: [0.25, 0.0],
             x: vec![1.0, 0.5, 0.0, 0.5, 1.0],
             y: vec![0.0, 0.05, 0.0, -0.05, 0.0],
+            generator: None,
         };
 
         // Write to temp file

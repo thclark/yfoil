@@ -1,9 +1,11 @@
-//! NACA airfoil generators
-//!
-//! Generate standard NACA airfoil profiles from their designation numbers.
+//! NACA aerofoil generators: the 4- and 5-digit entry points kept for the fixture pipeline and
+//! the CLI, and XFOIL's own `NACA4`/`NACA5` model (thickness applied vertically) for comparison.
+//! Every NACA family is defined in [`super::series`]; the perpendicular-thickness generators here
+//! delegate to it.
 
 use super::airfoil::Geometry;
 use super::panel::{repanel_by_curvature, PaneConfig};
+use super::series::Section;
 
 /// How a NACA section's thickness distribution is applied to its camber line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
@@ -44,86 +46,7 @@ pub fn naca_4digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
             "NACA 4-digit designation must be exactly 4 characters".to_string(),
         ));
     }
-
-    // Parse designation
-    let m = designation[0..1]
-        .parse::<f64>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid camber digit".to_string()))?
-        / 100.0; // max camber
-    let p = designation[1..2]
-        .parse::<f64>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid camber position digit".to_string()))?
-        / 10.0; // camber position
-    let t = designation[2..4]
-        .parse::<f64>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid thickness digits".to_string()))?
-        / 100.0; // thickness
-
-    // Generate cosine-spaced x coordinates
-    // To produce exactly n_panels points total, we need n_panels/2 points per surface.
-    // XFOIL's PANE command:
-    // - Places nodes at exactly x=1.0 (TE)
-    // - Straddles the LE (no node at exactly x=0)
-    let n_half = n_panels / 2;
-    let mut x_upper = Vec::with_capacity(n_half);
-    let mut y_upper = Vec::with_capacity(n_half);
-    let mut x_lower = Vec::with_capacity(n_half);
-    let mut y_lower = Vec::with_capacity(n_half);
-
-    for i in 0..n_half {
-        // Cosine distribution that places node at x=1 (TE) and straddles x=0 (LE).
-        // After reversal, the ordering will be: TE (x=1) -> near-LE (x≈0).
-        // XFOIL places station 1 exactly at x=1.0.
-        //
-        // Without half-cell offset: beta = π*i/(n_half-1) gives x=0 at i=0 and x=1 at i=n_half-1.
-        // But we want to avoid x=0 exactly, so we use a slight offset at the LE end only:
-        // - i=0: beta = 0.5π/(n_half-1+0.5), x ≈ 0.0001 (near LE)
-        // - i=n_half-1: beta = π, x = 1.0 (exact TE)
-        let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 - 0.5);
-        let beta = beta.min(std::f64::consts::PI); // Cap at π for last point
-        let x = 0.5 * (1.0 - beta.cos());
-
-        // Thickness distribution (modified for closed TE)
-        let yt = thickness_distribution(x, t);
-
-        // Camber line and its derivative
-        let (yc, dyc_dx) = camber_line(x, m, p);
-
-        // Angle of camber line
-        let theta = dyc_dx.atan();
-
-        // Upper and lower surface coordinates
-        x_upper.push(x - yt * theta.sin());
-        y_upper.push(yc + yt * theta.cos());
-        x_lower.push(x + yt * theta.sin());
-        y_lower.push(yc - yt * theta.cos());
-    }
-
-    // Combine: TE -> upper (reverse) -> near-LE upper -> near-LE lower -> lower -> TE
-    // With half-cell offset, we have two near-LE points that straddle the actual LE:
-    //   upper[0] at (x_small, +y) and lower[0] at (x_small, -y)
-    // Both points must be included (like XFOIL's PANE does).
-    // Total: n_half + n_half = n_panels points
-    let mut x_c = Vec::with_capacity(n_panels);
-    let mut y_c = Vec::with_capacity(n_panels);
-
-    // Upper surface from TE to near-LE (n_half points: indices n_half-1, n_half-2, ..., 0)
-    for i in (0..n_half).rev() {
-        x_c.push(x_upper[i]);
-        y_c.push(y_upper[i]);
-    }
-
-    // Lower surface from near-LE to TE (n_half points: indices 0, 1, ..., n_half-1)
-    for i in 0..n_half {
-        x_c.push(x_lower[i]);
-        y_c.push(y_lower[i]);
-    }
-
-    Ok(Geometry {
-        cm_ref: [0.25, 0.0], // Quarter chord
-        x: x_c,
-        y: y_c,
-    })
+    Ok(Section::from_designation(designation)?.geometry(n_panels))
 }
 
 /// Translates XFOIL's `NACA5`.
@@ -152,233 +75,7 @@ pub fn naca_5digit(designation: &str, n_panels: usize, thickness: Thickness) -> 
             "NACA 5-digit designation must be exactly 5 characters".to_string(),
         ));
     }
-
-    // Parse designation
-    let first = designation[0..1]
-        .parse::<u32>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid first digit".to_string()))?;
-    let second = designation[1..2]
-        .parse::<u32>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid second digit".to_string()))?;
-    let third = designation[2..3]
-        .parse::<u32>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid third digit".to_string()))?;
-    let thickness = designation[3..5]
-        .parse::<f64>()
-        .map_err(|_| NacaError::InvalidDesignation("Invalid thickness digits".to_string()))?
-        / 100.0;
-
-    // Design lift coefficient
-    let cl = (first as f64) * 0.15; // Cl = first_digit * 3/20
-
-    // Position of maximum camber
-    let p = (second as f64) * 0.05; // p = second_digit / 20
-
-    // Check for reflex camber
-    let reflex = third == 1;
-
-    if p == 0.0 && cl != 0.0 {
-        return Err(NacaError::InvalidDesignation(
-            "Invalid camber position (second digit cannot be 0 with non-zero lift)".to_string(),
-        ));
-    }
-
-    // Get camber line coefficients
-    let (r, k1, k2_k1) = get_5digit_coefficients(cl, p, reflex)?;
-
-    // Generate cosine-spaced x coordinates
-    let n_half = n_panels / 2;
-    let mut x_upper = Vec::with_capacity(n_half + 1);
-    let mut y_upper = Vec::with_capacity(n_half + 1);
-    let mut x_lower = Vec::with_capacity(n_half + 1);
-    let mut y_lower = Vec::with_capacity(n_half + 1);
-
-    for i in 0..=n_half {
-        // Use half-cell offset to avoid putting a node at exactly x=0 (LE).
-        // XFOIL's PANE command creates panels that straddle the LE, not pass through it.
-        // With a node at exact x=0, gamma=0 there and the BL fails to converge.
-        let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 + 1.0);
-        let x = 0.5 * (1.0 - beta.cos());
-
-        // Thickness distribution (same as 4-digit, modified for closed TE)
-        let yt = thickness_distribution(x, thickness);
-
-        // Camber line and its derivative
-        let (yc, dyc_dx) = camber_line_5digit(x, r, k1, k2_k1, reflex);
-
-        // Angle of camber line
-        let theta = dyc_dx.atan();
-
-        // Upper and lower surface coordinates
-        x_upper.push(x - yt * theta.sin());
-        y_upper.push(yc + yt * theta.cos());
-        x_lower.push(x + yt * theta.sin());
-        y_lower.push(yc - yt * theta.cos());
-    }
-
-    // Combine: TE -> upper (reverse) -> near-LE upper -> near-LE lower -> lower -> TE
-    // With half-cell offset, we have two near-LE points that straddle the actual LE:
-    //   upper[0] at (x_small, +y) and lower[0] at (x_small, -y)
-    // Both points must be included (like XFOIL's PANE does).
-    let mut x_c = Vec::with_capacity(2 * n_half + 2);
-    let mut y_c = Vec::with_capacity(2 * n_half + 2);
-
-    // Upper surface from TE to near-LE (include ALL points including i=0)
-    for i in (0..=n_half).rev() {
-        x_c.push(x_upper[i]);
-        y_c.push(y_upper[i]);
-    }
-
-    // Lower surface from near-LE to TE (include ALL points including i=0)
-    for i in 0..=n_half {
-        x_c.push(x_lower[i]);
-        y_c.push(y_lower[i]);
-    }
-
-    Ok(Geometry {
-        cm_ref: [0.25, 0.0],
-        x: x_c,
-        y: y_c,
-    })
-}
-
-/// Get coefficients for NACA 5-digit mean camber line
-///
-/// Returns (r, k1, k2/k1) where r is the position where camber meets the
-/// straight section, k1 is the camber multiplier, and k2/k1 is the ratio
-/// for reflex cambers.
-fn get_5digit_coefficients(cl: f64, p: f64, reflex: bool) -> Result<(f64, f64, f64), NacaError> {
-    // Standard 5-digit camber line coefficients
-    // These are tabulated values for specific p positions
-    // p = 0.05, 0.10, 0.15, 0.20, 0.25
-
-    if cl == 0.0 {
-        // Symmetric airfoil
-        return Ok((0.0, 0.0, 0.0));
-    }
-
-    // Lookup table for standard (non-reflex) 5-digit cambers
-    // Format: (p, r, k1) - k1 is for Cl = 0.3 (first digit = 2)
-    let standard_coeffs = [
-        (0.05, 0.0580, 361.400),
-        (0.10, 0.1260, 51.640),
-        (0.15, 0.2025, 15.957),
-        (0.20, 0.2900, 6.643),
-        (0.25, 0.3910, 3.230),
-    ];
-
-    // Lookup table for reflex 5-digit cambers
-    let reflex_coeffs = [
-        (0.10, 0.1300, 51.990, 0.000764),
-        (0.15, 0.2170, 15.793, 0.00677),
-        (0.20, 0.3180, 6.520, 0.0303),
-        (0.25, 0.4410, 3.191, 0.1355),
-    ];
-
-    // Find closest p value and interpolate if needed
-    let (r, k1_base, k2_k1) = if reflex {
-        // Find matching reflex coefficients
-        let mut found = None;
-        for &(pi, ri, k1i, k2_k1i) in &reflex_coeffs {
-            if (pi - p).abs() < 0.001 {
-                found = Some((ri, k1i, k2_k1i));
-                break;
-            }
-        }
-        found.ok_or_else(|| {
-            NacaError::InvalidDesignation(format!(
-                "Reflex camber position {} not supported. Use 0.10, 0.15, 0.20, or 0.25",
-                p
-            ))
-        })?
-    } else {
-        // Find matching standard coefficients
-        let mut found = None;
-        for &(pi, ri, k1i) in &standard_coeffs {
-            if (pi - p).abs() < 0.001 {
-                found = Some((ri, k1i, 0.0));
-                break;
-            }
-        }
-        found.ok_or_else(|| {
-            NacaError::InvalidDesignation(format!(
-                "Camber position {} not supported. Use 0.05, 0.10, 0.15, 0.20, or 0.25",
-                p
-            ))
-        })?
-    };
-
-    // Scale k1 for actual Cl (base values are for Cl = 0.3)
-    let k1 = k1_base * (cl / 0.3);
-
-    Ok((r, k1, k2_k1))
-}
-
-/// NACA 5-digit mean camber line
-///
-/// Returns (y_c, dy_c/dx) at given x/c coordinate
-fn camber_line_5digit(x: f64, r: f64, k1: f64, k2_k1: f64, reflex: bool) -> (f64, f64) {
-    if k1 == 0.0 {
-        return (0.0, 0.0);
-    }
-
-    if reflex {
-        // Reflex camber line (three regions)
-        let k2 = k1 * k2_k1;
-        if x < r {
-            let yc = (k1 / 6.0) * (x.powi(3) - 3.0 * r * x.powi(2) + r.powi(2) * (3.0 - r) * x);
-            let dyc = (k1 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + r.powi(2) * (3.0 - r));
-            (yc, dyc)
-        } else {
-            let yc = (k1 * r.powi(3) / 6.0) * (1.0 - x)
-                - (k2 / 6.0) * (x.powi(3) - 3.0 * r * x.powi(2) + 3.0 * r.powi(2) * x - r.powi(3));
-            let dyc = -(k1 * r.powi(3) / 6.0) - (k2 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + 3.0 * r.powi(2));
-            (yc, dyc)
-        }
-    } else {
-        // Standard camber line (two regions)
-        if x < r {
-            let yc = (k1 / 6.0) * (x.powi(3) - 3.0 * r * x.powi(2) + r.powi(2) * (3.0 - r) * x);
-            let dyc = (k1 / 6.0) * (3.0 * x.powi(2) - 6.0 * r * x + r.powi(2) * (3.0 - r));
-            (yc, dyc)
-        } else {
-            let yc = (k1 * r.powi(3) / 6.0) * (1.0 - x);
-            let dyc = -(k1 * r.powi(3) / 6.0);
-            (yc, dyc)
-        }
-    }
-}
-
-/// NACA 4-digit thickness distribution
-///
-/// Returns half-thickness at given x/c coordinate
-fn thickness_distribution(x: f64, t: f64) -> f64 {
-    // Standard NACA 4-digit thickness equation
-    // Original coefficient -0.1015 gives blunt trailing edge (XFOIL default)
-    // For NACA 0012: half-thickness at TE = 0.00126, gap = 0.00252
-    5.0 * t * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3) - 0.1015 * x.powi(4))
-}
-
-/// NACA 4-digit mean camber line
-///
-/// Returns (y_c, dy_c/dx) at given x/c coordinate
-fn camber_line(x: f64, m: f64, p: f64) -> (f64, f64) {
-    if m == 0.0 || p == 0.0 {
-        // Symmetric airfoil
-        return (0.0, 0.0);
-    }
-
-    let (yc, dyc) = if x < p {
-        let yc = m / (p * p) * (2.0 * p * x - x * x);
-        let dyc = 2.0 * m / (p * p) * (p - x);
-        (yc, dyc)
-    } else {
-        let yc = m / ((1.0 - p).powi(2)) * ((1.0 - 2.0 * p) + 2.0 * p * x - x * x);
-        let dyc = 2.0 * m / ((1.0 - p).powi(2)) * (p - x);
-        (yc, dyc)
-    };
-
-    (yc, dyc)
+    Ok(Section::from_designation(designation)?.geometry(n_panels))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -434,6 +131,7 @@ fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
         cm_ref: [0.25, 0.0],
         x: x_c,
         y: y_c,
+        generator: None,
     }
 }
 
@@ -519,7 +217,7 @@ mod tests {
     use approx::assert_relative_eq;
 
     #[test]
-    fn test_naca_0012_symmetric() {
+    fn test_naca_0012_generation() {
         let geom = naca_4digit("0012", 100, Thickness::Perpendicular).unwrap();
 
         // Should produce exactly the requested number of points
@@ -553,6 +251,7 @@ mod tests {
 
     #[test]
     fn test_thickness_distribution() {
+        use super::super::series::four_digit_half_thickness as thickness_distribution;
         // At x=0.3 for 12% thick airfoil, thickness should be approximately maximum
         let yt = thickness_distribution(0.3, 0.12);
         assert!(yt > 0.05 && yt < 0.07);
@@ -570,8 +269,8 @@ mod tests {
     fn test_naca_23012() {
         let geom = naca_5digit("23012", 100, Thickness::Perpendicular).unwrap();
 
-        // Should have points on both sides
-        assert!(geom.x.len() > 100);
+        // The shared cosine spacing: exactly the requested count, both sides
+        assert_eq!(geom.x.len(), 100);
 
         // Should start and end near trailing edge
         assert!(geom.x[0] > 0.95);
@@ -642,7 +341,7 @@ mod tests {
         let geom = naca_5digit("23112", 100, Thickness::Perpendicular).unwrap();
 
         // Should generate valid geometry
-        assert!(geom.x.len() > 100);
+        assert_eq!(geom.x.len(), 100);
 
         // Reflex camber should still have positive camber but trailing edge should curve up
         let max_y = geom.y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);

@@ -1273,8 +1273,9 @@ base names are listed with the sensitivities XFOIL carries.
 | TRISOL | `solve_tridiagonal` (one, XFOIL argument order) | |
 | NCALC, APCALC | `node_normals`, `panel_angles` | |
 | PANGEN | `repanel_by_curvature` | |
+| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/xfoil_tgap_tests.rs` |
 | — | keep | doc: no XFOIL equivalent |
-| NACA4/NACA5 | `naca_4digit`, `naca_5digit` with a `Thickness` {`Perpendicular`, `Vertical`} argument | the un-suffixed name currently holds the non-XFOIL algorithm |
+| NACA4/NACA5 | `naca_4digit`, `naca_5digit` with a `Thickness` {`Perpendicular`, `Vertical`} argument | the un-suffixed name currently holds the non-XFOIL algorithm; every NACA family (4, 4M, 5, 16, 6, 6A) is `series::Section`, which has no XFOIL equivalent |
 | SCALC + SEGSPL + LEFIND + TECALC + NCALC + APCALC | `panel_foil` | doc lists all six |
 | OPER ALFA (fresh session) | `analyse` | |
 

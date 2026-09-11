@@ -410,6 +410,7 @@ pub fn repanel_by_curvature(geometry: &Geometry, n_panels: usize, config: &PaneC
         cm_ref: geometry.cm_ref,
         x,
         y,
+        generator: geometry.generator.clone(),
     }
 }
 
@@ -632,6 +633,80 @@ pub fn repanel_cosine(geometry: &Geometry, n_panels: usize, te_le_ratio: f64) ->
         cm_ref: geometry.cm_ref,
         x: x_c,
         y: y_c,
+        generator: geometry.generator.clone(),
+    }
+}
+
+/// TGAP (xgdes.f), line for line: set the trailing-edge gap of the buffer airfoil to `gap`
+/// (chord units), blending the change into the section over the fraction `blend` of the chord
+/// from the trailing edge (XFOIL's "blending distance/c", clamped to 0…1; 0 moves only the two
+/// trailing-edge points). The upper and lower surfaces move apart along the unit vector of the
+/// existing gap, or along the mean trailing-edge normal when the edge is sharp, by
+/// `½ Δgap · (x/c) · exp(−(1 − x/c)(1/blend − 1))` each. XFOIL then re-splines the buffer
+/// airfoil; the returned geometry is the moved nodes, with the provenance record kept.
+#[doc(alias = "TGAP")]
+pub fn set_te_gap(geometry: &Geometry, gap: f64, blend: f64) -> Geometry {
+    let nb = geometry.x.len();
+    let xb = &geometry.x;
+    let yb = &geometry.y;
+    let sb = arc_coordinate(xb, yb);
+    let xbp = spline_segmented(xb, &sb);
+    let ybp = spline_segmented(yb, &sb);
+
+    let sble = find_le(xb, &xbp, yb, &ybp, &sb);
+    let xble = spline_value(sble, xb, &xbp, &sb);
+    let yble = spline_value(sble, yb, &ybp, &sb);
+    let xbte = 0.5 * (xb[0] + xb[nb - 1]);
+    let ybte = 0.5 * (yb[0] + yb[nb - 1]);
+    let chbsq = (xbte - xble) * (xbte - xble) + (ybte - yble) * (ybte - yble);
+
+    let dxn = xb[0] - xb[nb - 1];
+    let dyn_ = yb[0] - yb[nb - 1];
+    let gap_old = (dxn * dxn + dyn_ * dyn_).sqrt();
+
+    // components of unit vector parallel to TE gap
+    let (dxu, dyu) = if gap_old > 0.0 {
+        (dxn / gap_old, dyn_ / gap_old)
+    } else {
+        (-0.5 * (ybp[nb - 1] - ybp[0]), 0.5 * (xbp[nb - 1] - xbp[0]))
+    };
+
+    let doc = blend.max(0.0).min(1.0);
+    let dgap = gap - gap_old;
+
+    let mut x = xb.clone();
+    let mut y = yb.clone();
+    // go over each point, changing the y-thickness appropriately
+    for i in 0..nb {
+        // chord-based x/c
+        let xoc = ((xb[i] - xble) * (xbte - xble) + (yb[i] - yble) * (ybte - yble)) / chbsq;
+
+        // thickness factor tails off exponentially away from trailing edge
+        let tfac = if doc == 0.0 {
+            if i == 0 || i == nb - 1 {
+                1.0
+            } else {
+                0.0
+            }
+        } else {
+            let arg = ((1.0 - xoc) * (1.0 / doc - 1.0)).min(15.0);
+            (-arg).exp()
+        };
+
+        if sb[i] <= sble {
+            x[i] = xb[i] + 0.5 * dgap * xoc * tfac * dxu;
+            y[i] = yb[i] + 0.5 * dgap * xoc * tfac * dyu;
+        } else {
+            x[i] = xb[i] - 0.5 * dgap * xoc * tfac * dxu;
+            y[i] = yb[i] - 0.5 * dgap * xoc * tfac * dyu;
+        }
+    }
+
+    Geometry {
+        cm_ref: geometry.cm_ref,
+        x,
+        y,
+        generator: geometry.generator.clone(),
     }
 }
 

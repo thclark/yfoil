@@ -270,6 +270,29 @@ node-tangent angle. Both were yFoil misreadings found by the S3 gate; both are n
 
 Integer truncation in both terms (`xpanel.f:1280`); `src/solver/analysis.rs:90`.
 
+### 6.5 TGAP on a sharp trailing edge does not deliver the requested gap — Replicated
+
+`xgdes.f:1238-1244` (TGAP): when the buffer airfoil's trailing-edge gap is zero, the direction
+along which the two surfaces are moved apart is `(DXU, DYU) = (−½(YBP(NB) − YBP(1)), ½(XBP(NB) −
+XBP(1)))`, the mean of the two end tangents of the spline. That vector is unit length only for a
+cusp: for a trailing-edge angle τ it has length cos(τ/2) (times the small stretch of the
+spline-parameter tangents), and the surfaces end up `cos(τ/2)` × the requested gap apart. With a
+gap already open the direction is the existing gap's unit vector and the requested gap is
+delivered exactly. Measured on the tracked `naca63-415_n160_tgap` case (τ ≈ 7°): `TGAP 0.002`
+gives 2.0012e-3. yFoil's `set_te_gap` reproduces the moved nodes bitwise
+(`tests/xfoil_tgap_tests.rs`); the resulting gap is asserted against the requested one only when a
+gap existed. The gap TGAP produces is what `TECALC` then measures, so the `SHARP` decision and
+the base-drag treatment see the delivered gap, not the requested one.
+
+### 6.6 NACA generator constants: the ordinate program's precision — Reference note
+
+Not XFOIL: the NASA/PDAS `naca456` program that the geometry generators are gated against
+(`tests/fixtures/naca456/`) carries `PI = 3.141592654` in its 6-series mean lines and
+`3.14159265` in the φ grid of the 6-series mapping, and inverts its arc-length spline with Brent's
+method at a 1e-6 tolerance, reporting the ordinate at the station reached. yFoil uses π and inverts
+to round-off; the tolerances in `tests/utilities/tolerances.rs` are derived from those three facts.
+naca456 also reports the aft slope of the 4-digit modified thickness form as dy/d(1 − x).
+
 ---
 
 ## 7. Numerical conventions that a reproduction must keep

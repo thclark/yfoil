@@ -346,7 +346,9 @@ pub fn write_summary_json(run_dir: &Path, foil: &str, families: &[(Family, Vec<R
             "level": r.level.slug,
             "label": r.level.label,
             "magnitude": r.level.magnitude,
+            "raw": r.level.raw,
             "panels": r.level.panels,
+            "actual_panels": r.level.actual_panels.unwrap_or(r.level.panels),
             "geometry_eps": r.level.geometry_eps,
             "alpha_step_deg": r.level.alpha_step,
             "ending": format!("{:?}", r.ending),
@@ -379,29 +381,58 @@ pub fn write_summary_json(run_dir: &Path, foil: &str, families: &[(Family, Vec<R
         serde_json::to_string_pretty(&serde_json::json!({ "foil": format!("naca{foil}"), "levels": summary })).unwrap(),
     )
     .unwrap();
-    let metrics: Vec<serde_json::Value> = families
-        .iter()
-        .flat_map(|(_, rs)| rs.iter())
-        .map(|r| {
-            let mut j = level_json(r);
-            let pts: Vec<serde_json::Value> = r
-                .points
-                .iter()
-                .map(|p| {
-                    serde_json::json!({
-                        "alpha_deg": p.alpha_deg, "converged": p.converged, "iterations": p.iterations,
-                        "rmsbl": p.rmsbl, "cl": p.cl, "cd": p.cd, "cm": p.cm, "xtr_upper": p.xtr_upper,
-                        "dstar_te_upper": p.dstar_te_upper, "h_te_upper": p.h_te_upper, "x_sep_upper": p.x_sep_upper,
-                    })
-                })
-                .collect();
-            j.as_object_mut().unwrap().insert("points".into(), pts.into());
-            j
+    let point_json = |p: &Point| {
+        serde_json::json!({
+            "alpha_deg": p.alpha_deg, "converged": p.converged, "iterations": p.iterations,
+            "rmsbl": p.rmsbl, "cl": p.cl, "cd": p.cd, "cm": p.cm, "xtr_upper": p.xtr_upper,
+            "dstar_te_upper": p.dstar_te_upper, "h_te_upper": p.h_te_upper, "x_sep_upper": p.x_sep_upper,
         })
-        .collect();
+    };
+    let mut levels_by_family = serde_json::Map::new();
+    for (family, rs) in families {
+        let levels: Vec<serde_json::Value> = rs
+            .iter()
+            .map(|r| {
+                let mut j = level_json(r);
+                let pts: Vec<serde_json::Value> = r.points.iter().map(point_json).collect();
+                j.as_object_mut().unwrap().insert("points".into(), pts.into());
+                j
+            })
+            .collect();
+        levels_by_family.insert(family.slug().to_string(), levels.into());
+    }
+    // the converged extents of every quantity over every level of every family: what a plot's
+    // axis range is set from (unconverged states can be anything, up to CD = 1e19). RMSBL is
+    // plotted on a logarithmic axis, so its extent is over positive values.
+    let quantities: [(&str, fn(&Point) -> f64, bool); 8] = [
+        ("alpha_deg", |p| p.alpha_deg, false),
+        ("cl", |p| p.cl, false),
+        ("cd", |p| p.cd, false),
+        ("dstar_te_upper", |p| p.dstar_te_upper, false),
+        ("h_te_upper", |p| p.h_te_upper, false),
+        ("xtr_upper", |p| p.xtr_upper, false),
+        ("x_sep_upper", |p| p.x_sep_upper, false),
+        ("rmsbl", |p| p.rmsbl, true),
+    ];
+    let mut extents = serde_json::Map::new();
+    for (name, get, positive) in quantities {
+        let (lo, hi) = families
+            .iter()
+            .flat_map(|(_, rs)| rs.iter().flat_map(|r| r.points.iter()))
+            .filter(|p| p.converged || name == "alpha_deg")
+            .map(|p| get(p))
+            .filter(|v| v.is_finite() && (!positive || *v > 0.0))
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v), b.max(v)));
+        extents.insert(name.to_string(), serde_json::json!({ "min": lo, "max": hi }));
+    }
+    let metrics = serde_json::json!({
+        "foil": format!("naca{foil}"),
+        "levels_by_family": levels_by_family,
+        "extents": extents,
+    });
     fs::write(
         run_dir.join("metrics.json"),
-        serde_json::to_string_pretty(&serde_json::json!({ "foil": format!("naca{foil}"), "runs": metrics })).unwrap(),
+        serde_json::to_string_pretty(&metrics).unwrap(),
     )
     .unwrap();
 }
@@ -422,19 +453,17 @@ pub fn write_index(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunResul
     .unwrap();
     writeln!(
         f,
-        "Figures are drawn at the document's physical size ({} pt sheet width, {} at {}–{} pt) and come as SVG and \
-         PDF; include the PDF at natural size (`\\includegraphics{{...pdf}}`, no `width=`, no `\\resizebox`).\n",
-        figure_style::TEXT_WIDTH_PT,
-        figure_style::FONT,
-        figure_style::TICK_PT,
-        figure_style::AXIS_LABEL_PT
+        "Figures are drawn by `plot.py` (matplotlib, via `scripts/figures/render.sh`) from `metrics.json` and \
+         `metadata.json` alone, at the document's physical size in its font (`scripts/figures/style.py`), and come \
+         as SVG and PDF; include the PDF at natural size (`\\includegraphics{{...pdf}}`, no `width=`, no \
+         `\\resizebox`).\n"
     )
     .unwrap();
     writeln!(f, "| Figure | Columns |\n|---|---|").unwrap();
     writeln!(
         f,
         "| [naca{foil}_sheet.svg](naca{foil}_sheet.svg) | {} |",
-        crate::plot::SHEET
+        crate::SHEET
             .iter()
             .map(|fm| format!("[{}](naca{foil}_{}.svg)", fm.title(), fm.slug()))
             .collect::<Vec<_>>()
@@ -540,15 +569,13 @@ pub fn write_index_tex(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunR
          The node-perturbation method is documented in \\texttt{{src/perturb.rs}}.",
         crate::ALPHA_STEP_DEG
     ));
-    w(&mut f, &format!(
-        "\n\\section*{{Figures}}\n\\noindent Figures are drawn at the document's physical size ({} pt sheet width, {} at \
-         {}--{} pt), so they are included at natural size: no \\texttt{{width=}} and no \\texttt{{\\resizebox}}, or the text \
-         no longer matches the document.\n\\begin{{table}}[h]\\centering\\begin{{tabular}}{{@{{}}ll@{{}}}}\\toprule\nFigure & Content \\\\ \\midrule",
-        figure_style::TEXT_WIDTH_PT,
-        figure_style::FONT,
-        figure_style::TICK_PT,
-        figure_style::AXIS_LABEL_PT
-    ));
+    w(
+        &mut f,
+        "\n\\section*{Figures}\n\\noindent Figures are drawn by \\texttt{plot.py} (matplotlib) from \\texttt{metrics.json} \
+         at the document's physical size in its font (\\texttt{scripts/figures/style.py}), so they are included at \
+         natural size: no \\texttt{width=} and no \\texttt{\\resizebox}, or the text no longer matches the \
+         document.\n\\begin{table}[h]\\centering\\begin{tabular}{@{}ll@{}}\\toprule\nFigure & Content \\\\ \\midrule",
+    );
     w(
         &mut f,
         &format!("\\texttt{{naca{foil}\\_sheet.pdf}} & node coordinates and alpha step, one column each \\\\"),
