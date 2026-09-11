@@ -20,8 +20,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 if ! command -v uv >/dev/null 2>&1; then
-    echo "error: uv is not installed. See https://docs.astral.sh/uv/" >&2
-    echo "       (or install Zensical yourself: pip install zensical==$zensical_version)" >&2
+    echo "error: uv is not installed. Install it from https://docs.astral.sh/uv/ and re-run." >&2
     exit 1
 fi
 
