@@ -322,7 +322,10 @@ other form are ignored pending regeneration from the M = 0.3 coverage case.
 
 gfortran expands `X**2`, `X**3` inline as multiplications; yFoil writes `x*x*x` where bit-exactness
 matters rather than `powi` (CLAUDE.md conventions). Transcendentals come from the host libm in both
-codes, so bit-identity is a same-host property.
+codes, so bit-identity is a same-host property: Apple libSystem and glibc differ by 1 ULP on 0.1 % (`exp`,
+`ln`, `pow`) to 18 % (`tanh`) of inputs (measured 2026-09-11), and XFOIL's own post-CL_max wanderings
+differ by O(1) between the two while its converged points move by ≤ 1.4e-11 (`docs/validation/README.md`,
+*Polar break points*; `tests/utilities/host.rs`).
 
 ### 7.5 EQUIVALENCE aliasing of UNEW/QNEW onto VA/VB — Overcome (structure only)
 

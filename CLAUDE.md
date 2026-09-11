@@ -22,11 +22,17 @@ XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it m
 (1-ULP input perturbation, per stage, per variable; results in `docs/validation/noise-floor.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
-Jacobian) can only be gated with a row-scaled metric. Four named constants live in `tests/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, and
-`TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10);
-no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at ~1e-11, converged Newton
-state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in *both* codes: bit-identity
-is a same-host property, cross-host is an ULP budget.
+Jacobian) can only be gated with a row-scaled metric. Five named constants live in `tests/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
+`TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10 —
+and `TOL_CROSS_HOST`); no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
+~1e-11, converged Newton state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in
+*both* codes: bit-identity is a same-host property, cross-host is an ULP budget. Measured 2026-09-11: Apple libSystem
+and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, identically on x86_64 and
+aarch64; XFOIL's own converged polar points move by ≤ 1.4e-11 between the two, its unconverged post-CL_max
+wanderings by O(1). Every fixture manifest records its host; `tests/utilities/host.rs` compares it with the running
+one, and the pins only a bit-identical trajectory can hold (the straddle iteration, a one-step replay at
+`TOL_SOLVER` in a hypersensitive state) are asserted on the fixture's host and reported elsewhere — the third
+outcome again, never a skip.
 
 **The error metric** is `|a − b| ≤ tol · max(|a|, |b|, scale_v)` with a physical per-variable scale. Bare relative
 error is undefined at CL≈0, VDEL≈0 and laminar CTAU≈0 and must not be used.
