@@ -37,7 +37,7 @@
  C---- set the CL used to define Mach, Reynolds numbers
        IF(LALFA) THEN
         CLMR = CL
-@@ -88,10 +106,106 @@
+@@ -88,10 +106,107 @@
        ENDIF
  C
        WRITE(*,*)
@@ -83,6 +83,7 @@
 +       WRITE(95,'(A,ES24.16)') 'MSQ_CLMR=', MSQ_CLMR
 +       WRITE(95,'(A,ES24.16)') 'QINF=', QINF
 +       WRITE(95,'(A,ES24.16)') 'VACCEL=', VACCEL
++       WRITE(95,'(A,ES24.16)') 'ALFA=', ALFA
 +       DO 8001 IS=1, 2
 +         DO 8002 IBL=1, NBL(IS)
 +           WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',
@@ -144,7 +145,7 @@
        DO 5 IS=1, 2
          DO 6 IBL=2, NBL(IS)
            USAV(IBL,IS) = UEDG(IBL,IS)
-@@ -238,6 +351,22 @@
+@@ -238,6 +352,22 @@
         DTE = DSTR(IBLTE(1),1) + DSTR(IBLTE(2),2) + ANTE
         CTE = ( CTAU(IBLTE(1),1)*THET(IBLTE(1),1)
       &       + CTAU(IBLTE(2),2)*THET(IBLTE(2),2) ) / TTE
@@ -167,12 +168,10 @@
         CALL TESYS(CTE,TTE,DTE)
  C
         TTE_TTE1 = 1.0
-@@ -271,6 +400,25 @@
+@@ -273,7 +403,26 @@
  C
-        CALL BLSYS
+       ENDIF
  C
-+      ENDIF
-+C
 +C---- INSTRUMENTATION: Log wake station data
 +      IF(WAKE) THEN
 +        IW = IBL - IBLTE(IS)
@@ -190,10 +189,13 @@
 +        WRITE(98,'(A,ES24.16)') 'HS2=', HS2
 +        WRITE(98,'(A,ES24.16)') 'CF2=', CF2
 +        WRITE(98,'(A,ES24.16)') 'DI2=', DI2
-       ENDIF
++      ENDIF
  C
- C
-@@ -512,6 +660,41 @@
++C
+ C---- Save wall shear and equil. max shear coefficient for plotting output
+       TAU(IBL,IS) = 0.5*R2*U2*U2*CF2
+       DIS(IBL,IS) =     R2*U2*U2*U2*DI2*HS2*0.5
+@@ -512,6 +661,41 @@
  C---- next airfoil side
   2000 CONTINUE
  C
@@ -235,17 +237,17 @@
        RETURN
        END
  
-@@ -535,6 +718,68 @@
+@@ -535,10 +719,72 @@
        NSYS = IV
        IF(NSYS.GT.2*IVX) STOP '*** IBLSYS: BL system array overflow. ***'
  C
 +C---- INSTRUMENTATION (S2): pointer layer after STFIND/IBLPAN/XICALC/IBLSYS
 +      CALL DUMPPTR
 +C
-+      RETURN
-+      END
-+
-+
+       RETURN
+       END
+ 
+ 
 +      SUBROUTINE DUMPPTR
 +C---------------------------------------------------------------
 +C     INSTRUMENTATION: dumps the BL pointer layer to xfoil_pointers.dat
@@ -301,10 +303,14 @@
 +        WRITE(93,'(I6,ES24.16)') IW, WGAP(IW)
 +   30 CONTINUE
 +      CLOSE(93)
-       RETURN
-       END
- 
-@@ -549,9 +794,44 @@
++      RETURN
++      END
++
++
+       SUBROUTINE MRCHUE
+ C----------------------------------------------------
+ C     Marches the BLs and wake in direct mode using
+@@ -549,9 +795,44 @@
  C----------------------------------------------------
        INCLUDE 'XFOIL.INC'
        INCLUDE 'XBL.INC'
@@ -349,7 +355,7 @@
  C---- shape parameters for separation criteria
        HLMAX = 3.8
        HTMAX = 2.5
-@@ -618,6 +898,21 @@
+@@ -618,6 +899,21 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
@@ -371,7 +377,7 @@
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -646,7 +941,27 @@
+@@ -646,7 +942,27 @@
             CALL BLSYS
            ENDIF
  C
@@ -400,20 +406,20 @@
            IF(DIRECT) THEN
  C
  C--------- try direct mode (set dUe = 0 in currently empty 4th line)
-@@ -658,6 +973,12 @@
- C
+@@ -659,6 +975,12 @@
  C--------- solve Newton system for current "2" station
             CALL GAUSS(4,4,VS2,VSREZ,1)
-+C
+ C
 +C--------- DEBUG: Output Newton solution (update vector)
 +           IF(LTRDIF) THEN
 +           WRITE(78,'(A,4ES24.16)') 'SOLUTION:', VSREZ(1),VSREZ(2),
 +     &        VSREZ(3),VSREZ(4)
 +           ENDIF
- C
++C
  C--------- determine max changes and underrelax if necessary
             DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -668,6 +989,11 @@
+      &                 ABS(VSREZ(3)/DSI)  )
+@@ -668,6 +990,11 @@
             RLX = 1.0
             IF(DMAX.GT.0.3) RLX = 0.3/DMAX
  C
@@ -425,7 +431,7 @@
  C--------- see if direct mode is not applicable
             IF(IBL .NE. IBLTE(IS)+1) THEN
  C
-@@ -738,6 +1064,11 @@
+@@ -738,6 +1065,11 @@
             VSREZ(4) = HTARG - HK2
  C
             CALL GAUSS(4,4,VS2,VSREZ,1)
@@ -437,7 +443,7 @@
  C
  C--------- added Ue clamp   MD  3 Apr 03
             DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -750,6 +1081,10 @@
+@@ -750,6 +1082,10 @@
  C
  C--------- update variables
  ccc           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
@@ -448,7 +454,7 @@
             IF(IBL.GE.ITRAN(IS)) CTI = CTI + RLX*VSREZ(1)
             THI = THI + RLX*VSREZ(2)
             DSI = DSI + RLX*VSREZ(3)
-@@ -773,8 +1108,18 @@
+@@ -773,8 +1109,18 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
@@ -468,7 +474,15 @@
    100   CONTINUE
          WRITE(*,1350) IBL, IS, DMAX 
   1350   FORMAT(' MRCHUE: Convergence failed at',I4,'  side',I2,
-@@ -842,6 +1187,7 @@
+@@ -783,6 +1129,7 @@
+ C------ the current unconverged solution might still be reasonable...
+ CCC        IF(DMAX .LE. 0.1) GO TO 110
+         IF(DMAX .LE. 0.1) GO TO 109
++        CALL EVLOG('MRCHUE_GARBAGE', IS, IBL, DMAX)
+ C
+ C------- the current solution is garbage --> extrapolate values instead
+          IF(IBL.GT.3) THEN 
+@@ -842,6 +1189,7 @@
          DELT(IBL,IS) = DE2
          TSTR(IBL,IS) = HS2*T2
  C
@@ -476,7 +490,7 @@
  C------ set "1" variables to "2" variables for next streamwise station
          CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
          CALL BLKIN
-@@ -868,10 +1214,14 @@
+@@ -868,10 +1216,14 @@
   1000 CONTINUE
   2000 CONTINUE
  C
@@ -493,7 +507,7 @@
        SUBROUTINE MRCHDU
  C----------------------------------------------------
  C     Marches the BLs and wake in mixed mode using
-@@ -888,6 +1238,10 @@
+@@ -888,6 +1240,10 @@
        REAL MSQ
  ccc   REAL MDI
  C
@@ -504,7 +518,7 @@
        DATA DEPS / 5.0E-6 /
  C
  C---- constant controlling how far Hk is allowed to deviate
-@@ -962,6 +1316,12 @@
+@@ -962,6 +1318,12 @@
            CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
            CALL BLKIN
  C
@@ -517,7 +531,7 @@
  C-------- check for transition and set appropriate flags and things
            IF((.NOT.SIMI) .AND. (.NOT.TURB)) THEN
             CALL TRCHEK
-@@ -980,6 +1340,12 @@
+@@ -980,6 +1342,12 @@
             CALL BLSYS
            ENDIF
  C
@@ -530,7 +544,7 @@
  C-------- set stuff at first iteration...
            IF(ITBL.EQ.1) THEN
  C
-@@ -1048,6 +1414,7 @@
+@@ -1048,6 +1416,7 @@
             ELSE IF(ITBL.LE.15) THEN
              SENS = 0.5*(SENS + SENNEW)
             ENDIF
@@ -538,12 +552,10 @@
  C
  C--------- set prescribed Ue-Hk combination
             VS2(4,1) = 0.
-@@ -1057,11 +1424,23 @@
-            VSREZ(4) = -(HKREF**2)*(HK2 / HKREF - 1.0)
-      &                     - SENS*(U2  / UEREF - 1.0)
+@@ -1059,9 +1428,21 @@
  C
-+          ENDIF
-+C
+           ENDIF
+ C
 +          IF(LMDUTR) THEN
 +           WRITE(79,'(A,2ES24.16)') 'REF:', UEREF, HKREF
 +           WRITE(79,'(A,4ES24.16)') 'RESIDUAL:', VSREZ(1),VSREZ(2),
@@ -551,8 +563,8 @@
 +           DO 8110 K=1, 4
 +             WRITE(79,'(A,I1,A,5ES24.16)') 'VS2_',K,':',(VS2(K,L),L=1,5)
 + 8110      CONTINUE
-           ENDIF
- C
++          ENDIF
++C
  C-------- solve Newton system for current "2" station
            CALL GAUSS(4,4,VS2,VSREZ,1)
  C
@@ -562,7 +574,7 @@
  C-------- determine max changes and underrelax if necessary
  C-------- (added Ue clamp   MD  3 Apr 03)
            DMAX = MAX( ABS(VSREZ(2)/THI),
-@@ -1071,6 +1450,7 @@
+@@ -1071,6 +1452,7 @@
  C
            RLX = 1.0
            IF(DMAX.GT.0.3) RLX = 0.3/DMAX
@@ -570,7 +582,7 @@
  C
  C-------- update as usual
            IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
-@@ -1095,10 +1475,16 @@
+@@ -1095,10 +1477,16 @@
            CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
            DSI = DSW + DSWAKI
  C
@@ -587,7 +599,15 @@
          WRITE(*,1350) IBL, IS, DMAX 
   1350   FORMAT(' MRCHDU: Convergence failed at',I4,'  side',I2,
       &         '    Res =', E12.4)
-@@ -1267,6 +1653,12 @@
+@@ -1106,6 +1494,7 @@
+ C------ the current unconverged solution might still be reasonable...
+ CCC        IF(DMAX .LE. 0.1) GO TO 110
+         IF(DMAX .LE. 0.1) GO TO 109
++        CALL EVLOG('MRCHDU_GARBAGE', IS, IBL, DMAX)
+ C
+ C------- the current solution is garbage --> extrapolate values instead
+          IF(IBL.GT.3) THEN
+@@ -1267,6 +1656,12 @@
        EQUIVALENCE (VA(1,1,IVX), U_AC(1,1)) ,
       &            (VB(1,1,IVX), Q_AC(1)  )
        REAL MSQ
@@ -600,7 +620,7 @@
  C
  C---- max allowable alpha changes per iteration
        DALMAX =  0.5*DTOR
-@@ -1281,6 +1673,8 @@
+@@ -1281,6 +1676,8 @@
  C
  C---- calculate new Ue distribution assuming no under-relaxation
  C-    also set the sensitivity of Ue wrt to alpha or Re
@@ -609,12 +629,11 @@
        DO 1 IS=1, 2
          DO 10 IBL=2, NBL(IS)
            I = IPAN(IBL,IS)
-@@ -1306,10 +1700,12 @@
- C
+@@ -1307,9 +1704,11 @@
            UNEW(IBL,IS) = UINV(IBL,IS) + DUI
            U_AC(IBL,IS) = UINV_AC      + DUI_AC
-+C
  C
++C
     10   CONTINUE
      1 CONTINUE
  C
@@ -622,7 +641,27 @@
  C---- set new Qtan from new Ue with appropriate sign change
        DO 2 IS=1, 2
          DO 20 IBL=2, IBLTE(IS)
-@@ -1556,6 +1952,44 @@
+@@ -1471,7 +1870,10 @@
+            ISMXBL = IS
+           ENDIF
+           IF(RDN4 .GT. DHI) RLX = DHI/DN4
+-          IF(RDN4 .LT. DLO) RLX = DLO/DN4
++          IF(RDN4 .LT. DLO) THEN
++           RLX = DLO/DN4
++           CALL EVLOG('UPDATE_RDN4', IS, IBL, RDN4)
++          ENDIF
+ C
+    40   CONTINUE
+     4 CONTINUE
+@@ -1536,6 +1938,7 @@
+         DO IBL = 3, IBLTE(IS)
+           IF(UEDG(IBL-1,IS) .GT. 0.0 .AND.
+      &       UEDG(IBL  ,IS) .LE. 0.0       ) THEN
++           CALL EVLOG('UPDATE_ISLAND', IS, IBL, UEDG(IBL,IS))
+            UEDG(IBL,IS) = UEDG(IBL-1,IS)
+            MASS(IBL,IS) = DSTR(IBL,IS) * UEDG(IBL,IS)
+           ENDIF
+@@ -1556,6 +1959,44 @@
          TSTR(IBLTE(1)+KBL,1) = TSTR(IBLTE(2)+KBL,2)
      6 CONTINUE
  C
@@ -667,7 +706,7 @@
        RETURN
        END
  
-@@ -1596,3 +2030,31 @@
+@@ -1596,3 +2037,31 @@
        RETURN
        END
  
