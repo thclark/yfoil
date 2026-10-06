@@ -64,6 +64,9 @@ pub enum TransitionCheck {
     Forced {
         /// Transition location (= xiforc)
         transition: Transition,
+        /// Amplification at station 2 from the N2 Newton (XFOIL's callers set AMI = AMPL2
+        /// after every TRCHEK, forced transition included)
+        ampl2: f64,
     },
 }
 
@@ -318,7 +321,7 @@ pub fn check_transition_traced(
             xi_transition_d_x_trip: 1.0,
             ..Default::default()
         };
-        return TransitionCheck::Forced { transition };
+        return TransitionCheck::Forced { transition, ampl2 };
     }
 
     // free transition ... set sensitivities of XT
@@ -1158,7 +1161,7 @@ mod tests {
 
         // Should return Forced at xiforc
         match result {
-            TransitionCheck::Forced { transition } => {
+            TransitionCheck::Forced { transition, .. } => {
                 assert_relative_eq!(transition.xi_transition, xiforc, epsilon = 1e-10);
                 assert_relative_eq!(transition.xi_transition_d_x_trip, 1.0, epsilon = 1e-10);
             }

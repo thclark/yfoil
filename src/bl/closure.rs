@@ -272,6 +272,7 @@ pub fn hstarstar(hk: f64, msq: f64) -> (f64, f64, f64) {
 }
 
 /// DILW (xblsys.f): laminar wake dissipation function 2*CD/H* and its Hk, Rt sensitivities.
+#[doc(alias = "DILW")]
 pub fn cdiss_wake(hk: f64, rt: f64) -> Closure {
     let msq = 0.0;
     let hs = hstar_laminar(hk, rt, msq);

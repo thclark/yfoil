@@ -16,6 +16,7 @@ mod events;
 mod polar;
 mod prologue_dij;
 mod prologue_pointers;
+mod route;
 mod run;
 mod runs;
 mod step;

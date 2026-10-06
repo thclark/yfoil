@@ -10,6 +10,7 @@
 
 mod closures;
 mod coverage;
+mod route;
 mod steps;
 
 use serde::Deserialize;
@@ -156,6 +157,7 @@ fn main() {
         Some("coverage") => coverage::run(&args[1..]),
         Some("twins") => steps::twins(&args[1..]),
         Some("steps") => steps::steps(&args[1..]),
+        Some("route") => route::route(&args[1..]),
         _ => {
             eprintln!(
                 "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--verify] [--big] | coverage [--case NAME] [--big] [--rebuild]>"

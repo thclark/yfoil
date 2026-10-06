@@ -168,7 +168,11 @@ pub fn march_prescribed_dstar(
                             transition = found;
                             state.i_transition_station[side] = i_station;
                         }
-                        TransitionCheck::Forced { transition: found } => {
+                        TransitionCheck::Forced {
+                            transition: found,
+                            ampl2,
+                        } => {
+                            ami = ampl2;
                             tran = true;
                             trforc = true;
                             transition = found;
@@ -418,7 +422,11 @@ pub fn march_prescribed_dstar(
                             transition = found;
                             state.i_transition_station[side] = i_station;
                         }
-                        TransitionCheck::Forced { transition: found } => {
+                        TransitionCheck::Forced {
+                            transition: found,
+                            ampl2,
+                        } => {
+                            ami = ampl2;
                             tran = true;
                             trforc = true;
                             transition = found;

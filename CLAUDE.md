@@ -145,8 +145,10 @@ sensitivities, laminar separation, the MRCHDU fallback, forced transition, `MATY
 Cases that exercise each of those are part of the validation set, not extras. The parameter/fuzz harness optimises
 branch coverage; it reports per-variable ULP distributions, iteration-count and branch-flip counts, and
 divergent comparisons — not a single worst-case number. Which step of which case takes each branch, and the
-fewest steps that take them all, are measured by `cargo xtask steps` (`docs/conventions/testing.md`, "How
-branch coverage is established"; the record is `docs/validation/branch-gating.md`).
+fewest steps that take them all, are measured by `cargo xtask steps`, and `cargo xtask route` observes that yFoil
+takes XFOIL's route through each step — the same call count of every translated subroutine — so a branch is
+gated only by a step whose route agrees (`docs/conventions/testing.md`, "How branch coverage is established" and
+"What gated means"; the record is `docs/validation/branch-gating.md`).
 
 **The measurement is mechanised.** `scripts/xfoil-build.sh --gcov` builds the pristine DP reference with
 `-fprofile-arcs -ftest-coverage`; `cargo xtask coverage` runs every tracked case through it from its tracked
@@ -365,7 +367,10 @@ work-directory files besides the inputs), `closures = true` (cut the reference's
 `tests/fixtures/subroutines/`), and how the case is tested: `run = true` / `run_through = N` (the whole run
 compared, or its first N calls) and `step_calls = [...]` (every iteration of those calls replayed as a step;
 the generator runs the reference twice to dump each of their SETBL calls). `xtask/fixtures-config/step-cover.toml`
-(written by `cargo xtask steps`) adds the dumps and files of the branch cover's steps. `cargo xtask twins --case
+(written by `cargo xtask steps`, from the steps `cargo xtask route` found to take XFOIL's route —
+`route.toml`, with `route-map.toml` naming the XFOIL call sites yFoil translates without a call, whose calls are
+taken off XFOIL's counts) adds
+the dumps and files of the branch cover's steps. `cargo xtask twins --case
 NAME` reruns a case on five seeded 1-ULP twins (study data, `target/fixtures/<case>/ulp<seed>/`); `cargo xtask
 fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
 `tests/fixtures/README.md`. The tracked CI reference case is

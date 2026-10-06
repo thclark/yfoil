@@ -31,6 +31,7 @@ pub fn set_ue_inviscid(state: &mut SolverState) {
 }
 
 /// QVFUE: panel viscous tangential velocity from viscous Ue.
+#[doc(alias = "QVFUE")]
 pub fn set_q_viscous_from_ue(state: &mut SolverState) {
     for side in 1..=2 {
         for i_station in 2..=state.n_stations[side] {
@@ -50,6 +51,7 @@ pub fn set_gamma_from_q_viscous(state: &mut SolverState) {
 }
 
 /// UESET: Ue from inviscid Ue plus all source (mass defect) influence through `st.dij`.
+#[doc(alias = "UESET")]
 pub fn set_ue_with_sources(state: &mut SolverState) {
     for side in 1..=2 {
         for i_station in 2..=state.n_stations[side] {

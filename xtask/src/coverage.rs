@@ -93,6 +93,12 @@ struct GcovLine {
     function_name: Option<String>,
     #[serde(default)]
     branches: Vec<GcovBranch>,
+    #[serde(default)]
+    calls: Vec<GcovCall>,
+}
+#[derive(Deserialize)]
+struct GcovCall {
+    returned: u64,
 }
 #[derive(Deserialize)]
 struct GcovBranch {
@@ -652,9 +658,18 @@ pub(crate) fn reset_counters(gdir: &Path) {
     }
 }
 
-/// Every branch of the translated subroutines (`coverage.toml`) with its accumulated count,
-/// keyed `file:line:index` — the identifiers the coverage report and the step cover use.
-pub(crate) fn branch_counts(root: &Path, gdir: &Path, scratch: &Path) -> HashMap<String, u64> {
+/// The accumulated counts of the translated subroutines (`coverage.toml`).
+pub(crate) struct Counts {
+    /// every branch, keyed `file:line:index` — the identifiers the coverage report and the step
+    /// cover use
+    pub branches: HashMap<String, u64>,
+    /// every subroutine's call count, keyed by its name
+    pub calls: HashMap<String, u64>,
+    /// the calls made from every line that makes one, keyed `file:line`
+    pub sites: HashMap<String, u64>,
+}
+
+pub(crate) fn branch_counts(root: &Path, gdir: &Path, scratch: &Path) -> Counts {
     let spec: Spec = toml::from_str(
         &fs::read_to_string(root.join("xtask/fixtures-config/coverage.toml"))
             .expect("xtask/fixtures-config/coverage.toml"),
@@ -665,6 +680,8 @@ pub(crate) fn branch_counts(root: &Path, gdir: &Path, scratch: &Path) -> HashMap
     let _ = fs::remove_dir_all(scratch);
     fs::create_dir_all(scratch).unwrap();
     let mut out = HashMap::new();
+    let mut calls = HashMap::new();
+    let mut sites = HashMap::new();
     for fspec in &spec.files {
         let src_path = gdir.join("src").join(&fspec.name);
         let st = Command::new(&gcov)
@@ -692,6 +709,7 @@ pub(crate) fn branch_counts(root: &Path, gdir: &Path, scratch: &Path) -> HashMap
             let Some(func) = gf.functions.iter().find(|f| f.name == sym) else {
                 continue;
             };
+            calls.insert(sub.clone(), func.execution_count);
             for l in &gf.lines {
                 if l.function_name.as_deref() != Some(sym.as_str())
                     || l.line_number < func.start_line
@@ -702,8 +720,18 @@ pub(crate) fn branch_counts(root: &Path, gdir: &Path, scratch: &Path) -> HashMap
                 for (bi, b) in l.branches.iter().enumerate() {
                     out.insert(format!("{}:{}:{bi}", fspec.name, l.line_number), b.count);
                 }
+                if !l.calls.is_empty() {
+                    sites.insert(
+                        format!("{}:{}", fspec.name, l.line_number),
+                        l.calls.iter().map(|c| c.returned).sum(),
+                    );
+                }
             }
         }
     }
-    out
+    Counts {
+        branches: out,
+        calls,
+        sites,
+    }
 }

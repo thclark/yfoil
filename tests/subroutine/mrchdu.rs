@@ -233,10 +233,12 @@ fn test_mrchdu_newton_trace_matches_xfoil_iteration_by_iteration() {
 
 /// The station Newton of MRCHDU, iterate by iterate, from XFOIL's exact state entering each SETBL
 /// call of the 7° point of the NACA 0012 polar (calls 40–47, known issues §7.9): the inviscid side
-/// from the panels, the BL side from `mrchdu_input_<k>.dat` (`fixtures::cases`). On every upper-side
-/// station up to the one after transition, the station Newton must take the reference's number
-/// of iterations (`mrchdu_trace_<k>.dat`) and its updated primaries CTI THI DSI UEI AMI must
-/// agree within `TOL_PURE`, each on the scale of that primary's largest magnitude at the station.
+/// from the panels, the BL side from `mrchdu_input_<k>.dat` (`fixtures::cases`). On every station of
+/// both sides, the station Newton must take the reference's number of iterations
+/// (`mrchdu_trace_<k>.dat`), the amplification AMPL2 each iterate starts from must agree within
+/// `TOL_PURE` (it is what the previous TRCHEK2 left, forced transition included: known issues
+/// §7.12), and its updated primaries CTI THI DSI UEI AMI must agree within `TOL_PURE`, each on the
+/// scale of that primary's largest magnitude at the station.
 ///
 /// Fixtures: `tests/fixtures/xfoil/naca0012_n60_polar30_re1e6/` (`mrchdu_input_<k>.dat`,
 /// `mrchdu_trace_<k>.dat`, `mrchdu_output_<k>.dat`) — `cargo xtask fixtures --case
@@ -264,11 +266,26 @@ fn test_mrchdu_station_newton_replays_from_xfoil_state_at_the_7deg_point() {
         let acrit = st.ncrit;
         let mut tr = MrchduTrace::default();
         march_prescribed_dstar(st, &params, acrit, Some(&mut tr));
-        for ibl in 2..=itran + 1 {
-            let what = format!("{CASE} SETBL {k} station {ibl}");
-            let ys: Vec<_> = tr.iters.iter().filter(|y| y.side == 1 && y.i_station == ibl).collect();
-            let xs: Vec<_> = xf.iters.iter().filter(|x| x.is == 1 && x.ibl == ibl).collect();
+        let _ = itran;
+        let stations: std::collections::BTreeSet<(usize, usize)> = xf.iters.iter().map(|x| (x.is, x.ibl)).collect();
+        for (is, ibl) in stations {
+            let what = format!("{CASE} SETBL {k} side {is} station {ibl}");
+            let ys: Vec<_> = tr.iters.iter().filter(|y| y.side == is && y.i_station == ibl).collect();
+            let xs: Vec<_> = xf.iters.iter().filter(|x| x.is == is && x.ibl == ibl).collect();
             assert_eq!(ys.len(), xs.len(), "{what}: station Newton iterations");
+            // the amplification each iterate starts from (AMPL2, set by the previous TRCHEK2); at
+            // the similarity station XFOIL logs COM1's stale values, which nothing reads
+            if ibl > 2 {
+                for (n, (y, x)) in ys.iter().zip(&xs).enumerate() {
+                    assert_within(
+                        y.ampl[1],
+                        x.ampl[1],
+                        TOL_PURE,
+                        1.0,
+                        &format!("{what} iterate {}: AMPL2", n + 1),
+                    );
+                }
+            }
             for j in 0..5 {
                 let scale = xs.iter().map(|x| x.updated[j].abs()).fold(0.0_f64, f64::max);
                 // a primary identically zero at the station (AMI on a turbulent one) is compared on 1

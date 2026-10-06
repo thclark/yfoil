@@ -118,6 +118,14 @@ pub fn blocks(path: &Path) -> Vec<HashMap<String, String>> {
 }
 
 pub fn load(name: &str) -> Case {
+    // the route measurement (`cargo xtask route`) reads its own reference runs, every SETBL call
+    // dumped, from the directory it names
+    #[cfg(yfoil_route)]
+    let dir = match std::env::var("YFOIL_ROUTE_FIXTURES") {
+        Ok(root) => PathBuf::from(root).join(name),
+        Err(_) => super::require_fixture(&format!("tests/fixtures/xfoil/{name}")),
+    };
+    #[cfg(not(yfoil_route))]
     let dir = super::require_fixture(&format!("tests/fixtures/xfoil/{name}"));
     let m: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("manifest.json")).unwrap()).unwrap();
@@ -168,10 +176,12 @@ pub fn load(name: &str) -> Case {
 }
 
 pub fn dump(c: &Case, file: &str) -> BlDump {
-    parse_bl_dump(&super::require_fixture(&format!(
-        "tests/fixtures/xfoil/{}/{file}",
-        c.name
-    )))
+    let path = c.dir.join(file);
+    let rel = path
+        .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| path.to_string_lossy().to_string());
+    parse_bl_dump(&super::require_fixture(&rel))
 }
 
 /// A session at the prologue of VISCAL call `call`: the call's operating point (SPECAL or SPECCL

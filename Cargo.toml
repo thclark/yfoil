@@ -48,6 +48,10 @@ members = [
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a
 # deliberate policy, not laziness; anything not listed here must be fixed, not allowed inline.
+[workspace.lints.rust]
+# `--cfg yfoil_route`: the route measurement (`cargo xtask route`), built with source coverage
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(yfoil_route)"] }
+
 [workspace.lints.clippy]
 excessive_precision = "allow"       # Fortran literals are kept verbatim (e.g. 20-digit PI)
 too_many_arguments = "allow"        # XFOIL subroutine signatures are translated as-is

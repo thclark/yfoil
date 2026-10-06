@@ -1,8 +1,10 @@
 //! (b) Execution equivalence, branch by branch: every branch of the translated subroutines that
-//! a well-conditioned step of a reference run takes is gated by replaying one such step
-//! (`step.rs`). The steps are the cover `cargo xtask steps` chose, listed with the branches each
-//! takes in `xtask/fixtures-config/step-cover.toml`; the branches only ill-conditioned steps
-//! take are listed there too, and have no test (`docs/conventions/testing.md`, rule 3).
+//! a step of a reference run takes is gated by replaying one step that takes it (`step.rs`) and
+//! whose route yFoil is observed to follow — the same call count of every translated subroutine
+//! in the step as XFOIL's (`cargo xtask route`, `xtask/fixtures-config/route.toml`). The steps are
+//! the cover `cargo xtask steps` chose, listed with the branches each takes in
+//! `xtask/fixtures-config/step-cover.toml`, which also lists any branch taken only at a step whose
+//! route diverges (`docs/conventions/testing.md`, "What gated means").
 //!
 //! Fixtures: `tests/fixtures/xfoil/<case>/`, the files each step reads — `cargo xtask fixtures
 //! --case <case>` (the cover adds the dumps and the files to the case).
@@ -33,10 +35,10 @@ fn naca0012_n60_a2_repeat_re1e6_call_2_iteration_1() {
     replay("naca0012_n60_a2_repeat_re1e6", 2, 1, 6);
 }
 
-/// `naca0012_n60_a8_re1e4_damp`, VISCAL call 1, iteration 3 (SETBL 3): 539 branches.
+/// `naca0012_n60_a8_re1e4_damp`, VISCAL call 1, iteration 1 (SETBL 1): 900 branches.
 #[test]
-fn naca0012_n60_a8_re1e4_damp_call_1_iteration_3() {
-    replay("naca0012_n60_a8_re1e4_damp", 1, 3, 3);
+fn naca0012_n60_a8_re1e4_damp_call_1_iteration_1() {
+    replay("naca0012_n60_a8_re1e4_damp", 1, 1, 1);
 }
 
 /// `naca16-212_n60_a4_re1e6_m07`, VISCAL call 1, iteration 1 (SETBL 1): 916 branches.
@@ -51,10 +53,10 @@ fn naca16_212_n60_a4_re1e6_m07_call_1_iteration_2() {
     replay("naca16-212_n60_a4_re1e6_m07", 1, 2, 2);
 }
 
-/// `naca23012_n60_a4_re1e6_xtr022_0001`, VISCAL call 1, iteration 4 (SETBL 4): 528 branches.
+/// `naca23012_n60_a4_re1e6_xtr022_0001`, VISCAL call 1, iteration 6 (SETBL 6): 526 branches.
 #[test]
-fn naca23012_n60_a4_re1e6_xtr022_0001_call_1_iteration_4() {
-    replay("naca23012_n60_a4_re1e6_xtr022_0001", 1, 4, 4);
+fn naca23012_n60_a4_re1e6_xtr022_0001_call_1_iteration_6() {
+    replay("naca23012_n60_a4_re1e6_xtr022_0001", 1, 6, 6);
 }
 
 /// `naca4412_n160_a16_re1e6_m05`, VISCAL call 1, iteration 8 (SETBL 8): 552 branches.
