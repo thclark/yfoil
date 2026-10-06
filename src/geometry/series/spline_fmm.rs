@@ -140,7 +140,7 @@ pub fn spline_eval(x: &[f64], f: &[f64], fp: &[f64], u: f64) -> (f64, f64, f64) 
 /// The parameter `u` in `[a, b]` at which a monotone segment takes the value `target`. Newton
 /// iteration safeguarded by bisection, run to the round-off of `u`; the segment must bracket
 /// `target` (`SplineZero` solves the same problem with Brent's method at a 1e-6 tolerance — see
-/// the tolerance note in `tests/utilities/tolerances.rs`).
+/// the tolerance note in `tests/common/utilities/tolerances.rs`).
 pub fn segment_inverse(seg: &Segment, target: f64) -> f64 {
     let (mut lo, mut hi) = (seg.a, seg.b);
     let (flo, fhi) = (seg.eval(lo).0 - target, seg.eval(hi).0 - target);

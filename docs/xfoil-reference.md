@@ -1328,7 +1328,7 @@ base names are listed with the sensitivities XFOIL carries.
 | NCALC, APCALC | `node_normals`, `panel_angles` | |
 | PANGEN | `repanel_by_curvature` (`PangenConfig`); `repanel` (`PanelConfig`) is PANE/PPAR with the trailing-edge treatment and the provenance record | |
 | GETPAN (PPAR menu) | `PanelConfig` / `PangenConfig` fields, `yfoil geometry repanel` flags | see table 12 |
-| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/xfoil_tgap_tests.rs` |
+| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/subroutine/tgap.rs` |
 | — | keep | doc: no XFOIL equivalent |
 | NACA4/NACA5 | `naca_4digit`, `naca_5digit` with a `Thickness` {`Perpendicular`, `Vertical`} argument | the un-suffixed name currently holds the non-XFOIL algorithm; every NACA family (4, 4M, 5, 16, 6, 6A) is `series::Section`, which has no XFOIL equivalent |
 | SCALC + SEGSPL + LEFIND + TECALC + NCALC + APCALC | `panel_foil` | doc lists all six |

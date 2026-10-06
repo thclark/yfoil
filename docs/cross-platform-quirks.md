@@ -19,7 +19,7 @@ glibc disagree by exactly 1 ULP on some inputs. The fixtures were generated on a
 so on CI every transcendental in both the reference trajectory and yFoil's differs by an ULP here and
 there. Everywhere well-conditioned that is absorbed by the existing tolerances, which is why every other
 fixture test passes on Linux. The four failing tests are the polar break cases
-(`tests/xfoil_polar_break_tests.rs`), which deliberately probe the region where the reference cannot
+(`tests/execution/polar_break.rs`), which deliberately probe the region where the reference cannot
 reproduce itself under a 1-ULP perturbation, and there the ULPs get amplified.
 
 ## Evidence
@@ -43,16 +43,16 @@ replay value, failing only on those macOS-specific pins.
 
 ## What the branch changed
 
-- `tests/utilities/host.rs` compares each fixture's recorded host (`manifest.json`, `host:` line) with
+- `tests/common/utilities/host.rs` compares each fixture's recorded host (`manifest.json`, `host:` line) with
   the running one. Same-host pins are asserted on the fixture's host and reported on any other, never
   skipped (CLAUDE.md Rule 1's third outcome). Gated on every host: the converged calls before the break,
   the straddle classification by the reference's own floor, the replay within `TOL_CROSS_HOST`
-  (`tests/utilities/tolerances.rs`, 1e-9 from the measured 3.6e-10), and the polar driver's bookkeeping
+  (`tests/common/utilities/tolerances.rs`, 1e-9 from the measured 3.6e-10), and the polar driver's bookkeeping
   against the sweep's own outcomes.
-- The straddle classifier in `tests/utilities/records.rs` had a real gap: a run parting in the relaxation
+- The straddle classifier in `tests/common/utilities/records.rs` had a real gap: a run parting in the relaxation
   factor (RLX) at a hypersensitive iteration was failed rather than classified, where one parting in RMSBL
   was classified. Fixed.
-- The replay (`tests/utilities/replay.rs`) asserted UPDATE's reported limiter letter (VMXBL) exactly; at
+- The replay (`tests/common/utilities/replay.rs`) asserted UPDATE's reported limiter letter (VMXBL) exactly; at
   the similarity station it is a rounding-decided tie (dn2 == dn3), now reported as the sweep comparison
   already did.
 - `scripts/xfoil-build.sh` used BSD-only `sed -i ''`, which is why the nightly `xfoil-parity` job died on

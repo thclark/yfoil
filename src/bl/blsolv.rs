@@ -112,7 +112,7 @@ pub struct NewtonDeltas {
 /// This is a direct translation of XFOIL's BLSOLV subroutine (xsolve.f). The algorithm
 /// performs block Gaussian elimination with special handling for the dense mass defect
 /// coupling (VM matrix). Verified bit-identical to XFOIL on the tracked reference fixture
-/// (all three calls, both columns) — see tests/xfoil_blsolv_tests.rs.
+/// (all three calls, both columns) — see tests/subroutine/blsolv.rs.
 #[doc(alias = "BLSOLV")]
 pub fn solve_newton_system(input: NewtonSystem) -> NewtonDeltas {
     solve_newton_system_traced(input, None)

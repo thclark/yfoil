@@ -65,5 +65,5 @@ almost nothing.
 The **noise floor** of a recorded value is the largest difference between the reference and any
 of its twins. It is the reference's own spread under a one-ULP perturbation. It is a study
 quantity, used to choose which steps are well-conditioned enough to become test cases and to
-derive the named tolerances in `tests/utilities/tolerances.rs`. Tests do not read it (see
+derive the named tolerances in `tests/common/utilities/tolerances.rs`. Tests do not read it (see
 [testing.md](testing.md), including its Status section).
