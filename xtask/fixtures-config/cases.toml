@@ -323,7 +323,7 @@ track = true
 
 # ---------------------------------------------------------------------------------------------
 # Solution validity (docs/guide/validity.md): inviscid runs whose events.dat records XFOIL's
-# Class A/B occasions (patch 19); tests/validity_tests.rs asserts yFoil's validity record
+# Class A/B occasions (patch 19); tests/known_issues/kt_pole_7_7.rs asserts yFoil's validity record
 # against them point by point.
 # ---------------------------------------------------------------------------------------------
 [[case]]

@@ -2,7 +2,7 @@
 # Measure the reference's own numerical noise floor (plan rigour addendum R1.3):
 # perturb every panel coordinate by +1 ULP, rerun instrumented XFOIL on the tracked
 # reference case, and report the per-stage spread of the ES24.16 dumps line-aligned.
-# Tolerances in tests/utilities/tolerances.rs are derived from this, not asserted.
+# Tolerances in tests/common/utilities/tolerances.rs are derived from this, not asserted.
 #
 # Usage: scripts/noise-floor.sh [case-dir]   (default: tests/fixtures/xfoil/naca0012_n60_a2_re1e6)
 set -euo pipefail

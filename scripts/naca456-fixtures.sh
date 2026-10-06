@@ -2,7 +2,7 @@
 #
 # Reference NACA ordinates from the public-domain PDAS `naca456` program (Ralph L. Carmichael's
 # revision of the NASA Langley programs of TM X-3284, TM X-3069 and TM-4741), for
-# tests/fixtures/naca456/ and tests/naca456_series_tests.rs.
+# tests/fixtures/naca456/ and tests/application/naca456.rs.
 #
 #   scripts/naca456-fixtures.sh            download (once), build the driver, write every case
 #   scripts/naca456-fixtures.sh --tables   also regenerate src/geometry/series/six_series_tables.rs

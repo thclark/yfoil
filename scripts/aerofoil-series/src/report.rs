@@ -82,8 +82,8 @@ fn comparison_note() -> &'static str {
      (1.1e-10 relative). The 6-series thickness forms differ by naca456's own root tolerance: it finds the \
      station on the arc-length spline with Brent's method at 1e-6 and reports the ordinate at the station \
      reached, so its ordinates are off by up to 1e-6 × |dy_t/dx| (largest at the nose); yFoil inverts to \
-     round-off. The gates in `tests/naca456_series_tests.rs` are derived from exactly that \
-     (`tests/utilities/tolerances.rs`). naca456 reports the aft slope of the 4-digit modified form as \
+     round-off. The gates in `tests/application/naca456.rs` are derived from exactly that \
+     (`tests/common/utilities/tolerances.rs`). naca456 reports the aft slope of the 4-digit modified form as \
      dy/d(1 − x); the sign is restored before comparing."
 }
 

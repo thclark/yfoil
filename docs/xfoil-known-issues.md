@@ -47,13 +47,13 @@ Verified in the source, not inferred:
   corrections), so ~1e-4 relative or better on a converged point; unbounded on an unconverged one.
   On the reference case (NACA 0012, N=60, α=2°, Re=1e6) live and DUMP `H*` differ by ~1e-8.
 
-**yFoil.** The stored arrays are reproduced exactly (`tests/xfoil_mrchdu_tests.rs:60`,
-`tests/xfoil_update_tests.rs:75`, the SETBL gates); the solver is untouched. In the analysis JSON
+**yFoil.** The stored arrays are reproduced exactly (`tests/subroutine/mrchdu.rs`,
+`tests/execution/update.rs`, the SETBL gates); the solver is untouched. In the analysis JSON
 (`BlSideOutput`, `src/output/foil.rs`) the canonical columns `hs, cf, cdis, delta, ctq, uslp` are
 computed *live* by running XFOIL's own BLPRV → BLKIN → BLVAR on the converged primaries, and the lagged
 arrays are emitted verbatim under `stored` (with `hs_dump`, `cf_dump` as DUMP prints them). A
 side-by-side of live `hs` against DUMP's `H*` will differ at the ~RMSBL level by construction;
-`tests/foil_output_tests.rs` bounds it. Column table: `docs/xfoil-reference.md`,
+`tests/application/output.rs` bounds it. Column table: `docs/xfoil-reference.md`,
 "Output" section.
 
 ### 1.2 DUMP's `Ue/Vinf` is signed by GAM — Overcome (output only)
@@ -133,7 +133,7 @@ returned `AMPL2` is the iterated value and may exceed Ncrit; with no transition,
 ### 2.6 VSREZ(4) is stale at MRCHUE's inner-loop entry — Replicated (instrumentation note)
 
 The fourth residual is assigned only in the direct/inverse branch, so a trace written before it holds
-the previous iteration's value; the gate excludes it (`tests/xfoil_mrchue_tests.rs:123`).
+the previous iteration's value; the gate excludes it (`tests/subroutine/mrchue.rs`).
 
 ### 2.7 RADLE stays zero for a flat LE — Replicated
 
@@ -147,7 +147,7 @@ THET, DSTR, UEDG, TAU, DIS, CTQ, DELT and TSTR (`xbl.f:1546-1557`) but not MASS,
 writes `MASS(IBL, 1)` beyond `NBL(1)` (MRCHUE/MRCHDU, UPDATE, DSSET and the SETBL/QVFUE sums all
 run to `NBL(IS)`, and `NBL(1) = IBLTE(1)`). Those slots hold whatever an earlier stagnation-point
 position left there and are read by nothing. yFoil's `mass_defect[1][..]` beyond `n_stations[1]` is
-the same dead storage with a different history, so the replay harness (`tests/utilities/replay.rs`)
+the same dead storage with a different history, so the replay harness (`tests/common/utilities/replay.rs`)
 does not compare it; it surfaced in the polar break-point cases, where IST moves between iterations
 and the instrumented `update_output_<k>.dat` dumps every row up to `NBL(1) + NW`.
 
@@ -179,7 +179,7 @@ replicates each (with the message as a code comment) so that its results and bra
 | Where | Behaviour | yFoil |
 |---|---|---|
 | `xfoil.f:796, 801` (MRCL) | `Illegal Re(CL)/Mach(CL) dependence trigger. Setting fixed` — RETYP/MATYP outside 1..3 silently reset to 1 | `src/solver/setbl.rs:39, 43`; unreachable through TYPE (§5.4) |
-| `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; the Mach limit and CL floor are checked against XFOIL's events by `tests/validity_tests.rs` on `naca64a010_n60_inviscid_sweep30_type2_m03`; reach notes in `coverage.toml` |
+| `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; the Mach limit and CL floor are checked against XFOIL's events by `tests/known_issues/kt_pole_7_7.rs` on `naca64a010_n60_inviscid_sweep30_type2_m03`; reach notes in `coverage.toml` |
 | `xfoil.f` (CPCALC, CLCALC) | the Kármán–Tsien denominator `DEN = β + BFAC·Cp_inc` goes non-positive once any panel's speed passes `q/Q∞ = √(1 + 2β(1+β)/M∞²)`, so Cp does not merely lose accuracy — it passes through a **pole** and changes sign. CPCALC prints `Local speed too large. Compressibility corrections invalid.` once per call and returns the inverted Cp anyway; **CLCALC forms the same denominator inline and does not warn at all**, so CL/CM/CDP are silently wrong, frequently in sign. At M = 0.3 the threshold is q/Q∞ = 6.513 (a NACA 64A010 at N = 240 crosses it between 19° and 20°); at the M = 0.99 that MRCL's clamp produces it is 1.153, which that section exceeds by α = ±1°. See §7.7 for how TYPE 2 walks into this on its own | Replicated (`clcalc.rs:26` warns as CPCALC does, `:57-69` is the unguarded CLCALC form) |
 | `xutils.f:41-50` (SETEXP) | 100-iteration Newton on the spacing ratio to `|dRatio| < 1e-5`; `Convergence failed. Continuing anyway ...` | `src/solver/xywake.rs:33-49`; the 1e-5 tolerance is load-bearing (§7.1) |
 | `xoper.f` (VISCAL, SPECAL, SPECCL) | `Convergence failed` after ITMAX / 20 / 12 iterations; state kept | `viscal.rs:187`, `specal.rs:110, 172` |
@@ -223,7 +223,7 @@ GEOLIN (geometric sensitivities) is inverse-design only and also not translated.
 The `TYPE` command maps TYPE 3 to `MATYP = 1, RETYP = 3` (`xoper.f:357-366`); nothing ever sets
 `MATYP = 3`, so MRCL's third Mach branch (`xfoil.f:812, 817`) and SPECAL's `MINF_CLM = 0` branch
 (`xoper.f:2784`) are dead. yFoil's `FlowConditions { mach_cl_dependence: Fixed, re_cl_dependence: InverseCl }` reproduces TYPE 3
-(`tests/xfoil_coverage_tests.rs:290`).
+(`tests/execution/coverage.rs`).
 
 ### 5.5 OPER `DAMP` is reachable and undocumented — Replicated
 
@@ -254,7 +254,7 @@ generators lay the thickness perpendicular to the mean line by default, whatever
 method (`yfoil geometry naca …`, `Section`). XFOIL's model is `--thickness vertical`
 (`naca_4digit_vertical`, `naca_5digit_vertical`): XFOIL's own 245-point NACA4/NACA5 buffer, always
 PANGEN-panelled, and it exists only to replicate the output of XFOIL's `NACA` command bitwise
-(`tests/xfoil_pangen_tests.rs`); the geometry file records `thickness_applied: "vertical"`. This
+(`tests/subroutine/pangen.rs`); the geometry file records `thickness_applied: "vertical"`. This
 never enters a comparison because yFoil generates the panels and XFOIL consumes them (Rule 4).
 Recorded in CLAUDE.md's divergence table, the only row.
 
@@ -285,7 +285,7 @@ spline-parameter tangents), and the surfaces end up `cos(τ/2)` × the requested
 gap already open the direction is the existing gap's unit vector and the requested gap is
 delivered exactly. Measured on the tracked `naca63-415_n160_tgap` case (τ ≈ 7°): `TGAP 0.002`
 gives 2.0012e-3. yFoil's `set_te_gap` reproduces the moved nodes bitwise
-(`tests/xfoil_tgap_tests.rs`); the resulting gap is asserted against the requested one only when a
+(`tests/subroutine/tgap.rs`); the resulting gap is asserted against the requested one only when a
 gap existed. The gap TGAP produces is what `TECALC` then measures, so the `SHARP` decision and
 the base-drag treatment see the delivered gap, not the requested one.
 
@@ -295,7 +295,7 @@ Not XFOIL: the NASA/PDAS `naca456` program that the geometry generators are gate
 (`tests/fixtures/naca456/`) carries `PI = 3.141592654` in its 6-series mean lines and
 `3.14159265` in the φ grid of the 6-series mapping, and inverts its arc-length spline with Brent's
 method at a 1e-6 tolerance, reporting the ordinate at the station reached. yFoil uses π and inverts
-to round-off; the tolerances in `tests/utilities/tolerances.rs` are derived from those three facts.
+to round-off; the tolerances in `tests/common/utilities/tolerances.rs` are derived from those three facts.
 naca456 also reports the aft slope of the 4-digit modified thickness form as dy/d(1 − x).
 
 ---
@@ -310,7 +310,7 @@ Tightening it moves every wake node; ported character for character (`src/solver
 
 `VACC2 = VACC3 = (VACCEL*2.0)/(S(N)-S(1))` gates the sparse-elimination skips; a 1-ULP difference in the
 threshold flips a branch (`src/bl/blsolv.rs:122-124`). A historic "~1 % BLSOLV error" was a yFoil test
-hard-coding `S(N)−S(1) = 2.0` instead of the fixture's 2.0387 (`tests/xfoil_blsolv_tests.rs:9-12`);
+hard-coding `S(N)−S(1) = 2.0` instead of the fixture's 2.0387 (`tests/subroutine/blsolv.rs`);
 BLSOLV is bit-identical.
 
 ### 7.3 Kármán–Tsien TK must be formed as COMSET forms it — Overcome (yFoil bug, fixed)
@@ -326,7 +326,7 @@ matters rather than `powi` (CLAUDE.md conventions). Transcendentals come from th
 codes, so bit-identity is a same-host property: Apple libSystem and glibc differ by 1 ULP on 0.1 % (`exp`,
 `ln`, `pow`) to 18 % (`tanh`) of inputs (measured 2026-09-11), and XFOIL's own post-CL_max wanderings
 differ by O(1) between the two while its converged points move by ≤ 1.4e-11 (`docs/validation/README.md`,
-*Polar break points*; `tests/utilities/host.rs`).
+*Polar break points*; `tests/common/utilities/host.rs`).
 
 ### 7.5 EQUIVALENCE aliasing of UNEW/QNEW onto VA/VB — Overcome (structure only)
 
@@ -425,7 +425,7 @@ cases, where BL state really is carried forward.
 `clcalc.rs:57-69` the unguarded denominator, so yFoil converges onto the same spurious roots — and
 then flags them, rather than reporting the numbers as if they were sound. This case is the worked
 example behind [Solution validity](guide/validity.md), which catalogues every reason yFoil withholds
-a result and what each one means. **Gate:** `tests/validity_tests.rs` sweeps the same section at N = 60
+a result and what each one means. **Gate:** `tests/known_issues/kt_pole_7_7.rs` sweeps the same section at N = 60
 (`naca64a010_n60_inviscid_sweep30_type2_m03`) and checks yFoil's validity record against XFOIL's own events
 point by point. The measurements above were made at N = 240 (`naca64a010_n240_inviscid_polar30_type2_m03`,
 defined in `cases.toml` and regenerated by `cargo xtask fixtures --case` with that name; untracked). The

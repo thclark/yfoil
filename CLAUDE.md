@@ -22,14 +22,14 @@ XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it m
 (1-ULP input perturbation, per stage, per variable; results in `docs/validation/noise-floor.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
-Jacobian) can only be gated with a row-scaled metric. Five named constants live in `tests/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
+Jacobian) can only be gated with a row-scaled metric. Five named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
 `TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10 —
 and `TOL_CROSS_HOST`); no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
 ~1e-11, converged Newton state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in
 *both* codes: bit-identity is a same-host property, cross-host is an ULP budget. Measured 2026-09-11: Apple libSystem
 and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, identically on x86_64 and
 aarch64; XFOIL's own converged polar points move by ≤ 1.4e-11 between the two, its unconverged post-CL_max
-wanderings by O(1). Every fixture manifest records its host; `tests/utilities/host.rs` compares it with the running
+wanderings by O(1). Every fixture manifest records its host; `tests/common/utilities/host.rs` compares it with the running
 one, and the pins only a bit-identical trajectory can hold (the straddle iteration, a one-step replay at
 `TOL_SOLVER` in a hypersensitive state) are asserted on the fixture's host and reported elsewhere — the third
 outcome again, never a skip.
@@ -50,7 +50,7 @@ and produces O(1) differences that are **not translation bugs**. So:
 - **Mechanised per case:** `cargo xtask fixtures` runs every case twice — as generated and with every panel
   coordinate +1 ULP — and writes `noise_floor.json` (the reference's own spread of every recorded value, and
   whether its branch trace survived). Tests gate a value at `max(tol · scale, FLOOR_FACTOR · floor)`
-  (`tests/utilities/records.rs`); a twin that flips its own branch trace, or a run that matches every
+  (`tests/common/utilities/records.rs`); a twin that flips its own branch trace, or a run that matches every
   iteration until one where the reference moves by more than `STRADDLE_FLOOR` under 1 ULP, is classified
   threshold-straddling — and the one-step replay from XFOIL's dumped state at that iteration (`dump_calls`)
   is the evidence that the step itself is faithful. The 12° NACA 0012 case is the worked example.
@@ -277,7 +277,7 @@ XFOIL is silent for `CLCALC` and `MRCL_CL_FLOOR` and writes only to the console 
 events are the only record of them in a fixture. Note the granularity differs from yFoil's record by
 design: an event fires on *any* call in the span, while yFoil's fields describe the *reported* state
 (the last call) — so a point whose intermediate Newton iterate left the domain but whose final one did
-not carries the event and not the flag. `tests/validity_tests.rs` checks the record against these events
+not carries the event and not the flag. `tests/known_issues/kt_pole_7_7.rs` checks the record against these events
 on `naca4412_n60_inviscid_m07_a10` and `naca64a010_n60_inviscid_sweep30_type2_m03`.
 
 Failures are classified by *what it would take to know*, not by severity (`docs/guide/validity.md`,
@@ -358,7 +358,7 @@ points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat`
 `inviscid = true` (no VISC: each ALFA is one SPECAL, each CL one SPECCL; no twin is run), `events = true` (keep
 `events.dat`, the reference's `EVLOG` branch events), `keep = [...]` (track exactly these work-directory files
 besides the inputs). The tracked CI reference case is
-`naca0012_n60_a2_re1e6` (`tests/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
+`naca0012_n60_a2_re1e6` (`tests/common/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
 plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
@@ -373,14 +373,18 @@ and used in that sense only.
 
 ```
 tests/
-├── utilities/          - shared helpers; tolerances.rs holds the only tolerance constants
-├── fixtures/           - tracked XFOIL fixtures (allowlisted in .gitignore) + loaders
-├── cli_*_tests.rs      - CLI behaviour
-├── integration_*_tests.rs
-└── xfoil_*_tests.rs    - equivalence against XFOIL fixtures
+├── subroutine/         - (a) one XFOIL subroutine at a time, from its dumped inputs
+├── execution/          - (b) one step from XFOIL's dumped state, or a well-conditioned whole run
+├── application/        - (c) yFoil-only functionality: CLI, I/O, generators, output records, ids
+├── known_issues/       - (d) one module per section of docs/xfoil-known-issues.md
+├── invariants/         - (e) XFOIL-independent physics
+├── apparatus/          - (f) the reference and its fixtures
+├── common/             - shared helpers and fixture loaders; utilities/tolerances.rs holds the only
+│                         tolerance constants
+└── fixtures/           - tracked fixture data (allowlisted in .gitignore)
 ```
 
-All test files end in `_tests.rs`. CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `ignore-drift`,
+One test binary per category (`cargo test --test execution`). CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `ignore-drift`,
 `no-deviations`, `examples`, and nightly `xfoil-parity` (rebuild reference, regenerate, compare).
 
 **Validation reports are generated, never hand-fed.** `docs/validation/` holds only Markdown and SVG; every

@@ -64,7 +64,7 @@ struct Case {
     ppar: Option<Ppar>,
     /// GDES `TGAP gap blend` on the LOADed panels (OPER never entered): the instrumented TGAP
     /// dumps the buffer airfoil before and after into `xfoil_tgap.dat`, the gate of
-    /// `set_te_gap` (tests/xfoil_tgap_tests.rs)
+    /// `set_te_gap` (tests/subroutine/tgap.rs)
     #[serde(default)]
     tgap: Vec<f64>,
     #[serde(default)]
