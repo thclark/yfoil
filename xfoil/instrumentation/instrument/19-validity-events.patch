@@ -114,7 +114,7 @@
  
 --- a/src/xoper.f
 +++ b/src/xoper.f
-@@ -2742,6 +2742,11 @@
+@@ -2746,6 +2746,11 @@
        CALL LOGREAL('ALFA', DBLE(ALFA))
        CALL LOGBOOL('LGAMU', LGAMU)
        CALL LOGBOOL('LQAIJ', LQAIJ)
@@ -126,7 +126,7 @@
  C
  C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
        IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
-@@ -2803,6 +2808,11 @@
+@@ -2807,6 +2812,11 @@
  C
    100 CONTINUE
        WRITE(*,*) 'SPECAL:  Minf convergence failed'
