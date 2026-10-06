@@ -39,7 +39,7 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
     assert!(p.converged, "the reference case converges");
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true, false);
     let st = session.state();
 
     // geometry: airfoil nodes and the wake, as the solver holds them
@@ -141,7 +141,7 @@ fn analysis_output_carries_geometry_wake_and_every_station() {
 fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true, false);
     let bl = out.boundary_layer.as_ref().unwrap();
 
     // The stored arrays were evaluated on the state entering the final Newton iteration; the live
@@ -185,18 +185,18 @@ fn live_closures_lag_the_stored_arrays_by_the_final_newton_correction() {
 fn markers_and_wake_split_follow_xfoil() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true, false);
     let bl = out.boundary_layer.as_ref().unwrap();
     let st = session.state();
 
     // transition: XOCTR is what the operating point reports; the point lies on the surface
     assert_eq!(
         bl.transition[0].x_transition.to_bits(),
-        out.results.transition_upper.unwrap()[0].to_bits()
+        out.results.values.as_ref().unwrap().transition_upper.unwrap()[0].to_bits()
     );
     assert_eq!(
         bl.transition[1].x_transition.to_bits(),
-        out.results.transition_lower.unwrap()[0].to_bits()
+        out.results.values.as_ref().unwrap().transition_lower.unwrap()[0].to_bits()
     );
     assert_eq!(bl.transition[0].i_station, st.i_transition_station[1]);
     assert!(!bl.transition[0].forced);
@@ -239,7 +239,7 @@ fn markers_and_wake_split_follow_xfoil() {
 fn json_round_trips_and_inviscid_has_no_boundary_layer() {
     let mut session = ref_case_session();
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", true, false);
     let json = out.to_json().unwrap();
     let back: AnalysisOutput = serde_json::from_str(&json).unwrap();
     assert_eq!(back.geometry, out.geometry);
@@ -250,10 +250,12 @@ fn json_round_trips_and_inviscid_has_no_boundary_layer() {
     let airfoil = panel_foil(&geometry);
     let mut session = Session::new(&airfoil, inviscid.clone());
     let p = session.alpha(2.0_f64.to_radians());
-    let out = AnalysisOutput::from_session(&session, &p, "naca0012", false);
+    let out = AnalysisOutput::from_session(&session, &p, "naca0012", false, false);
     assert!(out.boundary_layer.is_none());
-    assert!(out.results.cd.is_none() && out.results.residual.is_none());
-    assert_eq!(out.surface.q.len(), airfoil.n_foil_nodes);
+    let v = out.results.values.as_ref().unwrap();
+    let d = out.results.diagnostics.as_ref().unwrap();
+    assert!(v.cd.is_none() && d.residual.is_none());
+    assert_eq!(out.surface.as_ref().unwrap().q.len(), airfoil.n_foil_nodes);
     let json = out.to_json().unwrap();
     assert!(!json.contains("\"boundary_layer\"") && !json.contains("\"residual\""));
     assert!(out.geometry.wake.is_none());
@@ -276,14 +278,14 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
     let result = compute_polar_with(&airfoil, &config, &mut |session, p| {
         visited.push(p.alpha.to_degrees());
         assert_eq!(session.state().alpha, p.alpha, "the session is in the point's state");
-        records.push(AnalysisOutput::from_session(session, p, "naca0012", false));
+        records.push(AnalysisOutput::from_session(session, p, "naca0012", false, false));
     });
     // 0, 1, 2 then (after INIT) -1, -2: the sweep order, every point once
     assert_eq!(visited, vec![0.0, 1.0, 2.0, -1.0, -2.0]);
-    assert_eq!(records.len(), result.results.len() + result.failed_alphas.len());
+    assert_eq!(records.len(), result.results.len(), "every attempted point is kept");
 
     records.sort_by(|a, b| a.results.alpha_deg.partial_cmp(&b.results.alpha_deg).unwrap());
-    let mut polar = PolarOutput::from_polar(&result, "naca0012");
+    let mut polar = PolarOutput::from_polar(&result, "naca0012", false);
     polar.distributions = records;
     let json = polar.to_json().unwrap();
     let back: PolarOutput = serde_json::from_str(&json).unwrap();
@@ -294,10 +296,13 @@ fn polar_observer_sees_every_visited_point_in_its_own_state() {
             .iter()
             .find(|q| q.alpha_deg == d.results.alpha_deg)
             .expect("every converged point has its distribution");
-        assert_eq!(pt.cl.to_bits(), d.results.cl.to_bits());
+        assert_eq!(
+            pt.values.as_ref().unwrap().cl.to_bits(),
+            d.results.values.as_ref().unwrap().cl.to_bits()
+        );
         assert!(d.boundary_layer.is_some());
     }
     // a polar without distributions serialises without the field
-    let plain = PolarOutput::from_polar(&result, "naca0012");
+    let plain = PolarOutput::from_polar(&result, "naca0012", false);
     assert!(!plain.to_json().unwrap().contains("\"distributions\""));
 }

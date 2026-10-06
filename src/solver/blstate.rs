@@ -136,6 +136,10 @@ pub struct SolverState {
     pub pointers_built: bool,
     pub dij_wake_built: bool,
     pub viscous: bool,
+    /// Diagnostic, not part of XFOIL's state: the evidence for whether the values currently
+    /// stored are valid. Written by the routines it describes, never read by the solver
+    /// (`crate::solver::validity`).
+    pub validity: crate::solver::validity::ValidityRecord,
     pub converged: bool,
     /// AWAKE/AVISC/MVISC: alpha the wake was built for, alpha and Mach of the converged point
     pub alpha_wake: f64,
@@ -258,6 +262,7 @@ impl SolverState {
             dij_wake_built: false,
             viscous: false,
             converged: false,
+            validity: crate::solver::validity::ValidityRecord::default(),
             alpha_wake: 0.0,
             alpha_converged: 0.0,
             mach_converged: 0.0,

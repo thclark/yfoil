@@ -240,6 +240,59 @@ yfoil plot     - foil <file>... | analysis <file> | polar <file>...   (feature-g
                  scale per quantity), --scale K | --max-offset F, --markers/--no-markers; svg or png
 ```
 
+### Result validity
+
+`analyse` and `polar` return the same record per operating point (`PointRecord`, `src/output/results.rs`):
+`alpha_deg`, a `status` of `valid` / `invalid` / `not_attempted`, the `reasons` behind it, the
+`diagnostics` that are the evidence, and `values` — the numbers — **only** when the point is valid or
+`--allow-invalid` was given. Every alpha that was asked for produces a record, including the ones a
+halted sweep never reached, so nothing requested is silently missing. `--allow-invalid` changes only
+whether the numbers are present, never the status. For `analyse` the same gate covers `surface` and
+`boundary_layer`; `conditions` and `geometry` are inputs and are always present. Summary statistics and
+every plotted series are computed from the valid points alone.
+
+Every record also carries `id` and `initialised_from`, the `id` of the point whose converged BL seeded
+it (absent for a fresh MRCHUE march). A polar is a state machine and results are presented ascending
+in alpha, so the chain is the only record of execution order: two legs rooted at the 0° solve.
+
+`id` is **content-addressed** (`src/solver/point_id.rs`): a 12-character base-36 FNV-1a-128 hash of
+everything the solve depended on — yFoil version, panel geometry, flow conditions, operating point,
+iteration limit, and the predecessor's id. So it is deterministic (a result file is byte-reproducible),
+equal ids mean the same computation (results from different runs can be merged, or a sweep restarted
+from a point of an earlier one, without colliding references), and the chain is a Merkle chain, which
+distinguishes the same operating point reached along different paths. FNV is written out rather than
+taken from `DefaultHasher`, whose output is not stable across Rust releases. It also removes a special
+case: the polar's re-solved 0° (which seeds the downward leg and is not a polar point) has the same
+inputs and no predecessor, so it hashes to the same id as the first 0° solve and the leg cites the
+recorded point rather than a phantom — the fixture test that asserts the two solves are identical is
+what makes that sound.
+
+The instrumented reference records the same occasions as branch events in `events.dat`
+(`xfoil/instrumentation/instrument/19-validity-events.patch`, `EVLOG`): `CLCALC_KT_DOMAIN`,
+`CPCALC_KT_DOMAIN`, `SPECAL_MINF_FAIL`, `MRCL_CL_FLOOR`, `MRCL_MACH_LIMIT`, `MRCL_RE_LIMIT`, and a
+`SPECAL_ENTER` marker carrying alpha that opens each call's span (events carry NSETBLC, which is zero
+throughout an inviscid run, so without the marker an inviscid event could not be attributed to a point).
+This exists so yFoil's flagging can be cross-checked against the reference **without comparing numbers**:
+XFOIL is silent for `CLCALC` and `MRCL_CL_FLOOR` and writes only to the console for the rest, so the
+events are the only record of them in a fixture. Note the granularity differs from yFoil's record by
+design: an event fires on *any* call in the span, while yFoil's fields describe the *reported* state
+(the last call) — so a point whose intermediate Newton iterate left the domain but whose final one did
+not carries the event and not the flag. `tests/validity_tests.rs` checks the record against these events
+on `naca4412_n60_inviscid_m07_a10` and `naca64a010_n60_inviscid_sweep30_type2_m03`.
+
+Failures are classified by *what it would take to know*, not by severity (`docs/guide/validity.md`,
+"How failures are classified"): **Class A** a domain violation, **Class B** an iteration exhaustion —
+both exact from a single run, both recorded, both withholding the numbers — and **Class C**
+conditioning, which needs two runs to see, stays `Valid`: such a result is *ill-conditioned*
+(`docs/conventions/terminology.md`), the territory of the twins study. A result is therefore invalid on exact, single-run facts only
+(A or B), **never** on the size or smoothness of a number: `docs/xfoil-known-issues.md` §7.7 is the
+worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
+records the evidence, write-only, gated by `ci/validity-write-only.sh`. Ill-conditioned but converged
+points are not covered by this and stay valid.
+
+Both commands exit zero whenever the solver ran to completion: an invalid point is a result, not a tool
+failure, and the status carries it.
+
 Analysis commands accept JSON geometry only; use `yfoil geometry convert` for `.dat`. Typical session:
 
 ```bash
@@ -301,13 +354,22 @@ needed, generates panels **with yFoil**, runs instrumented XFOIL via `LOAD`, ass
 handoff, and keeps the raw dumps plus `manifest.json` under `tests/fixtures/xfoil/<case>/` (`track = true`,
 budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
 (drive with `ALFA a0 / ASEQ a1 aN da` like the polar procedure; ASEQ points get ITMAX+5), `cls` (OPER `CL x`
-points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat` records — for coverage cases). The tracked CI reference case is
+points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat` records — for coverage cases),
+`inviscid = true` (no VISC: each ALFA is one SPECAL, each CL one SPECCL; no twin is run), `events = true` (keep
+`events.dat`, the reference's `EVLOG` branch events), `keep = [...]` (track exactly these work-directory files
+besides the inputs). The tracked CI reference case is
 `naca0012_n60_a2_re1e6` (`tests/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
 plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
 
 ## Testing
+
+**Read `docs/conventions/testing.md` first.** Every test has exactly one purpose — (a) subroutine
+equivalence, (b) execution equivalence, (c) yFoil functionality, (d) known XFOIL weaknesses, (e) physical
+invariants, (f) reference integrity — and (b) test cases must be well-conditioned. The words
+*deterministic*, *ill-conditioned*, *twin* and *noise floor* are defined in `docs/conventions/terminology.md`
+and used in that sense only.
 
 ```
 tests/

@@ -23,8 +23,8 @@ pub use foil::{
     SideStations, StagnationMarker, TransitionMarker, WakeNodes,
 };
 pub use results::{
-    AnalysisOutput, GeometryDistributions, GeometryInfo, GeometrySummary, PolarOutput, PolarPoint, PolarSummary,
-    SurfaceDistributions,
+    AnalysisOutput, Diagnostics, GeometryDistributions, GeometryInfo, GeometrySummary, PointRecord, PointStatus,
+    PointValues, PolarOutput, PolarSummary, Reason, SurfaceDistributions,
 };
 
 #[cfg(feature = "plotting")]

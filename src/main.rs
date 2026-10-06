@@ -77,6 +77,11 @@ enum Commands {
         /// Also emit XFOIL's lagged closure arrays under each side's `lagged_closures`
         #[arg(long)]
         include_lagged_closures: bool,
+
+        /// Report the numbers of points that came back invalid as well. Their status and reasons
+        /// are unchanged — this only stops the numeric results being withheld.
+        #[arg(long)]
+        allow_invalid: bool,
     },
 
     /// Generate polar sweep
@@ -128,6 +133,11 @@ enum Commands {
         /// Also emit XFOIL's lagged closure arrays in the embedded records
         #[arg(long)]
         include_lagged_closures: bool,
+
+        /// Report the numbers of points that came back invalid as well. Their status and reasons
+        /// are unchanged — this only stops the numeric results being withheld.
+        #[arg(long)]
+        allow_invalid: bool,
 
         /// Output file path
         #[arg(short, long)]
@@ -610,6 +620,17 @@ enum GeomAction {
     },
 }
 
+/// The status column of the polar table: the verdict, and the reasons when there are any. The
+/// tokens are the enum variants' own names, identical to what the JSON carries, so a reason read
+/// here can be searched for directly.
+fn status_line(point: &yfoil::output::PointRecord) -> String {
+    if point.reasons.is_empty() {
+        return point.status.to_string();
+    }
+    let reasons: Vec<String> = point.reasons.iter().map(|r| r.to_string()).collect();
+    format!("{} ({})", point.status, reasons.join(", "))
+}
+
 fn main() {
     // Initialize logger
     env_logger::init();
@@ -629,6 +650,7 @@ fn main() {
             output,
             max_iterations,
             include_lagged_closures,
+            allow_invalid,
         } => {
             let geometry = read_geometry_auto(&file);
             let foil = panel_foil(&geometry);
@@ -667,31 +689,61 @@ fn main() {
                 println!("Ncrit:   {:.1}", ncrit);
             }
             println!();
-            println!("CL  = {:+.6}", point.cl);
-            if inviscid {
-                println!("CM  = {:+.6}", point.cm);
-                println!("CDp = {:+.6} (pressure drag)", point.cd_pressure);
-            } else {
-                println!("CD  = {:+.6}", point.cd);
-                println!("  CDf = {:+.6} (friction)", point.cd_friction);
-                println!("  CDp = {:+.6} (pressure, CD - CDf)", point.cd - point.cd_friction);
-                println!("CM  = {:+.6}", point.cm);
+
+            // the same record a polar entry carries, and the same gate on its numbers
+            let record = yfoil::output::PointRecord::from_point(&point, !inviscid, allow_invalid);
+            println!("Status:  {}", status_line(&record));
+            println!();
+            match &record.values {
+                Some(v) => {
+                    println!("CL  = {:+.6}", v.cl);
+                    if inviscid {
+                        println!("CM  = {:+.6}", v.cm);
+                        println!("CDp = {:+.6} (pressure drag)", v.cd_pressure);
+                    } else {
+                        let cd = v.cd.unwrap_or(0.0);
+                        let cdf = v.cd_friction.unwrap_or(0.0);
+                        println!("CD  = {:+.6}", cd);
+                        println!("  CDf = {:+.6} (friction)", cdf);
+                        println!("  CDp = {:+.6} (pressure, CD - CDf)", cd - cdf);
+                        println!("CM  = {:+.6}", v.cm);
+                        println!();
+                        println!("Transition:");
+                        println!(
+                            "  Upper: {:.1}% chord",
+                            v.transition_upper.map_or(0.0, |t| t[0]) * 100.0
+                        );
+                        println!(
+                            "  Lower: {:.1}% chord",
+                            v.transition_lower.map_or(0.0, |t| t[0]) * 100.0
+                        );
+                    }
+                }
+                None => {
+                    println!("Results withheld: this point is not valid, so its numbers are not");
+                    println!("to be believed. Pass --allow-invalid to report them anyway.");
+                }
+            }
+            if let Some(d) = &record.diagnostics {
                 println!();
-                println!("Transition:");
-                println!("  Upper: {:.1}% chord", point.transition_upper[0] * 100.0);
-                println!("  Lower: {:.1}% chord", point.transition_lower[0] * 100.0);
-                println!();
-                println!("Convergence:");
-                println!("  Iterations: {}", point.iterations);
-                println!("  rms:        {:.2e}", point.residual);
-                println!(
-                    "  Status:     {}",
-                    if point.converged { "Converged" } else { "NOT CONVERGED" }
-                );
+                println!("Diagnostics:");
+                if let Some(m) = d.karman_tsien_margin_forces {
+                    println!("  Karman-Tsien margin (forces):   {:+.4e}", m);
+                }
+                if let Some(m) = d.karman_tsien_margin_pressure {
+                    println!("  Karman-Tsien margin (pressure): {:+.4e}", m);
+                }
+                if let Some(i) = d.iterations {
+                    println!("  Iterations: {}", i);
+                }
+                if let Some(r) = d.residual {
+                    println!("  rms:        {:.2e}", r);
+                }
             }
 
             if let Some(ref path) = output {
-                let result = AnalysisOutput::from_session(&session, &point, foil_name, include_lagged_closures);
+                let result =
+                    AnalysisOutput::from_session(&session, &point, foil_name, include_lagged_closures, allow_invalid);
                 let json_str = result.to_json().expect("Failed to serialize results");
                 std::fs::write(path, &json_str).expect("Failed to write output file");
                 println!();
@@ -712,6 +764,7 @@ fn main() {
             max_iterations,
             distributions,
             include_lagged_closures,
+            allow_invalid,
         } => {
             // Read geometry
             let geometry = read_geometry_auto(&file);
@@ -742,6 +795,7 @@ fn main() {
                         p,
                         airfoil_name,
                         include_lagged_closures,
+                        allow_invalid,
                     ));
                 })
             } else {
@@ -750,7 +804,7 @@ fn main() {
             records.sort_by(|a, b| a.results.alpha_deg.partial_cmp(&b.results.alpha_deg).unwrap());
 
             // Create output struct
-            let mut polar_output = PolarOutput::from_polar(&result, airfoil_name);
+            let mut polar_output = PolarOutput::from_polar(&result, airfoil_name, allow_invalid);
             polar_output.label = label;
             polar_output.distributions = records;
 
@@ -773,26 +827,42 @@ fn main() {
                 println!("Ncrit:   {:.1}", ncrit);
                 println!();
                 println!(
-                    "{:>8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>8} {:>5} {:>10} {:>5}",
-                    "Alpha", "CL", "CD", "CM", "L/D", "Xtr_U", "Xtr_L", "Iter", "Residual", "Conv"
+                    "{:>8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>8} {:>5} {:>10}  Status",
+                    "Alpha", "CL", "CD", "CM", "L/D", "Xtr_U", "Xtr_L", "Iter", "Residual"
                 );
-                println!("{}", "-".repeat(98));
+                println!("{}", "-".repeat(104));
 
                 for point in &polar_output.results {
-                    let conv_marker = if point.is_converged() { "Y" } else { "N" };
-                    println!(
-                        "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e} {:>5}",
-                        point.alpha_deg,
-                        point.cl,
-                        point.cd.unwrap_or(0.0),
-                        point.cm,
-                        point.ldratio.unwrap_or(0.0),
-                        point.transition_upper.map_or(0.0, |t| t[0]),
-                        point.transition_lower.map_or(0.0, |t| t[0]),
-                        point.iterations.unwrap_or(0),
-                        point.residual.unwrap_or(0.0),
-                        conv_marker
-                    );
+                    let d = point.diagnostics.as_ref();
+                    match &point.values {
+                        Some(v) => println!(
+                            "{:>8.2} {:>10.5} {:>10.6} {:>10.5} {:>8.2} {:>8.3} {:>8.3} {:>5} {:>10.2e}  {}",
+                            point.alpha_deg,
+                            v.cl,
+                            v.cd.unwrap_or(0.0),
+                            v.cm,
+                            v.ldratio.unwrap_or(0.0),
+                            v.transition_upper.map_or(0.0, |t| t[0]),
+                            v.transition_lower.map_or(0.0, |t| t[0]),
+                            d.and_then(|d| d.iterations).unwrap_or(0),
+                            d.and_then(|d| d.residual).unwrap_or(0.0),
+                            status_line(point),
+                        ),
+                        // the point was asked for, so it is reported; its numbers are withheld
+                        None => println!(
+                            "{:>8.2} {:>10} {:>10} {:>10} {:>8} {:>8} {:>8} {:>5} {:>10}  {}",
+                            point.alpha_deg,
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            "-",
+                            status_line(point),
+                        ),
+                    }
                 }
 
                 println!();
@@ -814,15 +884,30 @@ fn main() {
                 if let Some(cd0) = polar_output.summary.cd0 {
                     println!("  CD0 = {:.6}", cd0);
                 }
-                println!(
-                    "  Converged: {}/{} points",
-                    polar_output.summary.n_converged,
-                    polar_output.summary.n_converged + polar_output.summary.n_failed
-                );
+                let sm = &polar_output.summary;
+                let total = sm.n_valid + sm.n_invalid + sm.n_not_attempted;
+                println!("  Valid: {}/{} points", sm.n_valid, total);
+                if sm.n_invalid > 0 {
+                    println!(
+                        "  Invalid: {} point(s) — solved, but the numbers are not to be believed{}",
+                        sm.n_invalid,
+                        if allow_invalid {
+                            " (reported anyway: --allow-invalid)"
+                        } else {
+                            " (numbers withheld; --allow-invalid reports them)"
+                        }
+                    );
+                }
+                if sm.n_not_attempted > 0 {
+                    println!(
+                        "  Not attempted: {} point(s) — the sweep halted before reaching them",
+                        sm.n_not_attempted
+                    );
+                }
 
                 if !result.completed {
                     println!();
-                    println!("Warning: Sweep stopped early due to consecutive failures");
+                    println!("Note: the sweep halted early on consecutive non-converged points (XFOIL's NSEQEX rule)");
                 }
 
                 // Write to file if requested

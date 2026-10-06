@@ -320,3 +320,43 @@ alphas = []
 geometry_only = true
 ppar = { cvpar = 0.5, cterat = 0.05 }
 track = true
+
+# ---------------------------------------------------------------------------------------------
+# Solution validity (docs/guide/validity.md): inviscid runs whose events.dat records XFOIL's
+# Class A/B occasions (patch 19); tests/validity_tests.rs asserts yFoil's validity record
+# against them point by point.
+# ---------------------------------------------------------------------------------------------
+[[case]]
+name = "naca4412_n60_inviscid_m07_a10"    # inviscid at M 0.7, alpha 10: the Karman-Tsien denominator <= 0 (CPCALC DENNEG, 'Local speed too large')
+foil = "naca4:4412"
+n_nodes = 60
+alphas = [10.0]
+mach = 0.7
+inviscid = true
+minimal = true
+events = true
+track = true
+
+[[case]]
+name = "naca64a010_n60_inviscid_sweep30_type2_m03"    # inviscid TYPE 2 at M 0.3, one SPECAL per degree from -30 to 30: MRCL's CL floor and Mach limit, SPECAL's CL(M) Newton exhausted, the Karman-Tsien pole (known issues 7.10)
+foil = "naca:64A010"
+n_nodes = 60
+alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+mach = 0.3
+matyp = 2
+inviscid = true
+minimal = true
+events = true
+track = true
+
+[[case]]
+name = "naca64a010_n240_inviscid_polar30_type2_m03"    # the N = 240 sweep of known issues 7.7 (the measurements there); untracked, regenerate with --case
+foil = "naca:64A010"
+n_nodes = 240
+alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+mach = 0.3
+matyp = 2
+inviscid = true
+minimal = true
+events = true
+track = false

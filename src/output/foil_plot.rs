@@ -188,7 +188,7 @@ impl DesignPoint {
     pub fn from_analysis(label: impl Into<String>, output: AnalysisOutput) -> Self {
         Self {
             label: label.into(),
-            converged: output.results.is_converged(),
+            converged: output.results.is_valid(),
             geometry: output.geometry,
             boundary_layer: output.boundary_layer,
         }

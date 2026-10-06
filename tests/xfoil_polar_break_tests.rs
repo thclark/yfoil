@@ -208,6 +208,16 @@ fn check_break(
 /// The polar driver's bookkeeping against the sweep's own point outcomes, on any host: converged
 /// points are kept (the re-solved 0° that seeds the second leg is not a polar point), unconverged
 /// alphas are listed as failed, and a leg halts after NSEQEX = 4 consecutive failures.
+/// The polar now keeps every alpha it attempted, converged or not (the validity contract:
+/// nothing the caller asked for goes missing). These recover the two quantities the break
+/// behaviour is asserted on.
+fn converged(polar: &yfoil::solver::analysis::PolarResult) -> Vec<&yfoil::solver::analysis::PointResult> {
+    polar.results.iter().filter(|p| p.converged).collect()
+}
+fn failed_alphas(polar: &yfoil::solver::analysis::PolarResult) -> Vec<f64> {
+    polar.results.iter().filter(|p| !p.converged).map(|p| p.alpha).collect()
+}
+
 fn assert_polar_consistent(case: &str, polar: &PolarResult, run: &[(PointResult, Outcome)], n_first_leg: usize) {
     let (mut kept, mut failed, mut completed) = (0, Vec::new(), true);
     for (leg, points) in [&run[..n_first_leg], &run[n_first_leg..]].into_iter().enumerate() {
@@ -230,10 +240,16 @@ fn assert_polar_consistent(case: &str, polar: &PolarResult, run: &[(PointResult,
         }
     }
     let half = |a: &f64| (a.to_degrees() * 2.0).round() / 2.0;
-    assert_eq!(polar.results.len(), kept, "{case}: polar points kept");
+    assert_eq!(converged(polar).len(), kept, "{case}: polar points kept");
+    // both sides sorted: the polar keeps its points ascending, the model above collects them in
+    // sweep order, and what is being asserted is which alphas failed, not the order they came in
+    let sorted = |mut v: Vec<f64>| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v
+    };
     assert_eq!(
-        polar.failed_alphas.iter().map(half).collect::<Vec<_>>(),
-        failed.iter().map(half).collect::<Vec<_>>(),
+        sorted(failed_alphas(polar).iter().map(half).collect()),
+        sorted(failed.iter().map(half).collect()),
         "{case}: failed alphas"
     );
     assert_eq!(polar.completed, completed, "{case}: completed");
@@ -262,10 +278,9 @@ fn test_naca0012_upward_break_matches_then_straddles() {
     );
     assert_polar_consistent(UP_CASE, &polar, &run, run.len());
     if same {
-        assert_eq!(polar.results.len(), UP_BREAK_CALL - 1);
+        assert_eq!(converged(&polar).len(), UP_BREAK_CALL - 1);
         assert_eq!(
-            polar
-                .failed_alphas
+            failed_alphas(&polar)
                 .iter()
                 .map(|a| (a.to_degrees() * 2.0).round() / 2.0)
                 .collect::<Vec<_>>(),
@@ -313,8 +328,12 @@ fn test_naca4412_downward_break_matches_then_straddles() {
     );
     assert_polar_consistent(DOWN_CASE, &polar, &run, 1);
     if same {
-        assert_eq!(polar.results.len(), rec.points.len() - 1 - 3, "0°, −0.5°…−14°, −16°");
-        assert_eq!(polar.failed_alphas.len(), 3);
+        assert_eq!(
+            converged(&polar).len(),
+            rec.points.len() - 1 - 3,
+            "0°, −0.5°…−14°, −16°"
+        );
+        assert_eq!(failed_alphas(&polar).len(), 3);
         assert!(polar.completed);
     }
 }

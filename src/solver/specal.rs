@@ -81,6 +81,7 @@ pub fn solve_inviscid_at_alpha(state: &mut SolverState, sys: &mut Option<Invisci
     compute_cl_cm(state);
 
     // iterate on CLM
+    let mut exhausted = true;
     for _itcl in 1..=20 {
         let msq_clm = 2.0 * state.mach * minf_clm;
         let dclm = (state.cl - clm) / (1.0 - state.cl_d_machsqd * msq_clm);
@@ -108,10 +109,13 @@ pub fn solve_inviscid_at_alpha(state: &mut SolverState, sys: &mut Option<Invisci
         compute_cl_cm(state);
 
         if dclm.abs() <= 1.0e-6 {
+            exhausted = false;
             break;
         }
     }
     // 'SPECAL:  Minf convergence failed' if the loop ran out
+    // observation only (never read by the solver)
+    state.validity.mach_cl_newton_exhausted = exhausted;
 
     // set final Mach, CL, Cp distributions, and hinge moment
     let (m_cl, re_cl) = set_mach_re_from_cl(state, state.cl);
@@ -119,20 +123,28 @@ pub fn solve_inviscid_at_alpha(state: &mut SolverState, sys: &mut Option<Invisci
     state.re_d_cl = re_cl;
     set_compressibility(state);
     compute_cl_cm(state);
-    state.cp_inviscid = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
-    if state.viscous {
+    (state.cp_inviscid, _) = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
+    let margin = if state.viscous {
         let nt = state.n_foil_nodes + state.n_wake_nodes;
-        state.cp_viscous = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
-        state.cp_inviscid = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+        let (cpv, mv) = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
+        state.cp_viscous = cpv;
+        let (cpi, mi) = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+        state.cp_inviscid = cpi;
+        mv.min(mi)
     } else {
-        state.cp_inviscid = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
-    }
+        let (cpi, mi) = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
+        state.cp_inviscid = cpi;
+        mi
+    };
+    state.validity.karman_tsien_margin_pressure = margin;
 }
 
 /// SPECCL: converges to the specified inviscid CL by Newton iteration on alpha (20 iterations,
-/// |DALFA| ≤ 1e-6), with MINF/REINF set from CLSPEC by MRCL and held fixed.
+/// |DALFA| ≤ 1e-6), with MINF/REINF set from CLSPEC by MRCL and held fixed. Returns XFOIL's
+/// ITAL as the loop leaves it: the iteration that met the tolerance, or 21 when the cap was
+/// exhausted ('SPECCL:  CL convergence failed').
 #[doc(alias = "SPECCL")]
-pub fn solve_inviscid_at_cl(state: &mut SolverState, sys: &mut Option<InviscidSystem>) {
+pub fn solve_inviscid_at_cl(state: &mut SolverState, sys: &mut Option<InviscidSystem>) -> usize {
     // calculate surface vorticity distributions for alpha = 0, 90 degrees
     if sys.is_none() {
         *sys = Some(build_inviscid_system(state));
@@ -159,7 +171,8 @@ pub fn solve_inviscid_at_cl(state: &mut SolverState, sys: &mut Option<InviscidSy
     compute_cl_cm(state);
 
     // Newton loop for alpha to get specified inviscid CL
-    for _ital in 1..=20 {
+    let mut ital = 21;
+    for it in 1..=20 {
         let dalfa = (state.cl_specified - state.cl) / state.cl_d_alpha;
         let rlx = 1.0;
         state.alpha += rlx * dalfa;
@@ -171,32 +184,41 @@ pub fn solve_inviscid_at_cl(state: &mut SolverState, sys: &mut Option<InviscidSy
         compute_cl_cm(state);
 
         if dalfa.abs() <= 1.0e-6 {
+            ital = it;
             break;
         }
     }
-    // 'SPECCL:  CL convergence failed' if the loop ran out
+    // 'SPECCL:  CL convergence failed' if the loop ran out (ital stays 21)
 
     // set final surface speed and Cp distributions
     set_te_thickness(state);
     set_q_inviscid(state, state.alpha);
-    if state.viscous {
+    let margin = if state.viscous {
         let nt = state.n_foil_nodes + state.n_wake_nodes;
-        state.cp_viscous = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
-        state.cp_inviscid = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+        let (cpv, mv) = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
+        state.cp_viscous = cpv;
+        let (cpi, mi) = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+        state.cp_inviscid = cpi;
+        mv.min(mi)
     } else {
-        state.cp_inviscid = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
-    }
+        let (cpi, mi) = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
+        state.cp_inviscid = cpi;
+        mi
+    };
+    state.validity.karman_tsien_margin_pressure = margin;
+    ital
 }
 
 /// OPER's `CL` command: LALFA false, ALFA reset to 0 as the Newton initial guess, QINF = 1,
 /// SPECCL, then the wake/converged invalidations.
+/// Returns SPECCL's exit iteration (see `solve_inviscid_at_cl`).
 #[doc(alias = "CL")]
-pub fn cl_command(state: &mut SolverState, sys: &mut Option<InviscidSystem>, clspec: f64) {
+pub fn cl_command(state: &mut SolverState, sys: &mut Option<InviscidSystem>, clspec: f64) -> usize {
     state.cl_specified = clspec;
     state.alpha_specified = false;
     state.alpha = 0.0;
     state.qinf = 1.0;
-    solve_inviscid_at_cl(state, sys);
+    let ital = solve_inviscid_at_cl(state, sys);
     if (state.alpha - state.alpha_wake).abs() > 1.0e-5 {
         state.wake_built = false;
     }
@@ -206,4 +228,5 @@ pub fn cl_command(state: &mut SolverState, sys: &mut Option<InviscidSystem>, cls
     if (state.mach - state.mach_converged).abs() > 1.0e-5 {
         state.converged = false;
     }
+    ital
 }

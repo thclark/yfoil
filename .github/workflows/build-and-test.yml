@@ -30,6 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ci/no-deviations.sh
+      # Rule 2, mechanised the other way: the validity record is observational, so no
+      # numeric result may depend on it. src/solver and src/bl write it and never read it.
+      - run: ci/validity-write-only.sh
 
   ignore-drift:
     # Every #[ignore] is tagged with its unblocking stage and listed in
