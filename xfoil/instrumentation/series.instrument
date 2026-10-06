@@ -7,3 +7,4 @@ instrument/15-xbl-dump.patch
 instrument/16-xblsys-dump.patch
 instrument/17-xsolve-dump.patch
 instrument/18-xoper-dump.patch
+instrument/19-validity-events.patch

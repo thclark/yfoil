@@ -37,6 +37,8 @@ Every command that reads a foil takes **JSON geometry**. Use
 
 [Bindings](../bindings.md) covers calling yFoil from other languages, and
 the [data model](data.md) documents the JSON that comes out.
+[Solution validity](validity.md) explains why a point may come back with a status and no numbers,
+and what each reason code means.
 
 ## Scope
 

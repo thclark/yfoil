@@ -14,19 +14,25 @@ pub fn set_compressibility(state: &mut SolverState) {
 }
 
 /// CPCALC: compressible Cp from speed, for `q[1..=n]` (1-based, slot 0 unused). Returns the
-/// Cp array in the same layout. (XFOIL only warns when the Kármán–Tsien denominator goes
-/// non-positive; the values are still those it computes.)
+/// Cp array in the same layout, and the smallest Kármán–Tsien denominator over the nodes.
+/// (XFOIL only warns when that denominator goes non-positive — its `DENNEG` flag — and returns
+/// the inverted Cp anyway; the values are still those it computes. The margin is observation
+/// only, recorded by the caller into the validity record.)
 #[doc(alias = "CPCALC")]
-pub fn compute_cp(n: usize, q: &[f64], qinf: f64, minf: f64) -> Vec<f64> {
+pub fn compute_cp(n: usize, q: &[f64], qinf: f64, minf: f64) -> (Vec<f64>, f64) {
     let beta = (1.0 - minf * minf).sqrt();
     let bfac = 0.5 * (minf * minf) / (1.0 + beta);
     let mut cp = vec![0.0; n + 1];
+    let mut margin = f64::INFINITY;
     for i in 1..=n {
         let cpinc = 1.0 - (q[i] / qinf) * (q[i] / qinf);
         let den = beta + bfac * cpinc;
         cp[i] = cpinc / den;
+        if den < margin {
+            margin = den;
+        }
     }
-    cp
+    (cp, margin)
 }
 
 /// CLCALC: integrates surface pressures from GAM to get CL, CM and CDP, and dCL/dalpha,
@@ -60,9 +66,15 @@ pub fn compute_cl_cm(state: &mut SolverState) {
     let mut cpc_cpi = (1.0 - bfac * cpg1) / (beta + bfac * cginc);
     let mut cpg1_alf = cpc_cpi * cpi_gam * gam_a[i];
 
+    // observation only (never read by the solver): the smallest Kármán–Tsien denominator over
+    // the nodes this integration visits. CLCALC forms `beta + bfac*cginc` inline and, unlike
+    // CPCALC, does not test it, so nothing else records that the forces crossed the pole.
+    let mut margin = beta + bfac * cginc;
+
     while i <= n {
         let ip = if i == n { 1 } else { i + 1 };
         cginc = 1.0 - (gam[ip] / qinf) * (gam[ip] / qinf);
+        margin = margin.min(beta + bfac * cginc);
         let cpg2 = cginc / (beta + bfac * cginc);
         let cpg2_msq = -cpg2 / (beta + bfac * cginc) * (beta_msq + bfac_msq * cginc);
         cpi_gam = -2.0 * gam[ip] / (qinf * qinf);
@@ -99,6 +111,7 @@ pub fn compute_cl_cm(state: &mut SolverState) {
     state.cd_pressure = cdp;
     state.cl_d_alpha = cl_alf;
     state.cl_d_machsqd = cl_msq;
+    state.validity.karman_tsien_margin_forces = margin;
 }
 
 /// CDCALC: total CD from the wake end by the Squire–Young extrapolation (with the

@@ -77,6 +77,18 @@ struct Case {
     max_iterations: usize,
     #[serde(default)]
     track: bool,
+    /// Inviscid only: no VISC, so ALFA is one SPECAL and CL one SPECCL (LVISC false throughout).
+    /// There are no VISCAL records, so no +1-ULP twin is run; the gate is `events.dat`.
+    #[serde(default)]
+    inviscid: bool,
+    /// Keep `events.dat`, the instrumented reference's branch-event log (`EVLOG`), for tests
+    /// that compare yFoil's decisions with XFOIL's events
+    #[serde(default)]
+    events: bool,
+    /// When non-empty, track exactly these files of the work directory besides the inputs
+    /// (panels, manifest, xfoil.inp) — the files a test reads, and nothing else
+    #[serde(default)]
+    keep: Vec<String>,
 }
 /// XFOIL's PPAR menu values for a geometry-only case
 #[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
@@ -364,10 +376,18 @@ fn fixtures(flags: &[String]) {
                 assert_eq!(case.xtr.len(), 2, "xtr = [xu, xl]");
                 format!("XTR {} {}\n", case.xtr[0], case.xtr[1])
             };
-            s += &format!(
-                "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
-                case.re, case.mach, case.ncrit, case.max_iterations
-            );
+            if case.inviscid {
+                assert!(
+                    case.xtr.is_empty() && !case.damp && !case.polar && case.alphas_after_reinit.is_empty(),
+                    "inviscid cases take MACH, TYPE, alphas and cls only"
+                );
+                s += &format!("MACH {}\n", case.mach);
+            } else {
+                s += &format!(
+                    "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
+                    case.re, case.mach, case.ncrit, case.max_iterations
+                );
+            }
             if case.matyp != 0 {
                 s += &format!("TYPE {}\n", case.matyp);
             }
@@ -393,6 +413,10 @@ fn fixtures(flags: &[String]) {
                 if !case.alphas_after_reinit.is_empty() {
                     s += "INIT\n";
                     seq(&mut s, &case.alphas_after_reinit);
+                }
+            } else if case.inviscid {
+                for a in &case.alphas {
+                    s += &format!("ALFA {a}\n");
                 }
             } else {
                 for a in &case.alphas {
@@ -448,6 +472,8 @@ fn fixtures(flags: &[String]) {
                 failures += 1;
                 continue;
             }
+        } else if case.inviscid {
+            println!("  inviscid case: no VISCAL records, no +1-ULP twin");
         } else {
             match ulp_twin(&xfoil, &work) {
                 Ok(summary) => println!("  noise floor: {summary}"),
@@ -463,7 +489,8 @@ fn fixtures(flags: &[String]) {
         let manifest = serde_json::json!({
             "case": { "name": case.name, "foil": case.foil, "n_nodes": case.n_nodes, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls, "tgap": case.tgap },
+                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls, "tgap": case.tgap,
+                      "inviscid": case.inviscid, "events": case.events, "keep": case.keep },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",
@@ -478,11 +505,14 @@ fn fixtures(flags: &[String]) {
         if case.track {
             let dst = root.join("tests/fixtures/xfoil").join(&case.name);
             let mut staged: Vec<(PathBuf, Vec<u8>)> = vec![];
+            let keep: Vec<&str> = case.keep.iter().map(String::as_str).collect();
+            let candidates: &[&str] = if keep.is_empty() { RAW_KEEP } else { &keep };
             for name in ["panels.json", "panels.dat", "manifest.json", "xfoil.inp"]
                 .iter()
-                .chain(RAW_KEEP.iter())
+                .chain(candidates.iter())
             {
-                if case.minimal
+                if keep.is_empty()
+                    && case.minimal
                     && !name.starts_with("viscal_")
                     && !name.starts_with("panels")
                     && *name != "manifest.json"
@@ -496,6 +526,9 @@ fn fixtures(flags: &[String]) {
                     staged.push((dst.join(name), fs::read(&p).unwrap()));
                 }
             }
+            if case.events && work.join("events.dat").exists() {
+                staged.push((dst.join("events.dat"), fs::read(work.join("events.dat")).unwrap()));
+            }
             for entry in fs::read_dir(&work).unwrap().flatten() {
                 let n = entry.file_name().to_string_lossy().to_string();
                 if !case.minimal && (n.starts_with("cp_a") || n.starts_with("bl_a")) {
@@ -503,7 +536,8 @@ fn fixtures(flags: &[String]) {
                 }
                 // per-call replay dumps beyond the default 1..3 (already in RAW_KEEP)
                 let per_call = ["mrchdu_input_", "mrchdu_output_", "setbl_output_", "update_output_"];
-                if !case.dump_calls.is_empty()
+                if case.keep.is_empty()
+                    && !case.dump_calls.is_empty()
                     && per_call.iter().any(|p| n.starts_with(p))
                     && !RAW_KEEP.contains(&n.as_str())
                 {

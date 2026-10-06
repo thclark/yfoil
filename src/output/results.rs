@@ -3,13 +3,101 @@
 
 use serde::{Deserialize, Serialize};
 
-/// One operating point's results, as XFOIL reports them after `ALFA`/`CL` and keeps them in a
-/// polar. The viscous-only fields are `None` for an inviscid point and are then omitted from the
-/// JSON, so an inviscid record is a strict subset of a viscous one.
+/// Why a point is not valid. Each variant is an exact, single-run fact — a formula evaluated
+/// outside its analytic domain, or an iteration that ran out before meeting its tolerance.
+/// Nothing here is inferred from the size or the smoothness of a returned number
+/// (`docs/xfoil-known-issues.md` §7.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Reason {
+    /// The Kármán–Tsien denominator `β + BFAC·Cp_inc` reached zero or below, so the
+    /// compressibility correction has passed its pole and Cp has changed sign
+    KarmanTsienOutOfDomain,
+    /// SPECAL's CL(M) Newton used all 20 iterations without reaching `|DCLM| ≤ 1e-6`
+    MachClNewtonExhausted,
+    /// SPECCL's alpha Newton used all 20 iterations without reaching `|DALFA| ≤ 1e-6`
+    ClNewtonExhausted,
+    /// VISCAL finished without LVCONV: the viscous-inviscid iteration did not converge
+    ViscousNotConverged,
+    /// The sweep halted before reaching this alpha, so it was never attempted
+    SequenceHalted,
+}
+
+/// Whether a point's numeric results can be believed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PointStatus {
+    /// Solved, in domain, and every iteration met its tolerance
+    Valid,
+    /// Solved, but at least one `Reason` applies, so the numbers are not to be believed
+    Invalid,
+    /// Never solved: the sweep halted before reaching this alpha
+    NotAttempted,
+}
+
+impl std::fmt::Display for Reason {
+    /// The variant's own name, which is also what it serialises as: someone who reads a reason in
+    /// a terminal or a JSON file and searches for it lands on the definition above.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Reason::KarmanTsienOutOfDomain => "KarmanTsienOutOfDomain",
+            Reason::MachClNewtonExhausted => "MachClNewtonExhausted",
+            Reason::ClNewtonExhausted => "ClNewtonExhausted",
+            Reason::ViscousNotConverged => "ViscousNotConverged",
+            Reason::SequenceHalted => "SequenceHalted",
+        };
+        f.write_str(s)
+    }
+}
+
+impl std::fmt::Display for PointStatus {
+    /// As for [`Reason`]: the printed token is the serialised token is the variant name.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            PointStatus::Valid => "Valid",
+            PointStatus::Invalid => "Invalid",
+            PointStatus::NotAttempted => "NotAttempted",
+        })
+    }
+}
+
+/// The evidence for a point's status. Present whenever the point was attempted, and present
+/// whether or not the numbers were withheld — these are facts about the computation, not
+/// physical results, and withholding them would make the verdict unfalsifiable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PolarPoint {
-    /// Angle of attack (degrees)
-    pub alpha_deg: f64,
+pub struct Diagnostics {
+    /// Smallest Kármán–Tsien denominator over the force integration; at or below zero the
+    /// correction has passed its pole. `None` if it was never evaluated
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub karman_tsien_margin_forces: Option<f64>,
+    /// The same over the stored Cp arrays (CPCALC's `DENNEG` test, kept as a margin)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub karman_tsien_margin_pressure: Option<f64>,
+    /// SPECAL's CL(M) Newton was exhausted
+    pub mach_cl_newton_exhausted: bool,
+    /// MRCL floored the lift coefficient when setting the reported Mach and Reynolds number
+    pub cl_floored: bool,
+    /// MRCL limited the reported Mach to 0.99
+    pub mach_limited: bool,
+    /// MRCL limited the reported Reynolds number to 100 × REINF1
+    pub re_limited: bool,
+    /// LVCONV: the viscous solution converged
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converged: Option<bool>,
+    /// VISCAL iterations performed
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iterations: Option<usize>,
+    /// RMSBL of the last iteration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub residual: Option<f64>,
+    /// SPECCL's exit iteration for an OPER `CL` point (21 when its Newton was exhausted)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inviscid_cl_iterations: Option<usize>,
+}
+
+/// One operating point's numbers, as XFOIL reports them after `ALFA`/`CL`. The viscous-only
+/// fields are `None` for an inviscid point and are then omitted from the JSON, so an inviscid
+/// record is a strict subset of a viscous one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PointValues {
     pub cl: f64,
     /// Moment coefficient about `cm_ref`
     pub cm: f64,
@@ -30,23 +118,66 @@ pub struct PolarPoint {
     /// (x, y) of the transition point on the lower side (XOCTR(2), YOCTR(2))
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition_lower: Option<[f64; 2]>,
-    /// LVCONV: the viscous solution converged
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub converged: Option<bool>,
-    /// VISCAL iterations performed
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub iterations: Option<usize>,
-    /// RMSBL of the last iteration
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub residual: Option<f64>,
 }
 
-impl PolarPoint {
-    /// From a solved point; `viscous` selects whether the viscous-only fields are carried
-    pub fn from_point(p: &crate::solver::analysis::PointResult, viscous: bool) -> Self {
+/// One entry of a result set: an operating point that was asked for. Every requested alpha
+/// produces one of these, so a point is never silently missing — `status` says what happened to
+/// it, `diagnostics` is the evidence, and `values` carries the numbers only when the point is
+/// valid or the caller passed `--allow-invalid`. The same record is one polar entry and the
+/// `results` of a single `analyse`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PointRecord {
+    /// Angle of attack (degrees)
+    pub alpha_deg: f64,
+    /// This point's stable reference: a random 8-character id, unique to this solve. Absent when
+    /// the point was never attempted. Random rather than positional so that points from different
+    /// runs can be held together without their references colliding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The `id` of the record whose converged boundary layer seeded this solve, or absent when
+    /// the BL was marched fresh. Records are presented ascending in alpha, which is not the order
+    /// they were solved in; following this chain back recovers that order, and lets a sweep be
+    /// restarted part way through instead of from the beginning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initialised_from: Option<String>,
+    pub status: PointStatus,
+    /// Empty when the status is valid
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reasons: Vec<Reason>,
+    /// Absent only when the point was never attempted
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<Diagnostics>,
+    /// The numbers, withheld unless the point is valid or `--allow-invalid` was given
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<PointValues>,
+}
+
+impl PointRecord {
+    /// Classify a solved point. `viscous` selects whether the viscous-only fields are carried;
+    /// `allow_invalid` populates `values` even when the status is invalid, and never changes the
+    /// status itself, so a consumer cannot read a withheld point as a sound one.
+    pub fn from_point(p: &crate::solver::analysis::PointResult, viscous: bool, allow_invalid: bool) -> Self {
         let v = viscous;
-        Self {
-            alpha_deg: p.alpha.to_degrees(),
+        let mut reasons = Vec::new();
+        if p.validity.out_of_domain() {
+            reasons.push(Reason::KarmanTsienOutOfDomain);
+        }
+        if p.validity.mach_cl_newton_exhausted {
+            reasons.push(Reason::MachClNewtonExhausted);
+        }
+        if p.inviscid_cl_iterations == 21 {
+            reasons.push(Reason::ClNewtonExhausted);
+        }
+        if v && !p.converged {
+            reasons.push(Reason::ViscousNotConverged);
+        }
+        let status = if reasons.is_empty() {
+            PointStatus::Valid
+        } else {
+            PointStatus::Invalid
+        };
+        let finite = |x: f64| x.is_finite().then_some(x);
+        let values = (status == PointStatus::Valid || allow_invalid).then(|| PointValues {
             cl: p.cl,
             cm: p.cm,
             cd_pressure: p.cd_pressure,
@@ -55,15 +186,46 @@ impl PolarPoint {
             ldratio: v.then_some(if p.cd > 1e-10 { p.cl / p.cd } else { 0.0 }),
             transition_upper: v.then_some(p.transition_upper),
             transition_lower: v.then_some(p.transition_lower),
-            converged: v.then_some(p.converged),
-            iterations: v.then_some(p.iterations),
-            residual: v.then_some(p.residual),
+        });
+        Self {
+            alpha_deg: p.alpha.to_degrees(),
+            id: Some(p.id.clone()),
+            initialised_from: p.initialised_from.clone(),
+            status,
+            reasons,
+            diagnostics: Some(Diagnostics {
+                karman_tsien_margin_forces: finite(p.validity.karman_tsien_margin_forces),
+                karman_tsien_margin_pressure: finite(p.validity.karman_tsien_margin_pressure),
+                mach_cl_newton_exhausted: p.validity.mach_cl_newton_exhausted,
+                cl_floored: p.validity.cl_floored,
+                mach_limited: p.validity.mach_limited,
+                re_limited: p.validity.re_limited,
+                converged: v.then_some(p.converged),
+                iterations: v.then_some(p.iterations),
+                residual: v.then_some(p.residual),
+                inviscid_cl_iterations: (p.inviscid_cl_iterations > 0).then_some(p.inviscid_cl_iterations),
+            }),
+            values,
         }
     }
 
-    /// True unless the point is a viscous one that did not converge
-    pub fn is_converged(&self) -> bool {
-        self.converged.unwrap_or(true)
+    /// An alpha the sweep halted before reaching. It was asked for, so it is reported; it was
+    /// never solved, so it has neither values nor evidence.
+    pub fn not_attempted(alpha_deg: f64) -> Self {
+        Self {
+            alpha_deg,
+            id: None,
+            initialised_from: None,
+            status: PointStatus::NotAttempted,
+            reasons: vec![Reason::SequenceHalted],
+            diagnostics: None,
+            values: None,
+        }
+    }
+
+    /// The point was solved and nothing disqualifies it.
+    pub fn is_valid(&self) -> bool {
+        self.status == PointStatus::Valid
     }
 }
 
@@ -77,8 +239,9 @@ pub struct PolarOutput {
     pub label: Option<String>,
     /// The flow conditions every point shares
     pub conditions: crate::solver::analysis::FlowConditions,
-    /// One record per converged point, ascending in alpha
-    pub results: Vec<PolarPoint>,
+    /// One record per alpha the sweep was asked for, ascending — including the ones that came
+    /// back invalid and the ones it halted before reaching. Nothing requested is omitted.
+    pub results: Vec<PointRecord>,
     /// Summary statistics
     pub summary: PolarSummary,
     /// Whether the sweep completed without excessive failures
@@ -104,36 +267,64 @@ pub struct PolarSummary {
     pub cl_at_ldratio_max: Option<f64>,
     /// CD at the point of smallest |CL|
     pub cd0: Option<f64>,
-    /// Number of converged points
-    pub n_converged: usize,
-    /// Number of failed points
-    pub n_failed: usize,
+    /// Number of points whose status is valid
+    pub n_valid: usize,
+    /// Number of points that were solved but came back invalid
+    pub n_invalid: usize,
+    /// Number of alphas the sweep halted before reaching
+    pub n_not_attempted: usize,
 }
 
 impl PolarOutput {
-    /// Create from PolarResult
-    pub fn from_polar(result: &crate::solver::analysis::PolarResult, foil_name: &str) -> Self {
+    /// Create from PolarResult. `allow_invalid` carries the numbers of invalid points through
+    /// as well; it never changes a status, and the summary is always computed from the valid
+    /// points alone — a Kármán–Tsien artefact must not be able to become the reported CL_max.
+    pub fn from_polar(result: &crate::solver::analysis::PolarResult, foil_name: &str, allow_invalid: bool) -> Self {
         let viscous = result.conditions.re.is_some();
-        let results: Vec<PolarPoint> = result
+        let mut results: Vec<PointRecord> = result
             .results
             .iter()
-            .map(|p| PolarPoint::from_point(p, viscous))
+            .map(|p| PointRecord::from_point(p, viscous, allow_invalid))
+            .chain(
+                result
+                    .not_attempted
+                    .iter()
+                    .map(|a| PointRecord::not_attempted(a.to_degrees())),
+            )
             .collect();
+        results.sort_by(|a, b| a.alpha_deg.partial_cmp(&b.alpha_deg).unwrap());
 
-        let (cl_max, alpha_at_cl_max) = result.cl_max().map_or((None, None), |(cl, a)| (Some(cl), Some(a)));
-
-        let (ldratio_max, cl_at_ldratio_max) = result
-            .ldratio_max()
-            .map_or((None, None), |(ld, cl)| (Some(ld), Some(cl)));
+        // every statistic below is over the valid points only
+        let valid: Vec<&PointRecord> = results.iter().filter(|r| r.is_valid()).collect();
+        fn value(r: &PointRecord) -> &PointValues {
+            r.values.as_ref().expect("a valid point carries its values")
+        }
+        let best = |f: &dyn Fn(&PointRecord) -> Option<(f64, f64)>| -> (Option<f64>, Option<f64>) {
+            valid
+                .iter()
+                .filter_map(|r| f(r))
+                .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
+                .map_or((None, None), |(x, y)| (Some(x), Some(y)))
+        };
+        let (cl_max, alpha_at_cl_max) = best(&|r| Some((value(r).cl, r.alpha_deg)));
+        let (ldratio_max, cl_at_ldratio_max) = best(&|r| {
+            let v = value(r);
+            v.cd.filter(|cd| *cd > 1e-10).map(|cd| (v.cl / cd, v.cl))
+        });
+        let cd0 = valid
+            .iter()
+            .min_by(|a, b| value(a).cl.abs().partial_cmp(&value(b).cl.abs()).unwrap())
+            .map(|r| value(r).cd_pressure);
 
         let summary = PolarSummary {
             cl_max,
             alpha_at_cl_max,
             ldratio_max,
             cl_at_ldratio_max,
-            cd0: result.cd0(),
-            n_converged: result.results.iter().filter(|p| p.converged).count(),
-            n_failed: result.failed_alphas.len(),
+            cd0,
+            n_valid: valid.len(),
+            n_invalid: results.iter().filter(|r| r.status == PointStatus::Invalid).count(),
+            n_not_attempted: result.not_attempted.len(),
         };
 
         Self {
@@ -172,10 +363,17 @@ pub struct AnalysisOutput {
     /// Aerofoil name (the geometry file stem)
     pub foil: String,
     pub conditions: crate::solver::analysis::FlowConditions,
-    pub results: PolarPoint,
-    /// Panel nodes, normals and (after a viscous solve) the wake
+    /// The point's status, evidence and — when it is valid, or `--allow-invalid` was given —
+    /// its numbers. Exactly the record one polar entry carries.
+    pub results: PointRecord,
+    /// Panel nodes, normals and (after a viscous solve) the wake. Geometry is an *input*, not a
+    /// result, so it is present whatever the status.
     pub geometry: crate::output::FoilNodes,
-    pub surface: SurfaceDistributions,
+    /// Surface q and Cp. These are results — on an out-of-domain point the Cp field is exactly
+    /// what passed through the Kármán–Tsien pole — so they are withheld on the same rule as
+    /// `results.values`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<SurfaceDistributions>,
     /// Boundary-layer distributions and markers; absent for an inviscid point
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundary_layer: Option<crate::output::BoundaryLayerOutput>,
@@ -190,6 +388,7 @@ impl AnalysisOutput {
         p: &crate::solver::analysis::PointResult,
         foil_name: &str,
         include_lagged_closures: bool,
+        allow_invalid: bool,
     ) -> Self {
         let state = session.state();
         let viscous = session.conditions().re.is_some();
@@ -213,34 +412,36 @@ impl AnalysisOutput {
         } else {
             None
         };
+        let results = PointRecord::from_point(p, viscous, allow_invalid);
+        // the numeric payload is gated as one: values, surface distributions and BL alike
+        let disclose = results.is_valid() || allow_invalid;
         Self {
             foil: foil_name.to_string(),
             conditions: session.conditions().clone(),
-            results: PolarPoint::from_point(p, viscous),
+            results,
             geometry: crate::output::FoilNodes::from_state(state),
-            surface,
-            boundary_layer,
+            surface: disclose.then_some(surface),
+            boundary_layer: boundary_layer.filter(|_| disclose),
         }
     }
 
-    /// Upper-surface (x, cp, q), TE to LE (nodes `0..=i_le_node`)
-    pub fn upper_surface(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    /// Upper-surface (x, cp, q), TE to LE (nodes `0..=i_le_node`). `None` when the surface
+    /// distributions were withheld because the point is not valid.
+    pub fn upper_surface(&self) -> Option<(Vec<f64>, Vec<f64>, Vec<f64>)> {
         let le = self.geometry.i_le_node;
-        (
+        let s = self.surface.as_ref()?;
+        Some((
             self.geometry.x[0..=le].to_vec(),
-            self.surface.cp[0..=le].to_vec(),
-            self.surface.q[0..=le].to_vec(),
-        )
+            s.cp[0..=le].to_vec(),
+            s.q[0..=le].to_vec(),
+        ))
     }
 
-    /// Lower-surface (x, cp, q), LE to TE (nodes `i_le_node..`)
-    pub fn lower_surface(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    /// Lower-surface (x, cp, q), LE to TE (nodes `i_le_node..`). `None` as above.
+    pub fn lower_surface(&self) -> Option<(Vec<f64>, Vec<f64>, Vec<f64>)> {
         let le = self.geometry.i_le_node;
-        (
-            self.geometry.x[le..].to_vec(),
-            self.surface.cp[le..].to_vec(),
-            self.surface.q[le..].to_vec(),
-        )
+        let s = self.surface.as_ref()?;
+        Some((self.geometry.x[le..].to_vec(), s.cp[le..].to_vec(), s.q[le..].to_vec()))
     }
 
     /// Serialize to JSON string
@@ -427,31 +628,89 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_operating_point_serialization() {
-        let point = PolarPoint {
+    fn test_point_record_serialization() {
+        let point = PointRecord {
             alpha_deg: 5.0,
-            cl: 0.55,
-            cm: -0.05,
-            cd_pressure: 0.0035,
-            cd: Some(0.0085),
-            cd_friction: Some(0.005),
-            ldratio: Some(64.7),
-            transition_upper: Some([0.15, 0.03]),
-            transition_lower: Some([0.45, -0.02]),
-            converged: Some(true),
-            iterations: Some(12),
-            residual: Some(1.2e-5),
+            id: Some("k3n8qz1p".to_string()),
+            initialised_from: Some("a7f2m0xd".to_string()),
+            status: PointStatus::Valid,
+            reasons: vec![],
+            diagnostics: Some(Diagnostics {
+                karman_tsien_margin_forces: Some(0.81),
+                karman_tsien_margin_pressure: Some(0.81),
+                mach_cl_newton_exhausted: false,
+                cl_floored: false,
+                mach_limited: false,
+                re_limited: false,
+                converged: Some(true),
+                iterations: Some(12),
+                residual: Some(1.2e-5),
+                inviscid_cl_iterations: None,
+            }),
+            values: Some(PointValues {
+                cl: 0.55,
+                cm: -0.05,
+                cd_pressure: 0.0035,
+                cd: Some(0.0085),
+                cd_friction: Some(0.005),
+                ldratio: Some(64.7),
+                transition_upper: Some([0.15, 0.03]),
+                transition_lower: Some([0.45, -0.02]),
+            }),
         };
 
         let json = serde_json::to_string(&point).unwrap();
         assert!(json.contains("\"alpha_deg\":5.0"));
+        assert!(json.contains("\"status\":\"Valid\""));
         assert!(json.contains("\"cl\":0.55"));
         assert!(json.contains("\"residual\":"));
 
-        // Deserialize back
-        let restored: PolarPoint = serde_json::from_str(&json).unwrap();
-        assert!((restored.cl - 0.55).abs() < 1e-10);
-        assert!((restored.residual.unwrap() - 1.2e-5).abs() < 1e-10);
+        let restored: PointRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.status, PointStatus::Valid);
+        assert!((restored.values.unwrap().cl - 0.55).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_withheld_point_still_reports_status_and_evidence() {
+        // the contract: a point that was asked for comes back, carrying its verdict and the
+        // evidence for it, with only the numbers withheld
+        let point = PointRecord {
+            alpha_deg: -1.0,
+            id: Some("q9w4ez2r".to_string()),
+            initialised_from: Some("t6y1u8io".to_string()),
+            status: PointStatus::Invalid,
+            reasons: vec![Reason::KarmanTsienOutOfDomain, Reason::MachClNewtonExhausted],
+            diagnostics: Some(Diagnostics {
+                karman_tsien_margin_forces: Some(-0.0296),
+                karman_tsien_margin_pressure: Some(-0.0296),
+                mach_cl_newton_exhausted: true,
+                cl_floored: true,
+                mach_limited: true,
+                re_limited: false,
+                converged: None,
+                iterations: None,
+                residual: None,
+                inviscid_cl_iterations: None,
+            }),
+            values: None,
+        };
+        let json = serde_json::to_string(&point).unwrap();
+        assert!(json.contains("\"status\":\"Invalid\""));
+        assert!(json.contains("KarmanTsienOutOfDomain"));
+        assert!(json.contains("MachClNewtonExhausted"));
+        assert!(json.contains("-0.0296"), "the margin is evidence and is not withheld");
+        assert!(!json.contains("\"values\""), "the numbers are withheld");
+    }
+
+    #[test]
+    fn test_not_attempted_point_is_still_reported() {
+        let p = PointRecord::not_attempted(24.0);
+        assert_eq!(p.status, PointStatus::NotAttempted);
+        assert_eq!(p.reasons, vec![Reason::SequenceHalted]);
+        assert!(p.values.is_none() && p.diagnostics.is_none());
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"alpha_deg\":24.0"));
+        assert!(json.contains("NotAttempted"));
     }
 
     #[test]
@@ -462,8 +721,9 @@ mod tests {
             ldratio_max: Some(80.0),
             cl_at_ldratio_max: Some(0.6),
             cd0: Some(0.006),
-            n_converged: 25,
-            n_failed: 2,
+            n_valid: 25,
+            n_invalid: 2,
+            n_not_attempted: 0,
         };
 
         let json = serde_json::to_string_pretty(&summary).unwrap();

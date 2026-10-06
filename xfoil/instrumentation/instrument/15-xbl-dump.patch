@@ -37,13 +37,14 @@
  C---- set the CL used to define Mach, Reynolds numbers
        IF(LALFA) THEN
         CLMR = CL
-@@ -88,10 +106,105 @@
+@@ -88,10 +106,106 @@
        ENDIF
  C
        WRITE(*,*)
 +C
 +C---- INSTRUMENTATION: state before MRCHDU, per dumped SETBL call
 +      NSETBL = NSETBL + 1
++      NSETBLC = NSETBL
 +      IF(NDUMP.LT.0) THEN
 +       CALL RDDUMP(NDUMP, IDUMP)
 +      ENDIF

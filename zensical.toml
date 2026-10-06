@@ -49,6 +49,7 @@ nav = [
     ] },
     { "Reference" = [
       "guide/data.md",
+      "guide/validity.md",
       "guide/aerofoil-series.md",
       "references.md",
       "xfoil-known-issues.md",

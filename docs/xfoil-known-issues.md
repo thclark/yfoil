@@ -179,7 +179,8 @@ replicates each (with the message as a code comment) so that its results and bra
 | Where | Behaviour | yFoil |
 |---|---|---|
 | `xfoil.f:796, 801` (MRCL) | `Illegal Re(CL)/Mach(CL) dependence trigger. Setting fixed` — RETYP/MATYP outside 1..3 silently reset to 1 | `src/solver/setbl.rs:39, 43`; unreachable through TYPE (§5.4) |
-| `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; reach notes in `coverage.toml` |
+| `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; the Mach limit and CL floor are checked against XFOIL's events by `tests/validity_tests.rs` on `naca64a010_n60_inviscid_sweep30_type2_m03`; reach notes in `coverage.toml` |
+| `xfoil.f` (CPCALC, CLCALC) | the Kármán–Tsien denominator `DEN = β + BFAC·Cp_inc` goes non-positive once any panel's speed passes `q/Q∞ = √(1 + 2β(1+β)/M∞²)`, so Cp does not merely lose accuracy — it passes through a **pole** and changes sign. CPCALC prints `Local speed too large. Compressibility corrections invalid.` once per call and returns the inverted Cp anyway; **CLCALC forms the same denominator inline and does not warn at all**, so CL/CM/CDP are silently wrong, frequently in sign. At M = 0.3 the threshold is q/Q∞ = 6.513 (a NACA 64A010 at N = 240 crosses it between 19° and 20°); at the M = 0.99 that MRCL's clamp produces it is 1.153, which that section exceeds by α = ±1°. See §7.7 for how TYPE 2 walks into this on its own | Replicated (`clcalc.rs:26` warns as CPCALC does, `:57-69` is the unguarded CLCALC form) |
 | `xutils.f:41-50` (SETEXP) | 100-iteration Newton on the spacing ratio to `|dRatio| < 1e-5`; `Convergence failed. Continuing anyway ...` | `src/solver/xywake.rs:33-49`; the 1e-5 tolerance is load-bearing (§7.1) |
 | `xoper.f` (VISCAL, SPECAL, SPECCL) | `Convergence failed` after ITMAX / 20 / 12 iterations; state kept | `viscal.rs:187`, `specal.rs:110, 172` |
 | `xbl.f:1474` (UPDATE) | under-relaxation whenever a step would change a BL variable by more than 50 % (DLO) | `src/solver/update.rs` |
@@ -340,6 +341,95 @@ gfortran Makefile ships with the bounds/FPE checks commented out (`bin/Makefile_
 `bin/Makefile` has them on). The DP reference built with `-finit-real=snan -ffpe-trap=invalid` runs the
 smoke case clean; the only raised (untrapped) flag is `IEEE_DIVIDE_BY_ZERO` from `PLTINI`
 (`xplots.f:37`), plot-scale setup that runs even with graphics off, outside the solver.
+
+---
+
+### 7.7 TYPE 2 on a section that can reach negative CL drives itself onto the Kármán–Tsien pole — Replicated
+
+**What TYPE 2 asks XFOIL to do.** TYPE 2 (`MATYP = 2`) is the fixed-lift type: it models an aircraft in
+steady level flight, holding weight and chord fixed and letting the speed vary, so that the Mach number
+follows the lift as `M∞ = M₁/√CL` (the three types are defined in
+[the XFOIL reference](xfoil-reference.md#the-oper-type-command-and-the-meaning-of-matyp-and-retyp)). It therefore does
+not fix the Mach number. It asks for a state in which two conditions hold at once: the Mach number follows
+the lift, `M∞ = M₁/√CL`, and the lift is whatever the aerofoil produces at that Mach, `CL = CL(α, M∞)`. SPECAL (`xoper.f`) solves this by Newton
+iteration on a variable `CLM`, starting from `CLM = 1.0` on every call. That is the whole mechanism, so
+the quality of the answer depends entirely on whether the fixed-point problem is well posed at the given α.
+
+**Why the equation is well posed above zero lift and hostile below it.** The boundary is set by the
+aerofoil's own compressibility correction. CLCALC forms Cp through the Kármán–Tsien denominator
+`DEN = β + BFAC·Cp_inc`, which crosses zero when the local speed reaches `q/Q∞ = √(1 + 2β(1+β)/M∞²)`.
+That is a **pole, not a loss of accuracy**: below it Cp is a smooth function of Mach, above it Cp has
+changed sign (§4, CPCALC/CLCALC row).
+
+At positive lift the coupling is **self-stabilising** — more lift lowers the Mach number, which weakens the
+compressibility correction, which moves the denominator further from zero. At negative lift it is
+**self-trapping**, in four steps:
+
+1. `CL ≤ 0` puts the case outside the type's domain of definition — the speed at which a fixed weight is
+   carried at negative lift is imaginary — so MRCL's floor `CLA = MAX(CLS, 1e-6)` stands in for it, and M∞
+   is pushed to its *maximum* and clamped at 0.99.
+2. At M∞ = 0.99 the pole sits at `q/Q∞ = 1.153`, which a 10 % section exceeds by α = ±1°.
+3. Past the pole the denominator is negative, so **CL comes back positive at negative α**.
+4. A positive CL is perfectly admissible to MRCL, so the fixed-point equation acquires a spurious root.
+   Because `CL(α, M)` has a pole it takes every value in a neighbourhood of it, so a root always exists
+   *adjacent to the pole*. SPECAL converges onto it in a handful of iterations and reports success.
+
+**Method.** Measured on `naca64a010_n240_inviscid_polar30_type2_m03` (2026-09-17) by exact offline replay of
+SPECAL's Newton. The replay is legitimate because on the inviscid path
+`GAM(I) = cos α · GAMU(I,1) + sin α · GAMU(I,2)` is Mach-independent — Mach enters only through `BETA` and
+`BFAC` inside CLCALC — so `CL(α, M)` can be re-evaluated for any M from the GAM already dumped at that α,
+and the whole iteration replayed. The replay reproduces all 61 tracked points with zero relative
+disagreement, so the figures below are XFOIL's own arithmetic.
+
+**Every negative-α point is wrong**, not only the conspicuous ones, and most of them converge:
+
+| α | XFOIL reports | truth (M→0) | Newton | min DEN |
+|---:|---:|---:|---|---:|
+| −30° | **+1.111** | −3.390 | converged, 6 it | −0.949 |
+| −20° | **+1.040** | −2.318 | converged, 5 it | −0.0023 |
+| −10° | **+0.327** | −1.176 | converged, 4 it | −0.0158 |
+| −5° | **+0.128** | −0.590 | converged, 13 it | −0.361 |
+| −1° | **−52.086** | −0.118 | failed, 20 it | −0.030 |
+
+The Newton fails outright (`Minf convergence failed`) at only 6 of the 61 points (α = −11, −8, −3, −2, −1, 0).
+The converged points are the worse case, because they carry no warning at all: XFOIL reports positive lift on
+a symmetric aerofoil at −30° and prints nothing. α = 0 looks innocent only because CL = 0 is pinned by
+symmetry whatever the Mach; its Newton failed just as hard, emitting 186 Mach-limit messages. α = +20° and
+above is the same failure reached from the other side, once the suction peak crosses the M ≈ 0.3 threshold
+of `q/Q∞ = 6.513`.
+
+**The size of the anomaly tracks distance from the pole, not severity of the failure.** At α = −20° the
+Newton converged to `M∞ = 0.294270`, where the minimum denominator is −0.0023 — essentially *on* the pole:
+
+```
+M = 0.294000   DEN = -0.000435   CL =   +59.89
+M = 0.294270   DEN = -0.002316   CL =    +1.07   <- XFOIL's converged answer
+M = 0.295000   DEN = -0.007411   CL =  -137.84
+```
+
+A change of 1e-3 in M∞ moves CL from +60 to −138, and XFOIL happens to land where it reads +1.04. By the same
+token α = −1° reports −52.09 while α = −5° reports +0.128: the first is spectacular only because its
+denominator is −0.030 rather than solidly negative, and the second is tamer for being *more* deeply inverted.
+Both are equally broken. A polar plotted from this case therefore looks locally plausible exactly where it is
+not, and a departure metric built on the size of the anomaly will rank these points in the wrong order.
+
+**These points are ill-conditioned pointwise, not by accumulation** (`docs/conventions/terminology.md`). They reproduce bitwise,
+and forward (−30→+30) and reverse (+30→−30) sweeps agree at all 61 points, because SPECAL resets `CLM = 1.0`
+at every call and GAMU is α-independent: nothing carries between points on the inviscid path. Their wide
+1-ULP twin envelope is pointwise ill-conditioning — each sits next to a pole, so a 1-ULP perturbation
+genuinely does move it by O(1). The case is consequently a useful control for sensitivity studies: a wide
+envelope that is provably non-cumulative. It says nothing either way about accumulation on the viscous
+cases, where BL state really is carried forward.
+
+**yFoil.** Replicated: `set_mach_re_from_cl` (`src/solver/setbl.rs:40-82`) carries both MRCL guards and
+`clcalc.rs:57-69` the unguarded denominator, so yFoil converges onto the same spurious roots — and
+then flags them, rather than reporting the numbers as if they were sound. This case is the worked
+example behind [Solution validity](guide/validity.md), which catalogues every reason yFoil withholds
+a result and what each one means. **Gate:** `tests/validity_tests.rs` sweeps the same section at N = 60
+(`naca64a010_n60_inviscid_sweep30_type2_m03`) and checks yFoil's validity record against XFOIL's own events
+point by point. The measurements above were made at N = 240 (`naca64a010_n240_inviscid_polar30_type2_m03`,
+defined in `cases.toml` and regenerated by `cargo xtask fixtures --case` with that name; untracked). The
+negative leg of such a sweep must not be read as a polar, and it is excluded from any accuracy claim.
 
 ---
 

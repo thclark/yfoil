@@ -38,6 +38,11 @@ pub struct AssembledSystem {
 #[doc(alias = "MRCL")]
 pub fn set_mach_re_from_cl(state: &mut SolverState, cls: f64) -> (f64, f64) {
     let cla = cls.max(0.000001);
+    // observation only (never read by the solver): MRCL had no real value to work from, so the
+    // conditions this sets are a substitute for the ones asked for.
+    state.validity.cl_floored = cls <= 0.000001;
+    state.validity.mach_limited = false;
+    state.validity.re_limited = false;
     // XFOIL's 'MRCL: Illegal Re(CL) / Mach(CL) dependence trigger. Setting fixed ...' branches
     // are unreachable here: the dependence enums cannot hold an illegal index.
     let mut m_cls;
@@ -70,6 +75,7 @@ pub fn set_mach_re_from_cl(state: &mut SolverState, cls: f64) -> (f64, f64) {
         // 'MRCL: CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99'
         state.mach = 0.99;
         m_cls = 0.0;
+        state.validity.mach_limited = true;
     }
     let mut rrat = 1.0;
     if state.re_cl1 > 0.0 {
@@ -79,6 +85,7 @@ pub fn set_mach_re_from_cl(state: &mut SolverState, cls: f64) -> (f64, f64) {
         // 'MRCL: CL too low for chosen Re(CL) dependence — artificially limiting Re'
         state.re = state.re_cl1 * 100.0;
         r_cls = 0.0;
+        state.validity.re_limited = true;
     }
     (m_cls, r_cls)
 }
