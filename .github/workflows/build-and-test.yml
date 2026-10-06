@@ -52,6 +52,15 @@ jobs:
       - run: cargo test --all-targets --features plotting --no-fail-fast
       - run: cargo build --examples
 
+  fixture-audit:
+    # Rule 7, mechanised: every tracked file under tests/fixtures/ is read by some test
+    # (access times are reset, the suite runs, and an unread file fails the job).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev pkg-config
+      - run: cargo run -p xtask -- fixtures --audit
+
   xfoil-parity:
     # Rebuild the reference from xfoil/third-party/ + xfoil/instrumentation/, prove the
     # instrumentation inert and free of uninitialised reads, then regenerate every

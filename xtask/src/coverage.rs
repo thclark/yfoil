@@ -630,3 +630,80 @@ fn render(
     );
     s
 }
+
+/// The gcov build's directory and binary, building it if needed.
+pub(crate) fn gcov_build(root: &Path, rebuild: bool) -> std::path::PathBuf {
+    let gdir = root.join("target/xfoil-ref/gcov");
+    if rebuild || !gdir.join("bin/xfoil").exists() {
+        super::run(
+            Command::new(root.join("scripts/xfoil-build.sh")).arg("--gcov"),
+            "scripts/xfoil-build.sh --gcov",
+        );
+    }
+    gdir
+}
+
+/// Delete the gcov build's counters, so the next run measures only itself.
+pub(crate) fn reset_counters(gdir: &Path) {
+    for e in fs::read_dir(gdir.join("bin")).unwrap().flatten() {
+        if e.path().extension().is_some_and(|x| x == "gcda") {
+            fs::remove_file(e.path()).unwrap();
+        }
+    }
+}
+
+/// Every branch of the translated subroutines (`coverage.toml`) with its accumulated count,
+/// keyed `file:line:index` — the identifiers the coverage report and the step cover use.
+pub(crate) fn branch_counts(root: &Path, gdir: &Path, scratch: &Path) -> HashMap<String, u64> {
+    let spec: Spec = toml::from_str(
+        &fs::read_to_string(root.join("xtask/fixtures-config/coverage.toml"))
+            .expect("xtask/fixtures-config/coverage.toml"),
+    )
+    .expect("parse coverage.toml");
+    let gcov = gcov_binary();
+    let bin = gdir.join("bin");
+    let _ = fs::remove_dir_all(scratch);
+    fs::create_dir_all(scratch).unwrap();
+    let mut out = HashMap::new();
+    for fspec in &spec.files {
+        let src_path = gdir.join("src").join(&fspec.name);
+        let st = Command::new(&gcov)
+            .args(["-j", "-b", "-o"])
+            .arg(&bin)
+            .arg(&src_path)
+            .current_dir(scratch)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap_or_else(|e| panic!("run {gcov}: {e}"));
+        assert!(st.success(), "{gcov} failed on {}", fspec.name);
+        let stem = fspec.name.trim_end_matches(".f");
+        let gz = scratch.join(format!("{stem}.gcov.json.gz"));
+        let json = Command::new("gzip").args(["-dc"]).arg(&gz).output().expect("gzip -dc");
+        assert!(json.status.success(), "gzip -dc {} failed", gz.display());
+        let parsed: GcovJson = serde_json::from_slice(&json.stdout).expect("parse gcov json");
+        let gf = parsed
+            .files
+            .iter()
+            .find(|f| Path::new(&f.file).file_name() == src_path.file_name())
+            .unwrap_or_else(|| panic!("no entry for {} in gcov json", fspec.name));
+        for sub in &fspec.subroutines {
+            let sym = format!("{}_", sub.to_lowercase());
+            let Some(func) = gf.functions.iter().find(|f| f.name == sym) else {
+                continue;
+            };
+            for l in &gf.lines {
+                if l.function_name.as_deref() != Some(sym.as_str())
+                    || l.line_number < func.start_line
+                    || l.line_number > func.end_line
+                {
+                    continue;
+                }
+                for (bi, b) in l.branches.iter().enumerate() {
+                    out.insert(format!("{}:{}:{bi}", fspec.name, l.line_number), b.count);
+                }
+            }
+        }
+    }
+    out
+}

@@ -50,6 +50,9 @@ pub struct MrchduTrace {
     pub iters: Vec<MrchduIter>,
     /// (IBL, IS, DMAX) for every station whose 25 Newton iterations did not converge
     pub failed: Vec<(usize, usize, f64)>,
+    /// the subset whose residual was above 0.1 (or non-finite): the 'garbage' extrapolation
+    /// replaced their solution
+    pub garbage: Vec<(usize, usize, f64)>,
 }
 
 /// MRCHDU. Requires the pointer layer (XSSI, IBLTE, NBL, WGAP), the current
@@ -358,7 +361,15 @@ pub fn march_prescribed_dstar(
                     t.failed.push((i_station, side, dmax));
                 }
                 // the current unconverged solution might still be reasonable...
-                if dmax > 0.1 {
+                // `IF(DMAX .LE. 0.1) GO TO 109`: written as XFOIL tests it, so that a NaN residual
+                // (a station whose closures went non-finite) takes the garbage path as it does there
+                if !(dmax <= 0.1) {
+                    if let Some(t) = trace.as_mut() {
+                        t.garbage.push((i_station, side, dmax));
+                    }
+                    if !dmax.is_finite() {
+                        state.nonfinite_station_failures += 1;
+                    }
                     // the current solution is garbage --> extrapolate values instead
                     if i_station > 3 {
                         if i_station <= state.i_te_station[side] {

@@ -100,3 +100,36 @@ fn test_polar_driver_reproduces_the_manual_sequence() {
         "points ascend in alpha"
     );
 }
+
+/// XFOIL's NSEQEX rule: an `ASEQ` halts after `max_consecutive_failures` points in a row fail to
+/// converge (4 by default, as XFOIL), and the alphas it never reached are recorded as not
+/// attempted. With no iterations at 0° and the rule at one failure, the first point of each leg
+/// gets ASEQ's five iterations from an unconverged start, stops at RMSBL ≈ 2.7e-3 (27 × EPS1),
+/// and halts its leg.
+#[test]
+fn test_polar_driver_halts_a_leg_after_consecutive_failures() {
+    assert_eq!(PolarConfig::default().max_consecutive_failures, 4, "XFOIL's NSEQEX");
+    let path = fixtures::require_fixture("tests/fixtures/xfoil/naca0012_n60_polar_re1e6/panels.json");
+    let airfoil = panel_foil(&read_geometry_from_file(path.to_str().unwrap()).expect("panels.json"));
+    let config = PolarConfig {
+        alpha_max: 3.0,
+        alpha_min: -3.0,
+        alpha_step: 1.0,
+        conditions: FlowConditions {
+            max_iterations: 0,
+            ..spec()
+        },
+        max_consecutive_failures: 1,
+    };
+    let polar = compute_polar(&airfoil, &config);
+    assert!(!polar.completed, "both legs halt");
+    let deg = |v: &[f64]| -> Vec<f64> { v.iter().map(|a| (a.to_degrees() * 2.0).round() / 2.0).collect() };
+    let solved: Vec<f64> = deg(&polar.results.iter().map(|p| p.alpha).collect::<Vec<_>>());
+    assert_eq!(solved, vec![-1.0, 0.0, 1.0], "0° and the first point of each leg");
+    assert!(polar.results.iter().all(|p| !p.converged && p.residual.is_finite()));
+    assert_eq!(
+        deg(&polar.not_attempted),
+        vec![-3.0, -2.0, 2.0, 3.0],
+        "the alphas past each halt"
+    );
+}

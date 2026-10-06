@@ -15,38 +15,43 @@ Two qualifications, neither of which is nondeterminism:
   libm in both codes. Apple libSystem and glibc differ by one ULP on a fraction of inputs, so
   the same input can give different bits on different hosts. Deterministic per host; an ULP
   budget across hosts (CLAUDE.md Rule 1).
-- **Ill-conditioning**, below.
+- **Ill-conditioned solutions** and **divergent comparisons**, below.
 
-## Ill-conditioned
+## Ill-conditioned solution
 
-A **branch is ill-conditioned** when the two operands of the real comparison that decides it are
-equal to within rounding, so that the decision depends on the last bit of the input. A one-ULP
-change to the input panels flips the decision, and the run that follows differs by O(1).
-XFOIL has about 140 real inequality branches; the ones met in practice include
+A **solution is ill-conditioned** where a tiny change of input moves the output a lot: near
+stall, in deep separation, near the Kármán–Tsien pole, at a Mach number pushed towards 0.99. The
+numerical method can no longer follow the physics there. It is a property of the problem at that
+point, met by **each code on its own**: XFOIL disagrees with itself under a one-ULP perturbation
+of its input, and so does yFoil.
 
-- `AMPL > ACRIT`, which picks the transition station (`ITRAN`);
-- `RMSBL < EPS1`, which decides whether a VISCAL call has converged;
-- the station at which UPDATE's relaxation factor `RLX` is limited.
+Ill-conditioned solutions are not to be avoided in testing. Most of XFOIL's rarely-taken branches
+— the garbage extrapolation of a failed station, the relaxation limits, the negative-Ue islands,
+the stagnation-point fallbacks — exist precisely to cope with them, so the tests must reach them
+to cover those branches.
 
-An **ill-conditioned iteration** or **ill-conditioned result** is one in which yFoil follows a
-different code path from the reference because a rounding-level difference fell on such a
-branch — not because of a translation error. A step or a point that is not ill-conditioned is
-**well-conditioned**.
+A result can be ill-conditioned and still valid: conditioning is Class C in
+[solution validity](../guide/validity.md), which a single run cannot detect.
 
-Ill-conditioning is a property of XFOIL's problem at that point, not of either code: XFOIL
-disagrees with *itself* there under a one-ULP perturbation. It is invisible in a single run and
-is found by perturbing the input (the twins, below).
+## Divergent comparison
 
-Consequences:
+A **comparison is divergent** when XFOIL and yFoil, run on the same input, take different routes
+through the code: at some real comparison `IF (A .GT. B)` the operands are equal to within
+rounding, and the last-bit difference between the two codes (different association, a host libm
+ULP) falls on opposite sides. XFOIL has about 140 real inequality branches; the ones met in
+practice include `AMPL > ACRIT` (the transition station), `RMSBL < EPS1` (convergence) and the
+station at which UPDATE's relaxation factor is limited.
 
-- An XFOIL–yFoil difference after an ill-conditioned branch is not, by itself, evidence of a bug.
-  Larger differences are expected in a polar that contains ill-conditioned solutions: transition
-  may move one panel at α = 10° in XFOIL and at α = 11° in yFoil, giving much the same polar by a
-  different path.
-- Tests never gate an ill-conditioned step (see [testing.md](testing.md)); the studies report
-  where they occur.
-- A result can be ill-conditioned and still valid: conditioning is Class C in
-  [solution validity](../guide/validity.md), which a single run cannot detect.
+A divergent comparison is a *consequence* of an ill-conditioned solution — the control flow of a
+well-conditioned solution does not sit on a knife edge — but it is not itself ill-conditioning.
+It says nothing about whether the translation is right, so **no test is ever a divergent
+comparison** (`testing.md`). Whether a comparison diverges is decided by observing both codes'
+routes through it, not by the size of any difference in the results.
+
+In validation, as opposed to testing, divergent comparisons are expected in a polar that contains
+ill-conditioned solutions: transition may move one panel at α = 10° in XFOIL and at α = 11° in
+yFoil, giving much the same polar by a different path. The twins and sensitivity studies explain
+such differences; they are not translation errors.
 
 This replaces the earlier term *threshold-straddling*.
 
@@ -54,8 +59,8 @@ This replaces the earlier term *threshold-straddling*.
 
 A **twin** is a rerun of the reference with every panel coordinate jogged by −1, 0 or +1 ULP,
 x and y independently, drawn reproducibly from a seed. Five seeded twins per case are the
-instrument that finds ill-conditioned branches: where a twin's branch trace differs from the
-reference's, the reference is ill-conditioned there.
+instrument that measures how ill-conditioned a solution is: where a twin's branch trace differs
+from the reference's, the reference's own route sits on a knife edge there.
 
 Moving every coordinate the same way is not a twin: it translates the aerofoil and measures
 almost nothing.
@@ -64,6 +69,6 @@ almost nothing.
 
 The **noise floor** of a recorded value is the largest difference between the reference and any
 of its twins. It is the reference's own spread under a one-ULP perturbation. It is a study
-quantity, used to choose which steps are well-conditioned enough to become test cases and to
-derive the named tolerances in `tests/common/utilities/tolerances.rs`. Tests do not read it (see
+quantity, used to derive the named tolerances in `tests/common/utilities/tolerances.rs` and in
+the sensitivity studies. Tests do not read it (see
 [testing.md](testing.md), including its Status section).

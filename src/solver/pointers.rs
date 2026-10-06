@@ -23,15 +23,31 @@ pub fn set_te_thickness(state: &mut SolverState) {
     state.sharp_te = state.te_gap < 0.0001 * state.chord;
 }
 
+/// What STFIND's scan of GAM did — the branch trace of its two rarely-taken arms.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StagnationScan {
+    /// a sign change GAM(I) >= 0, GAM(I+1) < 0 was found (otherwise IST = N/2:
+    /// 'STFIND: Stagnation point not found. Continuing ...')
+    pub found: bool,
+    /// the first node with GAM(I) < 0 met before the sign change, if any (a negative vorticity
+    /// at the upper TE node, or a scan through NaN)
+    pub first_negative_node: Option<usize>,
+}
+
 /// STFIND (xpanel.f): stagnation point arc length SST, panel index IST, and the
 /// sensitivities SST_GO = dSST/dGAM(IST), SST_GP = dSST/dGAM(IST+1).
 #[doc(alias = "STFIND")]
-pub fn find_stagnation(state: &mut SolverState) {
+pub fn find_stagnation(state: &mut SolverState) -> StagnationScan {
     let n = state.n_foil_nodes;
     let mut i = n / 2; // fallback if no sign change side found ("Stagnation point not found")
+    let mut scan = StagnationScan::default();
     for ii in 1..n {
+        if scan.first_negative_node.is_none() && state.gamma[ii] < 0.0 {
+            scan.first_negative_node = Some(ii);
+        }
         if state.gamma[ii] >= 0.0 && state.gamma[ii + 1] < 0.0 {
             i = ii;
+            scan.found = true;
             break;
         }
     }
@@ -56,6 +72,7 @@ pub fn find_stagnation(state: &mut SolverState) {
     state.s_stagnation = sst;
     state.s_stagnation_d_gamma_node0 = (sst - state.s[i + 1]) / dgam;
     state.s_stagnation_d_gamma_node1 = (state.s[i] - sst) / dgam;
+    scan
 }
 
 /// IBLPAN (xpanel.f): BL station -> panel node pointers IPAN, the VTI sign, IBLTE and NBL.
@@ -251,11 +268,23 @@ pub fn xi_trip(state: &SolverState, side: usize) -> f64 {
 /// STMOVE: moves the stagnation point location to a new panel. Re-runs STFIND on the current
 /// GAM; if IST is unchanged only XICALC is redone, otherwise the pointer layer is rebuilt and
 /// the BL arrays and ITRAN are shifted by IDIF. Always refreshes MASS = DSTR*UEDG.
+/// What STMOVE did — the branch trace of its rarely-taken arms.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StagnationMove {
+    pub scan: StagnationScan,
+    /// (side, station) of every station whose Ue was at or below UEPS = 1e-7 after the shift
+    /// and was floored ('tweak Ue so it's not zero, in case stag. point is right on node')
+    pub ue_floored: Vec<(usize, usize)>,
+}
+
 #[doc(alias = "STMOVE")]
-pub fn move_stagnation(state: &mut SolverState) {
+pub fn move_stagnation(state: &mut SolverState) -> StagnationMove {
     // locate new stagnation point arc length SST from GAM distribution
     let istold = state.i_stagnation_node;
-    find_stagnation(state);
+    let mut moved = StagnationMove {
+        scan: find_stagnation(state),
+        ue_floored: Vec::new(),
+    };
 
     if istold == state.i_stagnation_node {
         // recalculate new arc length array
@@ -338,6 +367,7 @@ pub fn move_stagnation(state: &mut SolverState) {
             for i_station in 2..=state.n_stations[side] {
                 let i = state.i_node[side][i_station];
                 if state.ue[side][i_station] <= ueps {
+                    moved.ue_floored.push((side, i_station));
                     state.ue[side][i_station] = ueps;
                     state.q_viscous[i] = state.velocity_sign[side][i_station] * ueps;
                     state.gamma[i] = state.velocity_sign[side][i_station] * ueps;
@@ -352,6 +382,7 @@ pub fn move_stagnation(state: &mut SolverState) {
             state.mass_defect[side][i_station] = state.dstar[side][i_station] * state.ue[side][i_station];
         }
     }
+    moved
 }
 
 #[cfg(test)]

@@ -58,6 +58,7 @@ pub fn solve_viscous(
     waklen: f64,
     mut trace: Option<&mut Vec<IterationRecord>>,
 ) -> bool {
+    state.nonfinite_station_failures = 0;
     // calculate wake trajectory from current inviscid solution if necessary
     if !state.wake_built {
         build_wake(state, waklen);

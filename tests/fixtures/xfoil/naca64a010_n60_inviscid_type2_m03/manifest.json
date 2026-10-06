@@ -1,0 +1,47 @@
+{
+  "case": {
+    "alphas": [
+      0.0,
+      4.0
+    ],
+    "alphas_after_reinit": [],
+    "closures": false,
+    "cls": [
+      0.5,
+      8.0
+    ],
+    "damp": false,
+    "dump_calls": [],
+    "events": false,
+    "foil": "naca:64A010",
+    "inviscid": true,
+    "keep": [
+      "specal_points.dat",
+      "speccl_points.dat"
+    ],
+    "mach": 0.3,
+    "matyp": 2,
+    "max_iterations": 20,
+    "n_nodes": 60,
+    "name": "naca64a010_n60_inviscid_type2_m03",
+    "ncrit": 9.0,
+    "polar": false,
+    "re": 0.0,
+    "run": true,
+    "run_through": 0,
+    "step_calls": [],
+    "tgap": [],
+    "xtr": []
+  },
+  "generated_by": "cargo xtask fixtures",
+  "panels_dat_sha256": "3df222e05bedc87d33e84b2956c0b574607923ee624d289c2eaa2255e6cf78ee",
+  "xfoil_ref": [
+    "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
+    "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
+    "series_instr_sha256:    86fd5531db368bf0b2de999a500998b9378a63bdce83b5b8d2c818d081c99b4a",
+    "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
+    "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
+    "host:                   arm64-Darwin-24.6.0",
+    "libm:                   /usr/lib/libSystem.B.dylib 1345.120.2)"
+  ]
+}

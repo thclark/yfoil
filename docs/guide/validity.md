@@ -85,7 +85,7 @@ Where each is embodied:
 | Class | Recorded in | Surfaces as a reason | Withholds numbers |
 |---|---|---|---|
 | A | `karman_tsien_margin_forces`, `karman_tsien_margin_pressure` | `KarmanTsienOutOfDomain` | yes |
-| B | `mach_cl_newton_exhausted`, `converged`, `inviscid_cl_iterations` | `MachClNewtonExhausted`, `ClNewtonExhausted`, `ViscousNotConverged` | yes |
+| B | `mach_cl_newton_exhausted`, `converged`, `inviscid_cl_iterations`, `nonfinite_station_failures` | `MachClNewtonExhausted`, `ClNewtonExhausted`, `ViscousNotConverged`, `NonFiniteStationFailure` | yes |
 | C | — not in the record — | — | no |
 
 On the [worked case](#worked-case) A and B between them separate the 61 points exactly, with no
@@ -107,6 +107,7 @@ inferred from the size or the smoothness of a returned number; see
 | `MachClNewtonExhausted` | B | `SPECAL`'s CL(M) Newton used all 20 iterations without reaching `\|DCLM\| ≤ 1e-6`. | What is reported is iterate 20, not a solution. Only reachable under `TYPE 2`/`TYPE 3`, where the Mach number follows the lift. |
 | `ClNewtonExhausted` | B | `SPECCL`'s alpha Newton used all 20 iterations without reaching `\|DALFA\| ≤ 1e-6`. | The alpha reported does not deliver the CL you asked for. Typically a CL beyond what the section can reach. |
 | `ViscousNotConverged` | B | `VISCAL` finished without `LVCONV`: the viscous–inviscid iteration did not converge in `--max-iterations`. | The BL and the outer flow are not consistent with each other. Common past stall; raising `--max-iterations` sometimes helps and sometimes does not. |
+| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's garbage extrapolation. | The run passed through a NaN and kept going with extrapolated values. See [known issues §4](../xfoil-known-issues.md), the TRCHEK2 row. |
 | `SequenceHalted` | — | Only on `NotAttempted` points: the sweep stopped before this alpha. | Nothing was computed. |
 
 ## Diagnostics
@@ -124,6 +125,7 @@ would make the verdict unfalsifiable.
 | `mach_limited`, `re_limited` | `MRCL` limited the reported M∞ to 0.99, or Re to 100 × Re₁. |
 | `converged`, `iterations`, `residual` | `LVCONV`, the VISCAL iteration count, and the final RMSBL. |
 | `inviscid_cl_iterations` | `SPECCL`'s exit iteration (21 when exhausted). |
+| `nonfinite_station_failures` | Station Newton failures with a non-finite residual. |
 
 The margins are reported as numbers rather than collapsed to a flag on purpose. On the worked case
 below, α = −1° reports CL = −52 and α = −5° reports CL = +0.128 — and the *first* is the smaller

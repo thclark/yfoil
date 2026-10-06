@@ -56,6 +56,18 @@ pub struct UpdateSummary {
     pub cl_d_alpha: f64,
     pub cl_d_machsqd: f64,
     pub cl_d_free: f64,
+    /// The rarely-taken fallbacks this update took, in XFOIL's order (the branch trace the
+    /// non-finite event fixtures assert)
+    pub events: Vec<UpdateEvent>,
+}
+
+/// A rarely-taken UPDATE fallback.
+#[derive(Debug, Clone, PartialEq)]
+pub enum UpdateEvent {
+    /// `IF(RDN4 .LT. DLO) RLX = DLO/DN4`: the Ue relaxation limit below -50 % (xbl.f:1474)
+    UeRelaxationBelowLow { side: usize, station: usize },
+    /// an island of negative Ue overwritten by its upstream neighbour (xbl.f:1537)
+    NegativeUeIsland { side: usize, station: usize },
 }
 
 /// UPDATE. `vdel[iv-1][k][0..2]` is BLSOLV's solution (residual and AC-sensitivity columns);
@@ -210,6 +222,7 @@ pub fn apply_newton_update(state: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf
 
     let dhi = 1.5;
     let dlo = -0.5;
+    let mut events: Vec<UpdateEvent> = Vec::new();
 
     // calculate changes in BL variables and under-relaxation if needed
     for side in 1..=2 {
@@ -298,6 +311,10 @@ pub fn apply_newton_update(state: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf
             }
             if rdn4 < dlo {
                 rlx = dlo / dn4;
+                events.push(UpdateEvent::UeRelaxationBelowLow {
+                    side,
+                    station: i_station,
+                });
             }
         }
     }
@@ -356,6 +373,10 @@ pub fn apply_newton_update(state: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf
         // make sure there are no "islands" of negative Ue
         for i_station in 3..=state.i_te_station[side] {
             if state.ue[side][i_station - 1] > 0.0 && state.ue[side][i_station] <= 0.0 {
+                events.push(UpdateEvent::NegativeUeIsland {
+                    side,
+                    station: i_station,
+                });
                 state.ue[side][i_station] = state.ue[side][i_station - 1];
                 state.mass_defect[side][i_station] = state.dstar[side][i_station] * state.ue[side][i_station];
             }
@@ -383,6 +404,7 @@ pub fn apply_newton_update(state: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf
         residual_max_variable: vmxbl,
         i_residual_max_station: imxbl,
         residual_max_side: ismxbl,
+        events,
         free_variable_change: dac,
         cl_new: clnew,
         cl_d_alpha: cl_a,

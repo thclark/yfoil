@@ -11,11 +11,14 @@ mod fixtures;
 mod utilities;
 
 mod analysis;
-mod coverage;
+mod branches;
+mod events;
 mod polar;
-mod polar_break;
 mod prologue_dij;
 mod prologue_pointers;
-mod speccl;
+mod run;
+mod runs;
+mod step;
+mod steps;
 mod update;
 mod viscal;

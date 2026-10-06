@@ -74,14 +74,14 @@ fi
 } > "$OUT/manifest.txt"
 cat "$OUT/manifest.txt"
 
-# --- smoke case: identical geometry, alpha=2, Re=1e6, ITER 20 -----------------
+# --- smoke case: the tracked reference case's panels, alpha=2, Re=1e6, ITER 20 ----
 smoke() { # smoke <bindir> <workdir>
-  local bin="$1" wd="$2"; rm -rf "$wd"; mkdir -p "$wd"; cp "$ROOT/tests/fixtures/xfoil/smoke/panels.dat" "$wd/panels.dat"
+  local bin="$1" wd="$2"; rm -rf "$wd"; mkdir -p "$wd"; cp "$ROOT/tests/fixtures/xfoil/naca0012_n60_a2_re1e6/panels.dat" "$wd/panels.dat"
   ( cd "$wd" && printf 'PLOP\nG F\n\nLOAD panels.dat\nOPER\nVISC 1000000\nITER 20\nALFA 2\nCPWR cp.dat\nDUMP bl.dat\n\nQUIT\n' | "$bin/xfoil" > stdout.txt 2>&1 || true )
 }
 
 if [ "$VERIFY" = 1 ]; then
-  [ -f "$ROOT/tests/fixtures/xfoil/smoke/panels.dat" ] || { echo "smoke panels missing: tests/fixtures/xfoil/smoke/panels.dat" >&2; exit 1; }
+  [ -f "$ROOT/tests/fixtures/xfoil/naca0012_n60_a2_re1e6/panels.dat" ] || { echo "smoke panels missing: tests/fixtures/xfoil/naca0012_n60_a2_re1e6/panels.dat" >&2; exit 1; }
   smoke "$OUT/pristine/bin" "$OUT/verify/pristine"
   smoke "$OUT/instrumented/bin" "$OUT/verify/instrumented"
   # Compare only the numeric products XFOIL writes in both builds (cp.dat, bl.dat, and the
@@ -102,7 +102,7 @@ if [ "$SNAN" = 1 ]; then
   # gfortran's exit-time "Note: ... exceptions are signalling" lists raised-but-untrapped
   # flags (e.g. divide-by-zero) and is reported as information, not failure.
   stage snan "-g -fbacktrace -finit-real=snan -ffpe-trap=invalid" series.build
-  rm -rf "$OUT/verify/snan"; mkdir -p "$OUT/verify/snan"; cp "$ROOT/tests/fixtures/xfoil/smoke/panels.dat" "$OUT/verify/snan/"
+  rm -rf "$OUT/verify/snan"; mkdir -p "$OUT/verify/snan"; cp "$ROOT/tests/fixtures/xfoil/naca0012_n60_a2_re1e6/panels.dat" "$OUT/verify/snan/"
   set +e
   ( cd "$OUT/verify/snan" && printf 'PLOP\nG F\n\nLOAD panels.dat\nOPER\nVISC 1000000\nITER 20\nALFA 2\n\nQUIT\n' | "$OUT/snan/bin/xfoil" > stdout.txt 2>&1 ); rc=$?
   set -e

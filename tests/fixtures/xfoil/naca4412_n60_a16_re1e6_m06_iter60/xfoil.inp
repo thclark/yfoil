@@ -1,0 +1,16 @@
+PLOP
+G F
+
+LOAD panels.dat
+OPER
+VISC 1000000
+MACH 0.6
+VPAR
+N 9
+
+ITER 60
+ALFA 16
+CPWR cp_a16.dat
+DUMP bl_a16.dat
+
+QUIT

@@ -10,5 +10,7 @@ mod fixtures;
 mod utilities;
 
 mod blsolv_conditioning;
+mod case_tests;
+mod inputs;
 mod polar_reseed;
 mod tgap_handoff;

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Why a point is not valid. Each variant is an exact, single-run fact — a formula evaluated
 /// outside its analytic domain, or an iteration that ran out before meeting its tolerance.
 /// Nothing here is inferred from the size or the smoothness of a returned number
-/// (`docs/xfoil-known-issues.md` §7.7).
+/// (`docs/xfoil-known-issues.md` §7.10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reason {
     /// The Kármán–Tsien denominator `β + BFAC·Cp_inc` reached zero or below, so the
@@ -18,6 +18,9 @@ pub enum Reason {
     ClNewtonExhausted,
     /// VISCAL finished without LVCONV: the viscous-inviscid iteration did not converge
     ViscousNotConverged,
+    /// A station Newton failed with a non-finite residual and the march was carried over it by
+    /// the garbage extrapolation: the run went through a NaN
+    NonFiniteStationFailure,
     /// The sweep halted before reaching this alpha, so it was never attempted
     SequenceHalted,
 }
@@ -42,6 +45,7 @@ impl std::fmt::Display for Reason {
             Reason::MachClNewtonExhausted => "MachClNewtonExhausted",
             Reason::ClNewtonExhausted => "ClNewtonExhausted",
             Reason::ViscousNotConverged => "ViscousNotConverged",
+            Reason::NonFiniteStationFailure => "NonFiniteStationFailure",
             Reason::SequenceHalted => "SequenceHalted",
         };
         f.write_str(s)
@@ -91,6 +95,8 @@ pub struct Diagnostics {
     /// SPECCL's exit iteration for an OPER `CL` point (21 when its Newton was exhausted)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inviscid_cl_iterations: Option<usize>,
+    /// Station Newton failures with a non-finite residual in this point's marches
+    pub nonfinite_station_failures: usize,
 }
 
 /// One operating point's numbers, as XFOIL reports them after `ALFA`/`CL`. The viscous-only
@@ -171,6 +177,9 @@ impl PointRecord {
         if v && !p.converged {
             reasons.push(Reason::ViscousNotConverged);
         }
+        if p.nonfinite_station_failures > 0 {
+            reasons.push(Reason::NonFiniteStationFailure);
+        }
         let status = if reasons.is_empty() {
             PointStatus::Valid
         } else {
@@ -204,6 +213,7 @@ impl PointRecord {
                 iterations: v.then_some(p.iterations),
                 residual: v.then_some(p.residual),
                 inviscid_cl_iterations: (p.inviscid_cl_iterations > 0).then_some(p.inviscid_cl_iterations),
+                nonfinite_station_failures: p.nonfinite_station_failures,
             }),
             values,
         }
@@ -646,6 +656,7 @@ mod tests {
                 iterations: Some(12),
                 residual: Some(1.2e-5),
                 inviscid_cl_iterations: None,
+                nonfinite_station_failures: 0,
             }),
             values: Some(PointValues {
                 cl: 0.55,
@@ -691,6 +702,7 @@ mod tests {
                 iterations: None,
                 residual: None,
                 inviscid_cl_iterations: None,
+                nonfinite_station_failures: 0,
             }),
             values: None,
         };

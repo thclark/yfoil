@@ -6,9 +6,8 @@
 //! disagree by exactly 1 ULP on 0.1 % (`exp`, `ln`, `powf`) to 18 % (`tanh`) of inputs, on
 //! `x86_64` and `aarch64` alike (glibc's results are identical on both). So bit-identity with a
 //! fixture is a property of the host it was generated on (CLAUDE.md Rule 1); on any other host
-//! the comparison is an ULP budget, and the pins that only a bit-identical trajectory can hold
-//! (the iteration at which a threshold-straddling run parts, a one-step replay at `TOL_SOLVER`
-//! in a hypersensitive state) are reported instead of asserted.
+//! the comparison is an ULP budget: a step replayed from XFOIL's dumped state is gated at
+//! `TOL_SOLVER` on the fixture's host and at `TOL_CROSS_HOST` elsewhere.
 
 #![allow(dead_code)]
 

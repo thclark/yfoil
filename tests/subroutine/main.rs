@@ -10,7 +10,6 @@ mod fixtures;
 #[path = "../common/utilities/mod.rs"]
 mod utilities;
 
-mod axset;
 mod blsolv;
 mod closures;
 mod ggcalc;
@@ -22,4 +21,5 @@ mod pointers;
 mod setbl;
 mod speccl;
 mod tgap;
+mod transition;
 mod xywake;

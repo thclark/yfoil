@@ -42,6 +42,9 @@ pub struct MrchueIter {
 #[derive(Debug, Clone, Default)]
 pub struct MrchueTrace {
     pub iters: Vec<MrchueIter>,
+    /// (IBL, IS, DMAX) for every station whose failed Newton left a residual above 0.1 (or
+    /// non-finite): the 'garbage' extrapolation replaced its solution
+    pub garbage: Vec<(usize, usize, f64)>,
 }
 
 /// MRCHUE. Requires the pointer layer (XSSI, IPAN, IBLTE, NBL, WGAP), UEDG initialised
@@ -357,7 +360,15 @@ pub fn march_direct(
             if !converged {
                 // 'MRCHUE: Convergence failed at IBL side IS Res = DMAX'
                 // the current unconverged solution might still be reasonable...
-                if dmax > 0.1 {
+                // `IF(DMAX .LE. 0.1) GO TO 109`: written as XFOIL tests it, so that a NaN residual
+                // (a station whose closures went non-finite) takes the garbage path as it does there
+                if !(dmax <= 0.1) {
+                    if let Some(t) = trace.as_mut() {
+                        t.garbage.push((i_station, side, dmax));
+                    }
+                    if !dmax.is_finite() {
+                        state.nonfinite_station_failures += 1;
+                    }
                     // the current solution is garbage --> extrapolate values instead
                     if i_station > 3 {
                         if i_station <= state.i_te_station[side] {
@@ -416,15 +427,19 @@ pub fn march_direct(
                     }
                     s2.ampl = ami;
                 }
-                // set all other extrapolated values for current station (BLVAR/BLMID)
-                let ityp = if wake {
-                    crate::bl::system::FlowRegime::Wake
-                } else if i_station < state.i_transition_station[side] {
-                    crate::bl::system::FlowRegime::Laminar
-                } else {
-                    crate::bl::system::FlowRegime::Turbulent
-                };
-                s2.set_closure_variables(ityp, params);
+                // set all other extrapolated values for current station — XFOIL calls BLVAR in
+                // this order, each call clamping HK2 in place (a wake station gets BLVAR(2)'s
+                // 1.05 floor before BLVAR(3)), so the sequence is kept as in MRCHDU.
+                // (BLMID only sets the interval CFM, which nothing reads after this point.)
+                if i_station < state.i_transition_station[side] {
+                    s2.set_closure_variables(crate::bl::system::FlowRegime::Laminar, params);
+                }
+                if i_station >= state.i_transition_station[side] {
+                    s2.set_closure_variables(crate::bl::system::FlowRegime::Turbulent, params);
+                }
+                if wake {
+                    s2.set_closure_variables(crate::bl::system::FlowRegime::Wake, params);
+                }
                 hk2_snapshot = s2.hk;
             }
             let _ = hk2_snapshot;

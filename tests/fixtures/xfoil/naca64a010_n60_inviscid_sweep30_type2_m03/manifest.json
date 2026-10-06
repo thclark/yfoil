@@ -64,6 +64,7 @@
       30.0
     ],
     "alphas_after_reinit": [],
+    "closures": false,
     "cls": [],
     "damp": false,
     "dump_calls": [],
@@ -79,6 +80,9 @@
     "ncrit": 9.0,
     "polar": false,
     "re": 0.0,
+    "run": false,
+    "run_through": 0,
+    "step_calls": [],
     "tgap": [],
     "xtr": []
   },
