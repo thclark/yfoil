@@ -153,6 +153,16 @@ and the instrumented `update_output_<k>.dat` dumps every row up to `NBL(1) + NW`
 
 ---
 
+### 2.9 The closure log's `s2` at laminar BLVAR calls is not a value BLVAR uses — Out of scope
+
+The reference's closure log (`xfoil_subroutine_log.dat`, cut into `tests/fixtures/subroutines/` by
+`closures = true`) records BLVAR's inputs as they stand in COM2. At some laminar calls (`ityp = 1`,
+the stations near the leading edge) `S2` holds a subnormal (about 3e-314) that changed, with every
+output unchanged, when the instrumentation's dump list grew from 32 to 1000 entries — a value that
+depends on memory layout, so not one XFOIL computed for that station. BLVAR(1) does not read `S2`
+(the laminar closures take no shear stress), so the outputs and the gate are unaffected; the input
+is regenerated with the fixtures and `--verify` holds it for a given build. Noted 2026-10-06.
+
 ## 3. Drela's own dated fixes and flagged defects in the shipped source
 
 | Where | Comment | yFoil |
@@ -504,6 +514,20 @@ fails at wake station 40 with Hk = 1.011. yFoil keeps the call sequence in both 
 **Gate:** `tests/execution/events.rs::test_mrchue_garbage_extrapolation_events` (that
 case's first march, station 41 side 2 is where a single call would differ) and
 `tests/subroutine/mrchdu.rs` (MRCHDU's failure path on the reference case).
+
+### 7.12 AMI = AMPL2 after a forced transition — Overcome (yFoil bug, fixed)
+
+MRCHUE, MRCHDU and SETBL set `AMI = AMPL2` after every `CALL TRCHEK` (`xbl.f:225`, `:624`, `:815`,
+`:968`, `:1137`), whatever TRCHEK2 decided: after a forced transition (`XIFORC` in the interval — with
+the default `XSTRIP = 1` that is the trailing-edge interval of a side still laminar there) AMPL2 is the
+N2 Newton's converged value. yFoil's `TransitionCheck::Forced` carried no `ampl2`, so its callers kept
+the previous AMI. The converged state is unaffected — AMI at a transition station feeds only the
+starting value of the next TRCHEK2 call at that station — so no value test saw it; it changed the
+number of TRCHEK2 iterates, which `cargo xtask route` found on 2026-10-06 (NACA 0012 at 7° of the
+0 → 30° sweep, lower side, station 29: AMPL2 8.645 against 8.830). Fixed by carrying `ampl2` in
+`Forced`. **Gate:** `tests/subroutine/mrchdu.rs::
+test_mrchdu_station_newton_replays_from_xfoil_state_at_the_7deg_point` (AMPL2 at every station
+iterate, both sides).
 
 ## 8. Open items in yFoil's own tooling
 

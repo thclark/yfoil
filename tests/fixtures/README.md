@@ -27,9 +27,13 @@ A case's entry in `cases.toml` states how it is tested (`# how tested:`, `run`, 
 
 ```bash
 cargo xtask twins --case NAME ...          # the five seeded 1-ULP twins (study data, untracked)
-cargo xtask steps --case NAME ...          # which step takes which branch; writes step-cover.toml
+cargo xtask steps                          # which step takes which branch, and its subroutine calls
+cargo xtask route                          # yFoil's route through every step against XFOIL's; writes route.toml
+cargo xtask steps --from-json              # the cover from the route-agreeing steps; writes step-cover.toml
 ```
 
-and `cargo xtask fixtures` then adds the dumps the chosen steps need. Fixture data is a property of
+and `cargo xtask fixtures` then adds the dumps the chosen steps need. `cargo xtask route` needs
+`rustup component add llvm-tools`; its reference runs, with every SETBL call dumped, live in
+`target/route/` and are not tracked. Fixture data is a property of
 the host it was generated on (manifest `host:` line); on another host the tests use
 `TOL_CROSS_HOST`.

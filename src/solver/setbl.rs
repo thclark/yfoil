@@ -280,7 +280,11 @@ pub fn assemble_newton_system(state: &mut SolverState) -> AssembledSystem {
                         trforc = false;
                         transition = found;
                     }
-                    TransitionCheck::Forced { transition: found } => {
+                    TransitionCheck::Forced {
+                        transition: found,
+                        ampl2,
+                    } => {
+                        ami = ampl2;
                         trforc = true;
                         transition = found;
                     }

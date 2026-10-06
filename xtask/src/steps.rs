@@ -144,6 +144,13 @@ struct Step {
     /// NITDONE of the step's VISCAL call (0 for an inviscid call)
     call_iterations: usize,
     taken: Vec<String>,
+    /// how many times the step called each translated subroutine (`cargo xtask route` compares
+    /// yFoil's calls with these)
+    #[serde(default)]
+    calls: BTreeMap<String, i64>,
+    /// how many calls the step made from each call site `route-map.toml` names (`file:line`)
+    #[serde(default)]
+    sites: BTreeMap<String, i64>,
     conditioned: Option<bool>,
     /// why the step is not well-conditioned, or the worst twin spread relative to the tolerance
     conditioning: String,
@@ -198,10 +205,10 @@ pub fn steps(flags: &[String]) {
             Err(e) => eprintln!("  {}: {e}", case.name),
         }
     }
-    // merge with the attribution already measured for the cases not rerun now
+    // with --case, merge with the attribution already measured for the cases not rerun now
     let out = root.join("target/coverage/steps.json");
     fs::create_dir_all(out.parent().unwrap()).unwrap();
-    if let Ok(text) = fs::read_to_string(&out) {
+    if let (false, Ok(text)) = (selected.is_empty(), fs::read_to_string(&out)) {
         if let Ok(previous) = serde_json::from_str::<Vec<Step>>(&text) {
             let rerun: BTreeSet<String> = all.iter().map(|s| s.case.clone()).collect();
             let mut kept: Vec<Step> = previous.into_iter().filter(|s| !rerun.contains(&s.case)).collect();
@@ -217,6 +224,20 @@ pub fn steps(flags: &[String]) {
         "steps -> {}; cover -> xtask/fixtures-config/step-cover.toml",
         out.display()
     );
+}
+
+/// The call sites `xtask/fixtures-config/route-map.toml` names, whose per-step calls are recorded.
+fn mapped_sites(root: &Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(root.join("xtask/fixtures-config/route-map.toml")) else {
+        return vec![];
+    };
+    let map: toml::Value = toml::from_str(&text).expect("parse route-map.toml");
+    map.get("site")
+        .and_then(|s| s.as_array())
+        .into_iter()
+        .flatten()
+        .map(|s| s["site"].as_str().expect("route-map.toml: site").to_string())
+        .collect()
 }
 
 /// The operating points of a script, in order: `(line index, Some(point within its ASEQ))` for
@@ -301,6 +322,11 @@ fn truncated_script(script: &str, c: usize, i: usize) -> String {
     for l in &lines[..line] {
         if l.trim() == "QUIT" {
             break;
+        }
+        // the output commands (CPWR, DUMP) evaluate closures for what they write: they are not
+        // part of any step, and would otherwise be counted in the next point's first step
+        if l.starts_with("CPWR ") || l.starts_with("DUMP ") {
+            continue;
         }
         out.push_str(l);
         out.push('\n');
@@ -587,6 +613,26 @@ fn case_steps(root: &Path, gdir: &Path, case: &super::Case) -> Result<Vec<Step>,
     fs::copy(work.join("panels.dat"), run_dir.join("panels.dat")).unwrap();
     let scratch = run_dir.join("_gcov");
     let mut previous: HashMap<String, u64> = HashMap::new();
+    // the calls of the script before its first operating point (LOAD, OPER's set-up), which are
+    // not part of the first step's route
+    let first_line = operating_points(&script)[0].0;
+    let head: String = script.lines().take(first_line).map(|l| format!("{l}\n")).collect();
+    fs::write(run_dir.join("xfoil.inp"), head + "\nQUIT\n").unwrap();
+    super::coverage::reset_counters(gdir);
+    let st = Command::new(gdir.join("bin/xfoil"))
+        .current_dir(&run_dir)
+        .stdin(fs::File::open(run_dir.join("xfoil.inp")).unwrap())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !st.success() {
+        return Err(format!("the script's head: gcov xfoil exited {st}"));
+    }
+    let head_counts = super::coverage::branch_counts(root, gdir, &scratch);
+    let mut previous_calls: HashMap<String, u64> = head_counts.calls;
+    let mut previous_sites: HashMap<String, u64> = head_counts.sites;
+    let mapped = mapped_sites(root);
     let mut out = vec![];
     for (n, &(c, i)) in plan.iter().enumerate() {
         fs::write(run_dir.join("xfoil.inp"), truncated_script(&script, point_of[c - 1], i)).unwrap();
@@ -601,7 +647,22 @@ fn case_steps(root: &Path, gdir: &Path, case: &super::Case) -> Result<Vec<Step>,
         if !st.success() {
             return Err(format!("step ({c}, {i}): gcov xfoil exited {st}"));
         }
-        let counts = super::coverage::branch_counts(root, gdir, &scratch);
+        let now = super::coverage::branch_counts(root, gdir, &scratch);
+        let (counts, calls_now, sites_now) = (now.branches, now.calls, now.sites);
+        let calls: BTreeMap<String, i64> = calls_now
+            .iter()
+            .map(|(s, &v)| (s.clone(), v as i64 - previous_calls.get(s).copied().unwrap_or(0) as i64))
+            .filter(|(_, d)| *d != 0)
+            .collect();
+        let sites: BTreeMap<String, i64> = mapped
+            .iter()
+            .map(|s| {
+                let d =
+                    sites_now.get(s).copied().unwrap_or(0) as i64 - previous_sites.get(s).copied().unwrap_or(0) as i64;
+                (s.clone(), d)
+            })
+            .filter(|(_, d)| *d != 0)
+            .collect();
         let taken: Vec<String> = counts
             .iter()
             .filter(|(id, &v)| v > previous.get(*id).copied().unwrap_or(0))
@@ -627,10 +688,14 @@ fn case_steps(root: &Path, gdir: &Path, case: &super::Case) -> Result<Vec<Step>,
             setbl,
             call_iterations: if case.inviscid { 0 } else { nit[c - 1] },
             taken,
+            calls,
+            sites,
             conditioned,
             conditioning: why,
         });
         previous = counts;
+        previous_calls = calls_now;
+        previous_sites = sites_now;
         if n % 10 == 9 {
             println!("    {}: {}/{} steps", case.name, n + 1, plan.len());
         }
@@ -643,8 +708,9 @@ fn case_steps(root: &Path, gdir: &Path, case: &super::Case) -> Result<Vec<Step>,
 /// SETBL calls into the run, so the replay's fixture comes from early in it), then pruned of any step
 /// the rest make redundant. Every step is eligible, ill-conditioned solutions included
 /// (`docs/conventions/testing.md`, rule 4); the twins' conditioning is recorded beside each step for
-/// information. A step listed as divergent in `xtask/fixtures-config/route.toml` (its replay takes a
-/// different route from XFOIL's) is excluded; the file is absent until the route is measured.
+/// information. A step listed in `xtask/fixtures-config/route.toml` as divergent (its replay takes
+/// a different route from XFOIL's) or unmeasured (its replay could not be run) is excluded
+/// (`cargo xtask route`).
 fn choose_cover(all: &[Step]) -> String {
     let divergent = route_divergent();
     let good: Vec<&Step> = all
@@ -697,7 +763,7 @@ fn choose_cover(all: &[Step]) -> String {
     chosen.sort_by(|a, b| (&a.case, a.call, a.iteration).cmp(&(&b.case, b.call, b.iteration)));
     let ill: Vec<&&String> = universe.difference(&coverable).collect();
     let mut s = String::from(
-        "# Generated by `cargo xtask steps` — do not edit by hand.\n#\n# The fewest steps of the candidate reference runs that take every branch any candidate step\n# takes, excluding steps listed as divergent in route.toml (none until the route is measured). Each\n# [[step]] is replayed by one test in tests/execution/branches.rs.\n",
+        "# Generated by `cargo xtask steps` — do not edit by hand.\n#\n# The fewest steps of the candidate reference runs that take every branch any candidate step\n# takes, excluding the steps route.toml lists as divergent or unmeasured (`cargo xtask route`). Each\n# [[step]] is replayed by one test in tests/execution/branches.rs.\n",
     );
     s.push_str(&format!(
         "# {} branches taken by some step; {} by a step whose route agrees; {} steps chosen.\n",
@@ -845,6 +911,8 @@ fn route_divergent() -> BTreeSet<(String, usize, usize)> {
     struct Route {
         #[serde(default)]
         divergent: Vec<RouteStep>,
+        #[serde(default)]
+        unmeasured: Vec<RouteStep>,
     }
     #[derive(serde::Deserialize)]
     struct RouteStep {
@@ -857,7 +925,11 @@ fn route_divergent() -> BTreeSet<(String, usize, usize)> {
         return BTreeSet::new();
     };
     let r: Route = toml::from_str(&text).expect("parse route.toml");
-    r.divergent.into_iter().map(|s| (s.case, s.call, s.iteration)).collect()
+    r.divergent
+        .into_iter()
+        .chain(r.unmeasured)
+        .map(|s| (s.case, s.call, s.iteration))
+        .collect()
 }
 
 /// `docs/validation/branch-gating.md`: how full branch coverage is established — every candidate
@@ -909,7 +981,8 @@ fn write_report(root: &Path, all: &[Step], cover: &str) {
     let universe: BTreeSet<&String> = all.iter().flat_map(|s| &s.taken).collect();
     let mut md = String::from(
         "# Branch gating\n\nGenerated by `cargo xtask steps` — do not edit. The method is in\n\
-         [`docs/conventions/testing.md`](../conventions/testing.md), \"How branch coverage is established\".\n\n",
+         [`docs/conventions/testing.md`](../conventions/testing.md), \"How branch coverage is established\"\n\
+         and \"What gated means\".\n\n",
     );
     md.push_str(&format!(
         "{} branches of the translated subroutines are taken by some step of the {} candidate cases below; \
@@ -954,6 +1027,37 @@ fn write_report(root: &Path, all: &[Step], cover: &str) {
             s.setbl,
             s.branches.len()
         ));
+    }
+    // the route measurement (`cargo xtask route`): the steps excluded from the cover
+    if let Ok(text) = fs::read_to_string(root.join("xtask/fixtures-config/route.toml")) {
+        md.push_str("\n## The route\n\nA step is eligible for the cover only if yFoil is observed to take XFOIL's route through it: the same call count of every translated subroutine (`cargo xtask route`, [`testing.md`](../conventions/testing.md), \"What gated means\").");
+        if let Some(summary) = text
+            .lines()
+            .find(|l| l.starts_with("# ") && l.contains("steps measured"))
+        {
+            md.push_str(&format!(" Measured: {}", summary.trim_start_matches("# ")));
+        }
+        let r: toml::Value = toml::from_str(&text).expect("parse route.toml");
+        let excluded: Vec<&toml::Value> = ["divergent", "unmeasured"]
+            .iter()
+            .filter_map(|k| r.get(*k).and_then(|v| v.as_array()))
+            .flatten()
+            .collect();
+        if excluded.is_empty() {
+            md.push_str("\n\nNo step is excluded.\n");
+        } else {
+            md.push_str("\n\n| Case | Call | Iteration | Found by | Why |\n|---|---:|---:|---|---|\n");
+            for d in excluded {
+                md.push_str(&format!(
+                    "| `{}` | {} | {} | {} | {} |\n",
+                    d["case"].as_str().unwrap_or(""),
+                    d["call"].as_integer().unwrap_or(0),
+                    d["iteration"].as_integer().unwrap_or(0),
+                    d.get("found").and_then(|f| f.as_str()).unwrap_or("not measured"),
+                    d.get("why").and_then(|f| f.as_str()).unwrap_or("")
+                ));
+            }
+        }
     }
     md.push_str("\n## Branches no test gates\n\n");
     if c.route_divergent_only.is_empty() {
