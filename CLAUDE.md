@@ -30,9 +30,8 @@ and `TOL_CROSS_HOST`); no ad-hoc literals anywhere else. Expect pure closure fun
 and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, identically on x86_64 and
 aarch64; XFOIL's own converged polar points move by ≤ 1.4e-11 between the two, its unconverged post-CL_max
 wanderings by O(1). Every fixture manifest records its host; `tests/common/utilities/host.rs` compares it with the running
-one, and the pins only a bit-identical trajectory can hold (the straddle iteration, a one-step replay at
-`TOL_SOLVER` in a hypersensitive state) are asserted on the fixture's host and reported elsewhere — the third
-outcome again, never a skip.
+one: on the fixture's host values are held to `TOL_SOLVER`, on any other to `TOL_CROSS_HOST` (the measured spread
+of one replayed step between the two libraries), never skipped.
 
 **The error metric** is `|a − b| ≤ tol · max(|a|, |b|, scale_v)` with a physical per-variable scale. Bare relative
 error is undefined at CL≈0, VDEL≈0 and laminar CTAU≈0 and must not be used.
@@ -45,15 +44,17 @@ and produces O(1) differences that are **not translation bugs**. So:
 - Instrumented XFOIL logs its decisions (`ITRAN`, limiting station, skip counts, iteration count, `SHARP`,
   `DIRECT`). Those are compared exactly.
 - For iterative solvers the iteration count must be identical and per-iteration `RMSBL` is compared.
-- When a branch flips, show both inputs lie within the noise floor of the threshold and record the case as
-  **threshold-straddling** — a third outcome, reported separately, never silently passed or failed.
-- **Mechanised per case:** `cargo xtask fixtures` runs every case twice — as generated and with every panel
-  coordinate +1 ULP — and writes `noise_floor.json` (the reference's own spread of every recorded value, and
-  whether its branch trace survived). Tests gate a value at `max(tol · scale, FLOOR_FACTOR · floor)`
-  (`tests/common/utilities/records.rs`); a twin that flips its own branch trace, or a run that matches every
-  iteration until one where the reference moves by more than `STRADDLE_FLOOR` under 1 ULP, is classified
-  threshold-straddling — and the one-step replay from XFOIL's dumped state at that iteration (`dump_calls`)
-  is the evidence that the step itself is faithful. The 12° NACA 0012 case is the worked example.
+- A branch at which XFOIL and yFoil take different routes because its operands are within rounding of
+  the threshold is a **divergent comparison** (`docs/conventions/terminology.md`): it says nothing about the
+  translation, so no test is one. It is a consequence of an **ill-conditioned solution** — stall, separation,
+  the Kármán–Tsien pole — and those solutions *are* tested, because most rarely-taken branches exist for them.
+- **Mechanised per test:** a whole run is a run test only if it takes XFOIL's route with values in tolerance to
+  the end (`tests/execution/run.rs`); an ill-conditioned solution is tested one step at a time, each iteration
+  replayed from XFOIL's exact dumped state (`tests/execution/step.rs`), with decisions compared exactly and
+  each value within the named tolerance or four times the step's own sensitivity — measured in the test by
+  replaying the step from three copies of its inputs jogged by one ULP. How each case is tested, and why, is
+  recorded beside it in `xtask/fixtures-config/cases.toml`; `docs/conventions/testing.md` has the rules. The
+  reference's own twins (`cargo xtask twins`) are a study instrument, read by no test.
 
 Under those conditions: if values differ by more than tolerance, **it is a bug**. 1%, 0.1%, 1e-6 — all bugs. There
 is no "acceptable engineering tolerance" in this project.
@@ -143,7 +144,9 @@ subroutines hit at least once. NACA 0012/4412 at Re=1e6, M=0, Ncrit=9 leaves the
 sensitivities, laminar separation, the MRCHDU fallback, forced transition, `MATYP≠1` and RLX limiting **dead**.
 Cases that exercise each of those are part of the validation set, not extras. The parameter/fuzz harness optimises
 branch coverage; it reports per-variable ULP distributions, iteration-count and branch-flip counts, and
-threshold-straddling cases — not a single worst-case number.
+divergent comparisons — not a single worst-case number. Which step of which case takes each branch, and the
+fewest steps that take them all, are measured by `cargo xtask steps` (`docs/conventions/testing.md`, "How
+branch coverage is established"; the record is `docs/validation/branch-gating.md`).
 
 **The measurement is mechanised.** `scripts/xfoil-build.sh --gcov` builds the pristine DP reference with
 `-fprofile-arcs -ftest-coverage`; `cargo xtask coverage` runs every tracked case through it from its tracked
@@ -165,7 +168,9 @@ XFOIL-independent invariants are also required, because two codes can share a mi
 
 - `.gitignore` excludes generated files by default (`*.dat`, `*.log`, `fort.*`, `*.bl`, `.tmp/`) and **allowlists**
   what is deliberately committed (`!tests/fixtures/**`, `!xfoil/third-party/**`). Committing a fixture is a decision.
-- Tracked fixture budget ~25 MB; full-resolution cases live behind `cargo xtask fixtures --big`.
+- A tracked case is its inputs plus exactly the files its tests read (`keep`, and what `run`, `step_calls` and
+  the step cover add); `cargo xtask fixtures --audit` fails on any tracked file no test opens. Cases a test does
+  not read are untracked (`track = false`, regenerated into `target/fixtures/`).
 - Every fixture directory carries a `manifest.json`: source SHA256, patch-series SHA, `gfortran --version`,
   FFLAGS, host triple, libm/OS.
 - A missing fixture **fails** the test (`require_fixture`), never `eprintln!("Skipping")` + green.
@@ -351,13 +356,19 @@ explicitly in every equivalence run because the two codes' defaults differ: `ITE
 
 `cargo xtask fixtures [--case NAME] [--verify] [--big]` reads `xtask/fixtures-config/cases.toml`, builds the reference if
 needed, generates panels **with yFoil**, runs instrumented XFOIL via `LOAD`, asserts the bitwise geometry
-handoff, and keeps the raw dumps plus `manifest.json` under `tests/fixtures/xfoil/<case>/` (`track = true`,
-budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
+handoff, and keeps the inputs plus the files the case's tests read under `tests/fixtures/xfoil/<case>/`
+(`track = true`) or everything under `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
 (drive with `ALFA a0 / ASEQ a1 aN da` like the polar procedure; ASEQ points get ITMAX+5), `cls` (OPER `CL x`
-points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat` records — for coverage cases),
-`inviscid = true` (no VISC: each ALFA is one SPECAL, each CL one SPECCL; no twin is run), `events = true` (keep
-`events.dat`, the reference's `EVLOG` branch events), `keep = [...]` (track exactly these work-directory files
-besides the inputs). The tracked CI reference case is
+points), `matyp` (OPER `TYPE n`), `inviscid = true` (no VISC: each ALFA is one SPECAL, each CL one SPECCL),
+`events = true` (keep `events.dat`, the reference's `EVLOG` branch events), `keep = [...]` (track these
+work-directory files besides the inputs), `closures = true` (cut the reference's closure log into
+`tests/fixtures/subroutines/`), and how the case is tested: `run = true` / `run_through = N` (the whole run
+compared, or its first N calls) and `step_calls = [...]` (every iteration of those calls replayed as a step;
+the generator runs the reference twice to dump each of their SETBL calls). `xtask/fixtures-config/step-cover.toml`
+(written by `cargo xtask steps`) adds the dumps and files of the branch cover's steps. `cargo xtask twins --case
+NAME` reruns a case on five seeded 1-ULP twins (study data, `target/fixtures/<case>/ulp<seed>/`); `cargo xtask
+fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
+`tests/fixtures/README.md`. The tracked CI reference case is
 `naca0012_n60_a2_re1e6` (`tests/common/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
 plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
@@ -384,7 +395,7 @@ tests/
 └── fixtures/           - tracked fixture data (allowlisted in .gitignore)
 ```
 
-One test binary per category (`cargo test --test execution`). CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `ignore-drift`,
+One test binary per category (`cargo test --test execution`). CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `fixture-audit`, `ignore-drift`,
 `no-deviations`, `examples`, and nightly `xfoil-parity` (rebuild reference, regenerate, compare).
 
 **Validation reports are generated, never hand-fed.** `docs/validation/` holds only Markdown and SVG; every
@@ -392,7 +403,7 @@ number in it is derived from a fixture directory (`tests/fixtures/xfoil/<case>/`
 for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report is generated. No XFOIL dump,
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
-Current generators: `cargo xtask coverage` (coverage.md), `scripts/noise-floor.sh` (noise-floor.md),
+Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-gating.md), `scripts/noise-floor.sh` (noise-floor.md),
 `generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
 (aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison).
 The studies' figures are drawn by matplotlib from their JSON outputs (`scripts/<study>/plot.py`, presentation

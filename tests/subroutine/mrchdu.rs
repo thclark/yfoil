@@ -230,3 +230,59 @@ fn test_mrchdu_newton_trace_matches_xfoil_iteration_by_iteration() {
         mism[0]
     );
 }
+
+/// The station Newton of MRCHDU, iterate by iterate, from XFOIL's exact state entering each SETBL
+/// call of the 7° point of the NACA 0012 polar (calls 40–47, known issues §7.9): the inviscid side
+/// from the panels, the BL side from `mrchdu_input_<k>.dat` (`fixtures::cases`). On every upper-side
+/// station up to the one after transition, the station Newton must take the reference's number
+/// of iterations (`mrchdu_trace_<k>.dat`) and its updated primaries CTI THI DSI UEI AMI must
+/// agree within `TOL_PURE`, each on the scale of that primary's largest magnitude at the station.
+///
+/// Fixtures: `tests/fixtures/xfoil/naca0012_n60_polar30_re1e6/` (`mrchdu_input_<k>.dat`,
+/// `mrchdu_trace_<k>.dat`, `mrchdu_output_<k>.dat`) — `cargo xtask fixtures --case
+/// naca0012_n60_polar30_re1e6`.
+#[test]
+fn test_mrchdu_station_newton_replays_from_xfoil_state_at_the_7deg_point() {
+    use crate::fixtures::cases::{dump, load, prologue, seed};
+    use utilities::tolerances::TOL_PURE;
+    use yfoil::bl::params::FlowParameters;
+    const CASE: &str = "naca0012_n60_polar30_re1e6";
+    const CALL: usize = 8;
+    let c = load(CASE);
+    let nit: Vec<usize> = c.points.iter().map(|p| p["NITDONE"].parse().unwrap()).collect();
+    let before: usize = nit[..CALL - 1].iter().sum();
+    for i in 0..nit[CALL - 1] {
+        let k = before + i + 1;
+        let xf = parse_mrchdu_trace(&c.dir.join(format!("mrchdu_trace_{k}.dat")));
+        let itran = dump(&c, &format!("mrchdu_output_{k}.dat")).int("ITRAN1");
+        let d = dump(&c, &format!("mrchdu_input_{k}.dat"));
+        let mut session = prologue(&c, CALL, Some(d.real("ALFA")));
+        seed(&mut session, &d, TOL_SOLVER);
+        let st = session.state_mut();
+        let mut params = FlowParameters::new(st.mach, st.re, st.gamma_gas);
+        params.amplification_model = st.amplification_model;
+        let acrit = st.ncrit;
+        let mut tr = MrchduTrace::default();
+        march_prescribed_dstar(st, &params, acrit, Some(&mut tr));
+        for ibl in 2..=itran + 1 {
+            let what = format!("{CASE} SETBL {k} station {ibl}");
+            let ys: Vec<_> = tr.iters.iter().filter(|y| y.side == 1 && y.i_station == ibl).collect();
+            let xs: Vec<_> = xf.iters.iter().filter(|x| x.is == 1 && x.ibl == ibl).collect();
+            assert_eq!(ys.len(), xs.len(), "{what}: station Newton iterations");
+            for j in 0..5 {
+                let scale = xs.iter().map(|x| x.updated[j].abs()).fold(0.0_f64, f64::max);
+                // a primary identically zero at the station (AMI on a turbulent one) is compared on 1
+                let scale = if scale > 0.0 { scale } else { 1.0 };
+                for (n, (y, x)) in ys.iter().zip(&xs).enumerate() {
+                    assert_within(
+                        y.updated[j],
+                        x.updated[j],
+                        TOL_PURE,
+                        scale,
+                        &format!("{what} iterate {}: primary {j}", n + 1),
+                    );
+                }
+            }
+        }
+    }
+}

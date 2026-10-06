@@ -6,13 +6,13 @@ This report validates yFoil's boundary layer closure functions against XFOIL ref
 
 | Subroutine | Test Cases | Passed | Failed | Max Relative Error | Status |
 |------------|------------|--------|--------|-------------------|--------|
-| HKIN | 200 | 200 | 0 | 3.66e-16 | ✓ |
-| CFL | 200 | 200 | 0 | 2.63e-15 | ✓ |
-| HSL | 200 | 200 | 0 | 2.77e-14 | ✓ |
-| DIL | 200 | 200 | 0 | 6.00e-15 | ✓ |
-| HST | 200 | 200 | 0 | 6.51e-15 | ✓ |
-| CFT | 200 | 200 | 0 | 2.14e-15 | ✓ |
-| DAMPL | 200 | 200 | 0 | 2.10e-13 | ✓ |
+| HKIN | 200 | 200 | 0 | 0.00e0 | ✓ |
+| CFL | 200 | 200 | 0 | 0.00e0 | ✓ |
+| HSL | 200 | 200 | 0 | 0.00e0 | ✓ |
+| DIL | 200 | 200 | 0 | 0.00e0 | ✓ |
+| HST | 200 | 200 | 0 | 0.00e0 | ✓ |
+| CFT | 200 | 200 | 0 | 0.00e0 | ✓ |
+| DAMPL | 200 | 200 | 0 | 3.59e-15 | ✓ |
 
 ## Tolerance
 

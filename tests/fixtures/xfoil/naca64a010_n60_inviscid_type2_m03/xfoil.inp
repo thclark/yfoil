@@ -1,0 +1,13 @@
+PLOP
+G F
+
+LOAD panels.dat
+OPER
+MACH 0.3
+TYPE 2
+ALFA 0
+ALFA 4
+CL 0.5
+CL 8
+
+QUIT

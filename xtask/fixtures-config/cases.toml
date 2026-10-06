@@ -14,6 +14,9 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
+keep = ["blsolv_input.dat", "blsolv_output.dat", "blsolv_trace.dat", "mrchdu_input_1.dat", "mrchdu_input_2.dat", "mrchdu_input_3.dat", "mrchdu_output_1.dat", "mrchdu_output_2.dat", "mrchdu_output_3.dat", "setbl_output_1.dat", "setbl_output_2.dat", "setbl_output_3.dat", "update_output_1.dat", "update_output_2.dat", "update_output_3.dat", "viscal_final.dat", "viscal_inviscid.dat", "viscal_iter.dat", "xfoil_dij.dat", "xfoil_inviscid.dat", "xfoil_mrchdu_trace.dat", "xfoil_newton_trace.dat", "xfoil_pointers.dat", "xfoil_uinv.dat"]
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -27,6 +30,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 polar = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -39,7 +44,9 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 cls = [0.3]
-minimal = true
+keep = ["viscal_inviscid.dat"]
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -52,7 +59,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 matyp = 2
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -64,7 +72,8 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
-minimal = true
+# how tested: route identical to XFOIL, RMSBL drifts 1.2e-9 over TOL_SOLVER at iteration 3 (ill-conditioned solution): every iteration as a single step
+step_calls = [1]
 track = true
 
 [[case]]
@@ -76,7 +85,8 @@ re = 1.0e6
 mach = 0.3
 ncrit = 9.0
 max_iterations = 20
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -88,8 +98,9 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
-minimal = true
 dump_calls = [18, 19]                    # replay harness: iteration 19 is where the unconverged trajectories part
+# how tested: route identical, RMSBL drifts 5.9e-10 over TOL_SOLVER at iteration 6: every iteration as a single step
+step_calls = [1]
 track = true
 
 [[case]]
@@ -101,7 +112,8 @@ re = 1.0e5
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -114,7 +126,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 xtr = [0.3, 0.3]
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -126,7 +139,8 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -139,7 +153,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 cls = [0.3]
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -152,7 +167,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 matyp = 3
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -165,7 +181,8 @@ mach = 0.3
 ncrit = 9.0
 max_iterations = 20
 matyp = 2
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -178,7 +195,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 xtr = [0.48, 0.87]
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -191,7 +209,8 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 damp = true
-minimal = true
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
 track = true
 
 [[case]]
@@ -200,6 +219,7 @@ foil = "xfoil-naca:0012"
 n_nodes = 160
 alphas = []
 geometry_only = true
+keep = ["xfoil_pangen.dat"]
 track = true
 
 [[case]]
@@ -208,6 +228,7 @@ foil = "xfoil-naca:0012"
 n_nodes = 81
 alphas = []
 geometry_only = true
+keep = ["xfoil_pangen.dat"]
 track = true
 
 [[case]]
@@ -216,6 +237,7 @@ foil = "xfoil-naca:4412"
 n_nodes = 160
 alphas = []
 geometry_only = true
+keep = ["xfoil_pangen.dat"]
 track = true
 
 [[case]]
@@ -224,6 +246,7 @@ foil = "xfoil-naca:4412"
 n_nodes = 81
 alphas = []
 geometry_only = true
+keep = ["xfoil_pangen.dat"]
 track = true
 
 [[case]]
@@ -232,6 +255,7 @@ foil = "xfoil-naca:23012"
 n_nodes = 160
 alphas = []
 geometry_only = true
+keep = ["xfoil_pangen.dat"]
 track = true
 
 [[case]]
@@ -268,8 +292,11 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 100
 polar = true
-minimal = true
 dump_calls = [237, 238]                  # replay harness: iterations 31 and 32 of the 20.5° call (call 42), where the runs part
+run = true
+run_through = 41
+# how tested: calls 1-41 take XFOIL's route; the break call 42 drifts (RMSBL 6e-9 at iteration 6): run through call 41, call 42 as single steps
+step_calls = [42]
 track = true
 
 [[case]]
@@ -283,8 +310,11 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 100
 polar = true
-minimal = true
 dump_calls = [181, 182]                  # replay harness: iterations 15 and 16 of the -14.5° call (call 31), where the runs part
+run = true
+run_through = 30
+# how tested: calls 1-30 take XFOIL's route; the break call 31 drifts (RMSBL 1e-9 at iteration 4): run through call 30, call 31 as single steps
+step_calls = [31]
 track = true
 
 [[case]]
@@ -293,6 +323,7 @@ foil = "naca:63-415"
 n_nodes = 160
 alphas = []
 tgap = [0.002, 1.0]
+keep = ["xfoil_tgap.dat"]
 track = true
 
 [[case]]
@@ -301,6 +332,7 @@ foil = "naca4:0012"
 n_nodes = 60
 alphas = []
 tgap = [0.005, 0.8]
+keep = ["xfoil_tgap.dat"]
 track = true
 
 [[case]]
@@ -310,6 +342,7 @@ n_nodes = 160
 alphas = []
 geometry_only = true
 ppar = { cvpar = 1.5, cterat = 0.3, ctrrat = 0.5, xsref = [0.2, 0.4], xpref = [0.3, 0.6] }
+keep = ["xfoil_pangen.dat"]
 track = true
 
 [[case]]
@@ -319,6 +352,7 @@ n_nodes = 120
 alphas = []
 geometry_only = true
 ppar = { cvpar = 0.5, cterat = 0.05 }
+keep = ["xfoil_pangen.dat"]
 track = true
 
 # ---------------------------------------------------------------------------------------------
@@ -333,7 +367,9 @@ n_nodes = 60
 alphas = [10.0]
 mach = 0.7
 inviscid = true
-minimal = true
+# how tested: every inviscid point replayed and compared with XFOIL's record (tests/execution/runs.rs)
+run = true
+keep = ["specal_points.dat"]
 events = true
 track = true
 
@@ -345,7 +381,6 @@ alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, 
 mach = 0.3
 matyp = 2
 inviscid = true
-minimal = true
 events = true
 track = true
 
@@ -357,6 +392,293 @@ alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, 
 mach = 0.3
 matyp = 2
 inviscid = true
-minimal = true
 events = true
 track = false
+
+# ---------------------------------------------------------------------------------------------
+# Step-cover candidates (`cargo xtask steps`): the branch-coverage study's minimal cover and its
+# non-finite probes, untracked. A chosen step's case is tracked with exactly the files its test
+# reads (`keep`).
+# ---------------------------------------------------------------------------------------------
+
+[[case]]
+name = "kt_n60_inviscid_a4_cl05_cl8"      # inviscid-only OPER (no VISC) on the sharp analytic section: SPECAL/SPECCL/CDCALC LVISC=false arms; CL 8 cannot be met and exhausts SPECCL's 20-iteration alpha Newton
+foil = "karman-trefftz"
+n_nodes = 60
+alphas = [4.0]
+cls = [0.5, 8.0]
+mach = 0.0
+inviscid = true
+# how tested: every inviscid point replayed and compared with XFOIL's record (tests/execution/runs.rs)
+run = true
+keep = ["specal_points.dat", "speccl_points.dat"]
+track = true
+
+[[case]]
+name = "naca64a010_n60_inviscid_type2_m03" # inviscid TYPE 2 at CL = 0 (symmetric section, alpha 0): MRCL's Mach 0.99 clamp, SPECAL's 20-iteration CL(M) loop and 12-step RLX halving both exhausted; then a lifting point and two CL points
+foil = "naca:64A010"
+n_nodes = 60
+alphas = [0.0, 4.0]
+cls = [0.5, 8.0]
+mach = 0.3
+matyp = 2
+inviscid = true
+# how tested: every inviscid point replayed and compared with XFOIL's record (tests/execution/runs.rs)
+run = true
+keep = ["specal_points.dat", "speccl_points.dat"]
+track = true
+
+[[case]]
+name = "naca64a010_n60_type2_a0_re1e6"    # viscous TYPE 2 at CL ~ 0, M = 0: MRCL's 100xRe clamp (RRAT > 100) without the Mach clamp
+foil = "naca:64A010"
+n_nodes = 60
+alphas = [0.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+matyp = 2
+# how tested: as a run the iteration count differs from XFOIL (divergent comparison): every iteration as a single step
+step_calls = [1]
+track = true
+
+[[case]]
+name = "naca4412_n60_cl1_clm05_re1e6"     # fixed-CL far from the current alpha, both directions: UPDATE's DALMAX/DALMIN alpha-step limits (SPECCL first with LGAMU false, then valid)
+foil = "naca4:4412"
+n_nodes = 60
+alphas = []
+cls = [1.0, -0.5]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+# how tested: route identical, RMSBL drifts 2.3e-9 over TOL_TRANSIENT at call 2 iteration 11: every iteration as a single step
+step_calls = [1, 2]
+track = true
+
+[[case]]
+name = "naca23012_n60_a4_re1e6_xtr022_0001"  # lower trip upstream of the stagnation point (XIFSET 'past trip'), upper trip in the natural-transition interval (x/c 0.2185 at this point)
+foil = "naca:23012"
+n_nodes = 60
+alphas = [4.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+xtr = [0.22, 0.001]
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
+track = true
+
+[[case]]
+name = "naca4412_n60_a18_re3e6_iter40"    # stalled first march at Re 3e6: MRCHUE's garbage extrapolation at airfoil, wake-start and wake stations, ITRAN reset, wake closures after a failure
+foil = "naca4:4412"
+n_nodes = 60
+alphas = [18.0]
+re = 3.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 40
+# how tested: route identical, RLX drifts 1.2e-10 over TOL_SOLVER at iteration 23: every iteration as a single step
+step_calls = [1]
+track = true
+
+[[case]]
+name = "naca4412_n60_a20_re1e6_iter50"    # deep stall, ITER 50: SETBL's 'Xtr???' (MRCHDU's transition station no longer transitional in SETBL's own check)
+foil = "naca4:4412"
+n_nodes = 60
+alphas = [20.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 50
+# how tested: route identical, RMSBL drifts 1.1e-10 over TOL_SOLVER at iteration 8: every iteration as a single step
+step_calls = [1]
+track = true
+
+[[case]]
+name = "naca0012_n60_a8_re1e4_damp"       # Re 1e4 with DAMP: DAMPL2's negative modified rate clamped to 0 (separated laminar profile at low Rtheta)
+foil = "naca4:0012"
+n_nodes = 60
+alphas = [8.0]
+re = 1.0e4
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+damp = true
+
+# ---- non-finite probes (scripts/branch-coverage, untracked) ------------------------------------
+# The stalled compressible and closed-TE-stall candidates of the branch-coverage search. Each
+# reaches analysis-path branches no finite case reaches, but only after XFOIL has produced a NaN
+# (TRCHEK2's transition-point Newton landing on the interval end, then MRCHUE/MRCHDU's "garbage"
+# extrapolation carrying on). They are tracked but never part of the default selection: the study
+# measures them (`--with-group non-finite`) and reports the branches they alone reach as
+# *non-finite only*. The whole run is not gateable, but each event is: the instrumentation writes
+# `events.dat` (site, SETBL call, side, station, value) and `dump_calls` keeps the state dumps of
+# those calls, so tests/xfoil_nonfinite_events_tests.rs replays one call at a time.
+# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
+run = true
+track = true
+
+[[case]]
+name = "naca63-415_n60_a14_re1e6_m05"      # closed 6-series TE stalled at M 0.5: STFIND past a negative TE vorticity, STMOVE's Ue floor after a stagnation shift (reference prints NaN)
+foil = "naca:63-415"
+n_nodes = 60
+alphas = [14.0]
+re = 1.0e6
+mach = 0.5
+ncrit = 9.0
+max_iterations = 20
+# how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
+dump_calls = [1, 18, 19]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_18.dat", "update_output_18.dat", "mrchdu_input_19.dat"]
+events = true
+track = true
+
+[[case]]
+name = "naca16-212_n60_a4_re1e6_m07"       # 16-series at M 0.7: SETBL 'Xtr???', MRCHUE garbage at IBL <= 3, MRCHDU garbage at airfoil, wake-start and similarity stations, TRCHEK2 trip upstream of a laminar station (NaN from iteration 1)
+foil = "naca:16-212"
+n_nodes = 60
+alphas = [4.0]
+re = 1.0e6
+mach = 0.7
+ncrit = 9.0
+max_iterations = 20
+# how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
+dump_calls = [1, 2, 3]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "update_output_1.dat", "mrchdu_input_2.dat", "mrchdu_output_2.dat"]
+events = true
+track = true
+
+[[case]]
+name = "naca4412_n60_a16_re1e6_m06_iter60" # deep stall at M 0.6, ITER 60: UPDATE's island of negative Ue (reference prints NaN)
+foil = "naca4:4412"
+n_nodes = 60
+alphas = [16.0]
+re = 1.0e6
+mach = 0.6
+ncrit = 9.0
+max_iterations = 60
+# how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
+dump_calls = [1, 51]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_51.dat", "update_output_51.dat"]
+events = true
+track = true
+
+[[case]]
+name = "naca4412_n160_a16_re1e6_m05"       # deep stall at M 0.5, N = 160: BLVAR's wake Us clamp (reference prints NaN)
+foil = "naca4:4412"
+n_nodes = 160
+alphas = [16.0]
+re = 1.0e6
+mach = 0.5
+ncrit = 9.0
+max_iterations = 20
+# how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
+dump_calls = [1, 8]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_8.dat", "mrchdu_output_8.dat", "update_output_8.dat"]
+events = true
+track = true
+
+[[case]]
+name = "naca64a010_n60_type2_m03_a0"       # viscous TYPE 2 at CL ~ 0 with M 0.3: the Mach 0.99 clamp drives the compressible BL non-finite (reference prints NaN)
+foil = "naca:64A010"
+n_nodes = 60
+alphas = [0.0]
+re = 1.0e6
+mach = 0.3
+ncrit = 9.0
+max_iterations = 20
+matyp = 2
+
+# ---- branch-case-polars study: full polars of the branch-coverage sections (scripts/branch-case-polars) --
+# The study's sections and conditions swept 0 -> +30 deg, INIT, 0 -> -30 deg by 1 deg with the
+# polar procedure (ALFA 0 / ASEQ, ITMAX+5 per point, the sequence halting after NSEQEX = 4
+# consecutive unconverged points). The compressible sweeps drive the reference non-finite; a
+# non-finite CL hangs XFOIL's plot-label loop (docs/xfoil-known-issues.md §4, plotlib row), so
+# the fixture driver's watchdog ends the run when its output stops growing and keeps what was
+# written. Tracked minimal (viscal_* records only); group `branch-case-polars`.
+
+# ---------------------------------------------------------------------------------------------
+# Closure fixtures (`closures = true`, xtask/src/closures.rs): the reference's log of every BL
+# closure call, cut into tests/fixtures/subroutines/<closure>/<case>_NNN.json — incompressible and
+# at M 0.3, so the compressibility sensitivities are exercised.
+# ---------------------------------------------------------------------------------------------
+# how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
+dump_calls = [1, 7]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_7.dat", "update_output_7.dat"]
+events = true
+track = true
+
+[[case]]
+name = "closures_naca0012_n60_re1e6"
+foil = "naca4:0012"
+n_nodes = 60
+alphas = [0.0, 2.0, 5.0, 8.0, 10.0]
+re = 1.0e6
+max_iterations = 50
+closures = true
+track = true
+
+[[case]]
+name = "closures_naca0012_n60_re1e6_m03"
+foil = "naca4:0012"
+n_nodes = 60
+alphas = [0.0, 2.0, 5.0, 8.0, 10.0]
+re = 1.0e6
+mach = 0.3
+max_iterations = 50
+closures = true
+track = true
+
+# ---------------------------------------------------------------------------------------------
+# Branch-case polars: XFOIL's polar procedure 0 -> +30, INIT, 0 -> -30 by 1 deg on three sections,
+# their departures from XFOIL chased to single steps (known issues 7.9).
+# ---------------------------------------------------------------------------------------------
+[[case]]
+name = "naca0012_n60_polar30_re1e6"    # NACA 0012, Re 1e6: the incompressible baseline
+foil = "naca4:0012"
+n_nodes = 60
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+polar = true
+# how tested: calls 1-7 take XFOIL's route; the 7 deg call 8 drifts (RLX 1.4e-9 at iteration 4, known issues 7.9): run through call 7, calls 8, 16 and 18 as single steps; TRCHEK2 and the station Newton of call 8 replayed from their dumped inputs (tests/subroutine/)
+run = true
+run_through = 7
+step_calls = [8, 16, 18]
+keep = ["trchek2_40.dat", "trchek2_41.dat", "trchek2_42.dat", "trchek2_43.dat", "trchek2_44.dat", "trchek2_45.dat", "trchek2_46.dat", "trchek2_47.dat", "mrchdu_trace_40.dat", "mrchdu_trace_41.dat", "mrchdu_trace_42.dat", "mrchdu_trace_43.dat", "mrchdu_trace_44.dat", "mrchdu_trace_45.dat", "mrchdu_trace_46.dat", "mrchdu_trace_47.dat", "mrchdu_output_40.dat", "mrchdu_output_41.dat", "mrchdu_output_42.dat", "mrchdu_output_43.dat", "mrchdu_output_44.dat", "mrchdu_output_45.dat", "mrchdu_output_46.dat", "mrchdu_output_47.dat"]
+track = true
+
+[[case]]
+name = "naca4412_n60_polar30_re3e6"    # NACA 4412, Re 3e6: MRCHUE's garbage extrapolation on the first march at high alpha
+foil = "naca4:4412"
+n_nodes = 60
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 3.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+polar = true
+# how tested: the +22 deg call 23 is an ill-conditioned solution (the reference's own floor grows from 1e-10 to 1e-2 within two iterations): every iteration of call 23 as a single step
+step_calls = [23]
+track = true
+
+[[case]]
+name = "naca4412_n160_polar30_re1e6_m05"    # NACA 4412, N = 160, M 0.5: BLVAR's wake Us clamp in stall
+foil = "naca4:4412"
+n_nodes = 160
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.5
+ncrit = 9.0
+max_iterations = 20
+polar = true
+# how tested: the -5 deg call 37 converges in 18 iterations where XFOIL takes 19 (RMSBL at the EPS1 test straddles): every iteration of call 37 as a single step
+step_calls = [37]
+track = true

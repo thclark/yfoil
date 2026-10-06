@@ -1,8 +1,0 @@
-{
-  "airfoil": "NACA 0012",
-  "alpha_deg": 0.0,
-  "reynolds": 1000000.0,
-  "mach": 0.0,
-  "n_nodes": 160,
-  "ncrit": 9.0
-}

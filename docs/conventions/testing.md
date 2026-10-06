@@ -19,20 +19,25 @@ Every test performs one, and only one, of the following functions.
 ## Rules
 
 1. **One category per test.** A test that does two of these jobs is two tests.
-2. **A test never accepts a divergence.** A test passes when values agree within one of the
-   named tolerances in `tests/common/utilities/tolerances.rs` and, for (b), the branch decisions are
-   identical to XFOIL's. There is no third outcome in a test.
-3. **(b) test cases are well-conditioned by construction.** The purpose of a (b) test is to prove
-   that yFoil takes the same code path as XFOIL, so the step it replays must be one where a
-   one-ULP change cannot flip a decision. A step that is ill-conditioned is not a test case.
-4. **The studies select the test cases; the tests do not read study data.** Whether a step is
-   well-conditioned is decided once, when its fixture is chosen, from the twins: every twin must
-   reproduce the reference's branch trace through the step, and the twins' spread at the step
-   must be far below the tolerance. A branch reachable only through ill-conditioned steps is
-   reported by the coverage study, and no test is written for it.
-5. **Ill-conditioned behaviour belongs to the studies.** Explaining that an XFOIL–yFoil
-   difference is a rounding-induced change of branch, not an error, is the job of the twins and
-   sensitivity studies and of the validation reports — not of a test.
+2. **A test never accepts a divergence.** For (b), the branch decisions must be identical to
+   XFOIL's, and each value must agree within one of the named tolerances in
+   `tests/common/utilities/tolerances.rs` — or, for a single step, within four times that step's own
+   sensitivity, whichever is larger. The sensitivity is measured in the test: the same step is
+   replayed from three copies of its inputs (the panels and XFOIL's dumped state) jogged by −1, 0 or
+   +1 ULP, and the furthest a jog moves a value is how much the step amplifies a last-bit
+   difference. That is how an ill-conditioned solution is tested without a tolerance asserted for
+   it. There is no third outcome in a test.
+3. **A (b) test is never a divergent comparison.** Its purpose is to prove that yFoil takes the
+   same route through the code as XFOIL, so XFOIL and yFoil must take the same branches through the
+   step it replays (`terminology.md`). That is a property of the comparison, decided by observing
+   both codes' routes, not by how sensitive the solution is.
+4. **Ill-conditioned solutions are tested, not avoided.** Most of XFOIL's rarely-taken branches
+   exist for ill-conditioned solutions (stall, separation, the Kármán–Tsien pole), and branch
+   coverage needs them. A step replayed from XFOIL's exact state is far less likely to diverge than
+   a whole run, so such cases are tested as single steps wherever possible.
+5. **Divergence belongs to the studies.** Explaining that an XFOIL–yFoil difference in a polar is
+   a divergent comparison, not an error, is the job of the twins and sensitivity studies and of the
+   validation reports — not of a test. No test reads twin data.
 6. **A test asserts something.** A diagnostic that only prints is not a test; it goes in
    `examples/attic/`.
 7. **A missing fixture fails the test** (`require_fixture`); it is never skipped.
@@ -60,10 +65,46 @@ Unit tests inside `src/` are limited to (c), (e) and the mathematics of generic 
 (splines, Gauss elimination, LU). A comparison with XFOIL belongs in `tests/subroutine/`, against
 a fixture with a manifest, never against literals typed into the source.
 
+## How each case is tested
+
+`xtask/fixtures-config/cases.toml` records, beside every reference case, how it is tested and why
+(`# how tested:`), in fields the tests and the fixture generator both read:
+
+- `run = true` — the whole OPER script is compared with XFOIL's run (`tests/execution/run.rs`):
+  iteration counts, convergence, IST and ITRAN exactly, every iteration's values and the converged
+  point within the named tolerances. Only a run that takes XFOIL's route with values in tolerance to
+  the end is a run test; `run_through = N` compares the first N calls of a run whose later calls
+  are tested as steps. An inviscid run compares every SPECAL/SPECCL point.
+- `step_calls = [...]` — every iteration of these VISCAL calls is replayed as a single step from
+  XFOIL's exact state (`tests/execution/step.rs`, `steps.rs`). Ill-conditioned solutions are tested
+  this way, so that no step inherits the drift a whole run amplifies.
+- `dump_calls` with `events = true` — the non-finite probes, one step per rarely-taken branch,
+  compared with XFOIL's branch events (`tests/execution/events.rs`).
+
+## How branch coverage is established
+
+1. **Which step takes which branch.** `cargo xtask steps` reruns each candidate case on the
+   gcov build of the reference, cut off after each step, and attributes to a step the branches whose
+   counts rose over the previous step's prefix (`target/coverage/steps.json`).
+2. **The cover.** The fewest steps taking every branch any candidate step takes
+   (`xtask/fixtures-config/step-cover.toml`), each replayed by one test in
+   `tests/execution/branches.rs`; the fixture generator adds the dumps and files those steps need.
+   Every step is eligible, ill-conditioned solutions included; the twins' conditioning of each step
+   is recorded beside it for information.
+3. **The record.** `docs/validation/branch-gating.md` (generated) lists every candidate case and
+   how it is tested, every chosen step with its branches, and the branches no test gates.
+
+## What "gated" means
+
+A branch is **gated** when a test would fail if yFoil's translation of it were wrong: a test replays
+a step in which XFOIL took the branch and compares the step's decisions exactly and its values as
+above. That is inferred from the step's outputs; it is not yet observed that yFoil executed the
+translated branch in that step. Observing it — measuring yFoil's own route through each step and
+requiring it to equal XFOIL's — is the next stage of work, and will also detect any divergent
+comparison among the steps (rule 3).
+
 ## Status
 
-This convention was adopted on 2026-10-06 and every test now lives in its category binary. Two
-transitional exceptions remain, to be removed when branch coverage moves to single steps: some
-(b) whole-run comparisons still widen their gates by the noise floor and accept an ill-conditioned
-departure (`tests/common/utilities/records.rs`), and `subroutine/pane_legacy.rs` still compares
-against panels XFOIL generated itself.
+This convention was adopted on 2026-10-06 and every test lives in its category binary. One exception
+remains: `subroutine/pane_legacy.rs` compares against panels XFOIL generated itself (CLAUDE.md Rule 4);
+PANGEN is gated against yFoil-generated panels by `subroutine/pangen.rs`.

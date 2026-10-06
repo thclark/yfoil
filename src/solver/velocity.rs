@@ -1,4 +1,5 @@
-//! Velocity layer: QISET, UICALC, UECALC, QVFUE, GAMQV, UESET, DSSET (xpanel.f).
+//! Velocity layer: QISET, UICALC, QVFUE, GAMQV, UESET (xpanel.f). UECALC and DSSET are not
+//! translated: XFOIL 6.99 never calls them (docs/xfoil-known-issues.md §5.1).
 //! Line-for-line translations on the 1-based `SolverState`.
 
 use crate::solver::blstate::SolverState;
@@ -25,18 +26,6 @@ pub fn set_ue_inviscid(state: &mut SolverState) {
             state.ue_inviscid[side][i_station] = state.velocity_sign[side][i_station] * state.q_inviscid[i];
             state.ue_inviscid_d_alpha[side][i_station] =
                 state.velocity_sign[side][i_station] * state.q_inviscid_d_alpha[i];
-        }
-    }
-}
-
-/// UECALC: viscous Ue from panel viscous tangential velocity.
-#[doc(alias = "UECALC")]
-pub fn set_ue_from_q_viscous(state: &mut SolverState) {
-    for side in 1..=2 {
-        state.ue[side][1] = 0.0;
-        for i_station in 2..=state.n_stations[side] {
-            let i = state.i_node[side][i_station];
-            state.ue[side][i_station] = state.velocity_sign[side][i_station] * state.q_viscous[i];
         }
     }
 }
@@ -80,16 +69,6 @@ pub fn set_ue_with_sources(state: &mut SolverState) {
     }
 }
 
-/// DSSET: displacement thickness from mass defect and Ue.
-#[doc(alias = "DSSET")]
-pub fn set_dstar_from_mass(state: &mut SolverState) {
-    for side in 1..=2 {
-        for i_station in 2..=state.n_stations[side] {
-            state.dstar[side][i_station] = state.mass_defect[side][i_station] / state.ue[side][i_station];
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,23 +83,31 @@ mod tests {
         state
     }
 
-    /// QVFUE then UECALC is the identity on UEDG (VTI*VTI = 1), and GAMQV copies QVIS into GAM.
+    /// QVFUE sets QVIS = VTI * UEDG at every station's node (VTI = ±1, so UEDG = VTI * QVIS
+    /// inverts it bitwise), and GAMQV copies QVIS into GAM on the airfoil.
     #[test]
-    fn qvfue_uecalc_round_trip_is_identity() {
+    fn qvfue_signs_ue_onto_the_nodes_and_gamqv_copies_it() {
         let mut state = small_state();
         for side in 1..=2 {
             for i_station in 2..=state.n_stations[side] {
                 state.ue[side][i_station] = 0.1 * i_station as f64 + side as f64;
             }
         }
-        let before = state.ue.clone();
         set_q_viscous_from_ue(&mut state);
         set_gamma_from_q_viscous(&mut state);
-        set_ue_from_q_viscous(&mut state);
         for side in 1..=2 {
             for i_station in 2..=state.n_stations[side] {
-                assert_eq!(state.ue[side][i_station].to_bits(), before[side][i_station].to_bits());
                 let i = state.i_node[side][i_station];
+                let vti = state.velocity_sign[side][i_station];
+                assert!(vti == 1.0 || vti == -1.0);
+                assert_eq!(
+                    state.q_viscous[i].to_bits(),
+                    (vti * state.ue[side][i_station]).to_bits()
+                );
+                assert_eq!(
+                    (vti * state.q_viscous[i]).to_bits(),
+                    state.ue[side][i_station].to_bits()
+                );
                 if i <= state.n_foil_nodes {
                     assert_eq!(state.gamma[i].to_bits(), state.q_viscous[i].to_bits());
                 }
@@ -128,9 +115,9 @@ mod tests {
         }
     }
 
-    /// With DIJ = 0, UESET reduces to UEDG = UINV; with MASS = 0 likewise; DSSET inverts MASS.
+    /// With DIJ = 0, UESET reduces to UEDG = UINV.
     #[test]
-    fn ueset_and_dsset_degenerate_cases() {
+    fn ueset_with_zero_dij_is_the_inviscid_ue() {
         let mut state = small_state();
         let np = state.n_foil_nodes + state.n_wake_nodes;
         state.dij = vec![vec![0.0; np + 1]; np + 1];
@@ -141,16 +128,11 @@ mod tests {
             }
         }
         set_ue_with_sources(&mut state);
-        set_dstar_from_mass(&mut state);
         for side in 1..=2 {
             for i_station in 2..=state.n_stations[side] {
                 assert_eq!(
                     state.ue[side][i_station].to_bits(),
                     state.ue_inviscid[side][i_station].to_bits()
-                );
-                assert_eq!(
-                    state.dstar[side][i_station].to_bits(),
-                    (state.mass_defect[side][i_station] / state.ue[side][i_station]).to_bits()
                 );
             }
         }

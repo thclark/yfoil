@@ -1,175 +1,35 @@
-# Test Fixtures
+# Test fixtures: what they are and how to reproduce them
 
-This directory contains validation fixtures generated from XFOIL for testing yFoil numerical accuracy.
+Every tracked file under `tests/fixtures/` is read by a test (`cargo xtask fixtures --audit` fails
+otherwise), and every family has one producer. The tests that read each family name it, with its
+producer, in their module header (`docs/conventions/testing.md`).
 
-## Directory Structure
+| Family | What it holds | Producer | Needs | Read by |
+|---|---|---|---|---|
+| `xfoil/<case>/` | One instrumented XFOIL run on yFoil's panels: its inputs (`manifest.json`, `xfoil.inp`, `panels.json`, `panels.dat`) and the dumps its tests read | `cargo xtask fixtures [--case NAME]` from `xtask/fixtures-config/cases.toml` (and the branch cover in `step-cover.toml`) | the instrumented DP reference (`cargo xtask xfoil-build`, built on demand), gfortran | `tests/subroutine/`, `tests/execution/`, `tests/known_issues/`, `tests/apparatus/` |
+| `subroutines/<closure>/<case>_NNN.json`, `subroutines/manifest.json` | Distinct calls of the BL closures (HKIN … BLVAR), inputs to outputs | `cargo xtask fixtures --case closures_naca0012_n60_re1e6 --case closures_naca0012_n60_re1e6_m03` (`closures = true`, `xtask/src/closures.rs`) | as above | `tests/subroutine/closures.rs` |
+| `naca456/` | The NASA/PDAS `naca456` ordinates for the NACA series (an external reference, no XFOIL) | `scripts/naca456-fixtures.sh` | gfortran, network on the first run (the PDAS source, pinned by SHA-256) | `tests/application/naca456.rs` |
+| `repanel_cosine/` | yFoil's own cosine repanelling, frozen as regression snapshots | `UPDATE_SNAPSHOT=1 cargo test --test application repanel_cosine` | nothing | `tests/application/repanel_cosine.rs` |
+| `naca0012/panels*.json` | Legacy: panels XFOIL generated itself with PANE (contrary to CLAUDE.md Rule 4) | hand-made, 2026-01; no producer | — | `tests/subroutine/pane_legacy.rs` |
+| `naca0012_reference.dat`, `aerofoil_with_invalid_last_point.json` | Hand-written inputs | hand-written | — | `tests/application/geometry.rs`, `geometry_errors.rs` |
 
-```
-fixtures/
-├── README.md
-├── naca0012/
-│   ├── alpha_0_re_1e6/
-│   │   ├── input.json
-│   │   ├── geometry.json
-│   │   ├── inviscid.json
-│   │   ├── bl_stations.json
-│   │   ├── viscal_iters.json
-│   │   └── final.json
-│   ├── alpha_2_re_1e6/
-│   │   └── ...
-│   └── alpha_5_re_1e6/
-│       └── ...
-└── naca4412/
-    ├── alpha_0_re_1e6/
-    │   └── ...
-    └── alpha_4_re_1e6/
-        └── ...
-```
-
-## Test Cases
-
-| Airfoil | Alpha (°) | Re | Purpose |
-|---------|-----------|-----|---------|
-| NACA 0012 | 0 | 1e6 | Symmetric baseline |
-| NACA 0012 | 2 | 1e6 | Small angle, attached |
-| NACA 0012 | 5 | 1e6 | Moderate angle |
-| NACA 4412 | 0 | 1e6 | Cambered, zero lift angle |
-| NACA 4412 | 4 | 1e6 | Near design point |
-
-## Fixture Files
-
-### input.json
-
-Test case parameters:
-```json
-{
-  "airfoil": "NACA 0012",
-  "alpha_deg": 2.0,
-  "reynolds": 1000000.0,
-  "mach": 0.0,
-  "n_nodes": 160,
-  "n_crit": 9.0
-}
-```
-
-### geometry.json
-
-Panel geometry:
-```json
-{
-  "n": 160,
-  "x": [...],
-  "y": [...],
-  "s": [...],
-  "nx": [...],
-  "ny": [...]
-}
-```
-
-### inviscid.json
-
-Inviscid solution:
-```json
-{
-  "alpha_rad": 0.0349066,
-  "gamma": [...],
-  "qinv": [...],
-  "cpi": [...],
-  "cl_inv": 0.2199,
-  "cm_inv": -0.0244
-}
-```
-
-### bl_stations.json
-
-Boundary layer at each station:
-```json
-{
-  "upper": {
-    "n_stations": 84,
-    "stations": [
-      {
-        "ibl": 1,
-        "x": 0.0,
-        "s": 0.0,
-        "ue": 0.0,
-        "delta_star": 0.0,
-        "theta": 0.0,
-        "hk": 2.59,
-        "cf": 0.0,
-        "ctau": 0.0,
-        "regime": "stagnation"
-      },
-      ...
-    ]
-  },
-  "lower": { ... }
-}
-```
-
-### viscal_iters.json
-
-Iteration history:
-```json
-{
-  "n_iterations": 8,
-  "converged": true,
-  "iterations": [
-    {
-      "iter": 1,
-      "alpha_deg": 2.0,
-      "cl": 0.2195,
-      "cd": 0.00712,
-      "cdf": 0.00523,
-      "cdp": 0.00189,
-      "cm": -0.0245,
-      "rmsbl": 0.0234,
-      "rmxbl": 0.0891,
-      "rlx": 1.0
-    },
-    ...
-  ]
-}
-```
-
-### final.json
-
-Converged results:
-```json
-{
-  "alpha_deg": 2.0,
-  "cl": 0.2199,
-  "cd": 0.00689,
-  "cdf": 0.00512,
-  "cdp": 0.00177,
-  "cm": -0.0244,
-  "xtr_upper": 0.412,
-  "xtr_lower": 0.623
-}
-```
-
-## Generating Fixtures
-
-Use the `generate_fixtures.rs` example:
+## Reproducing the XFOIL families
 
 ```bash
-cargo run --example generate_fixtures
+cargo xtask xfoil-build --verify          # the reference, with the inertness proof
+cargo xtask fixtures                       # every tracked case; --case NAME for one
+cargo xtask fixtures --verify              # regenerate and assert byte-identity (same host)
+cargo xtask fixtures --audit               # every tracked file is read by some test
 ```
 
-This runs the instrumented XFOIL binary and parses the output into JSON fixtures.
+A case's entry in `cases.toml` states how it is tested (`# how tested:`, `run`, `run_through`,
+`step_calls`) and so which files are tracked. The branch cover is recomputed by
 
-## Numerical Precision
+```bash
+cargo xtask twins --case NAME ...          # the five seeded 1-ULP twins (study data, untracked)
+cargo xtask steps --case NAME ...          # which step takes which branch; writes step-cover.toml
+```
 
-All floating-point values are stored with full double precision (16 significant figures).
-
-When comparing yFoil results:
-- Relative tolerance: 1e-10
-- Absolute tolerance: 1e-14 (for values near zero)
-
-## Regenerating Fixtures
-
-If XFOIL source is modified:
-
-1. Rebuild XFOIL: `cd xfoil/xfoil6.99/bin && make clean && make`
-2. Regenerate fixtures: `cargo run --example generate_fixtures`
-3. Run validation: `cargo test --test fixtures`
+and `cargo xtask fixtures` then adds the dumps the chosen steps need. Fixture data is a property of
+the host it was generated on (manifest `host:` line); on another host the tests use
+`TOL_CROSS_HOST`.

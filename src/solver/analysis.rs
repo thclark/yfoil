@@ -78,6 +78,9 @@ pub struct PointResult {
     /// SPECCL's exit iteration for an OPER `CL` point (XFOIL's ITAL: 21 when the 20-iteration
     /// alpha Newton was exhausted), 0 for an `ALFA` point
     pub inviscid_cl_iterations: usize,
+    /// station Newton failures with a non-finite residual in this point's marches (the garbage
+    /// extrapolation carried the march over them): the run went through a NaN
+    pub nonfinite_station_failures: usize,
     /// The evidence for whether this point's values are valid: Kármán–Tsien margins, the CL(M)
     /// Newton's exhaustion and MRCL's substitutions (`crate::solver::validity`). Recorded by the
     /// solver, never read by it; the output layer classifies the point from this.
@@ -274,6 +277,7 @@ impl Session {
             converged,
             iterations: trace.len(),
             inviscid_cl_iterations,
+            nonfinite_station_failures: state.nonfinite_station_failures,
             validity: state.validity,
             id,
             initialised_from,

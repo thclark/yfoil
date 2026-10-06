@@ -4,13 +4,16 @@
       10.0
     ],
     "alphas_after_reinit": [],
+    "closures": false,
     "cls": [],
     "damp": false,
     "dump_calls": [],
     "events": true,
     "foil": "naca4:4412",
     "inviscid": true,
-    "keep": [],
+    "keep": [
+      "specal_points.dat"
+    ],
     "mach": 0.7,
     "matyp": 0,
     "max_iterations": 20,
@@ -19,6 +22,9 @@
     "ncrit": 9.0,
     "polar": false,
     "re": 0.0,
+    "run": true,
+    "run_through": 0,
+    "step_calls": [],
     "tgap": [],
     "xtr": []
   },
