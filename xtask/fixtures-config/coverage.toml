@@ -740,12 +740,6 @@ class = "structural"
 why = "CTAU at a station IBL >= ITROLD was stored by MRCHUE/MRCHDU clamped to >= 1e-7 (xbl.f:757, 1084) and updated by UPDATE with RLX*DN1 >= DLO = -0.5, DN1 = DCTAU/CTAU (xbl.f:1424, 1441): CTAU_new >= 0.5*CTAU > 0, then MIN(., 0.25); STMOVE only copies and shifts ITRAN consistently. A stored turbulent CTAU <= 0 cannot occur"
 
 [[unreachable]]
-file = "xblsys.f"
-line = 390
-class = "structural"
-why = "AX = AXA + DAX (xblsys.f:132) with AXA >= 0 (rms average or 0) and DAX = EXN*0.002/(T1+T2) > 0 for positive momentum thicknesses, which the marches (relative step cap 0.3, xbl.f:751) and UPDATE (RLX*DN2 >= -0.5) keep positive; NaN compares false. AX <= 0 cannot occur"
-
-[[unreachable]]
 file = "xpanel.f"
 line = 1385
 class = "numerical"

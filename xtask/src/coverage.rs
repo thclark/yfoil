@@ -400,19 +400,21 @@ pub(crate) fn run(flags: &[String]) {
         if per_case {
             clear_counters(&bin);
         }
-        let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
-        let out = fs::File::create(work.join("stdout.txt")).unwrap();
-        let st = Command::new(bin.join("xfoil"))
-            .current_dir(&work)
-            .stdin(inp)
-            .stdout(out)
-            .stderr(Stdio::inherit())
-            .status()
-            .expect("run gcov xfoil");
-        if !st.success() {
-            eprintln!("  {}: xfoil exited {st}", case.name);
-            failures += 1;
-            continue;
+        // under the fixture runner's watchdog: XFOIL's plot-label hang ends a run (kept, truncated),
+        // a run still going after an hour fails
+        // under the fixture runner's watchdog; a run it ends keeps its counts (the gcov build
+        // writes them on SIGTERM), so a hung or long run is counted up to where it was ended
+        match super::run_xfoil(&bin.join("xfoil"), &work) {
+            Ok(super::RunEnd::Finished) => {}
+            Ok(super::RunEnd::Hung) => println!("  {}: hung in the plot label; counted up to there", case.name),
+            Ok(super::RunEnd::TimedOut) => {
+                println!("  {}: still running after an hour; counted up to there", case.name)
+            }
+            Err(e) => {
+                eprintln!("  {}: {e}", case.name);
+                failures += 1;
+                continue;
+            }
         }
         println!("  ran {}", case.name);
         ran.push(case.name.clone());

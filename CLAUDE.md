@@ -385,7 +385,9 @@ is never decided by the clock: the reference stops itself, on entering the first
 NaN or an infinity (`stop_on_nonfinite = true`, event `STOP_NONFINITE` — the studies' N = 240, ITER 200 sections,
 which past stall would otherwise run for hours to no purpose) or after N SETBL calls (`stop_after_setbl = N`, event
 `STOP_AFTER_SETBL`), both instrumentation patch 20 and inert when not asked for; a run still going after an hour is
-an error that asks for one of them. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
+an error that asks for one of them. No case that gates or measures branches (tracked, or in the `branch-coverage`,
+`non-finite` or `series` groups) may use either: a stop cuts off the branches only reached later, the non-finite
+fallbacks among them, and `cargo xtask fixtures` refuses it. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
 

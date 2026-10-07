@@ -10,7 +10,7 @@
   "xfoil_ref": [
     "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
     "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
-    "series_instr_sha256:    8771d9e65cdd6e4214990686680592c4c11c85cc1b00d1871ef2f194411ee2ef",
+    "series_instr_sha256:    470fa6ab60d01a21f6ef34675cd09f2f0c14ee789989ccb1a034b2ede6fa0024",
     "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
     "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
     "host:                   arm64-Darwin-24.6.0",

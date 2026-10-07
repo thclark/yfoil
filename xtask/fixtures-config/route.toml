@@ -3,7 +3,7 @@
 # Entries with found = "route" are written by `cargo xtask route` — do not edit them by hand;
 # the others record a divergence found by other means, with the evidence.
 #
-# 870 steps measured, 0 divergent, 0 not measured; subroutines with no translation alias (not compared): TRCHEK, NACA, GEOPAR.
+# 895 steps measured, 0 divergent, 0 not measured; subroutines with no translation alias (not compared): TRCHEK, NACA, GEOPAR.
 
 [[divergent]]
 call = 1

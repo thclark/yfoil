@@ -96,3 +96,10 @@ fn naca4412_n60_polar30_re3e6_every_iteration() {
 fn naca4412_n160_polar30_re1e6_m05_every_iteration() {
     every_iteration("naca4412_n160_polar30_re1e6_m05");
 }
+
+/// `naca23012_n100_a1_a2_re1e6_xtr022_0001`: calls [2] — the 2° point that takes TRCHEK2's
+/// `IF(AX .LE. 0.0)` exit (xblsys.f:390).
+#[test]
+fn naca23012_n100_a1_a2_re1e6_xtr022_0001_every_iteration() {
+    every_iteration("naca23012_n100_a1_a2_re1e6_xtr022_0001");
+}

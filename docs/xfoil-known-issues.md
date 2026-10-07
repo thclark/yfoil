@@ -557,4 +557,15 @@ iterate, both sides).
   case asks for a deterministic stop (`stop_on_nonfinite`, `stop_after_setbl`, instrumentation
   patch 20). The twins study's N = 240 cases ask for none, so regenerating them takes hours; they are
   superseded by twins of every validation run at its own panelling (plan of 2026-10-07).
+- `xtask/fixtures-config/coverage.toml`'s `[[unreachable]]` annotations are code-reading arguments,
+  and one was wrong: TRCHEK2's `IF(AX .LE. 0.0) GO TO 101` (`xblsys.f:390`) was annotated
+  structurally unreachable, on the argument that AX = AXA + DAX cannot be ≤ 0 while the momentum
+  thicknesses stay positive. A run that has gone non-finite takes it: found 2026-10-07 by comparing
+  the twins-study cases' branches with the tracked cases' (the N = 240 23012 sweep with trips), and
+  reproduced by `naca23012_n100_a1_a2_re1e6_xtr022_0001` at call 2, iteration 2 (SETBL 7), the
+  iteration in which the boundary layer turns non-finite; reached from the 1° solution only, not by a
+  fresh march at 2°, and at N ≥ 100 only. The annotation is removed and the branch is gated (a
+  cover step, `tests/execution/branches.rs`, and every iteration of the call, `tests/execution/steps.rs`).
+  A wrong `[[unreachable]]` hides a reachable branch from the coverage search, so every annotation is
+  to be proved from the source's syntax tree rather than argued (open).
 

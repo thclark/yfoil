@@ -275,6 +275,10 @@ pub fn seed(session: &mut Session, d: &BlDump, tol: f64) {
         "NBL from the dumped IST"
     );
     st.i_transition_station = [0, d.int("ITRAN1"), d.int("ITRAN2")];
+    // the transition location as XFOIL last set it: SETBL resets a side's only in a call with a
+    // transition interval there, so a step can report the value of an earlier call
+    st.x_transition = [0.0, d.real("XOCTR1"), d.real("XOCTR2")];
+    st.y_transition = [0.0, d.real("YOCTR1"), d.real("YOCTR2")];
     st.cl = d.real("CLMR");
     let (m_cl, re_cl) = set_mach_re_from_cl(st, st.cl);
     st.mach_d_cl = m_cl;
