@@ -568,4 +568,12 @@ iterate, both sides).
   cover step, `tests/execution/branches.rs`, and every iteration of the call, `tests/execution/steps.rs`).
   A wrong `[[unreachable]]` hides a reachable branch from the coverage search, so every annotation is
   to be proved from the source's syntax tree rather than argued (open).
+- The `pathological` group of `xtask/fixtures-config/cases.toml` (2026-10-07) holds copies of the
+  five cases whose reference runs are pathologically slow or hang: the three N = 240 NACA 4412
+  sweeps (Re 1e6, Re 3e6, and the stall copy), which hang in the plot label on a non-finite CL while
+  the boundary-layer state stays finite; the N = 240 NACA 0012 TYPE 3 sweep, whose twins take up to
+  15 min; and the N = 240 NACA 23012 sweep with trips, non-finite from 2° and then ~7 s per SETBL
+  call. They run only on request. A later study is to establish why each is slow, why the 4412
+  sweeps hang with a finite boundary layer, and whether yFoil does the same — the first part of a
+  study that replicates every known issue with its yFoil equivalent.
 

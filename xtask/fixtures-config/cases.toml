@@ -1054,3 +1054,81 @@ ncrit = 9.0
 max_iterations = 200
 group = "twins-baseline"
 track = false
+
+# ---- pathological: copies of the cases whose reference runs are pathologically slow or hang
+# (2026-10-07). Untracked and outside every default selection, `--big` included: run only by name
+# or `--group pathological`. No deterministic end is set — a later study is to watch them run and
+# establish why they are slow, why the 4412 sweeps hang while the BL state stays finite, and whether
+# yFoil does the same (docs/xfoil-known-issues.md §8). Nothing runs them yet.
+
+[[case]]
+name = "pathological_naca4412_n240_polar30_re1e6_iter200"    # copy of naca4412_n240_polar30_re1e6_iter200: hangs in the plot label at about 30 deg on the upper leg (non-finite CL; the BL state stays finite); twins ~23 min each (observed 2026-10-07)
+foil = "naca4:4412"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+polar = true
+group = "pathological"
+track = false
+
+[[case]]
+name = "pathological_naca4412_n240_polar30_re3e6_iter200"    # copy of naca4412_n240_polar30_re3e6_iter200: hangs in the plot label; twins 80+ min each (observed 2026-10-07)
+foil = "naca4:4412"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 3.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+polar = true
+group = "pathological"
+track = false
+
+[[case]]
+name = "pathological_naca4412_n240_polar30_re1e6_iter200_stall"    # copy of naca4412_n240_polar30_re1e6_iter200_stall: the same conditions as naca4412_n240_polar30_re1e6_iter200: hangs in the plot label (observed 2026-10-07)
+foil = "naca4:4412"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+polar = true
+group = "pathological"
+track = false
+
+[[case]]
+name = "pathological_naca0012_n240_polar30_re1e6_type3_iter200"    # copy of naca0012_n240_polar30_re1e6_type3_iter200: twins up to ~15 min each (a reference ~4 min) (observed 2026-10-07)
+foil = "naca4:0012"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+matyp = 3
+polar = true
+group = "pathological"
+track = false
+
+[[case]]
+name = "pathological_naca23012_n240_polar30_re1e6_xtr022_0001_iter200"    # copy of naca23012_n240_polar30_re1e6_xtr022_0001_iter200: non-finite from the 2 deg point, ~7 s per SETBL call after it; the full sweep runs for hours (observed 2026-10-07)
+foil = "naca:23012"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+xtr = [0.22, 0.001]
+polar = true
+group = "pathological"
+track = false
