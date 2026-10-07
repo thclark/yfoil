@@ -151,13 +151,18 @@ impl Ppar {
 
 impl Case {
     /// Case selection shared by `fixtures` and `coverage`: the `--case NAME`s, else the members of
-    /// `--group NAME`, else every tracked case (`--big` adds the untracked ones).
+    /// `--group NAME`, else every tracked case (`--big` adds the untracked ones, except the
+    /// `pathological` group, which runs only by name or `--group pathological`).
     pub(crate) fn selected(&self, cases: &[&str], group: Option<&str>, big: bool) -> bool {
         if !cases.is_empty() {
             return cases.contains(&self.name.as_str());
         }
         if let Some(g) = group {
             return self.group.as_deref() == Some(g);
+        }
+        // the pathological cases run only when asked for by name or group
+        if self.group.as_deref() == Some("pathological") {
+            return false;
         }
         self.track || big
     }

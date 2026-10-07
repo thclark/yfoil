@@ -375,7 +375,8 @@ NAME` reruns a case on five seeded 1-ULP twins and writes its `noise_floor.json`
 `target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs); `group = "name"`
 (`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
 its NaN probes, `branch-case-polars` the ±30° sweeps, `twins-baseline`/`twins-extra` the N = 240, ITER 200
-sections — and study-only cases are untracked; `cargo xtask
+sections, `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
+`--group`, never by `--big`) — and study-only cases are untracked; `cargo xtask
 fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
 `tests/fixtures/README.md`. The tracked CI reference case is
 `naca0012_n60_a2_re1e6` (`tests/common/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
