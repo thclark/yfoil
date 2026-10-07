@@ -135,12 +135,14 @@ fn twin(xfoil: &Path, work: &Path, seed: u64) -> Result<(), String> {
         }
     }
     match super::run_xfoil(xfoil, &dir) {
-        Ok(truncated) => {
-            if truncated {
-                eprintln!("  WATCHDOG (twin {seed}): xfoil stopped producing output (hung) and was killed; the records written so far are kept");
-            }
+        Ok(super::RunEnd::Finished) => Ok(()),
+        Ok(super::RunEnd::Hung) => {
+            eprintln!("  WATCHDOG (twin {seed}): xfoil stopped producing output (hung) and was ended; the records written so far are kept");
             Ok(())
         }
+        Ok(super::RunEnd::TimedOut) => Err(format!(
+            "twin {seed}: still running after an hour: give the case a deterministic end"
+        )),
         Err(e) => Err(format!("twin {seed}: {e}")),
     }
 }

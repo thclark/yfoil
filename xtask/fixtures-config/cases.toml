@@ -548,6 +548,25 @@ events = true
 track = true
 
 [[case]]
+name = "naca23012_n100_a1_a2_re1e6_xtr022_0001"   # trips at 0.22 / 0.001, alpha 1 then 2: TRCHEK2's `IF(AX .LE. 0.0) GO TO 101` (xblsys.f:390), once annotated unreachable; reached at 2 deg from the 1 deg solution, not from a fresh march (reference prints NaN from TRCHEK2 near the leading edge)
+group = "non-finite"
+foil = "naca:23012"
+n_nodes = 100
+alphas = [1.0, 2.0]
+re = 1.0e6
+mach = 0.0
+ncrit = 9.0
+max_iterations = 20
+xtr = [0.22, 0.001]
+# how tested: every iteration of call 2, the 2 deg point that takes xblsys.f:390, replayed from
+# XFOIL's state (tests/execution/steps.rs), and the branch cover's step for that branch
+# (tests/execution/branches.rs). Found 2026-10-07 by the twins-case branch comparison: the N = 240
+# 0 -> 30 deg sweep took it; N = 100 is the smallest panelling that does (N = 60 and 80 do not), and the
+# 2 deg point solved fresh does not
+step_calls = [2]
+track = true
+
+[[case]]
 name = "naca16-212_n60_a4_re1e6_m07"       # 16-series at M 0.7: SETBL 'Xtr???', MRCHUE garbage at IBL <= 3, MRCHDU garbage at airfoil, wake-start and similarity stations, TRCHEK2 trip upstream of a laminar station (NaN from iteration 1)
 group = "non-finite"
 foil = "naca:16-212"

@@ -163,18 +163,28 @@ impl Case {
     }
 }
 
-/// Run the reference in `dir` on its `xfoil.inp`, writing `stdout.txt`, under a watchdog. A run
-/// whose output stops growing for two minutes has hung — XFOIL's plot-label loop on a non-finite
-/// value (known issues §4), which happens at a fixed point of the run — and is killed, keeping the
-/// records written so far: `Ok(true)` reports it truncated. Where a run ends is otherwise decided
-/// by the run itself, never by the clock: a case whose march goes non-finite and would run for hours
-/// sets `stop_on_nonfinite` (the reference stops on entering the first SETBL call with a non-finite
-/// BL state) or `stop_after_setbl` (after that many SETBL calls; both
-/// `xfoil/instrumentation/instrument/20-stop-after-setbl.patch`). A run still going after an hour
-/// is an error, not data: it needs one of them.
-pub(crate) fn run_xfoil(xfoil: &Path, dir: &Path) -> Result<bool, String> {
+/// How a watched reference run ended.
+#[derive(Debug, PartialEq)]
+pub(crate) enum RunEnd {
+    /// it exited on its own
+    Finished,
+    /// its output stopped growing for two minutes — XFOIL's plot-label loop on a non-finite value
+    /// (known issues §4), a fixed point of the run — and it was ended there
+    Hung,
+    /// still running after an hour: a case that needs a deterministic end (`stop_on_nonfinite` or
+    /// `stop_after_setbl`, instrumentation patch 20) and has none
+    TimedOut,
+}
+
+/// Run the reference in `dir` on its `xfoil.inp`, writing `stdout.txt`, under a watchdog. Where a
+/// run ends is decided by the run itself, never by the clock: it finishes, it hangs (ended after
+/// two minutes without output, at a fixed point), or the case asks the reference to stop itself
+/// (patch 20). A run is ended with SIGTERM first — the gcov build writes its counters on it
+/// (`scripts/xfoil-build/gcov_flush.c`) — and SIGKILL only if it is still there after ten
+/// seconds; the records written so far are kept either way.
+pub(crate) fn run_xfoil(xfoil: &Path, dir: &Path) -> Result<RunEnd, String> {
     const STALL_SECONDS: u64 = 120;
-    const FAIL_SECONDS: u64 = 3600;
+    const LIMIT_SECONDS: u64 = 3600;
     let inp = fs::File::open(dir.join("xfoil.inp")).map_err(|e| e.to_string())?;
     let out_path = dir.join("stdout.txt");
     let out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
@@ -185,13 +195,24 @@ pub(crate) fn run_xfoil(xfoil: &Path, dir: &Path) -> Result<bool, String> {
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("spawn xfoil: {e}"))?;
+    let end = |child: &mut std::process::Child| {
+        let _ = Command::new("kill").args(["-TERM", &child.id().to_string()]).status();
+        for _ in 0..20 {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    };
     let mut last_len = 0u64;
     let mut last_growth = std::time::Instant::now();
     let started = std::time::Instant::now();
     loop {
         if let Some(st) = child.try_wait().map_err(|e| e.to_string())? {
             return if st.success() {
-                Ok(false)
+                Ok(RunEnd::Finished)
             } else {
                 Err(format!("xfoil exited {st}"))
             };
@@ -202,17 +223,12 @@ pub(crate) fn run_xfoil(xfoil: &Path, dir: &Path) -> Result<bool, String> {
             last_len = len;
             last_growth = std::time::Instant::now();
         } else if last_growth.elapsed().as_secs() >= STALL_SECONDS {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Ok(true);
+            end(&mut child);
+            return Ok(RunEnd::Hung);
         }
-        if started.elapsed().as_secs() >= FAIL_SECONDS {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!(
-                "xfoil still running after {FAIL_SECONDS} s in {}: give the case a deterministic end (`stop_on_nonfinite` or `stop_after_setbl`)",
-                dir.display()
-            ));
+        if started.elapsed().as_secs() >= LIMIT_SECONDS {
+            end(&mut child);
+            return Ok(RunEnd::TimedOut);
         }
     }
 }
@@ -262,11 +278,16 @@ fn xfoil_build(flags: &[String]) {
 fn fixtures(flags: &[String]) {
     let root = root();
     if flags.iter().any(|f| f == "--audit") {
-        audit(&root);
+        if flags.iter().any(|f| f == "--by-test") {
+            audit_by_test(&root);
+        } else {
+            audit(&root);
+        }
         return;
     }
     let verify = flags.iter().any(|f| f == "--verify");
     let big = flags.iter().any(|f| f == "--big");
+    let inputs_only = flags.iter().any(|f| f == "--inputs-only");
     let selected: Vec<&str> = flags
         .windows(2)
         .filter(|w| w[0] == "--case")
@@ -293,6 +314,18 @@ fn fixtures(flags: &[String]) {
 
     let mut failures = 0;
     let group: Option<&str> = flags.windows(2).find(|w| w[0] == "--group").map(|w| w[1].as_str());
+    // a deterministic stop cuts a run off before the branches only reached later — the
+    // non-finite fallbacks among them — so no case that gates or measures branches may have one
+    for case in &cases.cases {
+        let gates = case.track || matches!(case.group.as_deref(), Some("branch-coverage" | "non-finite" | "series"));
+        if gates && (case.stop_on_nonfinite || case.stop_after_setbl.is_some()) {
+            eprintln!(
+                "{}: a case that gates or measures branches must run to its natural end; remove `stop_on_nonfinite` / `stop_after_setbl`",
+                case.name
+            );
+            std::process::exit(1);
+        }
+    }
     for case in &cases.cases {
         if !case.selected(&selected, group, big) {
             continue;
@@ -511,6 +544,12 @@ fn fixtures(flags: &[String]) {
             s += "\nQUIT\n";
             fs::write(work.join("xfoil.inp"), &s).unwrap();
         }
+        // `--inputs-only`: the panels and the script, for a measurement that runs its own reference
+        // (`cargo xtask coverage`); the instrumented reference is not run
+        if inputs_only {
+            println!("  inputs written");
+            continue;
+        }
         let _ = fs::remove_file(work.join("stop_after_setbl.txt"));
         if let Some(n) = case.stop_after_setbl {
             fs::write(work.join("stop_after_setbl.txt"), format!("{n}\n")).unwrap();
@@ -531,11 +570,14 @@ fn fixtures(flags: &[String]) {
                 fs::write(work.join("dump_calls.txt"), list.join("\n") + "\n").unwrap();
             }
             match run_xfoil(&xfoil, &work) {
-                Ok(truncated) => {
-                    if truncated {
-                        eprintln!("  WATCHDOG: xfoil stopped producing output (hung) and was killed; the records written so far are kept");
-                    }
+                Ok(RunEnd::Finished) => true,
+                Ok(RunEnd::Hung) => {
+                    eprintln!("  WATCHDOG: xfoil stopped producing output (hung) and was ended; the records written so far are kept");
                     true
+                }
+                Ok(RunEnd::TimedOut) => {
+                    eprintln!("  xfoil still running after an hour: give the case a deterministic end (`stop_on_nonfinite` or `stop_after_setbl`)");
+                    false
                 }
                 Err(e) => {
                     eprintln!("  {e}");
@@ -834,4 +876,98 @@ fn audit(root: &Path) {
     if !unread.is_empty() {
         std::process::exit(1);
     }
+}
+
+/// `cargo xtask fixtures --audit --by-test`: which test reads which tracked fixture file. Every
+/// integration test runs on its own, with the fixture files' access times reset before it, and the
+/// files it opened are recorded: `target/audit/readers.json`, `{ "<file>": ["<binary>::<test>", …] }`
+/// (the binary is the test category, `docs/conventions/testing.md`). A file no test opens has an
+/// empty list.
+fn audit_by_test(root: &Path) {
+    let out = Command::new("git")
+        .args(["ls-files", "-z", "tests/fixtures"])
+        .current_dir(root)
+        .output()
+        .expect("git ls-files");
+    let files: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|f| !f.is_empty() && !f.ends_with(".rs") && !f.ends_with("README.md"))
+        .map(|f| root.join(f))
+        .collect();
+    let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(946_684_800);
+    let reset = || {
+        for chunk in files.chunks(500) {
+            run(
+                Command::new("touch").args(["-a", "-t", "200001010000"]).args(chunk),
+                "touch -a",
+            );
+        }
+    };
+    // the integration-test binaries, one per category
+    let build = Command::new("cargo")
+        .args([
+            "test",
+            "--release",
+            "--tests",
+            "--all-features",
+            "--no-run",
+            "--message-format=json",
+        ])
+        .current_dir(root)
+        .stderr(Stdio::inherit())
+        .output()
+        .expect("cargo test --no-run");
+    assert!(build.status.success(), "cargo test --no-run failed");
+    let mut binaries: Vec<(String, PathBuf)> = vec![];
+    for l in String::from_utf8_lossy(&build.stdout).lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(l) else {
+            continue;
+        };
+        if v["target"]["kind"]
+            .as_array()
+            .is_some_and(|k| k.iter().any(|x| x == "test"))
+        {
+            if let Some(exe) = v["executable"].as_str() {
+                binaries.push((v["target"]["name"].as_str().unwrap().to_string(), PathBuf::from(exe)));
+            }
+        }
+    }
+    let mut readers: std::collections::BTreeMap<String, Vec<String>> = files
+        .iter()
+        .map(|f| (f.strip_prefix(root).unwrap().display().to_string(), vec![]))
+        .collect();
+    for (name, exe) in &binaries {
+        let list = Command::new(exe)
+            .args(["--list", "--format", "terse"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        let tests: Vec<String> = String::from_utf8_lossy(&list.stdout)
+            .lines()
+            .filter_map(|l| l.strip_suffix(": test"))
+            .map(str::to_string)
+            .collect();
+        for t in &tests {
+            reset();
+            let _ = Command::new(exe)
+                .args(["--exact", t.as_str(), "-q"])
+                .current_dir(root)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            for f in &files {
+                if fs::metadata(f).unwrap().accessed().unwrap() > stamp + std::time::Duration::from_secs(60) {
+                    readers
+                        .get_mut(&f.strip_prefix(root).unwrap().display().to_string())
+                        .unwrap()
+                        .push(format!("{name}::{t}"));
+                }
+            }
+        }
+        println!("  {name}: {} tests", tests.len());
+    }
+    let path = root.join("target/audit/readers.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, serde_json::to_string_pretty(&readers).unwrap()).unwrap();
+    println!("readers -> {}", path.display());
 }
