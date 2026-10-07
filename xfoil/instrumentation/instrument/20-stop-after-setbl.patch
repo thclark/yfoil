@@ -1,0 +1,72 @@
+--- a/src/xbl.f
++++ b/src/xbl.f
+@@ -42,6 +42,12 @@
+       LOGICAL LDUMPC
+       SAVE NSETBL, NDUMP, IDUMP
+       DATA NSETBL / 0 /, NDUMP / -1 /
++C---- INSTRUMENTATION: deterministic end (stop_after_setbl.txt, stop_on_nonfinite.txt;
++C     NSTOPS = -1: not read yet)
++      INTEGER NSTOPS, ISNF, IBNF
++      LOGICAL LSTPNF
++      SAVE NSTOPS, LSTPNF
++      DATA NSTOPS / -1 /, LSTPNF / .FALSE. /
+       CHARACTER*32 FNINST
+       LOGICAL LMDUTR
+       COMMON/MDU_INST/ LMDUTR
+@@ -115,6 +121,34 @@
+ C---- INSTRUMENTATION: state before MRCHDU, per dumped SETBL call
+       NSETBL = NSETBL + 1
+       NSETBLC = NSETBL
++C---- INSTRUMENTATION: deterministic end of a run. stop_after_setbl.txt holds a SETBL
++C     call count N: the run stops on entering call N+1, so calls 1..N are complete (event
++C     STOP_AFTER_SETBL, R = N). stop_on_nonfinite.txt (any content): the run stops on
++C     entering the first SETBL call whose BL state (UEDG, THET, DSTR, CTAU on either side)
++C     holds a NaN or an infinity (event STOP_NONFINITE at that side and station, R = the
++C     call). Neither file: the run is not stopped.
++      IF(NSTOPS.LT.0) CALL RDSTOP(NSTOPS, LSTPNF)
++      IF(NSTOPS.GT.0 .AND. NSETBL.GT.NSTOPS) THEN
++       CALL EVLOG('STOP_AFTER_SETBL', 0, 0, REAL(NSTOPS))
++       STOP
++      ENDIF
++      IF(LSTPNF) THEN
++       DO 8102 ISNF=1, 2
++         DO 8103 IBNF=2, NBL(ISNF)
++           IF(     UEDG(IBNF,ISNF).NE.UEDG(IBNF,ISNF)
++     &        .OR. THET(IBNF,ISNF).NE.THET(IBNF,ISNF)
++     &        .OR. DSTR(IBNF,ISNF).NE.DSTR(IBNF,ISNF)
++     &        .OR. CTAU(IBNF,ISNF).NE.CTAU(IBNF,ISNF)
++     &        .OR. ABS(UEDG(IBNF,ISNF)).GT.HUGE(UEDG(IBNF,ISNF))
++     &        .OR. ABS(THET(IBNF,ISNF)).GT.HUGE(THET(IBNF,ISNF))
++     &        .OR. ABS(DSTR(IBNF,ISNF)).GT.HUGE(DSTR(IBNF,ISNF))
++     &        .OR. ABS(CTAU(IBNF,ISNF)).GT.HUGE(CTAU(IBNF,ISNF))) THEN
++            CALL EVLOG('STOP_NONFINITE', ISNF, IBNF, REAL(NSETBL))
++            STOP
++           ENDIF
++ 8103    CONTINUE
++ 8102  CONTINUE
++      ENDIF
+       IF(NDUMP.LT.0) THEN
+        CALL RDDUMP(NDUMP, IDUMP)
+       ENDIF
+@@ -2083,3 +2117,21 @@
+       ENDIF
+       RETURN
+       END
++
++      SUBROUTINE RDSTOP(NSTOPS, LSTPNF)
++C---- INSTRUMENTATION: read the SETBL call count after which the run stops from
++C     stop_after_setbl.txt (one integer); 0, no cap, when the file is absent or unreadable.
++C     LSTPNF: whether stop_on_nonfinite.txt exists.
++      INTEGER NSTOPS, IOS
++      LOGICAL LEX, LSTPNF
++      NSTOPS = 0
++      INQUIRE(FILE='stop_on_nonfinite.txt', EXIST=LSTPNF)
++      INQUIRE(FILE='stop_after_setbl.txt', EXIST=LEX)
++      IF(LEX) THEN
++       OPEN(74, FILE='stop_after_setbl.txt', STATUS='OLD')
++       READ(74,*,IOSTAT=IOS) NSTOPS
++       IF(IOS.NE.0) NSTOPS = 0
++       CLOSE(74)
++      ENDIF
++      RETURN
++      END

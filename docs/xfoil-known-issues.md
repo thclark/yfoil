@@ -158,8 +158,8 @@ and the instrumented `update_output_<k>.dat` dumps every row up to `NBL(1) + NW`
 The reference's closure log (`xfoil_subroutine_log.dat`, cut into `tests/fixtures/subroutines/` by
 `closures = true`) records BLVAR's inputs as they stand in COM2. At some laminar calls (`ityp = 1`,
 the stations near the leading edge) `S2` holds a subnormal (about 3e-314) that changed, with every
-output unchanged, when the instrumentation's dump list grew from 32 to 1000 entries — a value that
-depends on memory layout, so not one XFOIL computed for that station. BLVAR(1) does not read `S2`
+output unchanged, when the instrumentation's dump list grew from 32 to 1000 entries and again when
+patches 20 and 21 were added — a value that depends on memory layout, so not one XFOIL computed for that station. BLVAR(1) does not read `S2`
 (the laminar closures take no shear stress), so the outputs and the gate are unaffected; the input
 is regenerated with the fixtures and `--verify` holds it for a given build. Noted 2026-10-06.
 
@@ -549,3 +549,12 @@ iterate, both sides).
   (`xtask/fixtures-config/route.toml`: NACA 63-415 M 0.5, SETBL 2, MRCHDU's garbage stations differ);
   its branches are gated by other steps. The step tests compare a step's outputs, not the route
   through it; observing the route is the next stage (`docs/conventions/testing.md`, "What gated means").
+- The fixture runner's watchdog used to end a reference run after five minutes of wall-clock, so
+  where it cut a run still going depended on the machine's load: regenerated from scratch on
+  2026-10-07, the twins study reproduced 7 of its 11 N = 240 cases exactly, and the 4 the cap cut
+  differed (the 23012 at 2 recorded points instead of 37). The clock no longer ends a run: a run ends
+  on its own, at XFOIL's plot-label hang (120 s without output, a fixed point of the run), or where a
+  case asks for a deterministic stop (`stop_on_nonfinite`, `stop_after_setbl`, instrumentation
+  patch 20). The twins study's N = 240 cases ask for none, so regenerating them takes hours; they are
+  superseded by twins of every validation run at its own panelling (plan of 2026-10-07).
+

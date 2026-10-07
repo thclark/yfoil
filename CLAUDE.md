@@ -371,11 +371,21 @@ the generator runs the reference twice to dump each of their SETBL calls). `xtas
 `route.toml`, with `route-map.toml` naming the XFOIL call sites yFoil translates without a call, whose calls are
 taken off XFOIL's counts) adds
 the dumps and files of the branch cover's steps. `cargo xtask twins --case
-NAME` reruns a case on five seeded 1-ULP twins (study data, `target/fixtures/<case>/ulp<seed>/`); `cargo xtask
+NAME` reruns a case on five seeded 1-ULP twins and writes its `noise_floor.json` (study data,
+`target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs); `group = "name"`
+(`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
+its NaN probes, `branch-case-polars` the ±30° sweeps, `twins-baseline`/`twins-extra` the N = 240, ITER 200
+sections — and study-only cases are untracked; `cargo xtask
 fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
 `tests/fixtures/README.md`. The tracked CI reference case is
 `naca0012_n60_a2_re1e6` (`tests/common/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
-plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
+plan stage lands. Every reference run, twins included, is watched: killed after 120 s without output (XFOIL's plot-label hang on a
+non-finite value, known issues §4, which happens at a fixed point of the run) and kept as truncated. Where a run ends
+is never decided by the clock: the reference stops itself, on entering the first SETBL call whose BL state holds a
+NaN or an infinity (`stop_on_nonfinite = true`, event `STOP_NONFINITE` — the studies' N = 240, ITER 200 sections,
+which past stall would otherwise run for hours to no purpose) or after N SETBL calls (`stop_after_setbl = N`, event
+`STOP_AFTER_SETBL`), both instrumentation patch 20 and inert when not asked for; a run still going after an hour is
+an error that asks for one of them. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
 
@@ -409,6 +419,10 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-gating.md), `scripts/noise-floor.sh` (noise-floor.md),
+`cargo run -p branch-coverage -- --docs` (branch-coverage/), `cargo run -p branch-case-polars -- --docs` (branch-case-polars/),
+`cargo run -p xfoil-sensitivity -- --twins --docs` (xfoil-sensitivity/: the reference against its five seeded 1-ULP twins per
+case), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
+(`scripts/study-support/records.rs`) — study evidence beside the tests, never read by them;
 `generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
 (aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison).
 The studies' figures are drawn by matplotlib from their JSON outputs (`scripts/<study>/plot.py`, presentation
@@ -477,7 +491,13 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
   (4-digit modified), 23018 (5-digit), 16-212 (16-series, compressible), 63-415 (6-series,
   closed TE, wind turbine), 64A010 (6A-series) and a Kármán–Trefftz section (analytic, sharp TE)
 - Plus the branch-coverage cases of Rule 6: sharpened TE, M=0.3, high-α separated, low-Re laminar separation,
-  `XSTRIP`, `MATYP≠1`
+  `XSTRIP`, `MATYP≠1` — and the study's minimal set (`group = "branch-coverage"`): inviscid-only (Kármán–Trefftz;
+  the 64A010 TYPE 2 M 0.3 sweep through −30…30°), fixed CL far from alpha, a trip upstream of the stagnation point,
+  a stalled first march at Re 3e6, deep stall at ITER 50, Re 1e4 with DAMP
+- The branch-case polars (`scripts/branch-case-polars`, `docs/validation/branch-case-polars/`): the same
+  sections swept 0 → ±30° by XFOIL's polar procedure (`group = "branch-case-polars"`), yFoil driven the same
+  way and compared point by point through stall and into the non-finite region (a study; the tests replay the
+  chased calls step by step)
 
 BL distributions are extracted at 0°, ±5°, ±10°, ±15°, but every intermediate angle is computed so initialisation
 matches XFOIL.

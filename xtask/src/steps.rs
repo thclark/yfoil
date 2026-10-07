@@ -4,7 +4,8 @@
 //! made its work directory, `target/fixtures/<case>/`) on five seeded 1-ULP twins of its panels,
 //! `ulp1` … `ulp5` beside it. A twin jogs every panel coordinate, x and y independently, by −1, 0
 //! or +1 ULP drawn from splitmix64 of (seed, node), so it is reproducible from its seed
-//! (`docs/conventions/terminology.md`, *twin*).
+//! (`docs/conventions/terminology.md`, *twin*), and then writes the case's `noise_floor.json` from
+//! them (`noise_floor.rs`; study data, read by the studies and by no test).
 //!
 //! `cargo xtask steps [--case NAME]... [--rebuild]` then, for every candidate case:
 //!
@@ -71,7 +72,18 @@ pub fn twins(flags: &[String]) {
         });
         let errs: Vec<String> = results.into_iter().filter_map(Result::err).collect();
         if errs.is_empty() {
-            println!("  {name}: {} twins", SEEDS.len());
+            let inviscid = fs::read_to_string(work.join("manifest.json"))
+                .ok()
+                .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                .and_then(|m| m["case"]["inviscid"].as_bool())
+                .unwrap_or(false);
+            match super::noise_floor::write(&work, inviscid, &SEEDS) {
+                Ok(summary) => println!("  {name}: {} twins; {summary}", SEEDS.len()),
+                Err(e) => {
+                    eprintln!("  {name}: {} twins; noise floor: {e}", SEEDS.len());
+                    failures += 1;
+                }
+            }
         } else {
             eprintln!("  {name}: {}", errs.join("; "));
             failures += 1;
@@ -112,22 +124,24 @@ fn twin(xfoil: &Path, work: &Path, seed: u64) -> Result<(), String> {
         out.push_str(&format!(" {:.17e}  {:.17e}\n", step(x, jx), step(y, jy)));
     }
     fs::write(dir.join("panels.dat"), out).map_err(|e| e.to_string())?;
-    for f in ["xfoil.inp", "dump_calls.txt"] {
+    for f in [
+        "xfoil.inp",
+        "dump_calls.txt",
+        "stop_after_setbl.txt",
+        "stop_on_nonfinite.txt",
+    ] {
         if work.join(f).exists() {
             fs::copy(work.join(f), dir.join(f)).map_err(|e| e.to_string())?;
         }
     }
-    let st = Command::new(xfoil)
-        .current_dir(&dir)
-        .stdin(fs::File::open(dir.join("xfoil.inp")).map_err(|e| e.to_string())?)
-        .stdout(fs::File::create(dir.join("stdout.txt")).map_err(|e| e.to_string())?)
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|e| e.to_string())?;
-    if st.success() {
-        Ok(())
-    } else {
-        Err(format!("twin {seed}: xfoil exited {st}"))
+    match super::run_xfoil(xfoil, &dir) {
+        Ok(truncated) => {
+            if truncated {
+                eprintln!("  WATCHDOG (twin {seed}): xfoil stopped producing output (hung) and was killed; the records written so far are kept");
+            }
+            Ok(())
+        }
+        Err(e) => Err(format!("twin {seed}: {e}")),
     }
 }
 
