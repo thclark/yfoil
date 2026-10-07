@@ -180,9 +180,162 @@ def draw(run_dir: Path, foil: str, meta: dict, metrics: dict, families: list, na
     style.save(fig, run_dir / f"naca{foil}_{name}.svg")
 
 
+# ---------------------------------------------------------------------------------------------
+# The twins mode: one sheet per case from twins.json
+# ---------------------------------------------------------------------------------------------
+
+TWIN_ROWS = [
+    ("cl", r"$C_L$"),
+    ("cd", r"$C_D$"),
+    ("xtr_upper", r"$x/c$ transition, upper"),
+    ("dstar_te_upper", r"$\delta^*$ at TE, upper"),
+]
+ENVELOPE_COLOUR = "#d62728"
+WARNING_COLOUR = "#ff7f0e"
+TWIN_ROW_H_PT = 96.0
+TWIN_GUTTER_PT = 30.0
+
+
+def stitched(points):
+    """The points of both legs as one curve ascending in alpha (leg 2 reversed, then leg 1)."""
+    leg2 = sorted((p for p in points if p["leg"] == 2), key=lambda p: p["alpha_deg"])
+    leg1 = sorted((p for p in points if p["leg"] == 1), key=lambda p: p["alpha_deg"])
+    # the seed alpha of leg 2 repeats leg 1's first point: keep leg 1's
+    if leg2 and leg1 and abs(leg2[-1]["alpha_deg"] - leg1[0]["alpha_deg"]) < 1e-6:
+        leg2 = leg2[:-1]
+    return leg2 + leg1
+
+
+def twins_sheet(run_dir: Path, case: dict) -> None:
+    from matplotlib.lines import Line2D
+    name = case["name"]
+    ref = case["reference"]["points"]
+    twins = case["twins"]
+    env = {(e["leg"], round(e["alpha_deg"] * 1000)): e for e in case["envelope"]}
+    ext = case["extents"]
+    nseeds = max(len(twins), 1)
+    colour_of = {t["seed"]: style.ylgnbu(i / max(nseeds - 1, 1)) for i, t in enumerate(twins)}
+
+    rows = [tuple(r) for r in case.get("plot_rows", TWIN_ROWS)]
+    col_w = (style.TEXT_WIDTH_PT - TWIN_GUTTER_PT) / 2
+    legend_h = LEGEND_TITLE_PT + LEGEND_ROW_PT * (1 + math.ceil((nseeds + 4) / 2)) + 4.0
+    height = legend_h + TWIN_ROW_H_PT * len(rows) + X_LABEL_AREA_PT - X_STUB_PT
+    fig = style.figure(style.TEXT_WIDTH_PT, height)
+    a_lo, a_hi = ext["alpha_deg"]["min"], ext["alpha_deg"]["max"]
+    handles = {}
+    for r, (key, label) in enumerate(rows):
+        bottom = r == len(rows) - 1
+        x_area = X_LABEL_AREA_PT if bottom else X_STUB_PT
+        row_top = height - legend_h - TWIN_ROW_H_PT * r
+        plot_h = TWIN_ROW_H_PT - x_area - MARGIN_PT * 2
+        for c in range(2):
+            x_left = c * (col_w + TWIN_GUTTER_PT)
+            ax = style.axes(fig, x_left + Y_LABEL_AREA_PT + MARGIN_PT, row_top - MARGIN_PT - plot_h,
+                            col_w - Y_LABEL_AREA_PT - 2 * MARGIN_PT - 4.0, plot_h)
+            ax.set_xlim(a_lo - 0.5, a_hi + 0.5)
+            if bottom:
+                ax.set_xlabel(r"$\alpha$ (°)")
+            else:
+                ax.tick_params(labelbottom=False)
+            if c == 0:
+                # the baseline: twins beneath (higher seed drawn first), the reference on top
+                lo, hi = ext[key]["min"], ext[key]["max"]
+                if lo is None or hi is None:
+                    lo, hi = 0.0, 1.0
+                pad = 0.5 * max(hi - lo, 1e-12)
+                lo, hi = lo - pad, hi + pad
+                ax.set_ylim(lo, hi)
+                ax.set_ylabel(label)
+                for t in reversed(twins):
+                    pts = stitched(t["points"])
+                    a = np.array([p["alpha_deg"] for p in pts])
+                    v = np.array([p[key] for p in pts], dtype=float)
+                    ok = np.isfinite(v)
+                    conv = np.array([p["converged"] for p in pts])
+                    (h,) = ax.plot(a[ok], np.clip(v[ok], lo, hi), color=colour_of[t["seed"]], linewidth=0.75)
+                    unc = ok & ~conv
+                    ax.plot(a[unc], np.clip(v[unc], lo, hi), "o", markerfacecolor="none",
+                            markeredgecolor=colour_of[t["seed"]], markersize=OPEN_MARKER_PT, linestyle="none")
+                    handles.setdefault(("twin", t["seed"]), h)
+                pts = stitched(ref)
+                a = np.array([p["alpha_deg"] for p in pts])
+                v = np.array([p[key] for p in pts], dtype=float)
+                ok = np.isfinite(v)
+                conv = np.array([p["converged"] for p in pts])
+                capped = np.array([p["capped"] for p in pts])
+                (h,) = ax.plot(a[ok], np.clip(v[ok], lo, hi), color="black", linewidth=1.5)
+                ax.plot(a[ok], np.clip(v[ok], lo, hi), "o", color="black", markersize=MARKER_PT, linestyle="none")
+                unc = ok & ~conv
+                ax.plot(a[unc], np.clip(v[unc], lo, hi), "o", markerfacecolor="none", markeredgecolor="black",
+                        markersize=OPEN_MARKER_PT, linestyle="none")
+                handles.setdefault("reference", h)
+                # the reference's completion: an orange tick at the top where it stopped at its limit
+                for aa in a[capped]:
+                    ax.plot(aa, 0.985, marker="|", markersize=4, color=WARNING_COLOUR, markeredgewidth=0.9,
+                            transform=ax.get_xaxis_transform(), linestyle="none", clip_on=False)
+            else:
+                # the error column: |twin − reference| per twin, the envelope in red
+                dlo, dhi = ext[key]["diff_min"], ext[key]["diff_max"]
+                if dlo is None or dhi is None or not (np.isfinite(dlo) and np.isfinite(dhi)):
+                    dlo, dhi = 1e-16, 1.0
+                ax.set_yscale("log")
+                ax.set_ylim(dlo / 10.0, dhi * 10.0)
+                ax.set_ylabel(r"$|\Delta|$ " + label)
+                for t in twins:
+                    pts = stitched(t["points"])
+                    a = np.array([p["alpha_deg"] for p in pts])
+                    d = np.array([p["diff"][key] for p in pts], dtype=float)
+                    ok = np.isfinite(d) & (d > 0)
+                    (h,) = ax.plot(a[ok], d[ok], color=colour_of[t["seed"]], linewidth=0.75)
+                    differs = np.array([p["completion_differs"] for p in pts])
+                    m = ok & differs
+                    ax.plot(a[m], d[m], marker="D", markersize=5.0, color=WARNING_COLOUR, markerfacecolor="none",
+                            markeredgewidth=0.9, linestyle="none")
+                    # a zero difference has no place on a log axis: a tick at the bottom
+                    z = np.isfinite(d) & (d == 0)
+                    ax.plot(a[z], np.full(z.sum(), 0.015), marker="|", markersize=3, color=colour_of[t["seed"]],
+                            transform=ax.get_xaxis_transform(), linestyle="none", clip_on=False)
+                    handles.setdefault(("twin", t["seed"]), h)
+                pts = stitched(case["envelope"])
+                a = np.array([p["alpha_deg"] for p in pts])
+                d = np.array([p["scalars"][key] for p in pts], dtype=float)
+                ok = np.isfinite(d) & (d > 0)
+                (h,) = ax.plot(a[ok], d[ok], color=ENVELOPE_COLOUR, linewidth=1.3)
+                handles.setdefault("envelope", h)
+                # a non-finite envelope (a twin non-finite where the reference was not): a red tick
+                nan = ~np.isfinite(d)
+                for aa in a[nan]:
+                    ax.plot(aa, 0.985, marker="|", markersize=4, color=ENVELOPE_COLOUR, markeredgewidth=0.9,
+                            transform=ax.get_xaxis_transform(), linestyle="none", clip_on=False)
+    entries = [(handles["reference"], "reference")]
+    for t in twins:
+        entries.append((handles[("twin", t["seed"])], f"twin, seed {t['seed']}"))
+    entries.append((handles["envelope"], "envelope (max over the twins)"))
+    entries.append((Line2D([0], [0], color=WARNING_COLOUR, marker="D", markerfacecolor="none", linestyle="none", markersize=5.0),
+                    "twin finished differently from the reference"))
+    entries.append((Line2D([0], [0], color=WARNING_COLOUR, marker="|", linestyle="none", markersize=4),
+                    "reference stopped at its iteration limit"))
+    entries.append((Line2D([0], [0], color="black", marker="o", markerfacecolor="none", linestyle="none", markersize=OPEN_MARKER_PT),
+                    "unconverged point"))
+    fig.text((Y_LABEL_AREA_PT + MARGIN_PT) * style.PT / fig.get_size_inches()[0],
+             (height - LEGEND_TITLE_PT + 3.0) * style.PT / fig.get_size_inches()[1],
+             f"{case['section']}: {name}  (N = {case.get('n_nodes', '?')}, "
+             + ("inviscid)" if case.get("inviscid") else f"ITER {case.get('max_iterations', '?')})"),
+             fontsize=style.AXIS_LABEL_PT, family="monospace")
+    style.legend_below(fig, Y_LABEL_AREA_PT + MARGIN_PT, height - LEGEND_TITLE_PT,
+                       style.TEXT_WIDTH_PT - Y_LABEL_AREA_PT - 2 * MARGIN_PT, entries, 2,
+                       row_pt=LEGEND_ROW_PT, first_alone=True)
+    style.save(fig, run_dir / f"twins-{name}.svg")
+
+
 def main():
     style.apply()
     run_dir = Path(sys.argv[1])
+    if (run_dir / "twins.json").exists():
+        j = json.loads((run_dir / "twins.json").read_text())
+        for case in j["cases"]:
+            twins_sheet(run_dir, case)
+        return
     meta = json.loads((run_dir / "metadata.json").read_text())
     metrics = json.loads((run_dir / "metrics.json").read_text())
     foil = meta["foil"].removeprefix("naca")

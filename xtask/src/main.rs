@@ -10,6 +10,7 @@
 
 mod closures;
 mod coverage;
+mod noise_floor;
 mod route;
 mod steps;
 
@@ -101,6 +102,19 @@ struct Case {
     /// (tests/execution/steps.rs)
     #[serde(default)]
     step_calls: Vec<usize>,
+    /// the study the case belongs to (`--group NAME` selects it): `branch-coverage`, `non-finite`,
+    /// `branch-case-polars`, `twins-baseline`, `twins-extra` — the studies read their cases by it
+    #[serde(default)]
+    group: Option<String>,
+    /// stop the reference after this many SETBL calls (`stop_after_setbl.txt`, patch 20): the
+    /// deterministic end of a run whose march goes non-finite and would otherwise run for hours
+    #[serde(default)]
+    stop_after_setbl: Option<usize>,
+    /// stop the reference on entering the first SETBL call whose BL state holds a NaN or an
+    /// infinity (`stop_on_nonfinite.txt`, patch 20): a study that compares runs gains nothing
+    /// from the iterations after that
+    #[serde(default)]
+    stop_on_nonfinite: bool,
 }
 /// XFOIL's PPAR menu values for a geometry-only case
 #[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
@@ -135,6 +149,74 @@ impl Ppar {
     }
 }
 
+impl Case {
+    /// Case selection shared by `fixtures` and `coverage`: the `--case NAME`s, else the members of
+    /// `--group NAME`, else every tracked case (`--big` adds the untracked ones).
+    pub(crate) fn selected(&self, cases: &[&str], group: Option<&str>, big: bool) -> bool {
+        if !cases.is_empty() {
+            return cases.contains(&self.name.as_str());
+        }
+        if let Some(g) = group {
+            return self.group.as_deref() == Some(g);
+        }
+        self.track || big
+    }
+}
+
+/// Run the reference in `dir` on its `xfoil.inp`, writing `stdout.txt`, under a watchdog. A run
+/// whose output stops growing for two minutes has hung — XFOIL's plot-label loop on a non-finite
+/// value (known issues §4), which happens at a fixed point of the run — and is killed, keeping the
+/// records written so far: `Ok(true)` reports it truncated. Where a run ends is otherwise decided
+/// by the run itself, never by the clock: a case whose march goes non-finite and would run for hours
+/// sets `stop_on_nonfinite` (the reference stops on entering the first SETBL call with a non-finite
+/// BL state) or `stop_after_setbl` (after that many SETBL calls; both
+/// `xfoil/instrumentation/instrument/20-stop-after-setbl.patch`). A run still going after an hour
+/// is an error, not data: it needs one of them.
+pub(crate) fn run_xfoil(xfoil: &Path, dir: &Path) -> Result<bool, String> {
+    const STALL_SECONDS: u64 = 120;
+    const FAIL_SECONDS: u64 = 3600;
+    let inp = fs::File::open(dir.join("xfoil.inp")).map_err(|e| e.to_string())?;
+    let out_path = dir.join("stdout.txt");
+    let out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
+    let mut child = Command::new(xfoil)
+        .current_dir(dir)
+        .stdin(inp)
+        .stdout(out)
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("spawn xfoil: {e}"))?;
+    let mut last_len = 0u64;
+    let mut last_growth = std::time::Instant::now();
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(st) = child.try_wait().map_err(|e| e.to_string())? {
+            return if st.success() {
+                Ok(false)
+            } else {
+                Err(format!("xfoil exited {st}"))
+            };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let len = fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
+        if len != last_len {
+            last_len = len;
+            last_growth = std::time::Instant::now();
+        } else if last_growth.elapsed().as_secs() >= STALL_SECONDS {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(true);
+        }
+        if started.elapsed().as_secs() >= FAIL_SECONDS {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!(
+                "xfoil still running after {FAIL_SECONDS} s in {}: give the case a deterministic end (`stop_on_nonfinite` or `stop_after_setbl`)",
+                dir.display()
+            ));
+        }
+    }
+}
+
 fn default_ncrit() -> f64 {
     9.0
 }
@@ -160,7 +242,7 @@ fn main() {
         Some("route") => route::route(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--verify] [--big] | coverage [--case NAME] [--big] [--rebuild]>"
+                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse]>"
             );
             std::process::exit(2);
         }
@@ -210,15 +292,35 @@ fn fixtures(flags: &[String]) {
     let ref_manifest = fs::read_to_string(root.join("target/xfoil-ref/manifest.txt")).unwrap_or_default();
 
     let mut failures = 0;
+    let group: Option<&str> = flags.windows(2).find(|w| w[0] == "--group").map(|w| w[1].as_str());
     for case in &cases.cases {
-        if !selected.is_empty() && !selected.contains(&case.name.as_str()) {
-            continue;
-        }
-        if !case.track && !big && selected.is_empty() {
+        if !case.selected(&selected, group, big) {
             continue;
         }
         println!("== {} ==", case.name);
         let work = root.join("target/fixtures").join(&case.name);
+        // the case's twins (`cargo xtask twins`, study data) are set aside and put back if the
+        // regenerated run has the same inputs, so regenerating does not discard them
+        let held = root.join("target/fixtures/.held").join(&case.name);
+        let _ = fs::remove_dir_all(&held);
+        if work.join("noise_floor.json").exists() {
+            fs::create_dir_all(&held).unwrap();
+            for e in fs::read_dir(&work).unwrap().flatten() {
+                let n = e.file_name().to_string_lossy().to_string();
+                if n.starts_with("ulp")
+                    || [
+                        "noise_floor.json",
+                        "panels.dat",
+                        "xfoil.inp",
+                        "stop_after_setbl.txt",
+                        "stop_on_nonfinite.txt",
+                    ]
+                    .contains(&n.as_str())
+                {
+                    let _ = fs::rename(e.path(), held.join(&n));
+                }
+            }
+        }
         let _ = fs::remove_dir_all(&work);
         fs::create_dir_all(&work).unwrap();
 
@@ -409,25 +511,37 @@ fn fixtures(flags: &[String]) {
             s += "\nQUIT\n";
             fs::write(work.join("xfoil.inp"), &s).unwrap();
         }
+        let _ = fs::remove_file(work.join("stop_after_setbl.txt"));
+        if let Some(n) = case.stop_after_setbl {
+            fs::write(work.join("stop_after_setbl.txt"), format!("{n}\n")).unwrap();
+        }
+        let _ = fs::remove_file(work.join("stop_on_nonfinite.txt"));
+        if case.stop_on_nonfinite {
+            fs::write(work.join("stop_on_nonfinite.txt"), "").unwrap();
+        }
+        // the closure log (patch 21) only for the cases whose closure fixtures are cut from it
+        let _ = fs::remove_file(work.join("log_closures.txt"));
+        if case.closures {
+            fs::write(work.join("log_closures.txt"), "").unwrap();
+        }
         let run_reference = |dump_calls: &[usize]| -> bool {
             let _ = fs::remove_file(work.join("dump_calls.txt"));
             if !dump_calls.is_empty() {
                 let list: Vec<String> = dump_calls.iter().map(|k| k.to_string()).collect();
                 fs::write(work.join("dump_calls.txt"), list.join("\n") + "\n").unwrap();
             }
-            let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
-            let out = fs::File::create(work.join("stdout.txt")).unwrap();
-            let st = Command::new(&xfoil)
-                .current_dir(&work)
-                .stdin(inp)
-                .stdout(out)
-                .stderr(Stdio::inherit())
-                .status()
-                .expect("run xfoil");
-            if !st.success() {
-                eprintln!("  xfoil exited {st}");
+            match run_xfoil(&xfoil, &work) {
+                Ok(truncated) => {
+                    if truncated {
+                        eprintln!("  WATCHDOG: xfoil stopped producing output (hung) and was killed; the records written so far are kept");
+                    }
+                    true
+                }
+                Err(e) => {
+                    eprintln!("  {e}");
+                    false
+                }
             }
-            st.success()
         };
         if !run_reference(&case.dump_calls) {
             failures += 1;
@@ -472,6 +586,25 @@ fn fixtures(flags: &[String]) {
                 continue;
             }
         }
+        if held.join("noise_floor.json").exists() {
+            let same = |f: &str| fs::read(held.join(f)).ok() == fs::read(work.join(f)).ok();
+            if same("panels.dat") && same("xfoil.inp") && same("stop_after_setbl.txt") && same("stop_on_nonfinite.txt")
+            {
+                for e in fs::read_dir(&held).unwrap().flatten() {
+                    let n = e.file_name().to_string_lossy().to_string();
+                    if n.starts_with("ulp") || n == "noise_floor.json" {
+                        let _ = fs::rename(e.path(), work.join(&n));
+                    }
+                }
+                println!("  twins kept (same panels and script)");
+            } else {
+                println!(
+                    "  twins discarded (the inputs changed): rerun `cargo xtask twins --case {}`",
+                    case.name
+                );
+            }
+            let _ = fs::remove_dir_all(&held);
+        }
 
         // 3b. a TGAP case must have produced its dump. (The reference's twins, which the step
         // cover is chosen from, are `cargo xtask twins`; no tracked fixture records them.)
@@ -492,6 +625,13 @@ fn fixtures(flags: &[String]) {
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",
         });
+        let mut manifest = manifest;
+        if let Some(n) = case.stop_after_setbl {
+            manifest["case"]["stop_after_setbl"] = serde_json::json!(n);
+        }
+        if case.stop_on_nonfinite {
+            manifest["case"]["stop_on_nonfinite"] = serde_json::json!(true);
+        }
         fs::write(
             work.join("manifest.json"),
             serde_json::to_string_pretty(&manifest).unwrap(),

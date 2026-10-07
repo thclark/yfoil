@@ -404,7 +404,8 @@ pub fn write_summary_json(run_dir: &Path, foil: &str, families: &[(Family, Vec<R
     // the converged extents of every quantity over every level of every family: what a plot's
     // axis range is set from (unconverged states can be anything, up to CD = 1e19). RMSBL is
     // plotted on a logarithmic axis, so its extent is over positive values.
-    let quantities: [(&str, fn(&Point) -> f64, bool); 8] = [
+    type Quantity = (&'static str, fn(&Point) -> f64, bool);
+    let quantities: [Quantity; 8] = [
         ("alpha_deg", |p| p.alpha_deg, false),
         ("cl", |p| p.cl, false),
         ("cd", |p| p.cd, false),
@@ -420,7 +421,7 @@ pub fn write_summary_json(run_dir: &Path, foil: &str, families: &[(Family, Vec<R
             .iter()
             .flat_map(|(_, rs)| rs.iter().flat_map(|r| r.points.iter()))
             .filter(|p| p.converged || name == "alpha_deg")
-            .map(|p| get(p))
+            .map(get)
             .filter(|v| v.is_finite() && (!positive || *v > 0.0))
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v), b.max(v)));
         extents.insert(name.to_string(), serde_json::json!({ "min": lo, "max": hi }));

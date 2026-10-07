@@ -1,0 +1,30 @@
+--- a/src/xoper.f
++++ b/src/xoper.f
+@@ -3002,6 +3002,8 @@
+       DATA NVISCAL / 0 /
+       INCLUDE 'XLOG.INC'
+ C
++C---- INSTRUMENTATION: closure log switch (log_closures.txt)
++      LOGICAL LCLOG
+ C---- convergence tolerance
+       DATA EPS1 / 1.0E-4 /
+ C
+@@ -3013,8 +3015,16 @@
+       CALL LOGBOOL('LIPAN', LIPAN)
+       CALL LOGBOOL('LBLINI', LBLINI)
+ C
+-C---- INSTRUMENTATION: Open log file for subroutine tracing (legacy)
+-      OPEN(98, FILE='xfoil_subroutine_log.dat', STATUS='REPLACE')
++C---- INSTRUMENTATION: Open log file for subroutine tracing (legacy). The closure log of
++C     every call grows without bound on a long run, so it is written only when
++C     log_closures.txt exists (the cases whose closure fixtures are cut from it); otherwise
++C     unit 98 goes to /dev/null.
++      INQUIRE(FILE='log_closures.txt', EXIST=LCLOG)
++      IF(LCLOG) THEN
++       OPEN(98, FILE='xfoil_subroutine_log.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(98, FILE='/dev/null', STATUS='OLD')
++      ENDIF
+       WRITE(98,'(A)') '=== VISCAL START ==='
+ C
+       NITER = NITER1

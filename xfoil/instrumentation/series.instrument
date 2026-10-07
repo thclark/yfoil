@@ -8,3 +8,5 @@ instrument/16-xblsys-dump.patch
 instrument/17-xsolve-dump.patch
 instrument/18-xoper-dump.patch
 instrument/19-validity-events.patch
+instrument/20-stop-after-setbl.patch
+instrument/21-closure-log-switch.patch

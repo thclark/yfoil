@@ -202,7 +202,14 @@ pub fn route(flags: &[String]) {
         }
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        for f in ["manifest.json", "panels.json", "panels.dat", "xfoil.inp"] {
+        for f in [
+            "manifest.json",
+            "panels.json",
+            "panels.dat",
+            "xfoil.inp",
+            "stop_after_setbl.txt",
+            "stop_on_nonfinite.txt",
+        ] {
             if work.join(f).exists() {
                 fs::copy(work.join(f), dir.join(f)).unwrap();
             }

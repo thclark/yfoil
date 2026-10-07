@@ -19,15 +19,34 @@
 //! `summary.json` (the per-level table), `metrics.json` (every per-alpha quantity) and the
 //! `README.md` / `README.tex` index. `runs/` is gitignored.
 //!
+//! The **twins mode** (`--twins`) is the second study of this crate: the reference against its
+//! own seeded 1-ULP twins, case by case (`src/twins.rs`). It reads the runs `cargo xtask
+//! fixtures` and `cargo xtask twins` leave under `target/fixtures/<case>/` (the reference and
+//! `ulp<seed>/`), archives
+//! their per-call records under `twins/<case>/` in the run folder, derives every converged-point
+//! scalar and boundary-layer scalar per point, the differences twin by twin, the envelope (the
+//! largest over the twins) of every scalar and every state array, and how each call finished
+//! (converged, or stopped at its iteration limit) — all in `twins.json` — and draws one sheet per
+//! case: the baseline column (reference black on top, twins in YlGnBu beneath) and the error
+//! column (log |twin − reference| per twin, the envelope in red, an orange diamond where a twin
+//! finished differently from the reference). `--docs` publishes the sheets to
+//! `docs/validation/xfoil-sensitivity/`. The default case set is the `twins-baseline` group of
+//! `cases.toml`: the branch-case-polars sections and conditions at 240 panels and ITER 200, swept
+//! 0 → ±30° by 1°, so the reference is given every chance to converge; each case's `n_nodes` and
+//! `max_iterations` are recorded in `twins.json` and tabled.
+//!
 //! Usage (from the repository root, reference built with `cargo xtask xfoil-build`):
 //!
 //! ```text
 //! cargo run --release -p xfoil-sensitivity -- [--foil 0012] [--family geometry|panels|alpha-step]
 //!                                            [--jobs N] [--resume RUN_DIR] [--plot-only RUN_DIR]
+//! cargo run --release -p xfoil-sensitivity -- --twins [--group branch-case-polars] [--case NAME]...
+//!                                            [--docs] [--plot-only RUN_DIR]
 //! ```
 
 mod perturb;
 mod run;
+mod twins;
 
 use std::path::{Path, PathBuf};
 
@@ -283,6 +302,14 @@ struct Args {
     resume: Option<PathBuf>,
     /// An existing run folder to post-process only
     plot_only: Option<PathBuf>,
+    /// The twins mode: the reference against its seeded 1-ULP twins, case by case
+    twins: bool,
+    /// `--group NAME` / `--case NAME` selection of the twins mode (default: the
+    /// branch-case-polars group)
+    group: String,
+    cases: Vec<String>,
+    /// publish the twins sheets to docs/validation/xfoil-sensitivity/
+    docs: bool,
 }
 
 fn parse_args() -> Args {
@@ -292,6 +319,10 @@ fn parse_args() -> Args {
         jobs: 4,
         resume: None,
         plot_only: None,
+        twins: false,
+        group: "twins-baseline".into(),
+        cases: vec![],
+        docs: false,
     };
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -322,6 +353,16 @@ fn parse_args() -> Args {
                 a.plot_only = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
             }
+            "--twins" => a.twins = true,
+            "--docs" => a.docs = true,
+            "--group" => {
+                a.group = argv[i + 1].clone();
+                i += 1;
+            }
+            "--case" => {
+                a.cases.push(argv[i + 1].clone());
+                i += 1;
+            }
             other => panic!("unknown argument {other}"),
         }
         i += 1;
@@ -329,8 +370,250 @@ fn parse_args() -> Args {
     a
 }
 
+/// A case of `xtask/fixtures-config/cases.toml`, as the twins mode needs it
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Case {
+    pub name: String,
+    pub foil: String,
+    #[serde(default)]
+    pub alphas: Vec<f64>,
+    #[serde(default)]
+    pub alphas_after_reinit: Vec<f64>,
+    #[serde(default)]
+    pub polar: bool,
+    #[serde(default)]
+    pub matyp: usize,
+    #[serde(default)]
+    pub xtr: Vec<f64>,
+    #[serde(default)]
+    pub damp: bool,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub track: bool,
+    #[serde(default)]
+    pub re: f64,
+    #[serde(default)]
+    pub mach: f64,
+    #[serde(default)]
+    pub ncrit: f64,
+    #[serde(default)]
+    pub max_iterations: usize,
+    #[serde(default)]
+    pub n_nodes: usize,
+    #[serde(default)]
+    pub inviscid: bool,
+    #[serde(default)]
+    pub cls: Vec<f64>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Cases {
+    case: Vec<Case>,
+}
+
+impl Case {
+    /// The OPER conditions and script, as the polar study tables them
+    pub fn script(&self) -> String {
+        let mut parts: Vec<String> = vec![
+            format!("Re {:.0e}", self.re),
+            format!("M {}", self.mach),
+            format!("Ncrit {}", self.ncrit),
+            format!("ITER {}", self.max_iterations),
+        ];
+        if self.matyp != 0 {
+            parts.push(format!("TYPE {}", self.matyp));
+        }
+        if !self.xtr.is_empty() {
+            parts.push(format!("XTR {} {}", self.xtr[0], self.xtr[1]));
+        }
+        if self.damp {
+            parts.push("DAMP".into());
+        }
+        let seq = |a: &[f64]| -> String {
+            if a.is_empty() {
+                return String::new();
+            }
+            if self.polar && a.len() > 1 {
+                format!("ALFA {} / ASEQ {} {} {}", a[0], a[1], a[a.len() - 1], a[1] - a[0])
+            } else {
+                a.iter().map(|v| format!("ALFA {v}")).collect::<Vec<_>>().join(" / ")
+            }
+        };
+        parts.push(seq(&self.alphas));
+        if !self.cls.is_empty() {
+            parts.push(format!(
+                "CL {} … {} ({} points)",
+                self.cls[0],
+                self.cls[self.cls.len() - 1],
+                self.cls.len()
+            ));
+        }
+        if !self.alphas_after_reinit.is_empty() {
+            parts.push(format!("INIT / {}", seq(&self.alphas_after_reinit)));
+        }
+        parts.join("; ")
+    }
+    pub fn section(&self) -> String {
+        let mut it = self.foil.split(':');
+        let kind = it.next().unwrap_or("");
+        let spec = it.next().unwrap_or("");
+        let sharp = it.next() == Some("sharp");
+        let name = match kind {
+            "karman-trefftz" => "Kármán–Trefftz".to_string(),
+            _ => format!("NACA {spec}"),
+        };
+        if sharp {
+            format!("{name} (sharp TE)")
+        } else {
+            name
+        }
+    }
+}
+
+/// The twins mode, start to finish
+fn twins_main(args: &Args) {
+    let root = repo_root();
+    let cases: Cases =
+        toml::from_str(&std::fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("cases.toml"))
+            .expect("cases.toml");
+    let selected: Vec<Case> = cases
+        .case
+        .iter()
+        .filter(|c| {
+            if !args.cases.is_empty() {
+                args.cases.contains(&c.name)
+            } else {
+                c.group.as_deref() == Some(args.group.as_str())
+            }
+        })
+        .cloned()
+        .collect();
+    assert!(
+        !selected.is_empty(),
+        "no case selected (group {}, cases {:?})",
+        args.group,
+        args.cases
+    );
+    let run_dir = match &args.plot_only {
+        Some(d) => {
+            assert!(
+                d.join("twins.json").exists(),
+                "{} is not a twins run folder",
+                d.display()
+            );
+            d.clone()
+        }
+        None => {
+            let d = runs_root().join(utc_stamp());
+            std::fs::create_dir_all(&d).unwrap();
+            d
+        }
+    };
+    if args.plot_only.is_none() {
+        let sha = git(&root, &["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".into());
+        let version = git(&root, &["describe", "--exact-match", "--tags", "HEAD"]).unwrap_or_else(|| "untagged".into());
+        let dirty = git(&root, &["status", "--porcelain"])
+            .map(|s| !s.is_empty())
+            .unwrap_or(true);
+        let reference: Vec<String> = std::fs::read_to_string(root.join("target/xfoil-ref/manifest.txt"))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let mut cases_json = vec![];
+        for case in &selected {
+            let (work, twin_dirs) = twins::work_dirs(&root, &case.name);
+            let records = if case.inviscid {
+                "specal_points.dat"
+            } else {
+                "viscal_points.dat"
+            };
+            assert!(
+                work.join(records).exists() && !twin_dirs.is_empty(),
+                "{}: no reference run with twins under {} — run `cargo xtask fixtures --case {2}` and `cargo xtask twins --case {2}` first",
+                case.name,
+                work.display(),
+                case.name
+            );
+            let first_after = case.alphas_after_reinit.first().copied();
+            let load = |dir: &Path, label: &str, seed: Option<u64>| {
+                if case.inviscid {
+                    twins::load_inviscid_run(dir, label, seed)
+                } else {
+                    twins::load_run(dir, label, seed, first_after)
+                }
+            };
+            let reference = load(&work, "reference", None).expect("reference records");
+            let mut tw = vec![];
+            for (seed, dir) in &twin_dirs {
+                if let Some(r) = load(dir, &format!("twin {seed}"), Some(*seed)) {
+                    tw.push(r);
+                }
+            }
+            let case_dir = run_dir.join("twins").join(&case.name);
+            twins::archive(&work, &case_dir.join("reference"));
+            for (seed, dir) in &twin_dirs {
+                twins::archive(dir, &case_dir.join(format!("twin{seed}")));
+            }
+            println!(
+                "== {} == reference {} points ({} converged, {} at the iteration limit), {} twins",
+                case.name,
+                reference.points.len(),
+                reference.points.iter().filter(|p| p.converged).count(),
+                reference.points.iter().filter(|p| p.capped).count(),
+                tw.len()
+            );
+            let by_call = case.alphas.is_empty() && !case.cls.is_empty();
+            let mut cj = twins::case_json(&case.name, &case.section(), &case.script(), &reference, &tw, by_call);
+            // the basic parameters, in the record in case the case definition is lost
+            cj["n_nodes"] = serde_json::json!(case.n_nodes);
+            cj["max_iterations"] = serde_json::json!(case.max_iterations);
+            cj["re"] = serde_json::json!(case.re);
+            cj["mach"] = serde_json::json!(case.mach);
+            cj["ncrit"] = serde_json::json!(case.ncrit);
+            cj["alphas"] = serde_json::json!(case.alphas);
+            cj["alphas_after_reinit"] = serde_json::json!(case.alphas_after_reinit);
+            cj["inviscid"] = serde_json::json!(case.inviscid);
+            // the rows of the case's sheet (presentation reads them; an inviscid case has no BL)
+            cj["plot_rows"] = if case.inviscid {
+                serde_json::json!([["cl", "$C_L$"], ["cm", "$C_M$"], ["cdp", "$C_{D,p}$"]])
+            } else {
+                serde_json::json!([
+                    ["cl", "$C_L$"],
+                    ["cd", "$C_D$"],
+                    ["xtr_upper", "$x/c$ transition, upper"],
+                    ["dstar_te_upper", "$\\delta^*$ at TE, upper"]
+                ])
+            };
+            cases_json.push(cj);
+        }
+        let j = serde_json::json!({
+            "study": "xfoil-sensitivity/twins",
+            "created_utc": run_dir.file_name().unwrap().to_string_lossy(),
+            "version": version, "commit": sha, "dirty": dirty, "reference": reference,
+            "group": args.group, "scalars": twins::SCALARS,
+            "cases": cases_json,
+        });
+        std::fs::write(run_dir.join("twins.json"), serde_json::to_string_pretty(&j).unwrap()).unwrap();
+        twins::write_index(&run_dir, &j);
+        twins::write_index_tex(&run_dir, &j);
+    }
+    render(&run_dir);
+    if args.docs {
+        let j: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(run_dir.join("twins.json")).unwrap()).unwrap();
+        twins::write_docs(&root.join("docs/validation/xfoil-sensitivity"), &run_dir, &j);
+    }
+    println!("run folder: {}", run_dir.display());
+}
+
 fn main() {
     let args = parse_args();
+    if args.twins {
+        twins_main(&args);
+        return;
+    }
     let root = repo_root();
     let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
     assert!(
