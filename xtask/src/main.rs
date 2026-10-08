@@ -103,7 +103,7 @@ struct Case {
     #[serde(default)]
     step_calls: Vec<usize>,
     /// the study the case belongs to (`--group NAME` selects it): `branch-coverage`, `non-finite`,
-    /// `series-cases`, `twins-baseline`, `twins-extra` — the studies read their cases by it
+    /// `series`, `pathological` — the studies read their cases by it
     #[serde(default)]
     group: Option<String>,
     /// stop the reference after this many SETBL calls (`stop_after_setbl.txt`, patch 20): the

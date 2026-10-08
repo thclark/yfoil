@@ -218,13 +218,10 @@ impl Branch {
 
 /// One candidate: a tracked solver case with its measured branch set.
 impl Candidate {
-    /// A sweep of another study (`series-cases`, the `twins-baseline` and `twins-extra`
+    /// A sweep of another study (`series-cases`) or a `pathological` copy
     /// sets): measured, never a cover candidate.
     pub fn polar_study(&self) -> bool {
-        matches!(
-            self.case.group.as_deref(),
-            Some("series") | Some("twins-baseline") | Some("twins-extra")
-        )
+        matches!(self.case.group.as_deref(), Some("series") | Some("pathological"))
     }
 }
 

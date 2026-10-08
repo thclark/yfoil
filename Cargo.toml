@@ -41,7 +41,7 @@ plotting = ["plotters", "resvg"]
 members = [
     ".",
     "xtask",
-    "scripts/xfoil-sensitivity",
+    "scripts/input-sensitivity",
     "scripts/xfoil-instrumentation-check",
     "scripts/aerofoil-series",
     "scripts/branch-coverage",
