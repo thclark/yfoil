@@ -77,3 +77,26 @@ quantity, used to derive the named tolerances in `tests/common/utilities/toleran
 the studies, which read it from the `noise_floor.json` written with the twins beside each
 case's work directory. Tests do not read it (see
 [testing.md](testing.md), including its Status section).
+
+## Case cover and step cover
+
+A **cover** is a set cover: a collection of runs that together take every branch of XFOIL's
+translated subroutines that some candidate takes. The project has two, and they are not
+interchangeable.
+
+The **case cover** is the fewest whole reference cases that together take every branch of the
+analysis path a finite run can reach. It is chosen by the branch-coverage study
+(`scripts/branch-coverage`) from each candidate case's gcov counts, and its members are the cases
+with `group = "branch-coverage"` in `xtask/fixtures-config/cases.toml`. A **case-cover member** is
+one of those cases (for example `naca0012_n60_a8_re1e4_damp`). It is a study's claim that this set
+of runs exercises the analysis path; the tests do not gate branches through it.
+
+The **step cover** is the fewest single steps — one Newton iteration of one VISCAL call, or one
+inviscid call — that together take every branch any candidate step takes. It is chosen by
+`cargo xtask steps` from every tracked case's steps, only among steps through which
+`cargo xtask route` observed yFoil take XFOIL's route, and is recorded in
+`xtask/fixtures-config/step-cover.toml`. A **step-cover member** is one such step, replayed by one
+test in `tests/execution/branches.rs`. This is the cover the tests gate branches with
+([testing.md](testing.md), "How branch coverage is established").
+
+Say which cover is meant; "the cover" alone is ambiguous.
