@@ -45,7 +45,7 @@ members = [
     "scripts/xfoil-instrumentation-check",
     "scripts/aerofoil-series",
     "scripts/branch-coverage",
-    "scripts/branch-case-polars",
+    "scripts/series-cases",
 ]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a

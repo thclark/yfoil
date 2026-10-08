@@ -31,7 +31,7 @@
 //!    `FLOOR_FACTOR`, the third outcome divergent.
 //!
 //! The same sections swept as full ±30° polars, through stall and into the non-finite region, are
-//! the `branch-case-polars` study (`scripts/branch-case-polars`).
+//! the `series-cases` study (`scripts/series-cases`).
 //!
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`; the
@@ -218,12 +218,12 @@ impl Branch {
 
 /// One candidate: a tracked solver case with its measured branch set.
 impl Candidate {
-    /// A sweep of another study (`branch-case-polars`, the `twins-baseline` and `twins-extra`
+    /// A sweep of another study (`series-cases`, the `twins-baseline` and `twins-extra`
     /// sets): measured, never a cover candidate.
     pub fn polar_study(&self) -> bool {
         matches!(
             self.case.group.as_deref(),
-            Some("branch-case-polars") | Some("twins-baseline") | Some("twins-extra")
+            Some("series") | Some("twins-baseline") | Some("twins-extra")
         )
     }
 }
@@ -381,7 +381,7 @@ fn main() {
         });
     }
     // the cover is a set of single operating points (and short sequences); the ±30° polars are
-    // the branch-case-polars study's cases, built from this cover's sections, and are measured
+    // the series-cases study's cases, built from this cover's sections, and are measured
     // here but never chosen for it
     let finite: Vec<&Candidate> = candidates
         .iter()

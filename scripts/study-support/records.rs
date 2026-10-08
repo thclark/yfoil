@@ -80,6 +80,50 @@ pub struct Records {
     pub floor: Option<Floor>,
 }
 
+/// Whether the reference itself was ill-conditioned at VISCAL call `k`, from its own five twins
+/// (`noise_floor.json`): a twin changed the call's branch trace (iteration count, convergence,
+/// IST, ITRAN — `flips`), or moved its converged point or any of its iterations' RMSBL by more than
+/// `DIVERGENCE_FLOOR` (`docs/conventions/terminology.md`, *ill-conditioned solution*). `None` when
+/// the case has no twins.
+pub fn reference_ill_conditioned(rec: &Records, k: usize) -> Option<bool> {
+    let floor = rec.floor.as_ref()?;
+    let flipped = floor
+        .flips
+        .iter()
+        .any(|f| f.starts_with(&format!("call {k}:")) || f.starts_with(&format!("call {k} ")));
+    let spread = floor.calls.get(k - 1).is_some_and(|c| {
+        ["CL", "CD", "CM", "RMSBL"]
+            .iter()
+            .any(|key| c.point.get(*key).is_some_and(|v| !(*v <= DIVERGENCE_FLOOR)))
+            || c.iterations
+                .iter()
+                .any(|it| it.get("RMSBL").is_some_and(|v| !(*v <= DIVERGENCE_FLOOR)))
+    });
+    Some(flipped || spread)
+}
+
+/// For an inviscid-only case: the 1-based SPECAL calls, then the SPECCL calls numbered after them
+/// (the order the reference made them in a case's script of ALFA then CL points), at which the
+/// reference's own twins moved CL, CM or CDp by more than `DIVERGENCE_FLOOR`. `None` without twins.
+pub fn inviscid_ill_conditioned_calls(rec: &Records) -> Option<Vec<usize>> {
+    let floor = rec.floor.as_ref()?;
+    let moved = |m: &HashMap<String, f64>| {
+        ["CL", "CM", "CDP"]
+            .iter()
+            .any(|k| m.get(*k).is_some_and(|v| !(*v <= DIVERGENCE_FLOOR)))
+    };
+    Some(
+        floor
+            .specal_calls
+            .iter()
+            .chain(floor.speccl_calls.iter())
+            .enumerate()
+            .filter(|(_, m)| moved(m))
+            .map(|(i, _)| i + 1)
+            .collect(),
+    )
+}
+
 /// What a call comparison concluded.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Outcome {

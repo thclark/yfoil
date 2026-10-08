@@ -3,7 +3,7 @@
 //! case's work directory from the base run and the `ulp<seed>` directories — per VISCAL call the
 //! largest absolute spread of every per-point and per-iteration value over the twins, the per-array
 //! spread of the dumped post-UPDATE state and of the final state, and every branch flip. The
-//! branch-coverage and branch-case-polars studies read it (`docs/conventions/terminology.md`,
+//! branch-coverage and series-cases studies read it (`docs/conventions/terminology.md`,
 //! *noise floor*). Ported unchanged from the fixture pipeline that wrote it before 2026-10-06.
 
 use std::fs;
