@@ -1,0 +1,780 @@
+{
+  "about": "The reference's own spread between the fixtures' host and another host's maths library, per tracked run case and per compared value, in the tests' metric |a - b| / max(|a|, |b|, scale). On a host whose libm is `measured_host.libm`, the run tests gate each value at max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR x spread). Written by `cargo xtask cross-host` (scripts/cross-host.sh); never edited.",
+  "cases": {
+    "kt_n60_inviscid_a4_cl05_cl8": {
+      "records": {
+        "specal_points.dat": {
+          "bytes": 5303,
+          "fnv64": "4c16ef53578b78c1"
+        },
+        "speccl_points.dat": {
+          "bytes": 10692,
+          "fnv64": "5184eab4ef347f5b"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {},
+        "node": {
+          "CPI": 7.564991022501744e-7,
+          "GAM": 2.4684214239290014e-7,
+          "QINV": 2.4684214239290014e-7
+        },
+        "point": {
+          "ALFA": 2.7836954630565844e-8,
+          "CDP": 1.3085239818771965e-8,
+          "CL": 1.02467018299196e-8,
+          "CM": 2.285274681990135e-8,
+          "MINF": 0.0
+        }
+      }
+    },
+    "naca0012_n160_polar_up22_re1e6_iter100": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 121164,
+          "fnv64": "eb6293d6c90a6435"
+        },
+        "viscal_points.dat": {
+          "bytes": 20790,
+          "fnv64": "0a564e6caacf501b"
+        }
+      },
+      "route_differs": null,
+      "run_through": 41,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 8.257258210520035e-10,
+          "CL": 2.141579019740773e-9,
+          "CM": 4.828821782536241e-10,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 1.4727555841531625e-9,
+          "RMSBL": 1.597831740182687e-9
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 2.736699755701011e-12,
+          "CDF": 3.76669181956224e-14,
+          "CDP": 3.8113123768113155e-12,
+          "CL": 1.1657961826749835e-11,
+          "CM": 1.617220246608042e-12,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 6.4101501884294976e-12,
+          "XOCTR2": 5.341949105286403e-12
+        }
+      }
+    },
+    "naca0012_n60_a2_cl03_re1e6": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 2382,
+          "fnv64": "e51d78bcaba6e518"
+        },
+        "viscal_points.dat": {
+          "bytes": 924,
+          "fnv64": "e7d86618228e0737"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 3.094746681142624e-14,
+          "CD": 6.529499163576702e-15,
+          "CL": 5.292433158388121e-13,
+          "CM": 1.4611575838152646e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 6.1954885666182236e-12,
+          "RMSBL": 1.901603874365776e-12
+        },
+        "point": {
+          "ALFA": 2.4147350785597155e-15,
+          "CD": 8.387388006347862e-16,
+          "CDF": 5.186823193170653e-16,
+          "CDP": 2.9477288665535895e-15,
+          "CL": 2.858824288409778e-15,
+          "CM": 3.972516759986888e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 1.3239409568654992e-13,
+          "XOCTR2": 7.382983113757291e-14
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1191,
+          "fnv64": "93c2f3582473a9d9"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "3b26c9fb0b0163f7"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 3.64552138476526e-15,
+          "CL": 6.100675520315235e-14,
+          "CM": 1.0559695479139819e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 2.418065747633591e-13,
+          "RMSBL": 6.637190796965342e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 1.8908485888147197e-16,
+          "CDF": 1.5525775109992423e-16,
+          "CDP": 2.84147705365001e-15,
+          "CL": 2.858824288409778e-15,
+          "CM": 5.668208957754217e-16,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 4.424238753131249e-14,
+          "XOCTR2": 1.0103029524088925e-14
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_damp": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1414,
+          "fnv64": "ce008c3da16b1212"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "9671921b7013325b"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 3.2257183035788728e-15,
+          "CL": 7.102651800039439e-14,
+          "CM": 1.3434565959702383e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 3.647082635893639e-13,
+          "RMSBL": 5.637990074802701e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 1.6740081543176188e-16,
+          "CDF": 1.4051260155412137e-16,
+          "CDP": 2.8406096919120216e-15,
+          "CL": 3.247402347028583e-15,
+          "CM": 5.750608322863116e-16,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 4.0467629247586956e-14,
+          "XOCTR2": 9.103828801926284e-15
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_m03": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1637,
+          "fnv64": "4ed3d366f49cc536"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "446079a61d3025b5"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 5.99260224776188e-15,
+          "CL": 1.7147394615335543e-13,
+          "CM": 3.9777209304148187e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 3.685385330243207e-12,
+          "RMSBL": 3.7828074006540646e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 1.6046192152785466e-16,
+          "CDF": 1.8908485888147197e-16,
+          "CDP": 2.73826100682939e-15,
+          "CL": 9.43689570931383e-16,
+          "CM": 5.811323644522304e-17,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 4.5574655160862676e-14,
+          "XOCTR2": 8.770761894538737e-15
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_m03_type2": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1191,
+          "fnv64": "76069859fd457f89"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "7001a2e8c43ebb11"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 7.745540320236444e-16,
+          "CL": 1.0880185641326534e-14,
+          "CM": 2.082535532910157e-15,
+          "MINF": 1.1546319456101628e-14,
+          "REINF": 1.9886235304392125e-14,
+          "RLX": 1.794120407794253e-13,
+          "RMSBL": 1.6245338407827603e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 1.6132928326584306e-16,
+          "CDF": 4.163336342344337e-17,
+          "CDP": 2.572594914873605e-15,
+          "CL": 8.326672684688674e-15,
+          "CM": 1.949829186997931e-15,
+          "MINF": 8.548717289613705e-15,
+          "REINF": 1.5054619714547637e-14,
+          "XOCTR1": 1.474376176702208e-13,
+          "XOCTR2": 1.155742168634788e-13
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_type2": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1414,
+          "fnv64": "17c2f3edace4c32f"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "48590ee5808ad25f"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 6.527764440100725e-15,
+          "CL": 1.0333400801698644e-13,
+          "CM": 2.851299925332729e-14,
+          "MINF": 0.0,
+          "REINF": 2.142353879435025e-13,
+          "RLX": 2.1073143230410096e-12,
+          "RMSBL": 4.102163053687491e-12
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 9.80118763926896e-17,
+          "CDF": 1.6479873021779667e-17,
+          "CDP": 3.0140820395097023e-15,
+          "CL": 4.191091917959966e-15,
+          "CM": 6.636401497783773e-16,
+          "MINF": 0.0,
+          "REINF": 1.0271605048338372e-14,
+          "XOCTR1": 1.0158540675320182e-13,
+          "XOCTR2": 4.807265696626928e-14
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_type3": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 2083,
+          "fnv64": "81b84746d45feee3"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "2cb0665d2e256380"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 2.2143745170843943e-15,
+          "CL": 2.550737399076297e-14,
+          "CM": 6.64334039168768e-15,
+          "MINF": 0.0,
+          "REINF": 1.6750816962941405e-13,
+          "RLX": 4.0861758421328886e-13,
+          "RMSBL": 3.8738456886733275e-12
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 6.626643678231403e-16,
+          "CDF": 6.687358999890591e-16,
+          "CDP": 3.04790914729125e-15,
+          "CL": 6.522560269672795e-15,
+          "CM": 1.008280915357207e-15,
+          "MINF": 0.0,
+          "REINF": 2.9339600288154475e-14,
+          "XOCTR1": 9.325873406851315e-15,
+          "XOCTR2": 1.7974510768681284e-13
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_xtr03": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1191,
+          "fnv64": "4678cd3cbef778c1"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "cea40e64dd7249c2"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 1.5785983631388945e-16,
+          "CL": 5.190292640122607e-15,
+          "CM": 7.589415207398531e-16,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 8.770761894538737e-15,
+          "RMSBL": 1.2012613126444194e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 5.0306980803327406e-17,
+          "CDF": 1.9081958235744878e-17,
+          "CDP": 2.3809079707781677e-15,
+          "CL": 2.498001805406602e-16,
+          "CM": 5.160802341031001e-17,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 0.0,
+          "XOCTR2": 0.0
+        }
+      }
+    },
+    "naca0012_n60_a2_re1e6_xtr_coinc": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1191,
+          "fnv64": "8b5e84a3d267e232"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "a48195404415d2ff"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 3.64552138476526e-15,
+          "CL": 6.100675520315235e-14,
+          "CM": 1.0559695479139819e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 2.418065747633591e-13,
+          "RMSBL": 6.637190796965342e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 1.717376241217039e-16,
+          "CDF": 1.5959455978986625e-16,
+          "CDP": 2.8345381597461028e-15,
+          "CL": 2.914335439641036e-15,
+          "CM": 5.798313218452478e-16,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 4.440892098500626e-14,
+          "XOCTR2": 9.2148511043888e-15
+        }
+      }
+    },
+    "naca0012_n60_a2_repeat_re1e6": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1490,
+          "fnv64": "357f7239db3512dc"
+        },
+        "viscal_points.dat": {
+          "bytes": 924,
+          "fnv64": "8aae8e0bc0842dce"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 3.64552138476526e-15,
+          "CL": 6.100675520315235e-14,
+          "CM": 1.0559695479139819e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 2.418065747633591e-13,
+          "RMSBL": 6.637190796965342e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 1.968911145233676e-16,
+          "CDF": 1.5525775109992423e-16,
+          "CDP": 2.84147705365001e-15,
+          "CL": 3.0808688933348094e-15,
+          "CM": 5.958775139980332e-16,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 4.424238753131249e-14,
+          "XOCTR2": 1.0103029524088925e-14
+        }
+      }
+    },
+    "naca0012_n60_a4_re1e5": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1860,
+          "fnv64": "197fd555038ba32d"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "7ef39c00f6de2fa0"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 1.5300261058115439e-15,
+          "CL": 7.083222897108499e-14,
+          "CM": 2.4810015153420295e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 2.134958876354176e-13,
+          "RMSBL": 7.432943149865423e-14
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 2.0816681711721685e-16,
+          "CDF": 2.3245294578089215e-16,
+          "CDP": 1.8691645453650096e-16,
+          "CL": 2.7755575615628914e-15,
+          "CM": 1.033895191682177e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 1.9095836023552692e-14,
+          "XOCTR2": 0.0
+        }
+      }
+    },
+    "naca0012_n60_a8_re1e4_damp": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 3421,
+          "fnv64": "f00aa2eb1ddcfb16"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "5cf12c5ecc029ed4"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 2.3495094758629875e-13,
+          "CL": 9.776623954849128e-13,
+          "CM": 3.062272657672338e-13,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 3.963274153306884e-11,
+          "RMSBL": 1.9545975948886962e-10
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 2.5951463200613034e-15,
+          "CDF": 9.71445146547012e-17,
+          "CDP": 2.4980018054066022e-15,
+          "CL": 5.284661597215745e-14,
+          "CM": 1.5161483180037294e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 6.7390537594747e-14,
+          "XOCTR2": 0.0
+        }
+      }
+    },
+    "naca0012_n60_cl03_re1e6": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1637,
+          "fnv64": "5f90bf6689ae8b98"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "8cea5e23f0f727ad"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 5.752343046339092e-15,
+          "CD": 1.5994150448506161e-15,
+          "CL": 4.141131881851834e-14,
+          "CM": 1.9296630265897008e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 8.749112545558546e-12,
+          "RMSBL": 8.196377604408056e-13
+        },
+        "point": {
+          "ALFA": 2.491062911502695e-15,
+          "CD": 8.396061623727746e-16,
+          "CDF": 5.212844045310305e-16,
+          "CDP": 2.9494635900295663e-15,
+          "CL": 1.6653345369377348e-16,
+          "CM": 4.034099443384065e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 1.3250511798901243e-13,
+          "XOCTR2": 7.349676423018536e-14
+        }
+      }
+    },
+    "naca0012_n60_polar30_re1e6": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 101677,
+          "fnv64": "99d4f7c5c29e5717"
+        },
+        "viscal_points.dat": {
+          "bytes": 17556,
+          "fnv64": "37ea795cfa13edfc"
+        }
+      },
+      "route_differs": null,
+      "run_through": 7,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 1.6594364771194137e-14,
+          "CL": 2.542376031922089e-12,
+          "CM": 1.239463548886443e-13,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 2.8799518325683948e-11,
+          "RMSBL": 3.4103553314679402e-12
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 2.5413698923060224e-15,
+          "CDF": 2.6515248330305496e-15,
+          "CDP": 3.0832541381142775e-15,
+          "CL": 3.024045857474844e-14,
+          "CM": 8.207202207959142e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 6.714628852932947e-13,
+          "XOCTR2": 6.94777568810423e-13
+        }
+      }
+    },
+    "naca0012_n60_polar_re1e6": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 16076,
+          "fnv64": "12edec98a370f66d"
+        },
+        "viscal_points.dat": {
+          "bytes": 5544,
+          "fnv64": "374b01ceef667ecd"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 1.025820053901505e-13,
+          "CL": 1.3785028674107025e-11,
+          "CM": 1.748948208479817e-13,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 2.0667012545771968e-10,
+          "RMSBL": 2.260275994148131e-11
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 2.5413698923060224e-15,
+          "CDF": 2.6515248330305496e-15,
+          "CDP": 3.0832541381142775e-15,
+          "CL": 3.024045857474844e-14,
+          "CM": 8.207202207959142e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 6.714628852932947e-13,
+          "XOCTR2": 6.94777568810423e-13
+        }
+      }
+    },
+    "naca23012_n60_a4_re1e6_xtr022_0001": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 1414,
+          "fnv64": "d2d0569031eae368"
+        },
+        "viscal_points.dat": {
+          "bytes": 462,
+          "fnv64": "74d5b3f662c62756"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 4.354069188527987e-14,
+          "CL": 2.1260770921571748e-13,
+          "CM": 6.61866395024191e-14,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 3.154387862025487e-11,
+          "RMSBL": 3.028022277362652e-12
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 8.326672684688674e-16,
+          "CDF": 5.603156827405087e-16,
+          "CDP": 1.582067810090848e-15,
+          "CL": 3.597122599785507e-14,
+          "CM": 9.292913660807756e-15,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 5.395683899678261e-14,
+          "XOCTR2": 2.7755575615628914e-15
+        }
+      }
+    },
+    "naca4412_n160_polar_down16_re1e6_iter100": {
+      "records": {
+        "viscal_iters_all.dat": {
+          "bytes": 118544,
+          "fnv64": "df74f0e94b2e1b05"
+        },
+        "viscal_points.dat": {
+          "bytes": 15708,
+          "fnv64": "215a42263fa7e65a"
+        }
+      },
+      "route_differs": null,
+      "run_through": 30,
+      "spread": {
+        "iteration": {
+          "ALFA": 0.0,
+          "CD": 6.244901817886728e-11,
+          "CL": 1.435487284595638e-10,
+          "CM": 4.660800911882035e-11,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "RLX": 6.583916550839675e-9,
+          "RMSBL": 6.20103790538451e-9
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CD": 7.345984931461658e-12,
+          "CDF": 1.1002787222991195e-13,
+          "CDP": 6.830071230812251e-12,
+          "CL": 4.2290726476323925e-11,
+          "CM": 6.025499543760304e-12,
+          "MINF": 0.0,
+          "REINF": 0.0,
+          "XOCTR1": 1.57862611871451e-12,
+          "XOCTR2": 1.812705541226478e-11
+        }
+      }
+    },
+    "naca4412_n60_inviscid_m07_a10": {
+      "records": {
+        "specal_points.dat": {
+          "bytes": 5303,
+          "fnv64": "7e94963eac7bac32"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {},
+        "node": {
+          "CPI": 8.451572774959004e-13,
+          "GAM": 4.702904732312163e-13,
+          "QINV": 4.702904732312163e-13
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CDP": 1.1457501614131615e-12,
+          "CL": 3.640488836766118e-13,
+          "CM": 1.2842504837351498e-13,
+          "MINF": 0.0
+        }
+      }
+    },
+    "naca64a010_n60_inviscid_type2_m03": {
+      "records": {
+        "specal_points.dat": {
+          "bytes": 10606,
+          "fnv64": "add3f2057fa7e5e4"
+        },
+        "speccl_points.dat": {
+          "bytes": 10692,
+          "fnv64": "4a7bcee61e4eb6dd"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {},
+        "node": {
+          "CPI": 9.415412893787334e-12,
+          "GAM": 6.0925708922354715e-12,
+          "QINV": 6.0925708922354715e-12
+        },
+        "point": {
+          "ALFA": 5.728750807065808e-14,
+          "CDP": 4.2011950353527514e-14,
+          "CL": 4.089550529814967e-12,
+          "CM": 4.150928568040384e-13,
+          "MINF": 1.0547118733938987e-15
+        }
+      }
+    }
+  },
+  "fixture_host": {
+    "host": "arm64-Darwin-24.6.0",
+    "libm": "/usr/lib/libSystem.B.dylib 1345.120.2)"
+  },
+  "measured_host": {
+    "host": "aarch64-Linux",
+    "libm": "ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39"
+  }
+}

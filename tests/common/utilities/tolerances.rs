@@ -31,6 +31,13 @@ pub const TOL_TRANSIENT: f64 = 1e-9;
 /// step on the fixture's own host reproduces XFOIL to ≤ 2e-12. Cross-host gates are that
 /// measured spread × ~3; same-host stays at `TOL_SOLVER`.
 pub const TOL_CROSS_HOST: f64 = 1e-9;
+/// The factor on the reference's own measured cross-host spread that a whole run is gated at on a
+/// host other than its fixture's: `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, the
+/// spread being how far XFOIL itself moves between the two hosts' maths libraries on that case and
+/// value (`tests/fixtures/cross-host/spread.json`, `cargo xtask cross-host`,
+/// `tests/common/utilities/cross_host.rs`). Four, as for the step tests' own measured sensitivity
+/// (CLAUDE.md Rule 1). Same-host gating never uses it.
+pub const CROSS_HOST_FACTOR: f64 = 4.0;
 /// The one error metric: `|a − b| ≤ tol · max(|a|, |b|, scale)`. Bare relative error is
 /// undefined at CL≈0, VDEL≈0, laminar CTAU≈0; `scale` is the physical scale of the variable.
 pub fn within(a: f64, b: f64, tol: f64, scale: f64) -> bool {

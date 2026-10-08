@@ -10,6 +10,7 @@
 
 mod closures;
 mod coverage;
+mod cross_host;
 mod noise_floor;
 mod route;
 mod steps;
@@ -266,9 +267,10 @@ fn main() {
         Some("twins") => steps::twins(&args[1..]),
         Some("steps") => steps::steps(&args[1..]),
         Some("route") => route::route(&args[1..]),
+        Some("cross-host") => cross_host::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse]>"
+                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse] | cross-host [--out PATH]>"
             );
             std::process::exit(2);
         }
