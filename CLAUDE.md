@@ -291,7 +291,7 @@ Failures are classified by *what it would take to know*, not by severity (`docs/
 "How failures are classified"): **Class A** a domain violation, **Class B** an iteration exhaustion —
 both exact from a single run, both recorded, both withholding the numbers — and **Class C**
 conditioning, which needs two runs to see, stays `Valid`: such a result is *ill-conditioned*
-(`docs/conventions/terminology.md`), the territory of the twins study. A result is therefore invalid on exact, single-run facts only
+(`docs/conventions/terminology.md`), measured by the twins every validation run carries. A result is therefore invalid on exact, single-run facts only
 (A or B), **never** on the size or smoothness of a number: `docs/xfoil-known-issues.md` §7.7 is the
 worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
 records the evidence, write-only, gated by `ci/validity-write-only.sh`. Ill-conditioned but converged
@@ -375,8 +375,7 @@ case) runs the case's five seeded 1-ULP twins after the reference and writes its
 `target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs; `cargo xtask twins --case
 NAME` reruns them alone); `group = "name"`
 (`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
-its NaN probes, `series` the series cases (polars or points for the aerofoil series of interest), `twins-baseline`/`twins-extra` the N = 240, ITER 200
-sections, `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
+its NaN probes, `series` the series cases (polars or points for the aerofoil series of interest), `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
 `--group`, never by `--big`) — and study-only cases are untracked; `cargo xtask
 fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
 `tests/fixtures/README.md`. The tracked CI reference case is
@@ -424,8 +423,7 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-gating.md), `scripts/noise-floor.sh` (noise-floor.md),
 `cargo run -p branch-coverage -- --docs` (branch-coverage/), `cargo run -p series-cases -- --docs` (series-cases/),
-`cargo run -p xfoil-sensitivity -- --twins --docs` (xfoil-sensitivity/: the reference against its five seeded 1-ULP twins per
-case), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
+the two studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
 (`scripts/study-support/records.rs`) — study evidence beside the tests, never read by them;
 `generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
 (aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison).

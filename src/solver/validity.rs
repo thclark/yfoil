@@ -27,7 +27,7 @@
 //! **Class C, conditioning** — a converged, in-domain point that a 1-ULP perturbation moves by
 //! O(1) — cannot be seen from one run at all, because it is a property of the problem near that
 //! point rather than of the arithmetic performed. It is not recorded here and does not make a
-//! point invalid; the twins study measures it. So a `Valid` verdict from this record is a
+//! point invalid; the twins every validation run carries measure it. So a `Valid` verdict from this record is a
 //! necessary condition for trusting a number, not a sufficient one.
 //!
 //! Each field describes **the state currently stored**, not the history of the point: a writer

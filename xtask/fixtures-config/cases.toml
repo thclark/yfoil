@@ -390,24 +390,11 @@ inviscid = true
 events = true
 track = true
 
-[[case]]
-name = "naca64a010_n240_inviscid_polar30_type2_m03"    # the N = 240 sweep of known issues 7.7 (the measurements there); untracked, regenerate with --case
-group = "twins-baseline"
-foil = "naca:64A010"
-n_nodes = 240
-alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-mach = 0.3
-matyp = 2
-inviscid = true
-events = true
-track = false
-
 # ---------------------------------------------------------------------------------------------
 # Step-cover candidates (`cargo xtask steps`): the branch-coverage study's minimal cover and its
 # non-finite probes, untracked. A chosen step's case is tracked with exactly the files its test
 # reads (`keep`).
 # ---------------------------------------------------------------------------------------------
-
 [[case]]
 name = "kt_n60_inviscid_a4_cl05_cl8"      # inviscid-only OPER (no VISC) on the sharp analytic section: SPECAL/SPECCL/CDCALC LVISC=false arms; CL 8 cannot be met and exhausts SPECCL's 20-iteration alpha Newton
 group = "branch-coverage"
@@ -851,236 +838,8 @@ group = "series"
 twins = true
 track = false
 
-# ---------------------------------------------------------------------------------------------
-# The twins baseline (`group = "twins-baseline"`, scripts/xfoil-sensitivity --twins): the same sections and
-# conditions as the series cases at 240 panels and ITER 200, 0 -> +30 / INIT / 0 -> -30 by 1 deg, so the
-# reference is given every chance to converge and the panelling is fine enough not to be the story. Read by
-# the twins study from the work directories (reference + five seeded twins); tracked as the viscal records.
-# ---------------------------------------------------------------------------------------------
-
-[[case]]
-name = "naca0012_n240_polar30_re1e6_iter200"    # NACA 0012, Re 1e6: the incompressible baseline
-foil = "naca4:0012"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-extra"
-track = false
-
-[[case]]
-name = "naca0012_n240_polar30_re1e4_damp_iter200"    # NACA 0012, Re 1e4 with DAMP: laminar separation everywhere
-foil = "naca4:0012"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+04
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-damp = true
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca23012_n240_polar30_re1e6_xtr022_0001_iter200"    # NACA 23012, Re 1e6, trips at 0.22/0.001: the lower trip is upstream of the stagnation point at positive alpha
-foil = "naca:23012"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-xtr = [0.22, 0.001]
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca4412_n240_polar30_re1e6_iter200"    # NACA 4412, Re 1e6: the cambered baseline
-foil = "naca4:4412"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca4412_n240_polar30_re3e6_iter200"    # NACA 4412, Re 3e6: MRCHUE's garbage extrapolation on the first march at high alpha
-foil = "naca4:4412"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 3.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca4412_n240_polar30_re1e6_m06_iter200"    # NACA 4412, M 0.6: the reference goes non-finite in stall
-foil = "naca4:4412"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.6
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-extra"
-track = false
-
-[[case]]
-name = "naca4412_n240_polar30_re1e6_m05_iter200"    # NACA 4412, N = 160, M 0.5: BLVAR's wake Us clamp in stall
-foil = "naca4:4412"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.5
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-extra"
-track = false
-
-[[case]]
-name = "naca63-415_n240_polar30_re1e6_m05_iter200"    # NACA 63-415 (closed TE), M 0.5: TRCHEK2's NaN from 10 deg on
-foil = "naca:63-415"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.5
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-extra"
-track = false
-
-[[case]]
-name = "naca16-212_n240_polar30_re1e6_m07_iter200"    # NACA 16-212, M 0.7: non-finite from the first iteration at 4 deg
-foil = "naca:16-212"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.7
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-extra"
-track = false
-
-[[case]]
-name = "naca64a010_n240_polar30_re1e6_m03_type2_iter200"    # NACA 64A010, M 0.3, TYPE 2: the Mach clamp at CL = 0
-foil = "naca:64A010"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.3
-ncrit = 9.0
-max_iterations = 200
-matyp = 2
-polar = true
-group = "twins-extra"
-track = false
-
-# One baseline case per cover member. `naca4412_n240_polar30_re1e6_iter200` mirrors the N = 160 down-sweep
-# member; the deep-stall and fixed-CL members get their own:
-
-[[case]]
-name = "kt_n240_inviscid_polar30"    # mirrors kt_n60_inviscid_a4_cl05_cl8: the sharp analytic section, inviscid, one SPECAL per degree from -30 to 30
-foil = "karman-trefftz"
-n_nodes = 240
-alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-mach = 0.0
-inviscid = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca0012_n240_polar30_re1e6_type3_iter200"    # mirrors naca0012_n60_a2_re1e6_type3: TYPE 3 (MATYP 1, RETYP 3)
-foil = "naca4:0012"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-matyp = 3
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca4412_n240_inviscid_polar30_m07"    # mirrors naca4412_n60_inviscid_m07_a10: inviscid at M 0.7, the Karman-Tsien denominator region, one SPECAL per degree
-foil = "naca4:4412"
-n_nodes = 240
-alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-mach = 0.7
-inviscid = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca64a010_n240_polar30_re1e6_type2_iter200"    # mirrors naca64a010_n60_type2_a0_re1e6: viscous TYPE 2 at M 0
-foil = "naca:64A010"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-matyp = 2
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca4412_n240_polar30_re1e6_iter200_stall"    # mirrors naca4412_n60_a20_re1e6_iter50: the deep-stall member, as the same +-30 sweep (identical conditions to the down-sweep mirror; a second run of it)
-foil = "naca4:4412"
-n_nodes = 240
-alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
-alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-polar = true
-group = "twins-baseline"
-track = false
-
-[[case]]
-name = "naca4412_n240_clsweep_re1e6_iter200"    # mirrors naca4412_n60_cl1_clm05_re1e6: the fixed-CL member, OPER CL points from -0.5 to 1.5 by 0.1 (SPECCL/MRCL at every point)
-foil = "naca4:4412"
-n_nodes = 240
-alphas = []
-cls = [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
-re = 1.0e+06
-mach = 0.0
-ncrit = 9.0
-max_iterations = 200
-group = "twins-baseline"
-track = false
-
+# The series cases copied 2026-10-08 from the (since removed) twins study: the behaviours of its
+# N = 240 cases that no series case showed, at the series' own N = 60.
 [[case]]
 name = "kt_n60_inviscid_polar30"    # the sharp analytic section, inviscid, one SPECAL per degree (copied 2026-10-08 from the twins study's kt_n240_inviscid_polar30, which no series case showed)
 foil = "karman-trefftz"
@@ -1139,7 +898,7 @@ track = false
 # ---------------------------------------------------------------------------------------------
 
 [[case]]
-name = "naca64a010_n60_polar30_re1e6_type2"    # viscous TYPE 2 at M 0: the 100xRe clamp at CL ~ 0; the reference converges at no point (copied 2026-10-08 from the twins study's naca64a010_n240_polar30_re1e6_type2_iter200, which no series case showed)
+name = "naca64a010_n60_polar30_re1e6_type2"    # viscous TYPE 2 at M 0: the 100xRe clamp at CL ~ 0 (copied 2026-10-08 from the twins study's naca64a010_n240_polar30_re1e6_type2_iter200, which no series case showed)
 foil = "naca:64A010"
 n_nodes = 60
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]

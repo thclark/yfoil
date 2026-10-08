@@ -204,7 +204,7 @@ replicates each (with the message as a code comment) so that its results and bra
 | `xpanel.f:1737` (UESET) | `tweak Ue so it's not zero, in case stag. point is right on node` (UEPS = 1e-7) | `pointers.rs:325` |
 | `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; a divergent comparison wherever it is reached (`docs/conventions/terminology.md`) |
 | `xbl.f` (SETBL) | `SETBL: Xtr???  n1 n2:` diagnostic when the transition interval and ITRAN disagree | `setbl.rs:272` |
-| `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `xfoil-sensitivity` driver detects the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
+| `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `input-sensitivity` driver and the fixture runner detect the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
 
 ---
 | `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the fallback above extrapolates finite values over it and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/validation/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are gated one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
@@ -555,8 +555,9 @@ iterate, both sides).
   differed (the 23012 at 2 recorded points instead of 37). The clock no longer ends a run: a run ends
   on its own, at XFOIL's plot-label hang (120 s without output, a fixed point of the run), or where a
   case asks for a deterministic stop (`stop_on_nonfinite`, `stop_after_setbl`, instrumentation
-  patch 20). The twins study's N = 240 cases ask for none, so regenerating them takes hours; they are
-  superseded by twins of every validation run at its own panelling (plan of 2026-10-07).
+  patch 20). The twins study was removed on 2026-10-08, superseded by the twins every validation run
+  carries at its own panelling; its slow cases live on as the `pathological` copies, which ask for no
+  stop and run only on request.
 - `xtask/fixtures-config/coverage.toml`'s `[[unreachable]]` annotations are code-reading arguments,
   and one was wrong: TRCHEK2's `IF(AX .LE. 0.0) GO TO 101` (`xblsys.f:390`) was annotated
   structurally unreachable, on the argument that AX = AXA + DAX cannot be ≤ 0 while the momentum
@@ -576,4 +577,9 @@ iterate, both sides).
   call. They run only on request. A later study is to establish why each is slow, why the 4412
   sweeps hang with a finite boundary layer, and whether yFoil does the same — the first part of a
   study that replicates every known issue with its yFoil equivalent.
+- `scripts/noise-floor.sh` (one all-coordinates +1-ULP twin of the reference case, the origin of the
+  tolerance constants in `tests/common/utilities/tolerances.rs`) predates the seeded twins and moves
+  every coordinate the same way, which `docs/conventions/terminology.md` notes measures little. The
+  reference case's own five twins, which `cargo xtask fixtures` can now run (`twins = true`), are to
+  derive `docs/validation/noise-floor.md` instead, after which the script can be retired (open).
 
