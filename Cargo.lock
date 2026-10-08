@@ -743,6 +743,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "known-issues"
+version = "0.1.0"
+dependencies = [
+ "series-cases",
+]
+
+[[package]]
 name = "kurbo"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

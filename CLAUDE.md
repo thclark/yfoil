@@ -375,7 +375,8 @@ case) runs the case's five seeded 1-ULP twins after the reference and writes its
 `target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs; `cargo xtask twins --case
 NAME` reruns them alone); `group = "name"`
 (`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
-its NaN probes, `series` the series cases (polars or points for the aerofoil series of interest), `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
+its NaN probes, `series` the series cases (the aerofoil series and regimes of interest under normal conditions),
+`known-issues` the runs that show XFOIL's known issues, `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
 `--group`, never by `--big`) — and study-only cases are untracked; `cargo xtask
 fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
 `tests/fixtures/README.md`. The tracked CI reference case is
@@ -387,7 +388,7 @@ NaN or an infinity (`stop_on_nonfinite = true`, event `STOP_NONFINITE` — the s
 which past stall would otherwise run for hours to no purpose) or after N SETBL calls (`stop_after_setbl = N`, event
 `STOP_AFTER_SETBL`), both instrumentation patch 20 and inert when not asked for; a run still going after an hour is
 an error that asks for one of them. No case that gates or measures branches (tracked, or in the `branch-coverage`,
-`non-finite` or `series` groups) may use either: a stop cuts off the branches only reached later, the non-finite
+`non-finite` or `series` groups), nor a `known-issues` case, may use either: a stop cuts off the branches only reached later, the non-finite
 fallbacks among them, and `cargo xtask fixtures` refuses it. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
@@ -423,7 +424,7 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-gating.md), `scripts/noise-floor.sh` (noise-floor.md),
 `cargo run -p branch-coverage -- --docs` (branch-coverage/), `cargo run -p series-cases -- --docs` (series-cases/),
-the two studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
+`cargo run -p known-issues -- --docs` (known-issues/), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
 (`scripts/study-support/records.rs`) — study evidence beside the tests, never read by them;
 `generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
 (aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison).
@@ -496,10 +497,15 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
   `XSTRIP`, `MATYP≠1` — and the study's minimal set (`group = "branch-coverage"`): inviscid-only (Kármán–Trefftz;
   the 64A010 TYPE 2 M 0.3 sweep through −30…30°), fixed CL far from alpha, a trip upstream of the stagnation point,
   a stalled first march at Re 3e6, deep stall at ITER 50, Re 1e4 with DAMP
-- The series cases (`scripts/series-cases`, `docs/validation/series-cases/`): the same
-  sections swept 0 → ±30° by XFOIL's polar procedure (`group = "series"`), yFoil driven the same
-  way and compared point by point through stall and into the non-finite region (a study; the tests replay the
-  chased calls step by step)
+- The series cases (`scripts/series-cases`, `docs/validation/series-cases/`, `group = "series"`): the
+  aerofoil series and flow regimes of interest under normal conditions (Re 1e4–1e8, Ncrit 4–11, M 0–0.6,
+  forced transition, fixed CL, inviscid), swept 0 → ±30° by XFOIL's polar procedure at N = 160, ITER 100
+  (N = 160 represents N = 240 where the flow is attached, `docs/xfoil-known-issues.md` §7.13), yFoil
+  driven the same way and compared point by point (a study; the tests replay the chased calls step by step)
+- The known-issues cases (`scripts/known-issues`, `docs/validation/known-issues/`, `group = "known-issues"`):
+  runs that show XFOIL's known issues arising — the dependence on the panel count (§7.13, each case at
+  N = 60, 160 and 240), the plot-label hang (§4), and the sweeps whose purpose is one issue — to be
+  brought one for one with `docs/xfoil-known-issues.md`
 
 BL distributions are extracted at 0°, ±5°, ±10°, ±15°, but every intermediate angle is computed so initialisation
 matches XFOIL.
