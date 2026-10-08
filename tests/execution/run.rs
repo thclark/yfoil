@@ -15,6 +15,7 @@
 
 use crate::fixtures::cases::{load, Op};
 use crate::step::replay_inviscid;
+use crate::utilities::fortran::real;
 use crate::utilities::host::same_host;
 use crate::utilities::tolerances::{assert_within, TOL_CROSS_HOST, TOL_SOLVER, TOL_TRANSIENT};
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
@@ -28,7 +29,7 @@ fn iterations(dir: &std::path::Path) -> Vec<Vec<Vec<f64>>> {
         .lines()
     {
         let Some(r) = l.strip_prefix("IT ") else { continue };
-        let v: Vec<f64> = r.split_whitespace().map(|t| t.parse().unwrap()).collect();
+        let v: Vec<f64> = r.split_whitespace().map(real).collect();
         let k = v[0] as usize;
         while out.len() < k {
             out.push(vec![]);
@@ -115,7 +116,7 @@ pub fn compare_run(case: &str, through: usize) -> Vec<PointResult> {
             ("MINF", st.mach, 1.0),
             ("REINF", st.re, st.re),
         ] {
-            assert_within(ours, x[name].parse().unwrap(), pt, scale, &format!("{ctx}: {name}"));
+            assert_within(ours, real(&x[name]), pt, scale, &format!("{ctx}: {name}"));
         }
         assert_eq!(st.i_stagnation_node, x["IST"].parse::<usize>().unwrap(), "{ctx}: IST");
         assert_eq!(

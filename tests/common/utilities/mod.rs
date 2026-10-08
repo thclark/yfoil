@@ -1,4 +1,5 @@
 #![allow(dead_code)] // shared test-support module; each test crate uses a subset
+pub mod fortran;
 pub mod host;
 pub mod tolerances;
 
