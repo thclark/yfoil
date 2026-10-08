@@ -46,6 +46,7 @@ members = [
     "scripts/aerofoil-series",
     "scripts/branch-coverage",
     "scripts/series-cases",
+    "scripts/known-issues",
 ]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a

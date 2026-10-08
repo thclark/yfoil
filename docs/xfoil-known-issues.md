@@ -205,9 +205,9 @@ replicates each (with the message as a code comment) so that its results and bra
 | `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; a divergent comparison wherever it is reached (`docs/conventions/terminology.md`) |
 | `xbl.f` (SETBL) | `SETBL: Xtr???  n1 n2:` diagnostic when the transition interval and ITRAN disagree | `setbl.rs:272` |
 | `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `input-sensitivity` driver and the fixture runner detect the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
+| `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the fallback above extrapolates finite values over it and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/validation/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are gated one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
 
 ---
-| `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the fallback above extrapolates finite values over it and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/validation/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are gated one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
 
 ## 5. Dead and unreachable code in 6.99
 
@@ -529,6 +529,33 @@ number of TRCHEK2 iterates, which `cargo xtask route` found on 2026-10-06 (NACA 
 test_mrchdu_station_newton_replays_from_xfoil_state_at_the_7deg_point` (AMPL2 at every station
 iterate, both sides).
 
+### 7.13 Whether a sweep converges, and what it converges to, can depend on the panel count — Replicated
+
+The same OPER script on the same section, panelled at N = 60, 160 and 240 nodes (yFoil's cosine
+sampling; ITER 20, 100 and 200, the settings each was studied at), can differ qualitatively, not by
+a discretisation error that shrinks with N. Measured 2026-10-08 (`cargo xtask fixtures`, reference
+runs; ITER 200 at N = 160 as a control, so the difference is the panelling's and not the iteration
+limit's):
+
+| Case (0 → +30°, `INIT`, 0 → −30° by 1°) | N = 60, ITER 20 | N = 160, ITER 100 | N = 160, ITER 200 | N = 240, ITER 200 |
+|---|---|---|---|---|
+| NACA 16-212, Re 1e6, M 0.7 | first unconverged point 13° | first unconverged 3°; non-finite at −18° and hangs (§4) | first unconverged 3°; runs to its end | first unconverged 23°; CL_max 1.257 at 26° |
+| NACA 64A010, Re 1e6, M 0, TYPE 2 | 5 of 14 points converged | 11 of 13 converged, CL to 0.95; non-finite at 12° and hangs | 11 of 15 converged; non-finite at 14° and hangs | **no point converged** (10 recorded, every one at the limit) |
+| NACA 4412, inviscid, M 0.7 | largest CL 111 (at −15°) | largest CL 18 (16°) | — | largest CL 73 (18°) |
+| NACA 64A010, inviscid, M 0.3, TYPE 2 | largest CL 36 (−1°) | largest CL 18 (−1°) | — | largest CL 28 (−3°) |
+
+The inviscid rows are the Kármán–Tsien pole (§4, §7.7): past it the corrected Cp, and so CL, depend
+on which panel's speed crosses the threshold first and by how much, so their size is the
+panelling's choice. The viscous rows are convergence itself: N = 240 does not converge where N = 160
+does, and the reverse at low alpha on the 16-212. Neither panel count is a reference truth.
+
+Where the sections are attached and well conditioned, N = 160 and N = 240 agree to a few per cent in
+CL and CD and on CL_max and its angle (NACA 0012 and 4412 at Re 1e6, the 4412 at Re 3e6 and M 0.6,
+the Kármán–Trefftz section, the fixed-CL sweep); past stall the branch a sweep follows can differ
+between them, which is expected. That is why the series cases run at N = 160, ITER 100, and these
+four runs are known-issues cases at all three panel counts (`group = "known-issues"`,
+`docs/validation/known-issues/`). yFoil, given the same panels, is to follow XFOIL at each.
+
 ## 8. Open items in yFoil's own tooling
 
 - `src/bin/generate_subroutine_validation.rs:691-695` still emits an `E24.16` instrumentation
@@ -569,17 +596,58 @@ iterate, both sides).
   cover step, `tests/execution/branches.rs`, and every iteration of the call, `tests/execution/steps.rs`).
   A wrong `[[unreachable]]` hides a reachable branch from the coverage search, so every annotation is
   to be proved from the source's syntax tree rather than argued (open).
-- The `pathological` group of `xtask/fixtures-config/cases.toml` (2026-10-07) holds copies of the
-  five cases whose reference runs are pathologically slow or hang: the three N = 240 NACA 4412
-  sweeps (Re 1e6, Re 3e6, and the stall copy), which hang in the plot label on a non-finite CL while
-  the boundary-layer state stays finite; the N = 240 NACA 0012 TYPE 3 sweep, whose twins take up to
-  15 min; and the N = 240 NACA 23012 sweep with trips, non-finite from 2° and then ~7 s per SETBL
-  call. They run only on request. A later study is to establish why each is slow, why the 4412
-  sweeps hang with a finite boundary layer, and whether yFoil does the same — the first part of a
-  study that replicates every known issue with its yFoil equivalent.
+- **Closed-trailing-edge 6-series sections do not converge in a routine viscous sweep** (2026-10-08). The
+  NACA 63-415 and 64A010 from yFoil's generators have a trailing-edge gap of exactly zero; at N = 160
+  (cosine sampling), ITER 100, Re 1e6, M 0, TYPE 1, neither converges at any point of a polar — the
+  first call's RMSBL is about 3.5e3 from its first iteration and MRCHUE fails at the trailing-edge
+  station of both sides — where every blunt 4- and 5-digit section converges. Whether this is XFOIL's
+  sharp-TE path, the cosine sampling's trailing-edge panels or the generators' closure is open; the
+  series has no 6- or 6A-series member until it is settled. Both runs are known-issues cases
+  (`naca63-415_n160_polar30_re1e6_iter100`, `naca64a010_n160_polar30_re1e6_iter100`).
+- The `pathological` cases (§9) are to be studied: why each is slow or hangs, why the 4412 sweeps
+  hang with a finite boundary layer, and whether yFoil does the same — the first part of a study
+  that replicates every known issue with its yFoil equivalent (open).
 - `scripts/noise-floor.sh` (one all-coordinates +1-ULP twin of the reference case, the origin of the
   tolerance constants in `tests/common/utilities/tolerances.rs`) predates the seeded twins and moves
   every coordinate the same way, which `docs/conventions/terminology.md` notes measures little. The
   reference case's own five twins, which `cargo xtask fixtures` can now run (`twins = true`), are to
   derive `docs/validation/noise-floor.md` instead, after which the script can be retired (open).
+
+## 9. Pathological cases
+
+Cases whose reference runs are pathologically slow or hang, kept as the `pathological` group of
+`xtask/fixtures-config/cases.toml` (untracked, run only by name or `--group pathological`, never by
+`--big`, never in a routine regeneration). Each was a copy of one of the removed twins study's N = 240,
+ITER 200 cases. They are recorded here with what the run showed and what physics it captures, so
+the insight is kept even though the run is not part of the routine sets; the last column says where
+the same behaviour is gated and shown in routine time.
+
+| Case | What makes it pathological (observed 2026-10-07) | Physical insight / scenario | Where the behaviour is gated and shown |
+|---|---|---|---|
+| `pathological_naca4412_n240_polar30_re1e6_iter200` (NACA 4412, Re 1e6, ±30°) | Past about 30° on the upward leg CL turns non-finite while the boundary-layer state stays finite, and XFOIL hangs formatting the plot label (§4); the downward leg never runs. Twins about 23 min each. | The cambered section through stall: the reference cannot complete a post-stall sweep at this panelling and iteration limit; its twins leave the reference's branch at the stall edge. | Gated: the case-cover member `naca4412_n160_polar_down16_re1e6_iter100` (whole run to call 30, every iteration of call 31) and the tracked N = 60 sweep's steps. Shown: series `naca4412_n160_polar30_re1e6_iter100` (at N = 160 the reference does not hang); the hang itself, reference only: known-issues `naca4412_n240_polar30_re1e6_iter200`. |
+| `pathological_naca4412_n240_polar30_re3e6_iter200` (NACA 4412, Re 3e6, ±30°) | Hangs in the plot label like the Re 1e6 sweep. Twins 80+ min each; one twin goes non-finite at a point the reference converges (CL envelope 0.78). | MRCHUE's garbage extrapolation on the first march at high alpha: at Re 3e6 the fresh march stalls, and the post-stall solution is ill-conditioned. | Gated: case-cover member `naca4412_n60_a18_re3e6_iter40` (every iteration of call 1). Shown: series `naca4412_n160_polar30_re3e6_iter100`; the hang itself, reference only: known-issues `naca4412_n240_polar30_re3e6_iter200`. |
+| `pathological_naca0012_n240_polar30_re1e6_type3_iter200` (NACA 0012, Re 1e6, TYPE 3, ±30°) | Twins up to about 15 min each (reference about 4 min); the twins leave the reference's branch from 17–20° and at −29…−30° (6 completion mismatches, CL envelope 8e-2). | TYPE 3 scales Re with 1/CL: near CL = 0 the Reynolds number runs to MRCL's limit (`MRCL_RE_LIMIT` fires at every call), and in stall the solution is strongly ill-conditioned. | Gated: case-cover member `naca0012_n60_a2_re1e6_type3` (whole run and a step-cover step). Not shown by a series case (removed 2026-10-08 as pathological). |
+| `pathological_naca23012_n240_polar30_re1e6_xtr022_0001_iter200` (NACA 23012, Re 1e6, trips 0.22 / 0.001, ±30°) | Non-finite from the 2° point; every station Newton then fails, about 7 s per SETBL call, and the full sweep runs for hours. | **The lower trip at x/c = 0.001 lies upstream of the stagnation point at positive alpha** (XIFSET's "past trip"): TRCHEK2 is asked for transition upstream of a laminar station, produces a NaN near the leading edge, and the march continues on the fallbacks. Reached from the 1° solution, at N ≥ 100, it takes TRCHEK2's `IF(AX .LE. 0.0)` exit (`xblsys.f:390`), once annotated unreachable (§8). | Gated: case-cover member `naca23012_n60_a4_re1e6_xtr022_0001`, and the non-finite probe `naca23012_n100_a1_a2_re1e6_xtr022_0001` (the `xblsys.f:390` exit: a step-cover step and every iteration of call 2). Shown: known-issues `naca23012_n60_polar30_re1e6_xtr022_0001` (non-finite from 1°, the trip-upstream event at every station of every call after it). |
+
+The removed `…_iter200_stall` copy repeated the first row's conditions exactly and is not kept.
+
+**Slow only through its twins: run time as a symptom of ill-conditioning.** Three of the four cases
+are not slow in their own reference run; their seeded 1-ULP twins are — the same script, every panel
+coordinate moved by −1, 0 or +1 ULP. Measured 2026-10-07 (wall clock; the reference ran alone, its
+five twins together on 8 cores, so some of a ratio can be load, but not a factor of ten or more):
+
+| Case | Reference | Its five twins | Ratio |
+|---|---|---|---|
+| NACA 4412, Re 1e6 | 132 s, of which 120 s is the watchdog's wait at the plot-label hang (about 12 s of computation) | 1302–1423 s each | about 10× on wall time, about 100× on computation |
+| NACA 4412, Re 3e6 | 160 s, of which 120 s is the wait at the hang (about 40 s of computation) | 4855–5134 s each | about 30× on wall time, over 100× on computation |
+| NACA 0012, TYPE 3 | 252 s | 236–874 s (three twins as fast as the reference, two 3.5× slower) | 1–3.5× |
+| NACA 23012, trips | hours in its own run | — | — |
+
+A one-ULP change to the geometry changes the solution time by up to two orders of magnitude: past
+stall the twins leave the reference's branch (the completion mismatches above) and take another route
+through the sweep. Which route, and why it costs so much more — more points iterated to their limit,
+marches on the fallbacks, or not reaching the non-finite CL that ends the reference at the hang — is
+for the later study to establish (§8). Solution time is therefore itself a measure of how ill-conditioned a
+run is, and an interesting case in itself for the later study: the same physics, identical to the last
+bit but one, at a hundred times the cost.
 

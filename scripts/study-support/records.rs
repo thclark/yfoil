@@ -171,7 +171,7 @@ pub fn load(case_dir: &Path) -> Records {
         .lines()
     {
         let Some(r) = l.strip_prefix("IT ") else { continue };
-        let v: Vec<f64> = r.split_whitespace().map(|t| t.parse().unwrap()).collect();
+        let v: Vec<f64> = r.split_whitespace().map(fortran_real).collect();
         iters.entry(v[0] as usize).or_default().push(v[1..].to_vec());
     }
     let iter1 = std::fs::read_to_string(case_dir.join("viscal_iter.dat"))
@@ -255,7 +255,7 @@ pub fn read_state_arrays(path: &Path) -> Option<BTreeMap<String, Vec<f64>>> {
         } else {
             continue;
         };
-        let v: Vec<f64> = rest.split_whitespace().map(|t| t.parse().unwrap_or(f64::NAN)).collect();
+        let v: Vec<f64> = rest.split_whitespace().map(fortran_real).collect();
         for (m, name) in names.iter().enumerate() {
             arrays
                 .entry(name.to_string())
@@ -563,7 +563,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
                     b["IMXBL"].parse::<usize>().unwrap(),
                     b["ISMXBL"].parse::<usize>().unwrap(),
                 );
-                let xr: f64 = b["RMXBL"].parse().unwrap();
+                let xr: f64 = fortran_real(&b["RMXBL"]);
                 println!(
                     "        RLX limiter: yfoil {}@({},{}) RMXBL {:+.6e} | xfoil {}@({},{}) RMXBL {:+.6e}",
                     y.residual_max_variable,
@@ -774,7 +774,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         ("MINF", st.mach, 1.0),
         ("REINF", st.re, st.re),
     ] {
-        let theirs: f64 = x[name].parse().unwrap();
+        let theirs: f64 = fortran_real(&x[name]);
         if let Err(why) = value_ok(ours, theirs, TOL_SOLVER, scale, fl(fp, name), &format!("{ctx}: {name}")) {
             mismatch(&mut report, why);
             return report;
@@ -851,7 +851,7 @@ pub fn compare_inviscid_call(rec: &Records, kind: &str, k: usize, p: &PointResul
         return report;
     }
     for (name, ours) in [("ALFA", p.alpha), ("CL", p.cl), ("CM", p.cm), ("CDP", p.cd_pressure)] {
-        let theirs: f64 = x[name].parse().unwrap();
+        let theirs: f64 = fortran_real(&x[name]);
         if let Err(why) = value_ok(ours, theirs, TOL_SOLVER, 1.0, fl(name), &format!("{ctx}: {name}")) {
             mismatch(&mut report, why);
             return report;
@@ -868,7 +868,7 @@ pub fn compare_inviscid_call(rec: &Records, kind: &str, k: usize, p: &PointResul
     for i in 1..=n {
         let row: Vec<f64> = x[&format!("NODE({i:5})")]
             .split_whitespace()
-            .map(|t| t.parse().unwrap())
+            .map(fortran_real)
             .collect();
         let ours = [st.gamma[i], st.q_inviscid[i], st.cp_inviscid[i]];
         for (m, name) in ["GAM", "QINV", "CPI"].iter().enumerate() {
@@ -909,5 +909,20 @@ pub fn transient_tol(k: usize) -> f64 {
         TOL_SOLVER
     } else {
         TOL_TRANSIENT
+    }
+}
+
+/// A real the reference wrote with `ES24.16`. With a three-digit exponent the format has no room
+/// for the `E` and writes `2.7001298744446083+105` (a CD of 1e105 in a sweep that left the
+/// physical range); that form is read too, and anything else is NaN.
+pub fn fortran_real(s: &str) -> f64 {
+    let s = s.trim();
+    if let Ok(v) = s.parse() {
+        return v;
+    }
+    match s.get(1..).and_then(|t| t.rfind(['+', '-'])) {
+        // the sign at s[j + 1] starts the exponent
+        Some(j) => format!("{}e{}", &s[..=j], &s[j + 1..]).parse().unwrap_or(f64::NAN),
+        None => f64::NAN,
     }
 }

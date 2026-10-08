@@ -30,8 +30,9 @@
 //!    branch trace exact, values within tolerance or the reference's own 1-ULP spread ×
 //!    `FLOOR_FACTOR`, the third outcome divergent.
 //!
-//! The same sections swept as full ±30° polars, through stall and into the non-finite region, are
-//! the `series-cases` study (`scripts/series-cases`).
+//! Full ±30° polars of the aerofoil series and regimes of interest are the `series-cases` study
+//! (`scripts/series-cases`); the runs that show XFOIL's known issues are the `known-issues` study
+//! (`scripts/known-issues`).
 //!
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`; the
@@ -218,10 +219,13 @@ impl Branch {
 
 /// One candidate: a tracked solver case with its measured branch set.
 impl Candidate {
-    /// A sweep of another study (`series-cases`) or a `pathological` copy
+    /// A sweep of another study (`series-cases`, `known-issues`) or a `pathological` copy
     /// sets): measured, never a cover candidate.
     pub fn polar_study(&self) -> bool {
-        matches!(self.case.group.as_deref(), Some("series") | Some("pathological"))
+        matches!(
+            self.case.group.as_deref(),
+            Some("series") | Some("known-issues") | Some("pathological")
+        )
     }
 }
 
@@ -377,9 +381,8 @@ fn main() {
             nan_count,
         });
     }
-    // the cover is a set of single operating points (and short sequences); the ±30° polars are
-    // the series-cases study's cases, built from this cover's sections, and are measured
-    // here but never chosen for it
+    // the cover is a set of single operating points (and short sequences); the ±30° polars of
+    // the series-cases and known-issues studies are measured here but never chosen for it
     let finite: Vec<&Candidate> = candidates
         .iter()
         .filter(|c| !c.non_finite && !c.polar_study())

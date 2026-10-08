@@ -103,7 +103,7 @@ struct Case {
     #[serde(default)]
     step_calls: Vec<usize>,
     /// the study the case belongs to (`--group NAME` selects it): `branch-coverage`, `non-finite`,
-    /// `series`, `pathological` — the studies read their cases by it
+    /// `series`, `known-issues`, `pathological` — the studies read their cases by it
     #[serde(default)]
     group: Option<String>,
     /// stop the reference after this many SETBL calls (`stop_after_setbl.txt`, patch 20): the
@@ -325,9 +325,14 @@ fn fixtures(flags: &[String]) {
     let mut failures = 0;
     let group: Option<&str> = flags.windows(2).find(|w| w[0] == "--group").map(|w| w[1].as_str());
     // a deterministic stop cuts a run off before the branches only reached later — the
-    // non-finite fallbacks among them — so no case that gates or measures branches may have one
+    // non-finite fallbacks among them — so no case that gates or measures branches may have one,
+    // nor a known-issues case, whose run's own end (a hang, a halt) is what it shows
     for case in &cases.cases {
-        let gates = case.track || matches!(case.group.as_deref(), Some("branch-coverage" | "non-finite" | "series"));
+        let gates = case.track
+            || matches!(
+                case.group.as_deref(),
+                Some("branch-coverage" | "non-finite" | "series" | "known-issues")
+            );
         if gates && (case.stop_on_nonfinite || case.stop_after_setbl.is_some()) {
             eprintln!(
                 "{}: a case that gates or measures branches must run to its natural end; remove `stop_on_nonfinite` / `stop_after_setbl`",
@@ -573,6 +578,8 @@ fn fixtures(flags: &[String]) {
         if case.closures {
             fs::write(work.join("log_closures.txt"), "").unwrap();
         }
+        // whether the watchdog ended a reference run of this case (recorded in the manifest)
+        let hung = std::cell::Cell::new(false);
         let run_reference = |dump_calls: &[usize]| -> bool {
             let _ = fs::remove_file(work.join("dump_calls.txt"));
             if !dump_calls.is_empty() {
@@ -583,6 +590,7 @@ fn fixtures(flags: &[String]) {
                 Ok(RunEnd::Finished) => true,
                 Ok(RunEnd::Hung) => {
                     eprintln!("  WATCHDOG: xfoil stopped producing output (hung) and was ended; the records written so far are kept");
+                    hung.set(true);
                     true
                 }
                 Ok(RunEnd::TimedOut) => {
@@ -694,6 +702,11 @@ fn fixtures(flags: &[String]) {
         }
         if case.stop_on_nonfinite {
             manifest["case"]["stop_on_nonfinite"] = serde_json::json!(true);
+        }
+        // written only when it happened, so the manifest of every run that ends on its own is
+        // unchanged; the studies read it (the plot-label hang, known issues §4)
+        if hung.get() {
+            manifest["truncated_by_watchdog"] = serde_json::json!(true);
         }
         fs::write(
             work.join("manifest.json"),

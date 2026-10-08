@@ -797,10 +797,11 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
           gated; *gated* counts the iterations matched before that. The NaN count is the number of `NaN` \
           tokens in the reference's own output for the run.\n\n";
     m += &nonfinite_table_md(s);
-    m += "\n## Full polars\n\nThe same sections swept as full ±30° polars, through stall and into the non-finite region, are \
-          the [series-cases](../series-cases/README.md) study. Those sweeps are measured here like \
-          every tracked case (their branches count as taken) but are never candidates for the cover: the cover \
-          is the minimal set of single operating points, and the polars are built from its sections.\n";
+    m += "\n## Full polars\n\nFull ±30° polars of the aerofoil series and regimes of interest are the \
+          [series-cases](../series-cases/README.md) study, and the runs that show XFOIL's known issues the \
+          [known-issues](../known-issues/README.md) study. Those sweeps are measured here like every tracked case \
+          (their branches count as taken) but are never candidates for the cover: the cover is the minimal set of \
+          single operating points.\n";
     m += "\n## Not covered\n\n";
     m += "Analysis-path branches no case of the set takes, with the recorded way to reach them. *Non-finite \
           only* branches were taken during this study's candidate search, but only in runs where the reference \

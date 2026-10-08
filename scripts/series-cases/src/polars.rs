@@ -188,7 +188,7 @@ fn specal_records(dir: &Path) -> Vec<(f64, f64, f64, Vec<[f64; 3]>)> {
             continue;
         }
         let Some(cur) = out.last_mut() else { continue };
-        let num = |s: &str| s.trim().parse::<f64>().unwrap_or(f64::NAN);
+        let num = |s: &str| crate::utilities::records::fortran_real(s);
         match k {
             "CL" => cur.0 = num(v),
             "CM" => cur.1 = num(v),
@@ -319,7 +319,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
     let ref_alpha = |i: usize| -> f64 {
         rec.points[i]
             .get("ALFA")
-            .and_then(|v| v.parse::<f64>().ok())
+            .map(|v| crate::utilities::records::fortran_real(v))
             .map(|r| r.to_degrees())
             .unwrap_or(f64::NAN)
     };
