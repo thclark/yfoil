@@ -31,6 +31,7 @@
 use crate::fixtures;
 use crate::fixtures::cases::{blocks, dump, jog_dump, load, prologue_jogged, seed, Op};
 use crate::fixtures::mrchdu_fixtures::BlDump;
+use crate::utilities::cross_host::gate;
 use crate::utilities::host::same_host;
 use crate::utilities::tolerances::{assert_within, TOL_CROSS_HOST, TOL_SOLVER};
 use std::collections::HashMap;
@@ -268,7 +269,9 @@ pub fn replay(case: &str, call: usize, iteration: usize, setbl: usize) {
 /// record of the point before.
 pub fn replay_inviscid(case: &str, call: usize) {
     let c = load(case);
-    let tol = if same_host(&c.dir) { TOL_SOLVER } else { TOL_CROSS_HOST };
+    // on another host each value is gated at no less than the reference's own measured
+    // cross-host spread (`common/utilities/cross_host.rs`)
+    same_host(&c.dir);
     let g = read_geometry_from_file(c.dir.join("panels.json").to_str().unwrap()).expect("panels.json");
     let mut session = Session::new(&panel_foil(&g), c.spec.clone());
     let n_before = |pred: fn(&Op) -> bool| c.ops[..call].iter().filter(|o| pred(o)).count();
@@ -330,13 +333,19 @@ pub fn replay_inviscid(case: &str, call: usize) {
         ("CDP", st.cd_pressure),
         ("MINF", st.mach),
     ] {
-        assert_within(ours, h[name], tol, 1.0, &format!("{what}: {name}"));
+        let g = gate(case, &c.dir, "point", name, TOL_SOLVER);
+        assert_within(ours, h[name], g.tol, 1.0, &format!("{what}: {name}{}", g.note));
     }
     assert_eq!(nodes.len(), st.n_foil_nodes, "{what}: node count");
     for (i, r) in nodes.iter().enumerate() {
         let n = i + 1;
-        assert_within(st.gamma[n], r[0], tol, 1.0, &format!("{what}: GAM({n})"));
-        assert_within(st.q_inviscid[n], r[1], tol, 1.0, &format!("{what}: QINV({n})"));
-        assert_within(st.cp_inviscid[n], r[2], tol, 1.0, &format!("{what}: CPI({n})"));
+        for (k, name, ours) in [
+            (0, "GAM", st.gamma[n]),
+            (1, "QINV", st.q_inviscid[n]),
+            (2, "CPI", st.cp_inviscid[n]),
+        ] {
+            let g = gate(case, &c.dir, "node", name, TOL_SOLVER);
+            assert_within(ours, r[k], g.tol, 1.0, &format!("{what}: {name}({n}){}", g.note));
+        }
     }
 }

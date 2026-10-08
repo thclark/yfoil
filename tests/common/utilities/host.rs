@@ -77,13 +77,13 @@ impl std::fmt::Display for Host {
     }
 }
 
-/// Whether the fixture in `dir` was generated on this host. When it was not, prints why the
-/// same-host pins are being reported rather than asserted, once per call.
+/// Whether the fixture in `dir` was generated on this host. When it was not, prints how values are
+/// gated instead, once per call.
 pub fn same_host(dir: &Path) -> bool {
     let (fixture, running) = (Host::of_fixture(dir), Host::running());
     if fixture != running {
         println!(
-            "CROSS-HOST: fixture generated on {fixture} ({}), running on {running}: transcendentals come from a different libm (1-ULP differences), so the same-host pins are reported, not asserted",
+            "CROSS-HOST: fixture generated on {fixture} ({}), running on {running}: transcendentals come from a different libm (1-ULP differences), so values are gated at TOL_CROSS_HOST, and a whole run at no less than the reference's own measured cross-host spread × CROSS_HOST_FACTOR",
             Host::libm_of_fixture(dir)
         );
     }

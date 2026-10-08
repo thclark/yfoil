@@ -24,14 +24,22 @@ tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
 Jacobian) can only be gated with a row-scaled metric. Five named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
 `TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10 —
-and `TOL_CROSS_HOST`); no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
+and `TOL_CROSS_HOST`), with `CROSS_HOST_FACTOR` (4) on the measured cross-host spread of whole runs; no ad-hoc
+literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
 ~1e-11, converged Newton state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in
 *both* codes: bit-identity is a same-host property, cross-host is an ULP budget. Measured 2026-09-11: Apple libSystem
 and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, identically on x86_64 and
 aarch64; XFOIL's own converged polar points move by ≤ 1.4e-11 between the two, its unconverged post-CL_max
 wanderings by O(1). Every fixture manifest records its host; `tests/common/utilities/host.rs` compares it with the running
 one: on the fixture's host values are held to `TOL_SOLVER`, on any other to `TOL_CROSS_HOST` (the measured spread
-of one replayed step between the two libraries), never skipped.
+of one replayed step between the two libraries), never skipped. A whole run can move further between the libraries
+than one step — an exhausted Newton or a sweep into a stall break does — so on another host each value of a run
+test is gated at `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, *spread* being how far the reference
+itself moves on that case and value between the fixtures' host and the other host's libm: measured, not chosen, by
+`scripts/cross-host.sh` (`cargo xtask cross-host` in a Linux container) into `tests/fixtures/cross-host/spread.json`,
+which names both hosts and fails a test whose fixture records have changed since (rerun it after regenerating a
+run case). Measured 2026-10-08, macOS libSystem against glibc 2.39: ≤ 2.1e-10 on 18 of 21 run cases, up to 2.8e-8
+on the three ill-conditioned ones.
 
 **The error metric** is `|a − b| ≤ tol · max(|a|, |b|, scale_v)` with a physical per-variable scale. Bare relative
 error is undefined at CL≈0, VDEL≈0 and laminar CTAU≈0 and must not be used.
