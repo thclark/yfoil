@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Draw the branch-case-polars figures from a run folder's summary.json, one per case: CL and CD
+"""Draw the series-cases figures from a run folder's summary.json, one per case: CL and CD
 (top), the last iteration's RMSBL and the iterations taken (bottom) against alpha, XFOIL in red
 (dashed, crosses), yFoil in blue (solid, circles), non-finite behaviour in orange, departures as
 diamonds.
 
 Presentation only: every number comes from `summary.json`. Run via
-scripts/figures/render.sh branch-case-polars <run_dir>.
+scripts/figures/render.sh series-cases <run_dir>.
 """
 import json
 import sys

@@ -40,17 +40,18 @@ the host it was generated on (manifest `host:` line); on another host the tests 
 
 ## Study data (untracked)
 
-The studies (`scripts/branch-coverage`, `scripts/branch-case-polars`, `scripts/xfoil-sensitivity`)
+The studies (`scripts/branch-coverage`, `scripts/series-cases`, `scripts/xfoil-sensitivity`)
 read the reference's full runs from `target/fixtures/<case>/`, never from `tests/fixtures/`, and no
 test reads what they produce. Their cases carry `group = "..."` in `cases.toml`; the ones only a study
 uses are `track = false`.
 
 ```bash
-cargo xtask fixtures --group branch-case-polars   # the ±30° sweeps (and twins-baseline, twins-extra: N = 240)
-cargo xtask twins --case NAME ...                 # five seeded 1-ULP twins and noise_floor.json per case
+cargo xtask fixtures --group series        # the series cases, each with its twins (twins = true)
+cargo xtask fixtures --group branch-coverage  # likewise; --group non-finite for the probes
+cargo xtask twins --case NAME ...           # rerun a case's five twins and noise_floor.json alone
 cargo run --release -p branch-coverage -- --docs
-cargo run --release -p branch-case-polars -- --docs
-cargo run --release -p xfoil-sensitivity -- --twins --docs
+cargo run --release -p series-cases -- --docs
+cargo run --release -p xfoil-sensitivity -- --twins --docs   # superseded; kept for back-checking
 ```
 
 Regenerating a case keeps its twins when its panels and script are unchanged.

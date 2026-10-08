@@ -1,5 +1,5 @@
 //! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/validation/branch-case-polars/README.md`).
+//! documentation page (`docs/validation/series-cases/README.md`).
 
 use crate::polars::PolarRun;
 use serde_json::{json, Value};
@@ -32,11 +32,41 @@ fn parted(r: &Value) -> String {
 /// One row per polar: what each code recorded and where they part.
 fn table_md(s: &Value) -> String {
     let mut t = String::from(
-        "| case | section | OPER | XFOIL points | yFoil points | followed to the end | parts at | reference hung |\n|---|---|---|---:|---:|---:|---|---|\n",
+        "| case | section | OPER | XFOIL points | yFoil points | followed to the end | parts at | XFOIL ill-conditioned (its twins) | reference hung |\n|---|---|---|---:|---:|---:|---|---|---|\n",
     );
     for r in s["polars"].as_array().unwrap() {
+        // the points at which the reference's own twins changed its branch trace or moved it by
+        // more than DIVERGENCE_FLOOR
+        let pts = r["points"].as_array().cloned().unwrap_or_default();
+        let known: Vec<&Value> = pts.iter().filter(|p| p["xfoil_ill_conditioned"].is_boolean()).collect();
+        let ill: Vec<String> = known
+            .iter()
+            .filter(|p| p["xfoil_ill_conditioned"] == true)
+            .map(|p| {
+                let a = p["alpha_deg"].as_f64().unwrap_or(f64::NAN);
+                if a.fract() == 0.0 {
+                    format!("{}/{a}°", p["leg"])
+                } else {
+                    format!("{}/{a:.2}°", p["leg"])
+                }
+            })
+            .collect();
+        let conditioning = if known.is_empty() {
+            "—".to_string()
+        } else if ill.is_empty() {
+            format!("none of {}", known.len())
+        } else {
+            let shown: Vec<String> = ill.iter().take(4).cloned().collect();
+            format!(
+                "{} of {} (from {}{})",
+                ill.len(),
+                known.len(),
+                shown.join(", "),
+                if ill.len() > 4 { ", …" } else { "" }
+            )
+        };
         t += &format!(
-            "| `{}` | {} | {} | {} | {} | {} | {} | {} |\n",
+            "| `{}` | {} | {} | {} | {} | {} | {} | {conditioning} | {} |\n",
             r["name"].as_str().unwrap(),
             r["section"].as_str().unwrap(),
             r["script"].as_str().unwrap(),
@@ -56,16 +86,21 @@ fn table_md(s: &Value) -> String {
 
 fn body_md(s: &Value, figure: bool) -> String {
     let mut m = String::new();
-    m += "The sections and conditions the branch-coverage study drew its cases from \
-          ([branch-coverage](../branch-coverage/README.md)), each swept as a full polar: 0 → +30°, `INIT`, \
-          0 → −30° by 1°, XFOIL's polar procedure (`ALFA 0 / ASEQ`, ITMAX + 5 iterations per point, the sequence \
-          halting after NSEQEX = 4 consecutive unconverged points). yFoil is driven the same way through its \
-          `Session`, applying the same halting rule to its own convergence, and every point the reference \
-          recorded is compared with the studies' whole-run floor comparison (`scripts/study-support/records.rs`): \
-          iteration count, LVCONV, IST and ITRAN exact, every transient and the converged point within \
+    m += "Runs of the aerofoil series and flow conditions of interest, shown to an external reader: how \
+          each condition, regime and behaviour arises, and whether yFoil follows the reference through it. \
+          Members are full polars or sets of points (`group = \"series\"` in `xtask/fixtures-config/cases.toml`): \
+          a polar is XFOIL's polar procedure, 0 → +30°, `INIT`, 0 → −30° by 1° (`ALFA 0 / ASEQ`, ITMAX + 5 \
+          iterations per point, the sequence halting after NSEQEX = 4 consecutive unconverged points); an inviscid \
+          member is one SPECAL per alpha; a fixed-CL member one OPER `CL` command per point. yFoil is driven \
+          the same way through its `Session` and every point the reference recorded is compared — a viscous \
+          point with the studies' whole-run floor comparison (`scripts/study-support/records.rs`: iteration \
+          count, LVCONV, IST and ITRAN exact, every transient and the converged point within \
           `max(tol · scale, FLOOR_FACTOR · floor)` with *floor* the reference's own 1-ULP spread of the value, \
-          a *threshold* (the divergent comparison of `docs/conventions/terminology.md`) where the reference itself moves by more than \
-          `DIVERGENCE_FLOOR`.\n\n";
+          *divergent* — `docs/conventions/terminology.md` — where the reference itself moves by more than \
+          `DIVERGENCE_FLOOR`), an inviscid point on CL, CM, CDp and every node's γ, q and Cp at `TOL_SOLVER`. \
+          Every member is run with its five seeded 1-ULP twins (`twins = true`), so the table also says at \
+          which points XFOIL was itself ill-conditioned. The tests gate the same behaviours minimally, one \
+          step at a time (`docs/conventions/testing.md`); this page demonstrates them.\n\n";
     m += "The point of the study is what happens past convergence: through stall, and into the region where the \
           reference goes non-finite. The reference may record fewer points than the script — its sequence \
           halted, or the fixture driver's watchdog ended a run that had gone non-finite and hung in XFOIL's \
@@ -223,9 +258,9 @@ fn state_table_md(s: &Value) -> String {
 
 pub fn write_index(run_dir: &Path, s: &Value) {
     let meta: Value = serde_json::from_str(&fs::read_to_string(run_dir.join("metadata.json")).unwrap()).unwrap();
-    let mut m = String::from("# Branch-case polars\n\n");
+    let mut m = String::from("# Series cases\n\n");
     m += &format!(
-        "Generated by `cargo run --release -p branch-case-polars` on {} (git {}{}, host {}); provenance in \
+        "Generated by `cargo run --release -p series-cases` on {} (git {}{}, host {}); provenance in \
          `metadata.json`, every number in `summary.json`, the figure drawn by `plot.py`.\n\n",
         meta["generated"].as_str().unwrap_or(""),
         meta["git_describe"].as_str().unwrap_or(""),
@@ -257,9 +292,9 @@ pub fn write_index_tex(run_dir: &Path, s: &Value) {
     let w = |f: &mut fs::File, t: &str| writeln!(f, "{t}").unwrap();
     w(
         &mut f,
-        "% Generated by `cargo run --release -p branch-case-polars`; table from summary.json. Needs booktabs.",
+        "% Generated by `cargo run --release -p series-cases`; table from summary.json. Needs booktabs.",
     );
-    w(&mut f, "\\section*{Branch-case polars}");
+    w(&mut f, "\\section*{Series cases}");
     w(&mut f, "\\noindent The branch-coverage sections swept as full polars, $0\\rightarrow+30^\\circ$ and after INIT $0\\rightarrow-30^\\circ$ by $1^\\circ$ with XFOIL's polar procedure (ASEQ, ITMAX+5 per point, the sequence halting after NSEQEX = 4 consecutive unconverged points); yFoil driven the same way and compared point by point with the equivalence gate. Provenance in \\texttt{metadata.json}, every number in \\texttt{summary.json}.");
     for r in s["polars"].as_array().unwrap() {
         w(&mut f, &format!("\\begin{{figure}}[h]\\centering\\includegraphics{{polars-{}.pdf}}\\caption{{{} (\\texttt{{{}}}): $C_L$ and $C_D$ against $\\alpha$ (top), the last iteration's RMSBL and the iterations taken (second row), the transition location on each side (third row; an open triangle where the final IST or ITRAN differs between the codes), the position of transition within its station interval on each side (fourth row) and, where the fixture keeps the reference's per-call state, yFoil's final state against the reference's, worst array, as a ratio to its gate and as $|\\Delta|$ against the twin's 1-ULP floor (fifth row). XFOIL red (dashed, crosses), yFoil blue (solid, circles filled where yFoil followed the reference to the end of the point); an orange outer square marks a point in which that code went through a non-finite value, an orange tick a plotted value that is itself NaN; a black outer diamond a point within which the run departs where the reference is unstable against its 1-ULP twins (a threshold), a filled grey diamond one where it is stable (a mismatch). Where the red line stops short of the blue one the reference's sequence halted or hung there.}}\\end{{figure}}", r["name"].as_str().unwrap(), tex_escape(r["section"].as_str().unwrap()), tex_escape(r["name"].as_str().unwrap())));
@@ -327,15 +362,18 @@ pub fn write_index_tex(run_dir: &Path, s: &Value) {
 
 pub fn write_docs(docs: &Path, run_dir: &Path, s: &Value, drawn: bool) {
     let meta: Value = serde_json::from_str(&fs::read_to_string(run_dir.join("metadata.json")).unwrap()).unwrap();
-    let mut m = String::from("# Branch-case polars: the branch-coverage sections through stall\n\n");
-    m +=
-        &format!(
-        "Generated by `cargo run --release -p branch-case-polars -- --docs` on {} (git {}{}, host {}). Do not edit; \
-         regenerate. The run folder (`scripts/branch-case-polars/runs/`, gitignored) holds `summary.json` with \
+    let mut m = String::from("# Series cases\n\n");
+    m += &format!(
+        "Generated by `cargo run --release -p series-cases -- --docs` on {} (git {}{}, host {}). Do not edit; \
+         regenerate. The run folder (`scripts/series-cases/runs/`, gitignored) holds `summary.json` with \
          every point of every polar and `README.tex` with the same table for the paper.\n\n",
         meta["generated"].as_str().unwrap_or(""),
         meta["git_describe"].as_str().unwrap_or(""),
-        if meta["git_dirty"].as_bool().unwrap_or(false) { ", dirty" } else { "" },
+        if meta["git_dirty"].as_bool().unwrap_or(false) {
+            ", dirty"
+        } else {
+            ""
+        },
         meta["host"].as_str().unwrap_or("")
     );
     m += &body_md(s, drawn);

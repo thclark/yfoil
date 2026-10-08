@@ -1,7 +1,10 @@
 //! Run one case through yFoil's `Session` exactly as its OPER script drove XFOIL, and compare
 //! every call with the fixture (`scripts/study-support/records.rs`).
 
-use crate::utilities::records::{compare_call, compare_inviscid_call, load, transient_tol, CallReport, Outcome};
+use crate::utilities::records::{
+    compare_call, compare_inviscid_call, inviscid_ill_conditioned_calls, load, reference_ill_conditioned,
+    transient_tol, CallReport, Outcome,
+};
 use crate::Case;
 use std::path::Path;
 use yfoil::bl::system::{AmplificationModel, MachClDependence, ReClDependence};
@@ -21,6 +24,9 @@ pub struct CaseGate {
     /// SETBL/UPDATE/… subroutine calls the reference made (from the gcov measurement) — not
     /// known here; kept for the summary by the caller
     pub reference_iterations: usize,
+    /// the calls at which the reference itself was ill-conditioned, from its own twins
+    /// (`reference_ill_conditioned`); `None` when the case has no twins
+    pub ill_conditioned_calls: Option<Vec<usize>>,
 }
 
 impl CaseGate {
@@ -171,5 +177,14 @@ pub fn gate(root: &Path, case: &Case) -> CaseGate {
         floor_iteration_max: fi,
         floor_point_max: fp,
         reference_iterations,
+        ill_conditioned_calls: if rec.points.is_empty() {
+            inviscid_ill_conditioned_calls(&rec)
+        } else {
+            rec.floor.as_ref().map(|_| {
+                (1..=rec.points.len())
+                    .filter(|&k| reference_ill_conditioned(&rec, k) == Some(true))
+                    .collect()
+            })
+        },
     }
 }

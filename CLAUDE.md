@@ -370,11 +370,12 @@ the generator runs the reference twice to dump each of their SETBL calls). `xtas
 (written by `cargo xtask steps`, from the steps `cargo xtask route` found to take XFOIL's route —
 `route.toml`, with `route-map.toml` naming the XFOIL call sites yFoil translates without a call, whose calls are
 taken off XFOIL's counts) adds
-the dumps and files of the branch cover's steps. `cargo xtask twins --case
-NAME` reruns a case on five seeded 1-ULP twins and writes its `noise_floor.json` (study data,
-`target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs); `group = "name"`
+the dumps and files of the branch cover's steps. `twins = true` (every `branch-coverage`, `non-finite` and `series`
+case) runs the case's five seeded 1-ULP twins after the reference and writes its `noise_floor.json` (study data,
+`target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs; `cargo xtask twins --case
+NAME` reruns them alone); `group = "name"`
 (`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
-its NaN probes, `branch-case-polars` the ±30° sweeps, `twins-baseline`/`twins-extra` the N = 240, ITER 200
+its NaN probes, `series` the series cases (polars or points for the aerofoil series of interest), `twins-baseline`/`twins-extra` the N = 240, ITER 200
 sections, `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
 `--group`, never by `--big`) — and study-only cases are untracked; `cargo xtask
 fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
@@ -422,7 +423,7 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-gating.md), `scripts/noise-floor.sh` (noise-floor.md),
-`cargo run -p branch-coverage -- --docs` (branch-coverage/), `cargo run -p branch-case-polars -- --docs` (branch-case-polars/),
+`cargo run -p branch-coverage -- --docs` (branch-coverage/), `cargo run -p series-cases -- --docs` (series-cases/),
 `cargo run -p xfoil-sensitivity -- --twins --docs` (xfoil-sensitivity/: the reference against its five seeded 1-ULP twins per
 case), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
 (`scripts/study-support/records.rs`) — study evidence beside the tests, never read by them;
@@ -497,8 +498,8 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
   `XSTRIP`, `MATYP≠1` — and the study's minimal set (`group = "branch-coverage"`): inviscid-only (Kármán–Trefftz;
   the 64A010 TYPE 2 M 0.3 sweep through −30…30°), fixed CL far from alpha, a trip upstream of the stagnation point,
   a stalled first march at Re 3e6, deep stall at ITER 50, Re 1e4 with DAMP
-- The branch-case polars (`scripts/branch-case-polars`, `docs/validation/branch-case-polars/`): the same
-  sections swept 0 → ±30° by XFOIL's polar procedure (`group = "branch-case-polars"`), yFoil driven the same
+- The series cases (`scripts/series-cases`, `docs/validation/series-cases/`): the same
+  sections swept 0 → ±30° by XFOIL's polar procedure (`group = "series"`), yFoil driven the same
   way and compared point by point through stall and into the non-finite region (a study; the tests replay the
   chased calls step by step)
 

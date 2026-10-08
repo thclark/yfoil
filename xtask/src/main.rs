@@ -103,7 +103,7 @@ struct Case {
     #[serde(default)]
     step_calls: Vec<usize>,
     /// the study the case belongs to (`--group NAME` selects it): `branch-coverage`, `non-finite`,
-    /// `branch-case-polars`, `twins-baseline`, `twins-extra` — the studies read their cases by it
+    /// `series-cases`, `twins-baseline`, `twins-extra` — the studies read their cases by it
     #[serde(default)]
     group: Option<String>,
     /// stop the reference after this many SETBL calls (`stop_after_setbl.txt`, patch 20): the
@@ -115,6 +115,11 @@ struct Case {
     /// from the iterations after that
     #[serde(default)]
     stop_on_nonfinite: bool,
+    /// run the case's five seeded 1-ULP twins and write its `noise_floor.json` after the
+    /// reference (study data, never tracked): whether XFOIL was ill-conditioned at each point of
+    /// a validation run is known only from them
+    #[serde(default)]
+    twins: bool,
 }
 /// XFOIL's PPAR menu values for a geometry-only case
 #[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
@@ -633,6 +638,7 @@ fn fixtures(flags: &[String]) {
                 continue;
             }
         }
+        let mut twins_ready = false;
         if held.join("noise_floor.json").exists() {
             let same = |f: &str| fs::read(held.join(f)).ok() == fs::read(work.join(f)).ok();
             if same("panels.dat") && same("xfoil.inp") && same("stop_after_setbl.txt") && same("stop_on_nonfinite.txt")
@@ -644,6 +650,7 @@ fn fixtures(flags: &[String]) {
                     }
                 }
                 println!("  twins kept (same panels and script)");
+                twins_ready = true;
             } else {
                 println!(
                     "  twins discarded (the inputs changed): rerun `cargo xtask twins --case {}`",
@@ -651,6 +658,15 @@ fn fixtures(flags: &[String]) {
                 );
             }
             let _ = fs::remove_dir_all(&held);
+        }
+        if case.twins && !twins_ready {
+            match steps::run_twins(&xfoil, &work, case.inviscid) {
+                Ok(summary) => println!("  twins: {summary}"),
+                Err(e) => {
+                    eprintln!("  TWINS FAILED: {e}");
+                    failures += 1;
+                }
+            }
         }
 
         // 3b. a TGAP case must have produced its dump. (The reference's twins, which the step

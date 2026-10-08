@@ -613,7 +613,7 @@ fn body_md(j: &Value, run_dir: &Path, figures: bool) -> String {
             ""
         }
     );
-    m += "The cases are the `twins-baseline` group of `xtask/fixtures-config/cases.toml`: the branch-case-polars \
+    m += "The cases are the `twins-baseline` group of `xtask/fixtures-config/cases.toml`: the series-cases \
           sections and conditions at 240 panels and ITER 200, swept 0 → +30°, `INIT`, 0 → −30° by 1° with XFOIL's \
           polar procedure (`ALFA 0 / ASEQ`, ITMAX + 5 per sequence point, the sequence halting after NSEQEX = 4 \
           consecutive unconverged points), so that the reference is given every chance to converge and the \

@@ -60,38 +60,40 @@ pub fn twins(flags: &[String]) {
             failures += 1;
             continue;
         }
-        let results: Vec<Result<(), String>> = std::thread::scope(|scope| {
-            let handles: Vec<_> = SEEDS
-                .iter()
-                .map(|&seed| {
-                    let (work, xfoil) = (&work, &xfoil);
-                    scope.spawn(move || twin(xfoil, work, seed))
-                })
-                .collect();
-            handles.into_iter().map(|h| h.join().expect("twin thread")).collect()
-        });
-        let errs: Vec<String> = results.into_iter().filter_map(Result::err).collect();
-        if errs.is_empty() {
-            let inviscid = fs::read_to_string(work.join("manifest.json"))
-                .ok()
-                .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-                .and_then(|m| m["case"]["inviscid"].as_bool())
-                .unwrap_or(false);
-            match super::noise_floor::write(&work, inviscid, &SEEDS) {
-                Ok(summary) => println!("  {name}: {} twins; {summary}", SEEDS.len()),
-                Err(e) => {
-                    eprintln!("  {name}: {} twins; noise floor: {e}", SEEDS.len());
-                    failures += 1;
-                }
+        let inviscid = fs::read_to_string(work.join("manifest.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|m| m["case"]["inviscid"].as_bool())
+            .unwrap_or(false);
+        match run_twins(&xfoil, &work, inviscid) {
+            Ok(summary) => println!("  {name}: {} twins; {summary}", SEEDS.len()),
+            Err(e) => {
+                eprintln!("  {name}: {e}");
+                failures += 1;
             }
-        } else {
-            eprintln!("  {name}: {}", errs.join("; "));
-            failures += 1;
         }
     }
     if failures > 0 {
         std::process::exit(1);
     }
+}
+
+/// The case in `work`: its five seeded twins (`ulp<seed>/`, run concurrently) and then its
+/// `noise_floor.json`. Called by `cargo xtask twins` and by `cargo xtask fixtures` for a case
+/// with `twins = true`; returns the noise floor's one-line summary.
+pub(crate) fn run_twins(xfoil: &Path, work: &Path, inviscid: bool) -> Result<String, String> {
+    let results: Vec<Result<(), String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = SEEDS
+            .iter()
+            .map(|&seed| scope.spawn(move || twin(xfoil, work, seed)))
+            .collect();
+        handles.into_iter().map(|h| h.join().expect("twin thread")).collect()
+    });
+    let errs: Vec<String> = results.into_iter().filter_map(Result::err).collect();
+    if !errs.is_empty() {
+        return Err(errs.join("; "));
+    }
+    super::noise_floor::write(work, inviscid, &SEEDS).map_err(|e| format!("noise floor: {e}"))
 }
 
 /// The jog of node `i`'s coordinates in twin `seed`: −1, 0 or +1 ULP for x and for y.

@@ -61,7 +61,10 @@ A **twin** is a rerun of the reference with every panel coordinate jogged by −
 x and y independently, drawn reproducibly from a seed. Five seeded twins per case are the
 instrument that measures how ill-conditioned a solution is: where a twin's branch trace differs
 from the reference's, the reference's own route sits on a knife edge there. They are made by
-`cargo xtask twins` (`target/fixtures/<case>/ulp<seed>/`).
+`cargo xtask fixtures` for every case with `twins = true` — every validation run — or by
+`cargo xtask twins` (`target/fixtures/<case>/ulp<seed>/`). A twin describes the run it is the
+twin of: its conditioning says nothing about the same section at another panelling or reached
+along another path.
 
 Moving every coordinate the same way is not a twin: it translates the aerofoil and measures
 almost nothing.
@@ -71,6 +74,6 @@ almost nothing.
 The **noise floor** of a recorded value is the largest difference between the reference and any
 of its twins. It is the reference's own spread under a one-ULP perturbation. It is a study
 quantity, used to derive the named tolerances in `tests/common/utilities/tolerances.rs` and in
-the studies, which read it from the `noise_floor.json` that `cargo xtask twins` writes beside each
+the studies, which read it from the `noise_floor.json` written with the twins beside each
 case's work directory. Tests do not read it (see
 [testing.md](testing.md), including its Status section).

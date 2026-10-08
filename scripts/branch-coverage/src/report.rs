@@ -197,7 +197,7 @@ pub fn summary(
             "description": desc.get(&g.name).cloned().unwrap_or_default(),
             "inviscid": c.case.inviscid, "nan_count": c.nan_count,
             "calls": calls, "reference_iterations": g.reference_iterations,
-            "verdict": g.verdict(), "parted_at": g.parted_at(),
+            "verdict": g.verdict(), "parted_at": g.parted_at(), "ill_conditioned_calls": g.ill_conditioned_calls,
             "gated_iterations": g.calls.iter().map(|r| r.gated_iterations).sum::<usize>(),
             "metrics": {
                 "cl": point("CL"), "cd": point("CD"), "cm": point("CM"),
@@ -253,7 +253,7 @@ pub fn summary(
             "n_nodes": c.case.n_nodes,
             "branches_taken": c.taken.len(), "unique_branches": unique, "unique_by_subroutine": unique_subs,
             "calls": calls, "reference_iterations": g.reference_iterations,
-            "verdict": g.verdict(), "parted_at": g.parted_at(),
+            "verdict": g.verdict(), "parted_at": g.parted_at(), "ill_conditioned_calls": g.ill_conditioned_calls,
             "metrics": {
                 "cl": point("CL"), "cd": point("CD"), "cm": point("CM"),
                 "gam": point("GAM"), "qinv": point("QINV"), "cpi": point("CPI"),
@@ -517,7 +517,7 @@ fn case_table_md(s: &Value) -> String {
 /// The gate table (difference metrics) as Markdown rows.
 fn gate_table_md(s: &Value) -> String {
     let mut t = String::from(
-        "| case | calls | ref. iterations | outcome | parts at | max \\|ΔCL\\| | max \\|ΔCD\\| | max \\|ΔCM\\| | max \\|ΔRMSBL\\| / \\|ΔGAM\\| | worst diff/floor | ref. 1-ULP spread |\n|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|\n",
+        "| case | calls | ref. iterations | outcome | parts at | XFOIL ill-conditioned at (its twins) | max \\|ΔCL\\| | max \\|ΔCD\\| | max \\|ΔCM\\| | max \\|ΔRMSBL\\| / \\|ΔGAM\\| | worst diff/floor | ref. 1-ULP spread |\n|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|\n",
     );
     for c in s["cases"].as_array().unwrap() {
         let inviscid = c["inviscid"].as_bool().unwrap_or(false);
@@ -527,8 +527,17 @@ fn gate_table_md(s: &Value) -> String {
         } else {
             metric(c, "floor_iteration_max")
         };
+        let ill = match c["ill_conditioned_calls"].as_array() {
+            None => "—".to_string(),
+            Some(a) if a.is_empty() => "no call".to_string(),
+            Some(a) => format!(
+                "call{} {}",
+                if a.len() > 1 { "s" } else { "" },
+                a.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ")
+            ),
+        };
         t += &format!(
-            "| `{}` | {} | {} | {} | {} | {} | {} | {} | {}{} | {} | {} |\n",
+            "| `{}` | {} | {} | {} | {} | {ill} | {} | {} | {} | {}{} | {} | {} |\n",
             c["name"].as_str().unwrap(),
             c["calls"].as_array().unwrap().len(),
             c["reference_iterations"],
@@ -789,7 +798,7 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
           tokens in the reference's own output for the run.\n\n";
     m += &nonfinite_table_md(s);
     m += "\n## Full polars\n\nThe same sections swept as full ±30° polars, through stall and into the non-finite region, are \
-          the [branch-case-polars](../branch-case-polars/README.md) study. Those sweeps are measured here like \
+          the [series-cases](../series-cases/README.md) study. Those sweeps are measured here like \
           every tracked case (their branches count as taken) but are never candidates for the cover: the cover \
           is the minimal set of single operating points, and the polars are built from its sections.\n";
     m += "\n## Not covered\n\n";

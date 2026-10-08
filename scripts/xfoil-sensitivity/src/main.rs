@@ -31,7 +31,7 @@
 //! column (log |twin − reference| per twin, the envelope in red, an orange diamond where a twin
 //! finished differently from the reference). `--docs` publishes the sheets to
 //! `docs/validation/xfoil-sensitivity/`. The default case set is the `twins-baseline` group of
-//! `cases.toml`: the branch-case-polars sections and conditions at 240 panels and ITER 200, swept
+//! `cases.toml`: the series-cases sections and conditions at 240 panels and ITER 200, swept
 //! 0 → ±30° by 1°, so the reference is given every chance to converge; each case's `n_nodes` and
 //! `max_iterations` are recorded in `twins.json` and tabled.
 //!
@@ -40,7 +40,7 @@
 //! ```text
 //! cargo run --release -p xfoil-sensitivity -- [--foil 0012] [--family geometry|panels|alpha-step]
 //!                                            [--jobs N] [--resume RUN_DIR] [--plot-only RUN_DIR]
-//! cargo run --release -p xfoil-sensitivity -- --twins [--group branch-case-polars] [--case NAME]...
+//! cargo run --release -p xfoil-sensitivity -- --twins [--group series] [--case NAME]...
 //!                                            [--docs] [--plot-only RUN_DIR]
 //! ```
 
@@ -305,7 +305,7 @@ struct Args {
     /// The twins mode: the reference against its seeded 1-ULP twins, case by case
     twins: bool,
     /// `--group NAME` / `--case NAME` selection of the twins mode (default: the
-    /// branch-case-polars group)
+    /// series-cases group)
     group: String,
     cases: Vec<String>,
     /// publish the twins sheets to docs/validation/xfoil-sensitivity/

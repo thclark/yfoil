@@ -11,7 +11,9 @@
 //! yFoil's sweep continues to its own halt either way, so the figure shows where each code ends
 //! up.
 
-use crate::utilities::records::{compare_call, compare_state, load, transient_tol, ArrayDiff, Outcome};
+use crate::utilities::records::{
+    compare_call, compare_state, load, reference_ill_conditioned, transient_tol, ArrayDiff, Outcome,
+};
 use crate::Case;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -31,6 +33,9 @@ pub struct PolarPoint {
     /// match | divergent | mismatch | ungated (the leg had already departed), when the call was
     /// compared
     pub outcome: Option<String>,
+    /// whether the reference itself was ill-conditioned at this point, from its twins
+    /// (`reference_ill_conditioned`); `None` without twins or a matching call
+    pub xfoil_ill_conditioned: Option<bool>,
     pub parted_iteration: Option<usize>,
     /// iterations of the call compared within tolerance (all of them when yFoil followed the
     /// reference to the end of the call, whatever the twin did)
@@ -147,7 +152,7 @@ impl PolarRun {
             "truncated_by_watchdog": self.truncated_by_watchdog, "parted": self.parted(),
             "points": self.points.iter().map(|p| json!({
                 "leg": p.leg, "alpha_deg": p.alpha_deg, "yfoil": pt(&p.yfoil),
-                "xfoil": p.xfoil.as_ref().map(pt), "outcome": p.outcome, "parted_iteration": p.parted_iteration,
+                "xfoil": p.xfoil.as_ref().map(pt), "outcome": p.outcome, "xfoil_ill_conditioned": p.xfoil_ill_conditioned, "parted_iteration": p.parted_iteration,
                 "gated_iterations": p.gated_iterations, "followed": Self::followed(p),
                 "yfoil_nonfinite": p.yfoil_nonfinite, "xfoil_nonfinite": p.xfoil_nonfinite,
                 "yfoil_nonfinite_stations": p.yfoil_nonfinite_stations, "xfoil_nan_tokens": p.xfoil_nan_tokens,
@@ -164,7 +169,135 @@ impl PolarRun {
     }
 }
 
+/// One operating point of a series case.
+enum Op {
+    Alpha(f64),
+    Cl(f64),
+}
+
+/// The reference's SPECAL records (`specal_points.dat`): per call CL, CM, CDP and the per-node
+/// GAM, QINV, CPI.
+fn specal_records(dir: &Path) -> Vec<(f64, f64, f64, Vec<[f64; 3]>)> {
+    let text = std::fs::read_to_string(dir.join("specal_points.dat")).unwrap_or_default();
+    let mut out: Vec<(f64, f64, f64, Vec<[f64; 3]>)> = vec![];
+    for l in text.lines() {
+        let Some((k, v)) = l.split_once('=') else { continue };
+        let k = k.trim();
+        if k == "CALL" {
+            out.push((f64::NAN, f64::NAN, f64::NAN, vec![]));
+            continue;
+        }
+        let Some(cur) = out.last_mut() else { continue };
+        let num = |s: &str| s.trim().parse::<f64>().unwrap_or(f64::NAN);
+        match k {
+            "CL" => cur.0 = num(v),
+            "CM" => cur.1 = num(v),
+            "CDP" => cur.2 = num(v),
+            _ if k.starts_with("NODE(") => {
+                let t: Vec<f64> = v.split_whitespace().map(num).collect();
+                if t.len() >= 3 {
+                    cur.3.push([t[0], t[1], t[2]]);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// An inviscid series case: one SPECAL per alpha, from the panels, compared with the reference's
+/// SPECAL record of the same call — CL, CM and CDp, and every node's GAM, QINV and CPI — on the
+/// Rule 1 metric (scale 1) within `max(TOL_SOLVER · scale, FLOOR_FACTOR · spread)`, with *spread*
+/// the reference's own twins' largest spread of that value at that call (`noise_floor.json`,
+/// `specal_calls`); the reference is ill-conditioned at a point where a scalar's spread exceeds
+/// `DIVERGENCE_FLOOR`. Inviscid runs have no iterations, transition or boundary layer; those fields
+/// are left empty.
+pub fn inviscid_sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
+    use crate::utilities::records::{DIVERGENCE_FLOOR, FLOOR_FACTOR};
+    use crate::utilities::tolerances::TOL_SOLVER;
+    let dir = root.join("target/fixtures").join(&case.name);
+    let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).expect("panels.json");
+    let airfoil = panel_foil(&geometry);
+    let recs = specal_records(&dir);
+    // the reference's twins: per call, the largest spread of each scalar and array
+    let spreads: Vec<serde_json::Map<String, Value>> = std::fs::read_to_string(dir.join("noise_floor.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v["specal_calls"].as_array().cloned())
+        .map(|a| {
+            a.iter()
+                .map(|c| c["point"].as_object().cloned().unwrap_or_default())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut session = Session::new(&airfoil, case.conditions());
+    let mut points = vec![];
+    for (j, a) in case.alphas.iter().enumerate() {
+        let p = session.alpha(a.to_radians());
+        let x = recs.get(j);
+        let spread = |key: &str| -> f64 {
+            spreads
+                .get(j)
+                .and_then(|m| m.get(key))
+                .map_or(0.0, |v| v.as_f64().unwrap_or(f64::INFINITY))
+        };
+        let within = |a: f64, b: f64, key: &str| -> bool {
+            (a.is_nan() && b.is_nan())
+                || (a - b).abs() <= (TOL_SOLVER * a.abs().max(b.abs()).max(1.0)).max(FLOOR_FACTOR * spread(key))
+        };
+        let outcome = x.map(|x| {
+            let nodes_ok = {
+                let st = session.state();
+                x.3.iter().enumerate().all(|(i, n)| {
+                    let i = i + 1;
+                    within(st.gamma.get(i).copied().unwrap_or(f64::NAN), n[0], "GAM")
+                        && within(st.q_inviscid.get(i).copied().unwrap_or(f64::NAN), n[1], "QINV")
+                        && within(st.cp_inviscid.get(i).copied().unwrap_or(f64::NAN), n[2], "CPI")
+                })
+            };
+            if within(p.cl, x.0, "CL") && within(p.cm, x.1, "CM") && within(p.cd_pressure, x.2, "CDP") && nodes_ok {
+                "match".to_string()
+            } else {
+                "mismatch".to_string()
+            }
+        });
+        let ill = (!spreads.is_empty()).then(|| ["CL", "CM", "CDP"].iter().any(|k| !(spread(k) <= DIVERGENCE_FLOOR)));
+        points.push(PolarPoint {
+            leg: 1,
+            alpha_deg: *a,
+            yfoil: (p.cl, p.cd_pressure, p.cm, f64::NAN, 0, true),
+            xfoil: x.map(|x| (x.0, x.2, x.1, f64::NAN, 0, true)),
+            gated_iterations: (outcome.as_deref() == Some("match")).then_some(0),
+            outcome,
+            xfoil_ill_conditioned: x.and(ill),
+            parted_iteration: None,
+            yfoil_nonfinite: ![p.cl, p.cm, p.cd_pressure].iter().all(|v| v.is_finite()),
+            xfoil_nonfinite: x.map(|x| ![x.0, x.1, x.2].iter().all(|v| v.is_finite())),
+            yfoil_nonfinite_stations: 0,
+            xfoil_nan_tokens: None,
+            yfoil_transition: [f64::NAN, f64::NAN],
+            xfoil_transition: None,
+            yfoil_stations: [session.state().i_stagnation_node, 0, 0],
+            xfoil_stations: None,
+            state: None,
+            transition_position: [None, None, None],
+        });
+    }
+    PolarRun {
+        name: case.name.clone(),
+        section: case.section(),
+        script: case.script(),
+        description: description.to_string(),
+        points,
+        xfoil_calls: recs.len(),
+        truncated_by_watchdog: false,
+    }
+}
+
 pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
+    if case.inviscid {
+        return inviscid_sweep(root, case, description);
+    }
     let dir = root.join("target/fixtures").join(&case.name);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = panel_foil(&geometry);
@@ -210,19 +343,29 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
     }
     let mut session = Session::new(&airfoil, case.conditions());
     let mut points: Vec<PolarPoint> = vec![];
-    let leg = |session: &mut Session, alphas: &[f64], leg_no: usize, points: &mut Vec<PolarPoint>| {
+    // a leg is a list of operating points: the alphas of an ALFA / ASEQ polar leg (the first an
+    // ALFA, the rest ASEQ points with its halting rule), or the CL points of a fixed-CL series
+    // (each its own OPER `CL` command, matched to the reference's calls in order)
+    let leg = |session: &mut Session, ops: &[Op], leg_no: usize, points: &mut Vec<PolarPoint>| {
         let mut failures = 0usize;
         // once a point of this leg was not followed to the end, every later point starts from a
         // state the reference did not compute: its comparison is informational, never a mismatch
         // (a leg starts afresh: INIT and a fresh march)
         let mut departed = false;
-        for (j, a) in alphas.iter().enumerate() {
-            let p = if j == 0 {
-                session.alpha(a.to_radians())
-            } else {
-                session.sequence_point(a.to_radians())
+        for (j, op) in ops.iter().enumerate() {
+            let p = match op {
+                Op::Alpha(a) if j == 0 => session.alpha(a.to_radians()),
+                Op::Alpha(a) => session.sequence_point(a.to_radians()),
+                Op::Cl(c) => session.cl(*c),
             };
-            let k = ref_calls.get(&(leg_no, (a * 1000.0).round() as i64)).copied();
+            let a = &match op {
+                Op::Alpha(a) => *a,
+                Op::Cl(_) => p.alpha.to_degrees(),
+            };
+            let k = match op {
+                Op::Alpha(a) => ref_calls.get(&(leg_no, (a * 1000.0).round() as i64)).copied(),
+                Op::Cl(_) => (j < rec.points.len()).then_some(j + 1),
+            };
             let mut xfoil_transition = None;
             let mut xfoil_stations = None;
             let state = k.and_then(|k| compare_state(&rec, &dir, k, session.state()));
@@ -275,6 +418,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                 yfoil: (p.cl, p.cd, p.cm, p.residual, p.iterations, p.converged),
                 xfoil,
                 outcome,
+                xfoil_ill_conditioned: k.and_then(|k| reference_ill_conditioned(&rec, k)),
                 parted_iteration: parted,
                 gated_iterations: gated,
                 yfoil_nonfinite,
@@ -297,8 +441,8 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                 ],
             });
             // ASEQ's halting rule on yFoil's own convergence (the ALFA 0 that seeds the leg is
-            // outside the sequence, as in XFOIL)
-            if j > 0 {
+            // outside the sequence, as in XFOIL); OPER CL commands do not halt
+            if j > 0 && matches!(op, Op::Alpha(_)) {
                 if p.converged {
                     failures = 0;
                 } else {
@@ -310,10 +454,17 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
             }
         }
     };
-    leg(&mut session, &case.alphas, 1, &mut points);
+    if case.alphas.is_empty() {
+        let ops: Vec<Op> = case.cls.iter().map(|c| Op::Cl(*c)).collect();
+        leg(&mut session, &ops, 1, &mut points);
+    } else {
+        let ops: Vec<Op> = case.alphas.iter().map(|a| Op::Alpha(*a)).collect();
+        leg(&mut session, &ops, 1, &mut points);
+    }
     if !case.alphas_after_reinit.is_empty() {
         session.init();
-        leg(&mut session, &case.alphas_after_reinit, 2, &mut points);
+        let ops: Vec<Op> = case.alphas_after_reinit.iter().map(|a| Op::Alpha(*a)).collect();
+        leg(&mut session, &ops, 2, &mut points);
     }
     PolarRun {
         name: case.name.clone(),

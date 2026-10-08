@@ -484,7 +484,7 @@ from XFOIL's exact state at `TOL_PURE`), `tests/subroutine/transition.rs` (TRCHE
 reference's dumped inputs, `trchek2_<k>.dat`), and `tests/execution/steps.rs` (every iteration of the 7° call
 replayed from XFOIL's state, each within four times the step's own measured sensitivity). Each code's own
 march through the call — the amplification acting on each code's own last-bit seed — is a divergent
-comparison in the sense of `docs/conventions/terminology.md` and belongs to the branch-case-polars study. The
+comparison in the sense of `docs/conventions/terminology.md` and belongs to the series-cases study. The
 instrumented reference dumps `trchek2_<k>.dat` and `mrchdu_trace_<k>.dat` for every `dump_calls` SETBL call.
 
 ### 7.10 The fallback tests are written so that a NaN residual takes the fallback — Replicated
