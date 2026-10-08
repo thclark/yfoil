@@ -108,7 +108,7 @@ a fixture with a manifest, never against literals typed into the source.
    changed to suit the measurement. Steps whose counts differ are **divergent** and
    are listed in `xtask/fixtures-config/route.toml` with the subroutines that differ, beside
    divergences found by other means (`found`, with the evidence).
-3. **The cover.** The fewest steps taking every branch that any step whose route agrees takes
+3. **The step cover** (`terminology.md`). The fewest steps taking every branch that any step whose route agrees takes
    (`xtask/fixtures-config/step-cover.toml`), each replayed by one test in
    `tests/execution/branches.rs`; the fixture generator adds the dumps and files those steps need.
    Every step is eligible, ill-conditioned solutions included, except the divergent ones; the
