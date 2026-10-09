@@ -97,8 +97,9 @@ where
     root.fill(&bg_color).map_err(|e| PlotError::Drawing(e.to_string()))?;
 
     // Get surface data
-    let (x_upper, cp_upper, vel_upper) = analysis.upper_surface();
-    let (x_lower, cp_lower, vel_lower) = analysis.lower_surface();
+    // a point whose numbers were withheld has no surface distributions to draw
+    let (x_upper, cp_upper, vel_upper) = analysis.upper_surface().unwrap_or_default();
+    let (x_lower, cp_lower, vel_lower) = analysis.lower_surface().unwrap_or_default();
 
     // Get airfoil outline
     let airfoil_x = &analysis.geometry.x;
@@ -282,8 +283,9 @@ fn write_analysis_precision_svg<P: AsRef<Path>>(
     let mut file = std::fs::File::create(output_path)?;
 
     // Get surface data
-    let (x_upper, cp_upper, vel_upper) = analysis.upper_surface();
-    let (x_lower, cp_lower, vel_lower) = analysis.lower_surface();
+    // a point whose numbers were withheld has no surface distributions to draw
+    let (x_upper, cp_upper, vel_upper) = analysis.upper_surface().unwrap_or_default();
+    let (x_lower, cp_lower, vel_lower) = analysis.lower_surface().unwrap_or_default();
 
     // Get airfoil outline
     let airfoil_x = &analysis.geometry.x;
@@ -776,6 +778,18 @@ impl Default for PolarPlotConfig {
 }
 
 /// Data for a single polar curve
+/// The points of a polar that can be drawn: valid, and therefore carrying their values.
+/// An invalid or never-attempted point has nothing to plot and is left out of every series, so a
+/// Kármán–Tsien artefact cannot appear as a bump on a curve.
+fn valid_points(polar: &crate::output::PolarOutput) -> Vec<(f64, &crate::output::PointValues)> {
+    polar
+        .results
+        .iter()
+        .filter(|p| p.is_valid())
+        .filter_map(|p| p.values.as_ref().map(|v| (p.alpha_deg, v)))
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct PolarData {
     /// Angle of attack values (degrees)
@@ -789,9 +803,10 @@ pub struct PolarData {
 impl PolarData {
     /// Create from PolarOutput
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
-        let alpha: Vec<f64> = polar.results.iter().map(|p| p.alpha_deg).collect();
-        let cl: Vec<f64> = polar.results.iter().map(|p| p.cl).collect();
-        let cd: Vec<f64> = polar.results.iter().map(|p| p.cd.unwrap_or(0.0)).collect();
+        let pts = valid_points(polar);
+        let alpha: Vec<f64> = pts.iter().map(|(a, _)| *a).collect();
+        let cl: Vec<f64> = pts.iter().map(|(_, v)| v.cl).collect();
+        let cd: Vec<f64> = pts.iter().map(|(_, v)| v.cd.unwrap_or(0.0)).collect();
         Self { alpha, cl, cd }
     }
 
@@ -1757,11 +1772,12 @@ pub struct PolarDataWithCm {
 impl PolarDataWithCm {
     /// Create from PolarOutput
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
+        let pts = valid_points(polar);
         Self {
-            alpha: polar.results.iter().map(|p| p.alpha_deg).collect(),
-            cl: polar.results.iter().map(|p| p.cl).collect(),
-            cd: polar.results.iter().map(|p| p.cd.unwrap_or(0.0)).collect(),
-            cm: polar.results.iter().map(|p| p.cm).collect(),
+            alpha: pts.iter().map(|(a, _)| *a).collect(),
+            cl: pts.iter().map(|(_, v)| v.cl).collect(),
+            cd: pts.iter().map(|(_, v)| v.cd.unwrap_or(0.0)).collect(),
+            cm: pts.iter().map(|(_, v)| v.cm).collect(),
         }
     }
 
@@ -2950,13 +2966,13 @@ impl PolarSeries {
     ///
     /// The label is the polar's `label` if set, otherwise its `airfoil` name.
     pub fn from_polar_output(polar: &crate::output::PolarOutput) -> Self {
-        let pts: Vec<_> = polar.results.iter().filter(|p| p.is_converged()).collect();
+        let pts = valid_points(polar);
         Self {
             label: polar.label.clone().unwrap_or_else(|| polar.foil.clone()),
-            alpha: pts.iter().map(|p| p.alpha_deg).collect(),
-            cl: pts.iter().map(|p| p.cl).collect(),
-            cd: pts.iter().map(|p| p.cd.unwrap_or(0.0)).collect(),
-            cm: pts.iter().map(|p| p.cm).collect(),
+            alpha: pts.iter().map(|(a, _)| *a).collect(),
+            cl: pts.iter().map(|(_, v)| v.cl).collect(),
+            cd: pts.iter().map(|(_, v)| v.cd.unwrap_or(0.0)).collect(),
+            cm: pts.iter().map(|(_, v)| v.cm).collect(),
         }
     }
 }

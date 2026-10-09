@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/src/xlog.f
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,388 @@
 +C***********************************************************************
 +C    Module:  xlog.f
 +C    XFOIL Instrumentation Logging Routines
@@ -358,9 +358,40 @@
 +C
 +      RETURN
 +      END
++
++
++      SUBROUTINE EVLOG(NAME, IS, IBL, R)
++C------------------------------------------------------------------
++C     Append one branch event to events.dat: the name of the site,
++C     the SETBL call it happened in (0 before the first SETBL), the
++C     side and station, and one real (the value that decided it).
++C     The events are the branch trace of the rarely-taken fallbacks
++C     (garbage extrapolation, Ue floors, negative-Ue islands, ...)
++C     that yFoil's replay tests assert one call at a time.
++C------------------------------------------------------------------
++      INCLUDE 'XLOG.INC'
++      CHARACTER*(*) NAME
++      INTEGER IS, IBL
++      REAL R
++      LOGICAL LFIRST
++      SAVE LFIRST
++      DATA LFIRST / .TRUE. /
++C
++      IF(LFIRST) THEN
++       OPEN(94, FILE='events.dat', STATUS='REPLACE')
++       LFIRST = .FALSE.
++      ELSE
++       OPEN(94, FILE='events.dat', STATUS='OLD', POSITION='APPEND')
++      ENDIF
++      WRITE(94,'(A,1X,A,1X,I6,1X,I3,1X,I5,1X,ES24.16)')
++     &  'EV', NAME, NSETBLC, IS, IBL, R
++      CLOSE(94)
++C
++      RETURN
++      END
 --- /dev/null
 +++ b/src/XLOG.INC
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,15 @@
 +C
 +C==== XFOIL Instrumentation Logging Include File ====
 +C
@@ -371,6 +402,10 @@
 +C---- Current call depth for indentation
 +      INTEGER LOGDEPTH
 +      COMMON/LOGCOM/ LOGDEPTH
++C
++C---- SETBL call counter (set by SETBL) stamped on every EVLOG event
++      INTEGER NSETBLC
++      COMMON/EVCOM/ NSETBLC
 +C
 --- a/src/XBL.INC
 +++ b/src/XBL.INC

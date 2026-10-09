@@ -1,0 +1,13 @@
+# Steps whose replay does not take XFOIL's route: divergent comparisons
+# (docs/conventions/terminology.md). The step cover excludes them (`cargo xtask steps`).
+# Entries with found = "route" are written by `cargo xtask route` — do not edit them by hand;
+# the others record a divergence found by other means, with the evidence.
+#
+# 895 steps measured, 0 divergent, 0 not measured; subroutines with no translation alias (not compared): TRCHEK, NACA, GEOPAR.
+
+[[divergent]]
+call = 1
+case = "naca63-415_n60_a14_re1e6_m05"
+found = "events"
+iteration = 2
+why = "MRCHDU at SETBL 2, every side-2 station from 31 failing its 25 station-Newton iterates: replayed from XFOIL's state, yFoil agrees to 1e-12 through station 32 (the garbage extrapolation at 31 included), then the non-contracting Newtons amplify the last-digit difference about a hundredfold a station (1.7e-9 at 33, 3e-7 at 35, 7e-6 at 37) until DMAX at 38 is 0.47 in yFoil (above 0.1, a second extrapolation) and below 0.1 in XFOIL, whose second is at 40; the call counts agree. An ill-conditioned solution (RMSBL 183, going non-finite), not a translation difference. Found 2026-10-06 from the branch events (events.dat), confirmed station by station from mrchdu_trace_2"

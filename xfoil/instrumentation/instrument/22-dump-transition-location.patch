@@ -1,0 +1,15 @@
+--- a/src/xbl.f
++++ b/src/xbl.f
+@@ -193,6 +193,12 @@
+        WRITE(95,'(A,ES24.16)') 'QINF=', QINF
+        WRITE(95,'(A,ES24.16)') 'VACCEL=', VACCEL
+        WRITE(95,'(A,ES24.16)') 'ALFA=', ALFA
++C------ transition location as last set (COMMON, kept across SETBL calls; only a call with a
++C       transition interval on a side resets it): the state a replayed step reports
++       WRITE(95,'(A,ES24.16)') 'XOCTR1=', XOCTR(1)
++       WRITE(95,'(A,ES24.16)') 'XOCTR2=', XOCTR(2)
++       WRITE(95,'(A,ES24.16)') 'YOCTR1=', YOCTR(1)
++       WRITE(95,'(A,ES24.16)') 'YOCTR2=', YOCTR(2)
+        DO 8001 IS=1, 2
+          DO 8002 IBL=1, NBL(IS)
+            WRITE(95,'(A,I2,A,I4,A,6ES24.16)') 'BL(',IS,',',IBL,')=',

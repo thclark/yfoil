@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::geometry::PanelledFoil;
 use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
+use crate::solver::point_id::IdHasher;
 use crate::solver::specal::{alpha_command, cl_command, sequence_command};
 use crate::solver::viscal::{solve_viscous, IterationRecord};
 
@@ -74,6 +75,27 @@ pub struct PointResult {
     pub converged: bool,
     /// VISCAL iterations performed
     pub iterations: usize,
+    /// SPECCL's exit iteration for an OPER `CL` point (XFOIL's ITAL: 21 when the 20-iteration
+    /// alpha Newton was exhausted), 0 for an `ALFA` point
+    pub inviscid_cl_iterations: usize,
+    /// station Newton failures with a non-finite residual in this point's marches (the garbage
+    /// extrapolation carried the march over them): the run went through a NaN
+    pub nonfinite_station_failures: usize,
+    /// The evidence for whether this point's values are valid: Kármán–Tsien margins, the CL(M)
+    /// Newton's exhaustion and MRCL's substitutions (`crate::solver::validity`). Recorded by the
+    /// solver, never read by it; the output layer classifies the point from this.
+    pub validity: crate::solver::validity::ValidityRecord,
+    /// This point's stable reference: a random 8-character id, unique to this solve. Random
+    /// rather than positional so that points from different runs can be held together — a polar
+    /// restarted from a point of an earlier one, or two sweeps merged — without the references
+    /// colliding, which a per-run counter would guarantee.
+    pub id: String,
+    /// The `id` of the point whose converged boundary layer seeded this solve, or `None` when the
+    /// BL was marched fresh (MRCHUE from the inviscid solution). A polar is a state machine, so
+    /// following this back gives the chain of states a point depends on — two chains rooted at
+    /// the 0° solve, one per leg — which recovers the order of execution and lets a sweep be
+    /// restarted part way through rather than from the beginning.
+    pub initialised_from: Option<String>,
     /// RMSBL of the last iteration (0 for an inviscid point)
     pub residual: f64,
     /// Per-iteration record
@@ -87,6 +109,13 @@ pub struct Session {
     state: SolverState,
     inviscid: Option<InviscidSystem>,
     conditions: FlowConditions,
+    /// Everything a point id depends on that does not change within a session: the yFoil version,
+    /// the panel geometry and the flow conditions (`crate::solver::point_id`). Hashed once here,
+    /// then each point mixes in its own operating point and predecessor.
+    inputs_hash: IdHasher,
+    /// The id of the last point solved, which is the predecessor of the next one whenever the
+    /// boundary layer is carried across.
+    last_point_id: Option<String>,
 }
 
 impl Session {
@@ -139,9 +168,27 @@ impl Session {
         state.viscous = spec.re.is_some();
         state.alpha_specified = true;
         state.qinf = 1.0;
+        let mut inputs_hash = IdHasher::new();
+        inputs_hash
+            .str("yfoil_version", env!("CARGO_PKG_VERSION"))
+            .f64_slice("x", &airfoil.x)
+            .f64_slice("y", &airfoil.y)
+            .opt_f64("re", spec.re)
+            .f64("mach", spec.mach)
+            .f64("ncrit", spec.ncrit)
+            .usize("max_iterations", spec.max_iterations)
+            .f64("wake_length", spec.wake_length)
+            .f64("elimination_threshold", spec.elimination_threshold)
+            .f64("x_trip_1", spec.x_trip[0])
+            .f64("x_trip_2", spec.x_trip[1])
+            .u8("mach_cl_dependence", spec.mach_cl_dependence as u8)
+            .u8("re_cl_dependence", spec.re_cl_dependence as u8)
+            .u8("amplification_model", spec.amplification_model as u8);
         Self {
             state,
             inviscid: None,
+            inputs_hash,
+            last_point_id: None,
             conditions: spec,
         }
     }
@@ -161,24 +208,48 @@ impl Session {
     #[doc(alias = "ALFA")]
     pub fn alpha(&mut self, alpha: f64) -> PointResult {
         alpha_command(&mut self.state, &mut self.inviscid, alpha);
-        self.solve_point(self.conditions.max_iterations)
+        self.solve_point(self.conditions.max_iterations, 0)
     }
 
     /// OPER `CL`: SPECCL for the specified CL (alpha is the unknown), then VISCAL(ITMAX) when
     /// viscous — UPDATE then drives alpha so that the viscous CL meets CLSPEC.
     pub fn cl(&mut self, clspec: f64) -> PointResult {
-        cl_command(&mut self.state, &mut self.inviscid, clspec);
-        self.solve_point(self.conditions.max_iterations)
+        let ital = cl_command(&mut self.state, &mut self.inviscid, clspec);
+        self.solve_point(self.conditions.max_iterations, ital)
     }
 
     /// One point of OPER `ASEQ`: SPECAL for the new angle, then VISCAL(ITMAX + 5) when viscous.
     #[doc(alias = "ASEQ")]
     pub fn sequence_point(&mut self, alpha: f64) -> PointResult {
         sequence_command(&mut self.state, &mut self.inviscid, alpha);
-        self.solve_point(self.conditions.max_iterations + 5)
+        self.solve_point(self.conditions.max_iterations + 5, 0)
     }
 
-    fn solve_point(&mut self, niter: usize) -> PointResult {
+    fn solve_point(&mut self, niter: usize, inviscid_cl_iterations: usize) -> PointResult {
+        // The predecessor is the point whose converged BL seeds this solve. There is one only if
+        // the BL is being carried across: an inviscid point depends on nothing before it (SPECAL
+        // resets CLM and GAMU is alpha-independent), and after INIT the march starts fresh.
+        let initialised_from = if self.state.viscous && self.state.bl_initialised {
+            self.last_point_id.clone()
+        } else {
+            None
+        };
+        let mut id_hash = self.inputs_hash.clone();
+        id_hash
+            .u8("alpha_specified", u8::from(self.state.alpha_specified))
+            .f64(
+                "operating_point",
+                if self.state.alpha_specified {
+                    self.state.alpha
+                } else {
+                    self.state.cl_specified
+                },
+            )
+            .usize("niter", niter)
+            .opt_str("initialised_from", initialised_from.as_deref());
+        let id = id_hash.finish();
+        self.last_point_id = Some(id.clone());
+
         let mut trace = Vec::new();
         let converged = if self.state.viscous {
             solve_viscous(
@@ -205,6 +276,11 @@ impl Session {
             i_transition_station: state.i_transition_station,
             converged,
             iterations: trace.len(),
+            inviscid_cl_iterations,
+            nonfinite_station_failures: state.nonfinite_station_failures,
+            validity: state.validity,
+            id,
+            initialised_from,
             residual: trace.last().map(|t| t.residual).unwrap_or(0.0),
             iteration_records: trace,
         }
@@ -245,41 +321,20 @@ impl Default for PolarConfig {
     }
 }
 
-/// Result of a polar sweep: points sorted by ascending alpha, in the order XFOIL's `PACC`
-/// would keep them (unconverged viscous points are recorded in `failed_alphas`, not in `points`).
+/// Result of a polar sweep: **every** alpha the sweep was asked for, sorted ascending. A point
+/// that did not converge is kept here with its whole record — the caller decides what to do with
+/// it — and an alpha the sweep halted before reaching is listed in `not_attempted`, so nothing
+/// the caller asked for goes missing from the result.
 #[derive(Debug, Clone)]
 pub struct PolarResult {
+    /// Every point the sweep solved, converged or not, ascending in alpha
     pub results: Vec<PointResult>,
-    /// Alphas (radians) that did not converge
-    pub failed_alphas: Vec<f64>,
+    /// Alphas (radians) the sweep halted before reaching, ascending. The halt is XFOIL's own
+    /// NSEQEX rule and is not changed by recording what it skipped.
+    pub not_attempted: Vec<f64>,
     pub conditions: FlowConditions,
     /// Neither sequence was halted by NSEQEX consecutive failures
     pub completed: bool,
-}
-
-impl PolarResult {
-    /// (CL_max, alpha in degrees at CL_max)
-    pub fn cl_max(&self) -> Option<(f64, f64)> {
-        self.results
-            .iter()
-            .map(|p| (p.cl, p.alpha.to_degrees()))
-            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
-    }
-    /// (max L/D, CL at max L/D)
-    pub fn ldratio_max(&self) -> Option<(f64, f64)> {
-        self.results
-            .iter()
-            .filter(|p| p.cd > 1e-10)
-            .map(|p| (p.cl / p.cd, p.cl))
-            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
-    }
-    /// CD at the point with the smallest |CL|
-    pub fn cd0(&self) -> Option<f64> {
-        self.results
-            .iter()
-            .min_by(|a, b| a.cl.abs().partial_cmp(&b.cl.abs()).unwrap())
-            .map(|p| p.cd)
-    }
 }
 
 /// The polar as XFOIL's OPER script runs it (CLAUDE.md):
@@ -306,7 +361,7 @@ pub fn compute_polar_with(
     let step = config.alpha_step.abs();
     let mut session = Session::new(airfoil, config.conditions.clone());
     let mut points = Vec::new();
-    let mut failed = Vec::new();
+    let mut not_attempted = Vec::new();
     let mut completed = true;
 
     // ASEQ: NPOINT = INT((A2-A1)/DA + 0.5) + 1 points from A1 in steps of DA
@@ -317,29 +372,24 @@ pub fn compute_polar_with(
         let npoint = ((a2 - a1) / da + 0.5).floor() as usize + 1;
         (0..npoint).map(|i| a1 + da * i as f64).collect()
     };
-    let record = |p: PointResult, points: &mut Vec<PointResult>, failed: &mut Vec<f64>| {
-        if p.converged {
-            points.push(p);
-        } else {
-            failed.push(p.alpha);
-        }
-    };
     let aseq = |session: &mut Session,
                 alphas: Vec<f64>,
                 points: &mut Vec<PointResult>,
-                failed: &mut Vec<f64>,
+                not_attempted: &mut Vec<f64>,
                 observe: &mut dyn FnMut(&Session, &PointResult)|
      -> bool {
         let mut iseqex = 0;
-        for adeg in alphas {
+        for (k, adeg) in alphas.iter().enumerate() {
             let p = session.sequence_point(adeg.to_radians());
             observe(session, &p);
             let conv = p.converged;
-            record(p, points, failed);
+            points.push(p);
             if session.state.viscous && !conv {
                 iseqex += 1;
                 if iseqex >= config.max_consecutive_failures {
-                    // 'Sequence halted since previous N points did not converge'
+                    // 'Sequence halted since previous N points did not converge'. The halt is
+                    // XFOIL's; recording the alphas it skipped is not a change to it.
+                    not_attempted.extend(alphas[k + 1..].iter().map(|a| a.to_radians()));
                     return false;
                 }
             } else {
@@ -350,15 +400,16 @@ pub fn compute_polar_with(
     };
 
     // ALFA 0, ASEQ step alpha_max step
+    // ALFA 0: a fresh march, so it is seeded by nothing and roots both legs
     let p = session.alpha(0.0);
     observe(&session, &p);
-    record(p, &mut points, &mut failed);
+    points.push(p);
     if config.alpha_max >= step {
         completed &= aseq(
             &mut session,
             aseq_alphas(step, config.alpha_max, step),
             &mut points,
-            &mut failed,
+            &mut not_attempted,
             observe,
         );
     }
@@ -367,19 +418,26 @@ pub fn compute_polar_with(
     if config.alpha_min <= -step {
         session.init();
         session.alpha(0.0);
+        // The re-solve seeds the downward leg and is not a polar point (OPER cannot store a BL
+        // state, so the leg starts from a fresh MRCHUE march at 0°). Its inputs — geometry,
+        // conditions, operating point, iteration limit, and no predecessor — are those of the
+        // first 0° solve, so it takes the same content-addressed id, and the leg's first point
+        // cites the recorded 0° point rather than a phantom. That the two solves really are
+        // identical is what the polar fixture test asserts.
         completed &= aseq(
             &mut session,
             aseq_alphas(-step, config.alpha_min, -step),
             &mut points,
-            &mut failed,
+            &mut not_attempted,
             observe,
         );
     }
 
     points.sort_by(|p, q| p.alpha.partial_cmp(&q.alpha).unwrap());
+    not_attempted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     PolarResult {
         results: points,
-        failed_alphas: failed,
+        not_attempted,
         conditions: config.conditions.clone(),
         completed,
     }

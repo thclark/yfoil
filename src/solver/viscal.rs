@@ -58,6 +58,7 @@ pub fn solve_viscous(
     waklen: f64,
     mut trace: Option<&mut Vec<IterationRecord>>,
 ) -> bool {
+    state.nonfinite_station_failures = 0;
     // calculate wake trajectory from current inviscid solution if necessary
     if !state.wake_built {
         build_wake(state, waklen);
@@ -99,12 +100,18 @@ pub fn solve_viscous(
         // set correct CL if converged point exists
         set_q_viscous_from_ue(state);
         let nt = state.n_foil_nodes + state.n_wake_nodes;
-        if state.viscous {
-            state.cp_viscous = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
-            state.cp_inviscid = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+        let margin = if state.viscous {
+            let (cpv, mv) = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
+            state.cp_viscous = cpv;
+            let (cpi, mi) = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+            state.cp_inviscid = cpi;
+            mv.min(mi)
         } else {
-            state.cp_inviscid = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
-        }
+            let (cpi, mi) = compute_cp(state.n_foil_nodes, &state.q_inviscid, state.qinf, state.mach);
+            state.cp_inviscid = cpi;
+            mi
+        };
+        state.validity.karman_tsien_margin_pressure = margin;
         set_gamma_from_q_viscous(state);
         compute_cl_cm(state);
         compute_cd(state);
@@ -190,7 +197,10 @@ pub fn solve_viscous(
     // 'VISCAL:  Convergence failed' if the loop ran out
 
     let nt = state.n_foil_nodes + state.n_wake_nodes;
-    state.cp_inviscid = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
-    state.cp_viscous = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
+    let (cpi, mi) = compute_cp(nt, &state.q_inviscid, state.qinf, state.mach);
+    state.cp_inviscid = cpi;
+    let (cpv, mv) = compute_cp(nt, &state.q_viscous, state.qinf, state.mach);
+    state.cp_viscous = cpv;
+    state.validity.karman_tsien_margin_pressure = mi.min(mv);
     converged
 }

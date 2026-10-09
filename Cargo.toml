@@ -30,6 +30,8 @@ resvg = { version = "0.48", optional = true }
 [dev-dependencies]
 approx = "0.5"
 tempfile = "3.10"
+# the apparatus tests read xtask/fixtures-config/cases.toml
+toml = "0.8"
 
 [features]
 default = []
@@ -39,13 +41,20 @@ plotting = ["plotters", "resvg"]
 members = [
     ".",
     "xtask",
-    "scripts/xfoil-sensitivity",
+    "scripts/input-sensitivity",
     "scripts/xfoil-instrumentation-check",
     "scripts/aerofoil-series",
+    "scripts/branch-coverage",
+    "scripts/series-cases",
+    "scripts/known-issues",
 ]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a
 # deliberate policy, not laziness; anything not listed here must be fixed, not allowed inline.
+[workspace.lints.rust]
+# `--cfg yfoil_route`: the route measurement (`cargo xtask route`), built with source coverage
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(yfoil_route)"] }
+
 [workspace.lints.clippy]
 excessive_precision = "allow"       # Fortran literals are kept verbatim (e.g. 20-digit PI)
 too_many_arguments = "allow"        # XFOIL subroutine signatures are translated as-is
@@ -55,6 +64,7 @@ manual_range_contains = "allow"     # keep XFOIL's comparison order verbatim
 assign_op_pattern = "allow"         # `x = x + y` kept where it mirrors the Fortran statement
 field_reassign_with_default = "allow" # test-fixture construction style
 approx_constant = "allow"           # XFOIL's own digits for ln10 etc. (e.g. DAMPL) must be kept, not replaced by LN_10
+neg_cmp_op_on_partial_ord = "allow" # a Fortran comparison is translated with its own operator and order (`if !(dmax <= 0.1)`), never its complement: NaN makes every comparison false (known issues §7.10)
 
 [lints]
 workspace = true

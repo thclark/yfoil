@@ -8,7 +8,12 @@
 //! yFoil, written at 17 significant digits, LOADed into instrumented XFOIL, and the panels
 //! XFOIL dumps after ABCOPY must equal yFoil's bitwise before a run is accepted.
 
+mod closures;
 mod coverage;
+mod cross_host;
+mod noise_floor;
+mod route;
+mod steps;
 
 use serde::Deserialize;
 use std::fs;
@@ -40,10 +45,6 @@ struct Case {
     /// OPER `TYPE n`: MATYP = RETYP = n (Mach/Re dependence on CL); 0 = leave XFOIL's default (1)
     #[serde(default)]
     matyp: usize,
-    /// Keep only the VISCAL-level records (viscal_*.dat) — for coverage cases that gate on the
-    /// converged points rather than the per-subroutine dumps
-    #[serde(default)]
-    minimal: bool,
     /// Forced transition XTR xu xl (VPAR menu); empty = free transition
     #[serde(default)]
     xtr: Vec<f64>,
@@ -64,7 +65,7 @@ struct Case {
     ppar: Option<Ppar>,
     /// GDES `TGAP gap blend` on the LOADed panels (OPER never entered): the instrumented TGAP
     /// dumps the buffer airfoil before and after into `xfoil_tgap.dat`, the gate of
-    /// `set_te_gap` (tests/xfoil_tgap_tests.rs)
+    /// `set_te_gap` (tests/subroutine/tgap.rs)
     #[serde(default)]
     tgap: Vec<f64>,
     #[serde(default)]
@@ -77,6 +78,49 @@ struct Case {
     max_iterations: usize,
     #[serde(default)]
     track: bool,
+    /// Inviscid only: no VISC, so ALFA is one SPECAL and CL one SPECCL (LVISC false throughout).
+    /// There are no VISCAL records, so no +1-ULP twin is run; the gate is `events.dat`.
+    #[serde(default)]
+    inviscid: bool,
+    /// Keep `events.dat`, the instrumented reference's branch-event log (`EVLOG`), for tests
+    /// that compare yFoil's decisions with XFOIL's events
+    #[serde(default)]
+    events: bool,
+    /// When non-empty, track exactly these files of the work directory besides the inputs
+    /// (panels, manifest, xfoil.inp) — the files a test reads, and nothing else
+    #[serde(default)]
+    keep: Vec<String>,
+    /// Cut the reference's closure log into `tests/fixtures/subroutines/` (`closures.rs`)
+    #[serde(default)]
+    closures: bool,
+    /// How the case is tested (tests/execution/runs.rs): the whole run compared with XFOIL's
+    #[serde(default)]
+    run: bool,
+    /// … through VISCAL call `run_through` only (0 = every call)
+    #[serde(default)]
+    run_through: usize,
+    /// … and/or every iteration of these VISCAL calls replayed as a single step
+    /// (tests/execution/steps.rs)
+    #[serde(default)]
+    step_calls: Vec<usize>,
+    /// the study the case belongs to (`--group NAME` selects it): `branch-coverage`, `non-finite`,
+    /// `series`, `known-issues`, `pathological` — the studies read their cases by it
+    #[serde(default)]
+    group: Option<String>,
+    /// stop the reference after this many SETBL calls (`stop_after_setbl.txt`, patch 20): the
+    /// deterministic end of a run whose march goes non-finite and would otherwise run for hours
+    #[serde(default)]
+    stop_after_setbl: Option<usize>,
+    /// stop the reference on entering the first SETBL call whose BL state holds a NaN or an
+    /// infinity (`stop_on_nonfinite.txt`, patch 20): a study that compares runs gains nothing
+    /// from the iterations after that
+    #[serde(default)]
+    stop_on_nonfinite: bool,
+    /// run the case's five seeded 1-ULP twins and write its `noise_floor.json` after the
+    /// reference (study data, never tracked): whether XFOIL was ill-conditioned at each point of
+    /// a validation run is known only from them
+    #[serde(default)]
+    twins: bool,
 }
 /// XFOIL's PPAR menu values for a geometry-only case
 #[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
@@ -111,52 +155,101 @@ impl Ppar {
     }
 }
 
+impl Case {
+    /// Case selection shared by `fixtures` and `coverage`: the `--case NAME`s, else the members of
+    /// `--group NAME`, else every tracked case (`--big` adds the untracked ones, except the
+    /// `pathological` group, which runs only by name or `--group pathological`).
+    pub(crate) fn selected(&self, cases: &[&str], group: Option<&str>, big: bool) -> bool {
+        if !cases.is_empty() {
+            return cases.contains(&self.name.as_str());
+        }
+        if let Some(g) = group {
+            return self.group.as_deref() == Some(g);
+        }
+        // the pathological cases run only when asked for by name or group
+        if self.group.as_deref() == Some("pathological") {
+            return false;
+        }
+        self.track || big
+    }
+}
+
+/// How a watched reference run ended.
+#[derive(Debug, PartialEq)]
+pub(crate) enum RunEnd {
+    /// it exited on its own
+    Finished,
+    /// its output stopped growing for two minutes — XFOIL's plot-label loop on a non-finite value
+    /// (known issues §4), a fixed point of the run — and it was ended there
+    Hung,
+    /// still running after an hour: a case that needs a deterministic end (`stop_on_nonfinite` or
+    /// `stop_after_setbl`, instrumentation patch 20) and has none
+    TimedOut,
+}
+
+/// Run the reference in `dir` on its `xfoil.inp`, writing `stdout.txt`, under a watchdog. Where a
+/// run ends is decided by the run itself, never by the clock: it finishes, it hangs (ended after
+/// two minutes without output, at a fixed point), or the case asks the reference to stop itself
+/// (patch 20). A run is ended with SIGTERM first — the gcov build writes its counters on it
+/// (`scripts/xfoil-build/gcov_flush.c`) — and SIGKILL only if it is still there after ten
+/// seconds; the records written so far are kept either way.
+pub(crate) fn run_xfoil(xfoil: &Path, dir: &Path) -> Result<RunEnd, String> {
+    const STALL_SECONDS: u64 = 120;
+    const LIMIT_SECONDS: u64 = 3600;
+    let inp = fs::File::open(dir.join("xfoil.inp")).map_err(|e| e.to_string())?;
+    let out_path = dir.join("stdout.txt");
+    let out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
+    let mut child = Command::new(xfoil)
+        .current_dir(dir)
+        .stdin(inp)
+        .stdout(out)
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("spawn xfoil: {e}"))?;
+    let end = |child: &mut std::process::Child| {
+        let _ = Command::new("kill").args(["-TERM", &child.id().to_string()]).status();
+        for _ in 0..20 {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+    let mut last_len = 0u64;
+    let mut last_growth = std::time::Instant::now();
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(st) = child.try_wait().map_err(|e| e.to_string())? {
+            return if st.success() {
+                Ok(RunEnd::Finished)
+            } else {
+                Err(format!("xfoil exited {st}"))
+            };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let len = fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
+        if len != last_len {
+            last_len = len;
+            last_growth = std::time::Instant::now();
+        } else if last_growth.elapsed().as_secs() >= STALL_SECONDS {
+            end(&mut child);
+            return Ok(RunEnd::Hung);
+        }
+        if started.elapsed().as_secs() >= LIMIT_SECONDS {
+            end(&mut child);
+            return Ok(RunEnd::TimedOut);
+        }
+    }
+}
+
 fn default_ncrit() -> f64 {
     9.0
 }
 fn default_iter() -> usize {
     20
 }
-
-/// Raw instrumented-XFOIL products worth keeping per case. Everything else in the work
-/// directory is transient. Stage-specific JSON parsers are added as each plan stage lands.
-const RAW_KEEP: &[&str] = &[
-    "stdout.txt",
-    "xfoil_trace.log",
-    "xfoil_panels.dat",
-    "xfoil_inviscid.dat",
-    "xfoil_dij.dat",
-    "mrchdu_input_1.dat",
-    "mrchdu_input_2.dat",
-    "mrchdu_input_3.dat",
-    "mrchdu_output_1.dat",
-    "mrchdu_output_2.dat",
-    "mrchdu_output_3.dat",
-    "xfoil_mrchdu_trace.dat",
-    "setbl_output_1.dat",
-    "setbl_output_2.dat",
-    "setbl_output_3.dat",
-    "update_output_1.dat",
-    "update_output_2.dat",
-    "update_output_3.dat",
-    "viscal_iter.dat",
-    "viscal_final.dat",
-    "viscal_inviscid.dat",
-    "viscal_points.dat",
-    "viscal_iters_all.dat",
-    "noise_floor.json",
-    "xfoil_pangen.dat",
-    "xfoil_tgap.dat",
-    "blsolv_input.dat",
-    "blsolv_output.dat",
-    "blsolv_trace.dat",
-    "blsolv_vz_trace.dat",
-    "xfoil_newton_trace.dat",
-    "xfoil_pointers.dat",
-    "xfoil_uinv.dat",
-];
-/// Tracked-fixture budget per case (bytes). CLAUDE.md Rule 7.
-const TRACK_BUDGET: u64 = 8 * 1024 * 1024;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -171,9 +264,13 @@ fn main() {
         Some("xfoil-build") => xfoil_build(&args[1..]),
         Some("fixtures") => fixtures(&args[1..]),
         Some("coverage") => coverage::run(&args[1..]),
+        Some("twins") => steps::twins(&args[1..]),
+        Some("steps") => steps::steps(&args[1..]),
+        Some("route") => route::route(&args[1..]),
+        Some("cross-host") => cross_host::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--verify] [--big] | coverage [--case NAME] [--big] [--rebuild]>"
+                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse] | cross-host [--out PATH]>"
             );
             std::process::exit(2);
         }
@@ -192,18 +289,28 @@ fn xfoil_build(flags: &[String]) {
 
 fn fixtures(flags: &[String]) {
     let root = root();
+    if flags.iter().any(|f| f == "--audit") {
+        if flags.iter().any(|f| f == "--by-test") {
+            audit_by_test(&root);
+        } else {
+            audit(&root);
+        }
+        return;
+    }
     let verify = flags.iter().any(|f| f == "--verify");
     let big = flags.iter().any(|f| f == "--big");
+    let inputs_only = flags.iter().any(|f| f == "--inputs-only");
     let selected: Vec<&str> = flags
         .windows(2)
         .filter(|w| w[0] == "--case")
         .map(|w| w[1].as_str())
         .collect();
 
-    let cases: Cases = toml::from_str(
+    let mut cases: Cases = toml::from_str(
         &fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("xtask/fixtures-config/cases.toml"),
     )
     .expect("parse cases.toml");
+    steps::apply_cover(&root, &mut cases.cases);
     let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
     if !xfoil.exists() {
         xfoil_build(&[]);
@@ -218,15 +325,52 @@ fn fixtures(flags: &[String]) {
     let ref_manifest = fs::read_to_string(root.join("target/xfoil-ref/manifest.txt")).unwrap_or_default();
 
     let mut failures = 0;
+    let group: Option<&str> = flags.windows(2).find(|w| w[0] == "--group").map(|w| w[1].as_str());
+    // a deterministic stop cuts a run off before the branches only reached later — the
+    // non-finite fallbacks among them — so no case that gates or measures branches may have one,
+    // nor a known-issues case, whose run's own end (a hang, a halt) is what it shows
     for case in &cases.cases {
-        if !selected.is_empty() && !selected.contains(&case.name.as_str()) {
-            continue;
+        let gates = case.track
+            || matches!(
+                case.group.as_deref(),
+                Some("branch-coverage" | "non-finite" | "series" | "known-issues")
+            );
+        if gates && (case.stop_on_nonfinite || case.stop_after_setbl.is_some()) {
+            eprintln!(
+                "{}: a case that gates or measures branches must run to its natural end; remove `stop_on_nonfinite` / `stop_after_setbl`",
+                case.name
+            );
+            std::process::exit(1);
         }
-        if !case.track && !big && selected.is_empty() {
+    }
+    for case in &cases.cases {
+        if !case.selected(&selected, group, big) {
             continue;
         }
         println!("== {} ==", case.name);
         let work = root.join("target/fixtures").join(&case.name);
+        // the case's twins (`cargo xtask twins`, study data) are set aside and put back if the
+        // regenerated run has the same inputs, so regenerating does not discard them
+        let held = root.join("target/fixtures/.held").join(&case.name);
+        let _ = fs::remove_dir_all(&held);
+        if work.join("noise_floor.json").exists() {
+            fs::create_dir_all(&held).unwrap();
+            for e in fs::read_dir(&work).unwrap().flatten() {
+                let n = e.file_name().to_string_lossy().to_string();
+                if n.starts_with("ulp")
+                    || [
+                        "noise_floor.json",
+                        "panels.dat",
+                        "xfoil.inp",
+                        "stop_after_setbl.txt",
+                        "stop_on_nonfinite.txt",
+                    ]
+                    .contains(&n.as_str())
+                {
+                    let _ = fs::rename(e.path(), held.join(&n));
+                }
+            }
+        }
         let _ = fs::remove_dir_all(&work);
         fs::create_dir_all(&work).unwrap();
 
@@ -295,37 +439,31 @@ fn fixtures(flags: &[String]) {
             continue;
         }
 
-        // 1. geometry, by yFoil only: `naca4:dddd[:sharp]` (the original 4-digit cases) or
-        // `naca:<designation>[:sharp]` for any NACA family (`yfoil geometry naca`)
+        // 1. geometry, by yFoil only: `naca4:dddd[:sharp]` (the original 4-digit cases),
+        // `naca:<designation>[:sharp]` for any NACA family (`yfoil geometry naca`), or
+        // `karman-trefftz`, the analytic section at the generator's defaults (sharp TE)
         let mut parts = case.foil.split(':');
         let kind = parts.next().unwrap();
-        let spec = parts.next().expect("airfoil = \"naca4:0012[:sharp]\"");
-        let sharp = matches!(parts.next(), Some("sharp"));
-        assert!(
-            kind == "naca4" || kind == "naca",
-            "foil kinds: naca4:<4 digits>, naca:<designation>, xfoil-naca:<digits> (geometry_only)"
-        );
         // `--method cosine`: the analytic cosine sampling every tracked fixture was generated
         // with (the CLI's default is now PANGEN)
         let npan = case.n_nodes.to_string();
-        let mut gargs = vec![
-            "geometry",
-            "naca",
-            spec,
-            "-n",
-            &npan,
-            "--method",
-            "cosine",
-            "-o",
-            "panels.json",
-        ];
-        if sharp {
-            gargs.push("--sharp");
+        let mut gargs: Vec<&str> = vec!["geometry"];
+        if kind == "karman-trefftz" {
+            assert!(parts.next().is_none(), "foil = \"karman-trefftz\" takes no parameters");
+            gargs.extend(["karman-trefftz", "-n", &npan, "--method", "cosine", "-o", "panels.json"]);
+        } else {
+            let spec = parts.next().expect("airfoil = \"naca4:0012[:sharp]\"");
+            let sharp = matches!(parts.next(), Some("sharp"));
+            assert!(
+                kind == "naca4" || kind == "naca",
+                "foil kinds: naca4:<4 digits>, naca:<designation>, karman-trefftz, xfoil-naca:<digits> (geometry_only)"
+            );
+            gargs.extend(["naca", spec, "-n", &npan, "--method", "cosine", "-o", "panels.json"]);
+            if sharp {
+                gargs.push("--sharp");
+            }
         }
-        run(
-            Command::new(&yfoil).args(&gargs).current_dir(&work),
-            "yfoil geometry naca",
-        );
+        run(Command::new(&yfoil).args(&gargs).current_dir(&work), "yfoil geometry");
         run(
             Command::new(&yfoil)
                 .args([
@@ -364,10 +502,18 @@ fn fixtures(flags: &[String]) {
                 assert_eq!(case.xtr.len(), 2, "xtr = [xu, xl]");
                 format!("XTR {} {}\n", case.xtr[0], case.xtr[1])
             };
-            s += &format!(
-                "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
-                case.re, case.mach, case.ncrit, case.max_iterations
-            );
+            if case.inviscid {
+                assert!(
+                    case.xtr.is_empty() && !case.damp && !case.polar && case.alphas_after_reinit.is_empty(),
+                    "inviscid cases take MACH, TYPE, alphas and cls only"
+                );
+                s += &format!("MACH {}\n", case.mach);
+            } else {
+                s += &format!(
+                    "VISC {}\nMACH {}\nVPAR\nN {}\n{xtr}\nITER {}\n",
+                    case.re, case.mach, case.ncrit, case.max_iterations
+                );
+            }
             if case.matyp != 0 {
                 s += &format!("TYPE {}\n", case.matyp);
             }
@@ -394,6 +540,10 @@ fn fixtures(flags: &[String]) {
                     s += "INIT\n";
                     seq(&mut s, &case.alphas_after_reinit);
                 }
+            } else if case.inviscid {
+                for a in &case.alphas {
+                    s += &format!("ALFA {a}\n");
+                }
             } else {
                 for a in &case.alphas {
                     s += &format!("ALFA {a}\nCPWR cp_a{a}.dat\nDUMP bl_a{a}.dat\n");
@@ -411,24 +561,83 @@ fn fixtures(flags: &[String]) {
             s += "\nQUIT\n";
             fs::write(work.join("xfoil.inp"), &s).unwrap();
         }
-        if !case.dump_calls.is_empty() {
-            let list: Vec<String> = case.dump_calls.iter().map(|k| k.to_string()).collect();
-            fs::write(work.join("dump_calls.txt"), list.join("\n") + "\n").unwrap();
+        // `--inputs-only`: the panels and the script, for a measurement that runs its own reference
+        // (`cargo xtask coverage`); the instrumented reference is not run
+        if inputs_only {
+            println!("  inputs written");
+            continue;
         }
-        let inp = fs::File::open(work.join("xfoil.inp")).unwrap();
-        let out = fs::File::create(work.join("stdout.txt")).unwrap();
-        let st = Command::new(&xfoil)
-            .current_dir(&work)
-            .stdin(inp)
-            .stdout(out)
-            .stderr(Stdio::inherit())
-            .status()
-            .expect("run xfoil");
-        if !st.success() {
-            eprintln!("  xfoil exited {st}");
+        let _ = fs::remove_file(work.join("stop_after_setbl.txt"));
+        if let Some(n) = case.stop_after_setbl {
+            fs::write(work.join("stop_after_setbl.txt"), format!("{n}\n")).unwrap();
+        }
+        let _ = fs::remove_file(work.join("stop_on_nonfinite.txt"));
+        if case.stop_on_nonfinite {
+            fs::write(work.join("stop_on_nonfinite.txt"), "").unwrap();
+        }
+        // the closure log (patch 21) only for the cases whose closure fixtures are cut from it
+        let _ = fs::remove_file(work.join("log_closures.txt"));
+        if case.closures {
+            fs::write(work.join("log_closures.txt"), "").unwrap();
+        }
+        // whether the watchdog ended a reference run of this case (recorded in the manifest)
+        let hung = std::cell::Cell::new(false);
+        let run_reference = |dump_calls: &[usize]| -> bool {
+            let _ = fs::remove_file(work.join("dump_calls.txt"));
+            if !dump_calls.is_empty() {
+                let list: Vec<String> = dump_calls.iter().map(|k| k.to_string()).collect();
+                fs::write(work.join("dump_calls.txt"), list.join("\n") + "\n").unwrap();
+            }
+            match run_xfoil(&xfoil, &work) {
+                Ok(RunEnd::Finished) => true,
+                Ok(RunEnd::Hung) => {
+                    eprintln!("  WATCHDOG: xfoil stopped producing output (hung) and was ended; the records written so far are kept");
+                    hung.set(true);
+                    true
+                }
+                Ok(RunEnd::TimedOut) => {
+                    eprintln!("  xfoil still running after an hour: give the case a deterministic end (`stop_on_nonfinite` or `stop_after_setbl`)");
+                    false
+                }
+                Err(e) => {
+                    eprintln!("  {e}");
+                    false
+                }
+            }
+        };
+        if !run_reference(&case.dump_calls) {
             failures += 1;
             continue;
         }
+        // a case whose calls are replayed step by step needs every SETBL call of them dumped,
+        // which needs the calls' iteration counts: rerun with the full list
+        let mut case = case.clone();
+        if !case.step_calls.is_empty() {
+            let (calls, files) = steps::step_call_files(&work, &case.step_calls);
+            for k in calls {
+                if !case.dump_calls.contains(&k) {
+                    case.dump_calls.push(k);
+                }
+            }
+            case.dump_calls.sort_unstable();
+            for f in files {
+                if !case.keep.contains(&f) {
+                    case.keep.push(f);
+                }
+            }
+            if !run_reference(&case.dump_calls) {
+                failures += 1;
+                continue;
+            }
+        }
+        if case.run && !case.inviscid {
+            for f in ["viscal_points.dat", "viscal_iters_all.dat"] {
+                if !case.keep.iter().any(|k| k == f) {
+                    case.keep.push(f.to_string());
+                }
+            }
+        }
+        let case = &case;
 
         // 3. bitwise geometry handoff (Rule 4)
         match check_handoff(&work) {
@@ -439,83 +648,119 @@ fn fixtures(flags: &[String]) {
                 continue;
             }
         }
-
-        // 3b. the +1-ULP twin: the reference's own noise floor for this case (CLAUDE.md Rule 1).
-        // A geometry (TGAP) case has no solver state to perturb.
-        if geometry_case {
-            if !work.join("xfoil_tgap.dat").exists() {
-                eprintln!("  xfoil_tgap.dat missing (TGAP dump)");
-                failures += 1;
-                continue;
+        let mut twins_ready = false;
+        if held.join("noise_floor.json").exists() {
+            let same = |f: &str| fs::read(held.join(f)).ok() == fs::read(work.join(f)).ok();
+            if same("panels.dat") && same("xfoil.inp") && same("stop_after_setbl.txt") && same("stop_on_nonfinite.txt")
+            {
+                for e in fs::read_dir(&held).unwrap().flatten() {
+                    let n = e.file_name().to_string_lossy().to_string();
+                    if n.starts_with("ulp") || n == "noise_floor.json" {
+                        let _ = fs::rename(e.path(), work.join(&n));
+                    }
+                }
+                println!("  twins kept (same panels and script)");
+                twins_ready = true;
+            } else {
+                println!(
+                    "  twins discarded (the inputs changed): rerun `cargo xtask twins --case {}`",
+                    case.name
+                );
             }
-        } else {
-            match ulp_twin(&xfoil, &work) {
-                Ok(summary) => println!("  noise floor: {summary}"),
+            let _ = fs::remove_dir_all(&held);
+        }
+        if case.twins && !twins_ready {
+            match steps::run_twins(&xfoil, &work, case.inviscid) {
+                Ok(summary) => println!("  twins: {summary}"),
                 Err(e) => {
-                    eprintln!("  NOISE FLOOR FAILED: {e}");
+                    eprintln!("  TWINS FAILED: {e}");
                     failures += 1;
-                    continue;
                 }
             }
+        }
+
+        // 3b. a TGAP case must have produced its dump. (The reference's twins, which the step
+        // cover is chosen from, are `cargo xtask twins`; no tracked fixture records them.)
+        if geometry_case && !work.join("xfoil_tgap.dat").exists() {
+            eprintln!("  xfoil_tgap.dat missing (TGAP dump)");
+            failures += 1;
+            continue;
         }
 
         // 4. manifest
         let manifest = serde_json::json!({
             "case": { "name": case.name, "foil": case.foil, "n_nodes": case.n_nodes, "alphas": case.alphas,
                       "alphas_after_reinit": case.alphas_after_reinit, "re": case.re, "mach": case.mach,
-                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls, "tgap": case.tgap },
+                      "ncrit": case.ncrit, "max_iterations": case.max_iterations, "polar": case.polar, "cls": case.cls, "matyp": case.matyp, "xtr": case.xtr, "damp": case.damp, "dump_calls": case.dump_calls, "tgap": case.tgap,
+                      "inviscid": case.inviscid, "events": case.events, "keep": case.keep, "closures": case.closures,
+                      "run": case.run, "run_through": case.run_through, "step_calls": case.step_calls },
             "panels_dat_sha256": sha256(&work.join("panels.dat")),
             "xfoil_ref": ref_manifest.lines().collect::<Vec<_>>(),
             "generated_by": "cargo xtask fixtures",
         });
+        let mut manifest = manifest;
+        if let Some(n) = case.stop_after_setbl {
+            manifest["case"]["stop_after_setbl"] = serde_json::json!(n);
+        }
+        if case.stop_on_nonfinite {
+            manifest["case"]["stop_on_nonfinite"] = serde_json::json!(true);
+        }
+        // written only when it happened, so the manifest of every run that ends on its own is
+        // unchanged; the studies read it (the plot-label hang, known issues §4)
+        if hung.get() {
+            manifest["truncated_by_watchdog"] = serde_json::json!(true);
+        }
         fs::write(
             work.join("manifest.json"),
             serde_json::to_string_pretty(&manifest).unwrap(),
         )
         .unwrap();
 
+        // 4b. closure fixtures, cut from the reference's subroutine log
+        if case.closures && !verify {
+            match closures::write(
+                &case.name,
+                &work,
+                &root.join("tests/fixtures/subroutines"),
+                &ref_manifest,
+            ) {
+                Ok(counts) => println!("  closure fixtures: {counts}"),
+                Err(e) => {
+                    eprintln!("  CLOSURE FIXTURES FAILED: {e}");
+                    failures += 1;
+                    continue;
+                }
+            }
+        }
+
         // 5. track or verify
         if case.track {
             let dst = root.join("tests/fixtures/xfoil").join(&case.name);
             let mut staged: Vec<(PathBuf, Vec<u8>)> = vec![];
-            for name in ["panels.json", "panels.dat", "manifest.json", "xfoil.inp"]
-                .iter()
-                .chain(RAW_KEEP.iter())
-            {
-                if case.minimal
-                    && !name.starts_with("viscal_")
-                    && !name.starts_with("panels")
-                    && *name != "manifest.json"
-                    && *name != "xfoil.inp"
-                    && *name != "noise_floor.json"
-                {
-                    continue;
-                }
-                let p = work.join(name);
-                if p.exists() {
-                    staged.push((dst.join(name), fs::read(&p).unwrap()));
-                }
-            }
-            for entry in fs::read_dir(&work).unwrap().flatten() {
-                let n = entry.file_name().to_string_lossy().to_string();
-                if !case.minimal && (n.starts_with("cp_a") || n.starts_with("bl_a")) {
-                    staged.push((dst.join(&n), fs::read(entry.path()).unwrap()));
-                }
-                // per-call replay dumps beyond the default 1..3 (already in RAW_KEEP)
-                let per_call = ["mrchdu_input_", "mrchdu_output_", "setbl_output_", "update_output_"];
-                if !case.dump_calls.is_empty()
-                    && per_call.iter().any(|p| n.starts_with(p))
-                    && !RAW_KEEP.contains(&n.as_str())
-                {
-                    staged.push((dst.join(&n), fs::read(entry.path()).unwrap()));
-                }
-            }
-            let total: u64 = staged.iter().map(|(_, b)| b.len() as u64).sum();
-            if total > TRACK_BUDGET {
-                eprintln!("  tracked size {} exceeds budget {}", total, TRACK_BUDGET);
+            // the inputs (checked against each other by tests/apparatus/inputs.rs), then exactly
+            // the files the case's tests read (`keep`, and `events.dat` when `events`)
+            if case.keep.is_empty() && !case.events && !case.closures {
+                eprintln!("  a tracked case must name the files its tests read (`keep`)");
                 failures += 1;
                 continue;
             }
+            for name in ["panels.json", "panels.dat", "manifest.json", "xfoil.inp"]
+                .iter()
+                .copied()
+                .chain(case.keep.iter().map(String::as_str))
+                .chain(case.events.then_some("events.dat"))
+            {
+                let p = work.join(name);
+                if p.exists() {
+                    staged.push((dst.join(name), fs::read(&p).unwrap()));
+                } else if case.keep.iter().any(|k| k == name) {
+                    eprintln!("  {name} (in `keep`) was not produced");
+                    failures += 1;
+                }
+            }
+            let total: u64 = staged.iter().map(|(_, b)| b.len() as u64).sum();
+            // no size cap: what is tracked is what the tests read (`--audit` enforces it)
+            println!("  {} files, {:.2} MB", staged.len(), total as f64 / 1048576.0);
             if verify {
                 let mut diffs = 0;
                 for (p, b) in &staged {
@@ -614,252 +859,151 @@ fn run(cmd: &mut Command, what: &str) {
     }
 }
 
-/// Run the case again on panels perturbed by +1 ULP in every coordinate and write
-/// `noise_floor.json`: per VISCAL call, the absolute spread of the per-point values and of every
-/// per-iteration value, plus whether the branch trace (iteration counts, convergence, IST,
-/// ITRAN) survived the perturbation.
-fn ulp_twin(xfoil: &Path, work: &Path) -> Result<String, String> {
-    let ulp = work.join("ulp");
-    let _ = fs::remove_dir_all(&ulp);
-    fs::create_dir_all(&ulp).map_err(|e| e.to_string())?;
-    let src = fs::read_to_string(work.join("panels.dat")).map_err(|e| e.to_string())?;
-    let mut lines = src.lines();
-    let mut out = String::new();
-    out.push_str(lines.next().unwrap_or(""));
-    out.push('\n');
-    for l in lines {
-        let t: Vec<&str> = l.split_whitespace().collect();
-        if t.len() < 2 {
-            continue;
-        }
-        let x: f64 = t[0].parse().map_err(|_| format!("bad coordinate {l}"))?;
-        let y: f64 = t[1].parse().map_err(|_| format!("bad coordinate {l}"))?;
-        out.push_str(&format!(" {:.17e}  {:.17e}\n", next_up(x), next_up(y)));
-    }
-    fs::write(ulp.join("panels.dat"), out).map_err(|e| e.to_string())?;
-    fs::copy(work.join("xfoil.inp"), ulp.join("xfoil.inp")).map_err(|e| e.to_string())?;
-    if work.join("dump_calls.txt").exists() {
-        fs::copy(work.join("dump_calls.txt"), ulp.join("dump_calls.txt")).map_err(|e| e.to_string())?;
-    }
-    let inp = fs::File::open(ulp.join("xfoil.inp")).map_err(|e| e.to_string())?;
-    let so = fs::File::create(ulp.join("stdout.txt")).map_err(|e| e.to_string())?;
-    let st = Command::new(xfoil)
-        .current_dir(&ulp)
-        .stdin(inp)
-        .stdout(so)
-        .stderr(Stdio::inherit())
-        .status()
-        .map_err(|e| e.to_string())?;
-    if !st.success() {
-        return Err(format!("xfoil (ulp twin) exited {st}"));
-    }
-
-    let pa = parse_points(&work.join("viscal_points.dat"))?;
-    let pb = parse_points(&ulp.join("viscal_points.dat"))?;
-    let ia = parse_iters(&work.join("viscal_iters_all.dat"))?;
-    let ib = parse_iters(&ulp.join("viscal_iters_all.dat"))?;
-
-    // call 1's viscal_iter.dat carries UPDATE's RMXBL and the reported limiter VMXBL/IMXBL/ISMXBL
-    let qa = parse_blocks(&work.join("viscal_iter.dat"), "ITER").unwrap_or_default();
-    let qb = parse_blocks(&ulp.join("viscal_iter.dat"), "ITER").unwrap_or_default();
-
-    let mut flips: Vec<String> = Vec::new();
-    if pa.len() != pb.len() {
-        flips.push(format!("VISCAL call count {} vs {}", pa.len(), pb.len()));
-    }
-    let point_keys = [
-        "ALFA", "CL", "CM", "CD", "CDF", "CDP", "XOCTR1", "XOCTR2", "MINF", "REINF", "RMSBL",
-    ];
-    let iter_keys = ["RMSBL", "RLX", "CL", "CD", "CM", "ALFA", "MINF", "REINF"];
-    let iter_cols = [1usize, 2, 3, 4, 5, 10, 11, 12];
-    let mut calls = Vec::new();
-    for (k, (a, b)) in pa.iter().zip(&pb).enumerate() {
-        let call = k + 1;
-        for key in ["NITDONE", "LVCONV", "IST", "ITRAN1", "ITRAN2"] {
-            if a.get(key) != b.get(key) {
-                flips.push(format!(
-                    "call {call}: {key} {} vs {}",
-                    a.get(key).cloned().unwrap_or_default(),
-                    b.get(key).cloned().unwrap_or_default()
-                ));
-            }
-        }
-        let mut point = serde_json::Map::new();
-        for key in point_keys {
-            if let (Some(x), Some(y)) = (a.get(key), b.get(key)) {
-                let (x, y): (f64, f64) = (x.parse().unwrap_or(0.0), y.parse().unwrap_or(0.0));
-                point.insert(key.to_string(), serde_json::json!((x - y).abs()));
-            }
-        }
-        let (ra, rb) = (
-            ia.get(&call).cloned().unwrap_or_default(),
-            ib.get(&call).cloned().unwrap_or_default(),
+/// `cargo xtask fixtures --audit`: every tracked file under `tests/fixtures/` must be read by some
+/// test (CLAUDE.md Rule 7: committing a fixture is a decision, and the decision is that a test
+/// needs it). Each tracked file's access time is set to 2000-01-01, the whole suite runs, and any
+/// file whose access time did not move was read by nothing. Works wherever reads update access
+/// times (macOS APFS; Linux `relatime`, since the old atime predates the file's mtime).
+fn audit(root: &Path) {
+    let out = Command::new("git")
+        .args(["ls-files", "-z", "tests/fixtures"])
+        .current_dir(root)
+        .output()
+        .expect("git ls-files");
+    let files: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|f| !f.is_empty() && !f.ends_with(".rs") && !f.ends_with("README.md"))
+        .map(|f| root.join(f))
+        .collect();
+    let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(946_684_800);
+    for chunk in files.chunks(500) {
+        run(
+            Command::new("touch").args(["-a", "-t", "200001010000"]).args(chunk),
+            "touch -a",
         );
-        if ra.len() != rb.len() {
-            flips.push(format!("call {call}: iteration count {} vs {}", ra.len(), rb.len()));
-        }
-        let mut iterations = Vec::new();
-        for (i, (x, y)) in ra.iter().zip(&rb).enumerate() {
-            for (name, col) in [("IST", 7usize), ("ITRAN1", 8), ("ITRAN2", 9)] {
-                if x[col] != y[col] {
-                    flips.push(format!(
-                        "call {call} iteration {}: {name} {} vs {}",
-                        i + 1,
-                        x[col],
-                        y[col]
-                    ));
-                }
-            }
-            let mut m = serde_json::Map::new();
-            for (key, col) in iter_keys.iter().zip(iter_cols) {
-                m.insert(key.to_string(), serde_json::json!((x[col] - y[col]).abs()));
-            }
-            if call == 1 {
-                if let (Some(ba), Some(bb)) = (qa.get(i), qb.get(i)) {
-                    let (ra, rb): (f64, f64) = (
-                        ba.get("RMXBL").and_then(|v| v.parse().ok()).unwrap_or(0.0),
-                        bb.get("RMXBL").and_then(|v| v.parse().ok()).unwrap_or(0.0),
-                    );
-                    m.insert("RMXBL".to_string(), serde_json::json!((ra - rb).abs()));
-                    let same = ba.get("VMXBL") == bb.get("VMXBL")
-                        && ba.get("IMXBL") == bb.get("IMXBL")
-                        && ba.get("ISMXBL") == bb.get("ISMXBL");
-                    m.insert(
-                        "LIMITER_FLIP".to_string(),
-                        serde_json::json!(if same { 0.0 } else { 1.0 }),
-                    );
-                }
-            }
-            iterations.push(serde_json::Value::Object(m));
-        }
-        calls.push(serde_json::json!({ "call": call, "point": point, "iterations": iterations }));
     }
-    // per-station spreads of the dumped post-UPDATE arrays (replay harness): max |base - twin|
-    // over stations, per array, keyed by call number
-    let mut arrays = serde_json::Map::new();
-    for entry in fs::read_dir(work).map_err(|e| e.to_string())?.flatten() {
-        let n = entry.file_name().to_string_lossy().to_string();
-        let Some(k) = n.strip_prefix("update_output_").and_then(|r| r.strip_suffix(".dat")) else {
+    run(
+        Command::new("cargo")
+            .args(["test", "--all-targets", "--all-features", "-q"])
+            .current_dir(root),
+        "cargo test",
+    );
+    let mut unread: Vec<String> = vec![];
+    let mut bytes = (0u64, 0u64);
+    for f in &files {
+        let m = fs::metadata(f).unwrap();
+        bytes.0 += m.len();
+        let accessed = m.accessed().unwrap();
+        if accessed <= stamp + std::time::Duration::from_secs(60) {
+            bytes.1 += m.len();
+            unread.push(f.strip_prefix(root).unwrap().display().to_string());
+        }
+    }
+    println!(
+        "audit: {} tracked fixture files, {:.2} MB; {} unread ({:.2} MB)",
+        files.len(),
+        bytes.0 as f64 / 1048576.0,
+        unread.len(),
+        bytes.1 as f64 / 1048576.0
+    );
+    for u in &unread {
+        println!("  unread: {u}");
+    }
+    if !unread.is_empty() {
+        std::process::exit(1);
+    }
+}
+
+/// `cargo xtask fixtures --audit --by-test`: which test reads which tracked fixture file. Every
+/// integration test runs on its own, with the fixture files' access times reset before it, and the
+/// files it opened are recorded: `target/audit/readers.json`, `{ "<file>": ["<binary>::<test>", …] }`
+/// (the binary is the test category, `docs/conventions/testing.md`). A file no test opens has an
+/// empty list.
+fn audit_by_test(root: &Path) {
+    let out = Command::new("git")
+        .args(["ls-files", "-z", "tests/fixtures"])
+        .current_dir(root)
+        .output()
+        .expect("git ls-files");
+    let files: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|f| !f.is_empty() && !f.ends_with(".rs") && !f.ends_with("README.md"))
+        .map(|f| root.join(f))
+        .collect();
+    let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(946_684_800);
+    let reset = || {
+        for chunk in files.chunks(500) {
+            run(
+                Command::new("touch").args(["-a", "-t", "200001010000"]).args(chunk),
+                "touch -a",
+            );
+        }
+    };
+    // the integration-test binaries, one per category
+    let build = Command::new("cargo")
+        .args([
+            "test",
+            "--release",
+            "--tests",
+            "--all-features",
+            "--no-run",
+            "--message-format=json",
+        ])
+        .current_dir(root)
+        .stderr(Stdio::inherit())
+        .output()
+        .expect("cargo test --no-run");
+    assert!(build.status.success(), "cargo test --no-run failed");
+    let mut binaries: Vec<(String, PathBuf)> = vec![];
+    for l in String::from_utf8_lossy(&build.stdout).lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(l) else {
             continue;
         };
-        let twin = ulp.join(&n);
-        if !twin.exists() {
-            continue;
+        if v["target"]["kind"]
+            .as_array()
+            .is_some_and(|k| k.iter().any(|x| x == "test"))
+        {
+            if let Some(exe) = v["executable"].as_str() {
+                binaries.push((v["target"]["name"].as_str().unwrap().to_string(), PathBuf::from(exe)));
+            }
         }
-        let names = ["XSSI", "UEDG", "THET", "DSTR", "CTAU", "MASS"];
-        let mut worst = [0.0_f64; 6];
-        let rows = |p: &Path| -> Vec<Vec<f64>> {
-            fs::read_to_string(p)
-                .unwrap_or_default()
-                .lines()
-                .filter(|l| l.starts_with("BL("))
-                .map(|l| {
-                    l.split_once(")=")
+    }
+    let mut readers: std::collections::BTreeMap<String, Vec<String>> = files
+        .iter()
+        .map(|f| (f.strip_prefix(root).unwrap().display().to_string(), vec![]))
+        .collect();
+    for (name, exe) in &binaries {
+        let list = Command::new(exe)
+            .args(["--list", "--format", "terse"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        let tests: Vec<String> = String::from_utf8_lossy(&list.stdout)
+            .lines()
+            .filter_map(|l| l.strip_suffix(": test"))
+            .map(str::to_string)
+            .collect();
+        for t in &tests {
+            reset();
+            let _ = Command::new(exe)
+                .args(["--exact", t.as_str(), "-q"])
+                .current_dir(root)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            for f in &files {
+                if fs::metadata(f).unwrap().accessed().unwrap() > stamp + std::time::Duration::from_secs(60) {
+                    readers
+                        .get_mut(&f.strip_prefix(root).unwrap().display().to_string())
                         .unwrap()
-                        .1
-                        .split_whitespace()
-                        .map(|t| t.parse().unwrap_or(f64::NAN))
-                        .collect()
-                })
-                .collect()
-        };
-        for (a, b) in rows(&entry.path()).iter().zip(rows(&twin)) {
-            for m in 0..6 {
-                worst[m] = worst[m].max((a[m] - b[m]).abs());
+                        .push(format!("{name}::{t}"));
+                }
             }
         }
-        let mut per = serde_json::Map::new();
-        for (m, name) in names.iter().enumerate() {
-            per.insert(name.to_string(), serde_json::json!(worst[m]));
-        }
-        arrays.insert(k.to_string(), serde_json::Value::Object(per));
+        println!("  {name}: {} tests", tests.len());
     }
-    let branch_identical = flips.is_empty();
-    let j = serde_json::json!({
-        "method": "every panel coordinate +1 ULP; same OPER script; absolute |base - twin| per value",
-        "branch_identical": branch_identical,
-        "flips": flips,
-        "calls": calls,
-        "update_output": arrays,
-    });
-    fs::write(work.join("noise_floor.json"), serde_json::to_string_pretty(&j).unwrap()).map_err(|e| e.to_string())?;
-    let worst_point = calls
-        .iter()
-        .flat_map(|c| c["point"].as_object().unwrap().values().map(|v| v.as_f64().unwrap()))
-        .fold(0.0_f64, f64::max);
-    let worst_iter = calls
-        .iter()
-        .flat_map(|c| c["iterations"].as_array().unwrap().iter())
-        .flat_map(|m| {
-            m.as_object()
-                .unwrap()
-                .iter()
-                .filter(|(k, _)| k.as_str() != "LIMITER_FLIP")
-                .map(|(_, v)| v.as_f64().unwrap())
-        })
-        .fold(0.0_f64, f64::max);
-    Ok(if branch_identical {
-        format!(
-            "branch trace identical; worst point spread {worst_point:.2e}, worst per-iteration spread {worst_iter:.2e}"
-        )
-    } else {
-        format!("THRESHOLD-STRADDLING ({} flips: {})", flips.len(), flips.join("; "))
-    })
-}
-
-/// The next representable f64 towards +∞ (f64::next_up needs Rust 1.86).
-fn next_up(x: f64) -> f64 {
-    if x.is_nan() || x == f64::INFINITY {
-        return x;
-    }
-    if x == 0.0 {
-        return f64::from_bits(1);
-    }
-    let bits = x.to_bits();
-    if x > 0.0 {
-        f64::from_bits(bits + 1)
-    } else {
-        f64::from_bits(bits - 1)
-    }
-}
-
-fn parse_blocks(p: &Path, start_key: &str) -> Result<Vec<std::collections::HashMap<String, String>>, String> {
-    let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-    let mut out: Vec<std::collections::HashMap<String, String>> = Vec::new();
-    for l in text.lines() {
-        let Some((k, v)) = l.split_once('=') else { continue };
-        if k.trim() == start_key {
-            out.push(Default::default());
-        }
-        if let Some(cur) = out.last_mut() {
-            cur.insert(k.trim().to_string(), v.trim().to_string());
-        }
-    }
-    Ok(out)
-}
-
-fn parse_points(p: &Path) -> Result<Vec<std::collections::HashMap<String, String>>, String> {
-    let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-    let mut out: Vec<std::collections::HashMap<String, String>> = Vec::new();
-    for l in text.lines() {
-        let Some((k, v)) = l.split_once('=') else { continue };
-        if k.trim() == "CALL" {
-            out.push(Default::default());
-        }
-        if let Some(cur) = out.last_mut() {
-            cur.insert(k.trim().to_string(), v.trim().to_string());
-        }
-    }
-    Ok(out)
-}
-
-fn parse_iters(p: &Path) -> Result<std::collections::HashMap<usize, Vec<Vec<f64>>>, String> {
-    let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-    let mut out: std::collections::HashMap<usize, Vec<Vec<f64>>> = Default::default();
-    for l in text.lines() {
-        let Some(r) = l.strip_prefix("IT ") else { continue };
-        let v: Vec<f64> = r.split_whitespace().map(|t| t.parse().unwrap_or(f64::NAN)).collect();
-        out.entry(v[0] as usize).or_default().push(v[1..].to_vec());
-    }
-    Ok(out)
+    let path = root.join("target/audit/readers.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, serde_json::to_string_pretty(&readers).unwrap()).unwrap();
+    println!("readers -> {}", path.display());
 }

@@ -22,17 +22,24 @@ XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it m
 (1-ULP input perturbation, per stage, per variable; results in `docs/validation/noise-floor.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
-Jacobian) can only be gated with a row-scaled metric. Five named constants live in `tests/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
+Jacobian) can only be gated with a row-scaled metric. Five named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
 `TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10 —
-and `TOL_CROSS_HOST`); no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
+and `TOL_CROSS_HOST`), with `CROSS_HOST_FACTOR` (4) on the measured cross-host spread of whole runs; no ad-hoc
+literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
 ~1e-11, converged Newton state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in
 *both* codes: bit-identity is a same-host property, cross-host is an ULP budget. Measured 2026-09-11: Apple libSystem
 and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, identically on x86_64 and
 aarch64; XFOIL's own converged polar points move by ≤ 1.4e-11 between the two, its unconverged post-CL_max
-wanderings by O(1). Every fixture manifest records its host; `tests/utilities/host.rs` compares it with the running
-one, and the pins only a bit-identical trajectory can hold (the straddle iteration, a one-step replay at
-`TOL_SOLVER` in a hypersensitive state) are asserted on the fixture's host and reported elsewhere — the third
-outcome again, never a skip.
+wanderings by O(1). Every fixture manifest records its host; `tests/common/utilities/host.rs` compares it with the running
+one: on the fixture's host values are held to `TOL_SOLVER`, on any other to `TOL_CROSS_HOST` (the measured spread
+of one replayed step between the two libraries), never skipped. A whole run can move further between the libraries
+than one step — an exhausted Newton or a sweep into a stall break does — so on another host each value of a run
+test is gated at `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, *spread* being how far the reference
+itself moves on that case and value between the fixtures' host and the other host's libm: measured, not chosen, by
+`scripts/cross-host.sh` (`cargo xtask cross-host` in a Linux container) into `tests/fixtures/cross-host/spread.json`,
+which names both hosts and fails a test whose fixture records have changed since (rerun it after regenerating a
+run case). Measured 2026-10-08, macOS libSystem against glibc 2.39: ≤ 2.1e-10 on 18 of 21 run cases, up to 2.8e-8
+on the three ill-conditioned ones.
 
 **The error metric** is `|a − b| ≤ tol · max(|a|, |b|, scale_v)` with a physical per-variable scale. Bare relative
 error is undefined at CL≈0, VDEL≈0 and laminar CTAU≈0 and must not be used.
@@ -45,15 +52,17 @@ and produces O(1) differences that are **not translation bugs**. So:
 - Instrumented XFOIL logs its decisions (`ITRAN`, limiting station, skip counts, iteration count, `SHARP`,
   `DIRECT`). Those are compared exactly.
 - For iterative solvers the iteration count must be identical and per-iteration `RMSBL` is compared.
-- When a branch flips, show both inputs lie within the noise floor of the threshold and record the case as
-  **threshold-straddling** — a third outcome, reported separately, never silently passed or failed.
-- **Mechanised per case:** `cargo xtask fixtures` runs every case twice — as generated and with every panel
-  coordinate +1 ULP — and writes `noise_floor.json` (the reference's own spread of every recorded value, and
-  whether its branch trace survived). Tests gate a value at `max(tol · scale, FLOOR_FACTOR · floor)`
-  (`tests/utilities/records.rs`); a twin that flips its own branch trace, or a run that matches every
-  iteration until one where the reference moves by more than `STRADDLE_FLOOR` under 1 ULP, is classified
-  threshold-straddling — and the one-step replay from XFOIL's dumped state at that iteration (`dump_calls`)
-  is the evidence that the step itself is faithful. The 12° NACA 0012 case is the worked example.
+- A branch at which XFOIL and yFoil take different routes because its operands are within rounding of
+  the threshold is a **divergent comparison** (`docs/conventions/terminology.md`): it says nothing about the
+  translation, so no test is one. It is a consequence of an **ill-conditioned solution** — stall, separation,
+  the Kármán–Tsien pole — and those solutions *are* tested, because most rarely-taken branches exist for them.
+- **Mechanised per test:** a whole run is a run test only if it takes XFOIL's route with values in tolerance to
+  the end (`tests/execution/run.rs`); an ill-conditioned solution is tested one step at a time, each iteration
+  replayed from XFOIL's exact dumped state (`tests/execution/step.rs`), with decisions compared exactly and
+  each value within the named tolerance or four times the step's own sensitivity — measured in the test by
+  replaying the step from three copies of its inputs jogged by one ULP. How each case is tested, and why, is
+  recorded beside it in `xtask/fixtures-config/cases.toml`; `docs/conventions/testing.md` has the rules. The
+  reference's own twins (`cargo xtask twins`) are a study instrument, read by no test.
 
 Under those conditions: if values differ by more than tolerance, **it is a bug**. 1%, 0.1%, 1e-6 — all bugs. There
 is no "acceptable engineering tolerance" in this project.
@@ -143,7 +152,11 @@ subroutines hit at least once. NACA 0012/4412 at Re=1e6, M=0, Ncrit=9 leaves the
 sensitivities, laminar separation, the MRCHDU fallback, forced transition, `MATYP≠1` and RLX limiting **dead**.
 Cases that exercise each of those are part of the validation set, not extras. The parameter/fuzz harness optimises
 branch coverage; it reports per-variable ULP distributions, iteration-count and branch-flip counts, and
-threshold-straddling cases — not a single worst-case number.
+divergent comparisons — not a single worst-case number. Which step of which case takes each branch, and the
+fewest steps that take them all, are measured by `cargo xtask steps`, and `cargo xtask route` observes that yFoil
+takes XFOIL's route through each step — the same call count of every translated subroutine — so a branch is
+gated only by a step whose route agrees (`docs/conventions/testing.md`, "How branch coverage is established" and
+"What gated means"; the record is `docs/validation/branch-gating.md`).
 
 **The measurement is mechanised.** `scripts/xfoil-build.sh --gcov` builds the pristine DP reference with
 `-fprofile-arcs -ftest-coverage`; `cargo xtask coverage` runs every tracked case through it from its tracked
@@ -165,7 +178,9 @@ XFOIL-independent invariants are also required, because two codes can share a mi
 
 - `.gitignore` excludes generated files by default (`*.dat`, `*.log`, `fort.*`, `*.bl`, `.tmp/`) and **allowlists**
   what is deliberately committed (`!tests/fixtures/**`, `!xfoil/third-party/**`). Committing a fixture is a decision.
-- Tracked fixture budget ~25 MB; full-resolution cases live behind `cargo xtask fixtures --big`.
+- A tracked case is its inputs plus exactly the files its tests read (`keep`, and what `run`, `step_calls` and
+  the step cover add); `cargo xtask fixtures --audit` fails on any tracked file no test opens. Cases a test does
+  not read are untracked (`track = false`, regenerated into `target/fixtures/`).
 - Every fixture directory carries a `manifest.json`: source SHA256, patch-series SHA, `gfortran --version`,
   FFLAGS, host triple, libm/OS.
 - A missing fixture **fails** the test (`require_fixture`), never `eprintln!("Skipping")` + green.
@@ -240,6 +255,59 @@ yfoil plot     - foil <file>... | analysis <file> | polar <file>...   (feature-g
                  scale per quantity), --scale K | --max-offset F, --markers/--no-markers; svg or png
 ```
 
+### Result validity
+
+`analyse` and `polar` return the same record per operating point (`PointRecord`, `src/output/results.rs`):
+`alpha_deg`, a `status` of `valid` / `invalid` / `not_attempted`, the `reasons` behind it, the
+`diagnostics` that are the evidence, and `values` — the numbers — **only** when the point is valid or
+`--allow-invalid` was given. Every alpha that was asked for produces a record, including the ones a
+halted sweep never reached, so nothing requested is silently missing. `--allow-invalid` changes only
+whether the numbers are present, never the status. For `analyse` the same gate covers `surface` and
+`boundary_layer`; `conditions` and `geometry` are inputs and are always present. Summary statistics and
+every plotted series are computed from the valid points alone.
+
+Every record also carries `id` and `initialised_from`, the `id` of the point whose converged BL seeded
+it (absent for a fresh MRCHUE march). A polar is a state machine and results are presented ascending
+in alpha, so the chain is the only record of execution order: two legs rooted at the 0° solve.
+
+`id` is **content-addressed** (`src/solver/point_id.rs`): a 12-character base-36 FNV-1a-128 hash of
+everything the solve depended on — yFoil version, panel geometry, flow conditions, operating point,
+iteration limit, and the predecessor's id. So it is deterministic (a result file is byte-reproducible),
+equal ids mean the same computation (results from different runs can be merged, or a sweep restarted
+from a point of an earlier one, without colliding references), and the chain is a Merkle chain, which
+distinguishes the same operating point reached along different paths. FNV is written out rather than
+taken from `DefaultHasher`, whose output is not stable across Rust releases. It also removes a special
+case: the polar's re-solved 0° (which seeds the downward leg and is not a polar point) has the same
+inputs and no predecessor, so it hashes to the same id as the first 0° solve and the leg cites the
+recorded point rather than a phantom — the fixture test that asserts the two solves are identical is
+what makes that sound.
+
+The instrumented reference records the same occasions as branch events in `events.dat`
+(`xfoil/instrumentation/instrument/19-validity-events.patch`, `EVLOG`): `CLCALC_KT_DOMAIN`,
+`CPCALC_KT_DOMAIN`, `SPECAL_MINF_FAIL`, `MRCL_CL_FLOOR`, `MRCL_MACH_LIMIT`, `MRCL_RE_LIMIT`, and a
+`SPECAL_ENTER` marker carrying alpha that opens each call's span (events carry NSETBLC, which is zero
+throughout an inviscid run, so without the marker an inviscid event could not be attributed to a point).
+This exists so yFoil's flagging can be cross-checked against the reference **without comparing numbers**:
+XFOIL is silent for `CLCALC` and `MRCL_CL_FLOOR` and writes only to the console for the rest, so the
+events are the only record of them in a fixture. Note the granularity differs from yFoil's record by
+design: an event fires on *any* call in the span, while yFoil's fields describe the *reported* state
+(the last call) — so a point whose intermediate Newton iterate left the domain but whose final one did
+not carries the event and not the flag. `tests/known_issues/kt_pole_7_7.rs` checks the record against these events
+on `naca4412_n60_inviscid_m07_a10` and `naca64a010_n60_inviscid_sweep30_type2_m03`.
+
+Failures are classified by *what it would take to know*, not by severity (`docs/guide/validity.md`,
+"How failures are classified"): **Class A** a domain violation, **Class B** an iteration exhaustion —
+both exact from a single run, both recorded, both withholding the numbers — and **Class C**
+conditioning, which needs two runs to see, stays `Valid`: such a result is *ill-conditioned*
+(`docs/conventions/terminology.md`), measured by the twins every validation run carries. A result is therefore invalid on exact, single-run facts only
+(A or B), **never** on the size or smoothness of a number: `docs/xfoil-known-issues.md` §7.7 is the
+worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
+records the evidence, write-only, gated by `ci/validity-write-only.sh`. Ill-conditioned but converged
+points are not covered by this and stay valid.
+
+Both commands exit zero whenever the solver ran to completion: an invalid point is a result, not a tool
+failure, and the status carries it.
+
 Analysis commands accept JSON geometry only; use `yfoil geometry convert` for `.dat`. Typical session:
 
 ```bash
@@ -266,7 +334,8 @@ target/xfoil-ref/{pristine,instrumented,snan}/ - build output; never edit in pla
 scripts/xfoil-build.sh            - the build; `cargo xtask xfoil-build [--verify] [--snan]` wraps it
 ```
 
-Two proofs are part of the reference build and re-run nightly:
+Two proofs are part of the reference build and re-run by the `reference-build` workflow on every change to
+`xfoil/` or the build script (and on demand):
 
 1. **Inert instrumentation** — pristine-DP and instrumented-DP produce byte-identical `cp.dat`, `bl.dat`
    and OPER summaries on the smoke case (`--verify`). Proven 2026-09-03; the patch-series build is also
@@ -298,35 +367,76 @@ explicitly in every equivalence run because the two codes' defaults differ: `ITE
 
 `cargo xtask fixtures [--case NAME] [--verify] [--big]` reads `xtask/fixtures-config/cases.toml`, builds the reference if
 needed, generates panels **with yFoil**, runs instrumented XFOIL via `LOAD`, asserts the bitwise geometry
-handoff, and keeps the raw dumps plus `manifest.json` under `tests/fixtures/xfoil/<case>/` (`track = true`,
-budget 8 MB) or `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
+handoff, and keeps the inputs plus the files the case's tests read under `tests/fixtures/xfoil/<case>/`
+(`track = true`) or everything under `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
 (drive with `ALFA a0 / ASEQ a1 aN da` like the polar procedure; ASEQ points get ITMAX+5), `cls` (OPER `CL x`
-points), `matyp` (OPER `TYPE n`), `minimal = true` (keep only the `viscal_*.dat` records — for coverage cases). The tracked CI reference case is
-`naca0012_n60_a2_re1e6` (`tests/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
-plan stage lands. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
+points), `matyp` (OPER `TYPE n`), `inviscid = true` (no VISC: each ALFA is one SPECAL, each CL one SPECCL),
+`events = true` (keep `events.dat`, the reference's `EVLOG` branch events), `keep = [...]` (track these
+work-directory files besides the inputs), `closures = true` (cut the reference's closure log into
+`tests/fixtures/subroutines/`), and how the case is tested: `run = true` / `run_through = N` (the whole run
+compared, or its first N calls) and `step_calls = [...]` (every iteration of those calls replayed as a step;
+the generator runs the reference twice to dump each of their SETBL calls). `xtask/fixtures-config/step-cover.toml`
+(written by `cargo xtask steps`, from the steps `cargo xtask route` found to take XFOIL's route —
+`route.toml`, with `route-map.toml` naming the XFOIL call sites yFoil translates without a call, whose calls are
+taken off XFOIL's counts) adds
+the dumps and files of the branch cover's steps. `twins = true` (every `branch-coverage`, `non-finite` and `series`
+case) runs the case's five seeded 1-ULP twins after the reference and writes its `noise_floor.json` (study data,
+`target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs; `cargo xtask twins --case
+NAME` reruns them alone); `group = "name"`
+(`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
+its NaN probes, `series` the series cases (the aerofoil series and regimes of interest under normal conditions),
+`known-issues` the runs that show XFOIL's known issues, `pathological` copies of the cases whose runs are pathologically slow or hang (run only by name or
+`--group`, never by `--big`) — and study-only cases are untracked; `cargo xtask
+fixtures --audit` checks every tracked fixture file is read by a test. The runbook for every fixture family is
+`tests/fixtures/README.md`. The tracked CI reference case is
+`naca0012_n60_a2_re1e6` (`tests/common/fixtures/mod.rs::REF_CASE`). Stage-specific JSON parsers are added as each
+plan stage lands. Every reference run, twins included, is watched: killed after 120 s without output (XFOIL's plot-label hang on a
+non-finite value, known issues §4, which happens at a fixed point of the run) and kept as truncated. Where a run ends
+is never decided by the clock: the reference stops itself, on entering the first SETBL call whose BL state holds a
+NaN or an infinity (`stop_on_nonfinite = true`, event `STOP_NONFINITE` — the studies' N = 240, ITER 200 sections,
+which past stall would otherwise run for hours to no purpose) or after N SETBL calls (`stop_after_setbl = N`, event
+`STOP_AFTER_SETBL`), both instrumentation patch 20 and inert when not asked for; a run still going after an hour is
+an error that asks for one of them. No case that gates or measures branches (tracked, or in the `branch-coverage`,
+`non-finite` or `series` groups), nor a `known-issues` case, may use either: a stop cuts off the branches only reached later, the non-finite
+fallbacks among them, and `cargo xtask fixtures` refuses it. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
 budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
 
 ## Testing
 
+**Read `docs/conventions/testing.md` first.** Every test has exactly one purpose — (a) subroutine
+equivalence, (b) execution equivalence, (c) yFoil functionality, (d) known XFOIL weaknesses, (e) physical
+invariants, (f) reference integrity — and (b) test cases must be well-conditioned. The words
+*deterministic*, *ill-conditioned*, *twin* and *noise floor* are defined in `docs/conventions/terminology.md`
+and used in that sense only.
+
 ```
 tests/
-├── utilities/          - shared helpers; tolerances.rs holds the only tolerance constants
-├── fixtures/           - tracked XFOIL fixtures (allowlisted in .gitignore) + loaders
-├── cli_*_tests.rs      - CLI behaviour
-├── integration_*_tests.rs
-└── xfoil_*_tests.rs    - equivalence against XFOIL fixtures
+├── subroutine/         - (a) one XFOIL subroutine at a time, from its dumped inputs
+├── execution/          - (b) one step from XFOIL's dumped state, or a well-conditioned whole run
+├── application/        - (c) yFoil-only functionality: CLI, I/O, generators, output records, ids
+├── known_issues/       - (d) one module per section of docs/xfoil-known-issues.md
+├── invariants/         - (e) XFOIL-independent physics
+├── apparatus/          - (f) the reference and its fixtures
+├── common/             - shared helpers and fixture loaders; utilities/tolerances.rs holds the only
+│                         tolerance constants
+└── fixtures/           - tracked fixture data (allowlisted in .gitignore)
 ```
 
-All test files end in `_tests.rs`. CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `ignore-drift`,
-`no-deviations`, `examples`, and nightly `xfoil-parity` (rebuild reference, regenerate, compare).
+One test binary per category (`cargo test --test execution`). CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `fixture-audit`, `ignore-drift`,
+`no-deviations`, `examples`, and `reference-build` (its own workflow, on changes to `xfoil/` or the build script:
+rebuild the reference and re-prove it inert and free of uninitialised reads). Fixture byte-identity
+(`cargo xtask fixtures --verify`) is a same-host property, checked locally on the fixtures' host.
 
 **Validation reports are generated, never hand-fed.** `docs/validation/` holds only Markdown and SVG; every
 number in it is derived from a fixture directory (`tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/`
 for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report is generated. No XFOIL dump,
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
-Current generators: `cargo xtask coverage` (coverage.md), `scripts/noise-floor.sh` (noise-floor.md),
+Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-gating.md), `scripts/noise-floor.sh` (noise-floor.md),
+`cargo run -p branch-coverage -- --docs` (branch-coverage/), `cargo run -p series-cases -- --docs` (series-cases/),
+`cargo run -p known-issues -- --docs` (known-issues/), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
+(`scripts/study-support/records.rs`) — study evidence beside the tests, never read by them;
 `generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
 (aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison).
 The studies' figures are drawn by matplotlib from their JSON outputs (`scripts/<study>/plot.py`, presentation
@@ -395,7 +505,18 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
   (4-digit modified), 23018 (5-digit), 16-212 (16-series, compressible), 63-415 (6-series,
   closed TE, wind turbine), 64A010 (6A-series) and a Kármán–Trefftz section (analytic, sharp TE)
 - Plus the branch-coverage cases of Rule 6: sharpened TE, M=0.3, high-α separated, low-Re laminar separation,
-  `XSTRIP`, `MATYP≠1`
+  `XSTRIP`, `MATYP≠1` — and the study's minimal set (`group = "branch-coverage"`): inviscid-only (Kármán–Trefftz;
+  the 64A010 TYPE 2 M 0.3 sweep through −30…30°), fixed CL far from alpha, a trip upstream of the stagnation point,
+  a stalled first march at Re 3e6, deep stall at ITER 50, Re 1e4 with DAMP
+- The series cases (`scripts/series-cases`, `docs/validation/series-cases/`, `group = "series"`): the
+  aerofoil series and flow regimes of interest under normal conditions (Re 1e4–1e8, Ncrit 4–11, M 0–0.6,
+  forced transition, fixed CL, inviscid), swept 0 → ±30° by XFOIL's polar procedure at N = 160, ITER 100
+  (N = 160 represents N = 240 where the flow is attached, `docs/xfoil-known-issues.md` §7.13), yFoil
+  driven the same way and compared point by point (a study; the tests replay the chased calls step by step)
+- The known-issues cases (`scripts/known-issues`, `docs/validation/known-issues/`, `group = "known-issues"`):
+  runs that show XFOIL's known issues arising — the dependence on the panel count (§7.13, each case at
+  N = 60, 160 and 240), the plot-label hang (§4), and the sweeps whose purpose is one issue — to be
+  brought one for one with `docs/xfoil-known-issues.md`
 
 BL distributions are extracted at 0°, ±5°, ±10°, ±15°, but every intermediate angle is computed so initialisation
 matches XFOIL.

@@ -136,6 +136,15 @@ pub struct SolverState {
     pub pointers_built: bool,
     pub dij_wake_built: bool,
     pub viscous: bool,
+    /// Diagnostic, not part of XFOIL's state: station Newton failures whose residual was
+    /// non-finite in the marches of the current VISCAL call (reset at its entry). The garbage
+    /// extrapolation carries the march over them, so nothing else in the state records that the
+    /// run went through a NaN; validity reports it.
+    pub nonfinite_station_failures: usize,
+    /// Diagnostic, not part of XFOIL's state: the evidence for whether the values currently
+    /// stored are valid. Written by the routines it describes, never read by the solver
+    /// (`crate::solver::validity`).
+    pub validity: crate::solver::validity::ValidityRecord,
     pub converged: bool,
     /// AWAKE/AVISC/MVISC: alpha the wake was built for, alpha and Mach of the converged point
     pub alpha_wake: f64,
@@ -187,7 +196,9 @@ impl SolverState {
             sigma: vec![0.0; np],
             qinf: 1.0,
             alpha: 0.0,
-            gamma: vec![0.0; n + 1],
+            // GAM is dimensioned to the wake in XFOIL (IZX): STMOVE writes its Ue floor into GAM(I) for
+            // wake stations too
+            gamma: vec![0.0; np],
             gamma_d_alpha: vec![0.0; n + 1],
             q_inviscid_basis: [Vec::new(), vec![0.0; np], vec![0.0; np]],
             q_inviscid: vec![0.0; np],
@@ -258,6 +269,8 @@ impl SolverState {
             dij_wake_built: false,
             viscous: false,
             converged: false,
+            nonfinite_station_failures: 0,
+            validity: crate::solver::validity::ValidityRecord::default(),
             alpha_wake: 0.0,
             alpha_converged: 0.0,
             mach_converged: 0.0,

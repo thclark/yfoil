@@ -5,8 +5,6 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  schedule:
-    - cron: "17 3 * * *"   # nightly xfoil-parity
 
 env:
   CARGO_TERM_COLOR: always
@@ -30,6 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ci/no-deviations.sh
+      # Rule 2, mechanised the other way: the validity record is observational, so no
+      # numeric result may depend on it. src/solver and src/bl write it and never read it.
+      - run: ci/validity-write-only.sh
 
   ignore-drift:
     # Every #[ignore] is tagged with its unblocking stage and listed in
@@ -49,14 +50,12 @@ jobs:
       - run: cargo test --all-targets --features plotting --no-fail-fast
       - run: cargo build --examples
 
-  xfoil-parity:
-    # Rebuild the reference from xfoil/third-party/ + xfoil/instrumentation/, prove the
-    # instrumentation inert and free of uninitialised reads, then regenerate every
-    # tracked fixture and compare. Nightly, and on demand.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  fixture-audit:
+    # Rule 7, mechanised: every tracked file under tests/fixtures/ is read by some test
+    # (access times are reset, the suite runs, and an unread file fails the job).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y gfortran libx11-dev
-      - run: scripts/xfoil-build.sh --verify --snan
-      - run: cargo run -p xtask -- fixtures --verify
+      - run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev pkg-config
+      - run: cargo run -p xtask -- fixtures --audit
+

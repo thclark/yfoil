@@ -808,7 +808,7 @@ pub fn solve_tridiagonal(a: &mut [f64], b: &[f64], c: &mut [f64], d: &mut [f64])
 /// edge; clamped to 0.05…2). Writes exactly `n_nodes` nodes: the upper surface from the trailing
 /// edge to a node at the leading edge, then the lower surface back to the trailing edge (the
 /// upper half carries the leading-edge node, so it has one node more than the lower). The node
-/// positions are gated against golden fixtures by `tests/repanel_cosine_tests.rs`; new work goes
+/// positions are frozen as regression snapshots by `tests/application/repanel_cosine.rs`; new work goes
 /// through [`repanel`] with [`PanelMethod::Pangen`].
 pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> Geometry {
     let n = geometry.x.len();

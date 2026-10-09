@@ -35,6 +35,8 @@ ENH!: Use permission-gated layer nodes
 BREAKING-CHANGE: Remove the top level layer nodes in favour of site-gated layer nodes to respect site permissions. Consumers must query `{ site { layers { ...} }` instead of `{ layers { ... } }`.
 ```
 
+5. **Commits touching tests and source code are not `TST`:** a `TST` code means you did something only with or to the test framework. If you are touching tests AND source code (e.g. to make your new tests pass), the commit is a `REF`, `ENH` or `FEA`, not a `TST`.
+
 ### Type codes and version impact
 
 Available codes:
@@ -59,12 +61,19 @@ this repo is pre-1.0, so the major stays `0` and "breaking" never bumps major (i
 
 ## How to tell when a commit is breaking change?
 
-A commit is breaking if it:
- - (backend) removes a capability of the API (eg removes a node, filter or ordering parameter)
- - (backend) alters existing behaviour of the API (eg alters what results are returned for a given filter)
- - (infrastructure) removes infrastructure definitions (eg deletes a bucket)
- - (infrastructure) recreates infrastructure in a destructive way (eg recreates a database, deleting all contents)
- - (services) has a breaking change in either the input or output schema definitions (versions specified in the octue.yaml or twine.json files for scientific service repositories) 
+A commit is breaking if it makes:
+1. a type change that makes data structures used on inputs/outputs incompatible with prior versions;
+2. a CLI change that makes prior commands fail or behave differently.
+
+Improvements that make yFoil output different numbers — yFoil becoming more consistent with XFOIL,
+more scientifically valid, more accurate or more robust — are labelled `FEA`, because better
+calculations are a new feature, but they are not breaking changes, because they don't interrupt
+anyone's work. Anyone wishing to maintain consistent calculations should pin the minor version.
+Patch versions must not alter calculation results.
+
+Any commit code can carry a breaking change in theory (there is no enforcement at the conventional
+commits level), but some are more likely to than others. A `TST` commit does something only with or
+to the test framework, so it never carries one.
 
 ## PRs and versioning
 

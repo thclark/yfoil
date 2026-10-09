@@ -1,0 +1,54 @@
+{
+  "case": {
+    "alphas": [
+      0.0
+    ],
+    "alphas_after_reinit": [],
+    "closures": false,
+    "cls": [],
+    "damp": false,
+    "dump_calls": [
+      1,
+      2,
+      7,
+      8
+    ],
+    "events": true,
+    "foil": "naca:64A010",
+    "inviscid": false,
+    "keep": [
+      "mrchdu_input_1.dat",
+      "mrchdu_output_1.dat",
+      "mrchdu_input_7.dat",
+      "update_output_7.dat",
+      "update_output_1.dat",
+      "mrchdu_input_2.dat",
+      "viscal_points.dat",
+      "mrchdu_input_8.dat"
+    ],
+    "mach": 0.3,
+    "matyp": 2,
+    "max_iterations": 20,
+    "n_nodes": 60,
+    "name": "naca64a010_n60_type2_m03_a0",
+    "ncrit": 9.0,
+    "polar": false,
+    "re": 1000000.0,
+    "run": false,
+    "run_through": 0,
+    "step_calls": [],
+    "tgap": [],
+    "xtr": []
+  },
+  "generated_by": "cargo xtask fixtures",
+  "panels_dat_sha256": "dbf0652bf8336a60a2fa9213cfd097366eeb4dee9c2897a7858ac4d44414d7d1",
+  "xfoil_ref": [
+    "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
+    "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
+    "series_instr_sha256:    470fa6ab60d01a21f6ef34675cd09f2f0c14ee789989ccb1a034b2ede6fa0024",
+    "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
+    "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
+    "host:                   arm64-Darwin-24.6.0",
+    "libm:                   /usr/lib/libSystem.B.dylib 1345.120.2)"
+  ]
+}

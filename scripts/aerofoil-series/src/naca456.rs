@@ -1,5 +1,5 @@
 //! The generators against the naca456 reference fixtures: the worst relative difference per
-//! case and column, for the report. The gates themselves are `tests/naca456_series_tests.rs`;
+//! case and column, for the report. The gates themselves are `tests/application/naca456.rs`;
 //! this tabulates what they assert.
 
 use std::collections::HashMap;

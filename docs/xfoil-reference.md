@@ -402,188 +402,171 @@ The amplification rate f depends on:
 
 This document describes how to instrument XFOIL to capture intermediate values for validation against yFoil.
 
-### Current Instrumentation
+### Validity events
 
-The XFOIL source code in `xfoil/xfoil6.99/src/` has been modified with diagnostic output:
+`xfoil/instrumentation/instrument/19-validity-events.patch` records, as `EVLOG` branch events in
+`events.dat`, every occasion on which XFOIL goes on to deliver numbers for a point it has not
+properly solved. It exists so that yFoil's flagging can be checked against the reference **without
+comparing any numbers** (see [Solution validity](guide/validity.md)).
 
-#### xoper.f - VISCAL Coupling
+The reason the events are needed at all is that XFOIL mostly does not record these occasions
+anywhere a fixture can see. What it does about each, on its own:
 
-Location: `xoper.f:2982-3104`
+| Event | What XFOIL does about it today |
+|---|---|
+| `CLCALC_KT_DOMAIN` | **nothing at all** — forms the denominator inline, never tests it |
+| `MRCL_CL_FLOOR` | **nothing at all** — silently substitutes `CLA = MAX(CLS, 1e-6)` |
+| `CPCALC_KT_DOMAIN` | console only (`Local speed too large`) |
+| `SPECAL_MINF_FAIL` | console only (`Minf convergence failed`) |
+| `MRCL_MACH_LIMIT` / `MRCL_RE_LIMIT` | console only |
+| `SPECAL_ENTER` | — (marker, carries alpha) |
 
-Outputs:
-- `/tmp/xfoil_dij.dat` - Source influence matrix DIJ
-- `/tmp/xfoil_viscal_iter.dat` - Iteration-by-iteration BL state
+The console messages are not a substitute: `stdout.txt` is not tracked, and `specal_points.dat`
+carries no `ITCL`, so for an inviscid case the event is the only record in a fixture that the CL(M)
+Newton was exhausted.
 
-#### xfoil.f - Panel Geometry
+`SPECAL_ENTER` matters more than it looks. Events carry `NSETBLC`, the SETBL call counter, which is
+**zero throughout an inviscid run** — so without a marker an inviscid event could not be attributed
+to an operating point. Every event between one marker and the next belongs to that SPECAL call, and
+the marker's real value is the alpha.
 
-Location: `xfoil.f:2124`
-
-Outputs:
-- `/tmp/xfoil_panels.dat` - Panel coordinates and normals
-
-### Output Format
-
-#### DIJ Matrix (`/tmp/xfoil_dij.dat`)
-
-```
-=== DIJ MATRIX ===
-N = 160
-NW = 23
-    1     1  1.234567890123456E+00
-    1     2  2.345678901234567E-01
-    ...
-```
-
-Format: `I J VALUE` where VALUE is in Fortran E24.16 format.
-
-#### VISCAL Iteration Log (`/tmp/xfoil_viscal_iter.dat`)
+Measured on `naca64a010_n240_inviscid_polar30_type2_m03` (2026-09-17), event counts against the
+console messages they correspond to:
 
 ```
-=== VISCAL ITERATION LOG ===
---- ITERATION 1 ---
-ALFA =  0.000000000000000E+00
-CL =  1.234567890123456E-01
-CD =  9.876543210987654E-03
-CDF =  5.432109876543210E-03
-CDP =  4.444433333222211E-03
-CM = -1.234567890123456E-02
-RMSBL =  1.234567890123456E-02
-RMXBL =  9.876543210987654E-02
-RLX =  1.000000000000000E+00
-IST = 80
-NBL(1) = 84
-NBL(2) = 84
-ITRAN(1) = 45
-ITRAN(2) = 52
---- Upper surface BL (IS=1) ---
-IBL, UEDG, DSTR, THET, MASS, CTAU
-    1  1.234567890E+00  1.234567890E-03  ...
-    2  ...
---- Lower surface BL (IS=2) ---
-...
+ 360 CLCALC_KT_DOMAIN      <- no console equivalent
+  80 CPCALC_KT_DOMAIN      = "Local speed too large"      80
+ 181 MRCL_CL_FLOOR         <- no console equivalent
+ 360 MRCL_MACH_LIMIT       = "limiting Mach"             360
+  61 SPECAL_ENTER          = 61 alphas
+   6 SPECAL_MINF_FAIL      = "Minf convergence failed"      6
 ```
 
-### Adding New Instrumentation
+Exact agreement everywhere XFOIL speaks. Comparing per alpha against yFoil's own flags on the same
+case: the Newton-exhaustion sets are identical (`[-11, -8, -3, -2, -1, 0]`) and the verdicts are
+identical at all 61 points (42 invalid, α = +1°…+19° sound).
 
-#### Step 1: Locate Subroutine
+**Granularity differs from yFoil's record by design.** An event fires on *any* call within the span,
+while yFoil's fields describe the *reported* state — the last call. So a point whose intermediate
+Newton iterate left the domain but whose final one did not carries the event and not the flag. On
+the case above that happens at exactly one point, α = −11°, which both codes flag invalid anyway
+through the exhaustion test. A comparison written against these events should be at verdict level,
+or should account for the difference.
 
-Find the subroutine in the XFOIL source:
+As with the rest of the series, the patch is inert: `scripts/xfoil-build.sh --verify` proves
+pristine and instrumented produce byte-identical `cp.dat`, `bl.dat` and OPER summary.
+
+### How the reference is built
+
+The reference is **never modified in place and never built in-tree**. `xfoil/third-party/xfoil-6.99/`
+holds the pristine MIT tarball with a per-file checksum manifest, and everything else is a tracked
+patch series applied to a staged copy:
+
+| Directory | Applied to | Contents |
+|---|---|---|
+| `xfoil/instrumentation/build/` | both builds | double precision (`-fdefault-real-8`), `-ffp-contract=off`, `-ffixed-line-length-none`, macOS X11 paths |
+| `xfoil/instrumentation/instrument/` | the instrumented build only | the `xlog` harness and the per-subroutine dumps |
+
+`scripts/xfoil-build.sh` (wrapped by `cargo xtask xfoil-build`) stages each tree under
+`target/xfoil-ref/{pristine,instrumented}/`, applies the series listed in
+`xfoil/instrumentation/series.build` and `series.instrument`, and builds. Two proofs are part of the
+build and re-run by the `reference-build` workflow whenever `xfoil/` or the build script changes:
+
+- `--verify` — pristine and instrumented produce byte-identical `cp.dat`, `bl.dat` and OPER summary
+  on the smoke case, so **the instrumentation is inert**.
+- `--snan` — a `-finit-real=snan -ffpe-trap=invalid` build runs the smoke case clean, so nothing
+  reads an uninitialised value.
+
+### Where output goes, and in what format
+
+Every dump is written to the **working directory** — never `/tmp` — so a run is self-contained and
+the fixture pipeline can keep a whole case in one directory. Rather than list them here, where the
+list would rot: the authoritative set is the `FILE=` targets in
+`xfoil/instrumentation/instrument/*.patch`, and any tracked case directory under
+`tests/fixtures/xfoil/` shows what a run of that shape actually produces. They fall into five groups:
+
+- **per operating point** — `specal_points.dat`, `speccl_points.dat`, `viscal_points.dat`
+- **per VISCAL iteration** — `viscal_iter.dat`, `viscal_iters_all.dat`, `viscal_final.dat`,
+  `viscal_inviscid.dat`, `viscal_nonfinite.dat`
+- **per SETBL call** (written for the calls listed in `dump_calls.txt`, default 1–3; a case's
+  `dump_calls`, `step_calls` and the branch cover fill it) — `mrchdu_input_<k>.dat`,
+  `mrchdu_output_<k>.dat`, `setbl_output_<k>.dat`, `update_output_<k>.dat`, `mrchdu_trace_<k>.dat`
+  and `trchek2_<k>.dat`; a case tracks only those its tests read
+- **one-shot state** — `xfoil_dij.dat`, `xfoil_pointers.dat`, `xfoil_uinv.dat`, `xfoil_panels.dat`,
+  `xfoil_inviscid.dat`, `xfoil_pangen.dat`, `xfoil_tgap.dat`, the BLSOLV inputs and traces
+- **branch events and call traces** — `events.dat` (see [Validity events](#validity-events)),
+  `xfoil_trace.log`, `xfoil_subroutine_log.dat`, `dump_calls.txt`
+
+**All of it at `ES24.16`** — 17 significant figures, the minimum that round-trips an f64. XFOIL's own
+debug formats (`E24.16`, `E18.10`, `E12.4`) carry 16, 10 and 4 figures respectively and were the
+reason earlier fixtures were not bit-exact; `E24.16` is *not* enough for a double. Prefer the
+`xlog.f` JSON harness (`LOGENTER`/`LOGINT`/`LOGREAL`/`LOGBOOL`/`LOGARR1`/`LOGARR2`) for new work;
+the per-file `.dat` dumps are legacy and are being migrated stage by stage.
+
+Nothing gates on XFOIL's *formatted* output files — `PSAVE` is `G15.7`, `.pol` is `F9.4/F10.5`,
+`DUMP` is `F9.5/F10.6`, `CPWR` is `F11.5`, none of which can support a comparison below ~1e-5.
+
+### Adding new instrumentation
+
+Edit a staged tree and regenerate the patch; do not edit `target/xfoil-ref/` in place, and do not
+touch the pristine source.
 
 ```bash
-grep -n "SUBROUTINE BLKIN" xfoil/xfoil6.99/src/xblsys.f
+# stage a tree with the full series applied
+W=.tmp/instr; rm -rf $W; mkdir -p $W
+cp -R xfoil/third-party/xfoil-6.99 $W/tree
+for s in series.build series.instrument; do
+  while IFS= read -r p; do [ -z "$p" ] && continue
+    patch -s -p1 -d $W/tree < xfoil/instrumentation/$p
+  done < xfoil/instrumentation/$s
+done
+cp -R $W/tree $W/base          # snapshot to diff against
+
+# ... edit $W/tree/src/<file>.f ...
+
+diff -u $W/base/src/xfoil.f $W/tree/src/xfoil.f \
+  | sed '1s|.*|--- a/src/xfoil.f|;2s|.*|+++ b/src/xfoil.f|' \
+  > xfoil/instrumentation/instrument/NN-my-change.patch
+echo "instrument/NN-my-change.patch" >> xfoil/instrumentation/series.instrument
+scripts/xfoil-build.sh --verify         # must still report the instrumentation inert
 ```
 
-#### Step 2: Add WRITE Statements
+Three rules for the edit itself:
 
-Example for BLKIN output:
+- **Write only.** Instrumentation may not change control flow or any stored value. `--verify` is the
+  proof, and it must still pass.
+- **Declare your locals.** XFOIL has no `IMPLICIT NONE`, so a name beginning `A-H` or `O-Z` is `REAL`
+  and `I-N` is `INTEGER` by default. Declare anything you add explicitly.
+- **Branch events go to `events.dat`** via `EVLOG(NAME, IS, IBL, R)`, not to a new file. That is how
+  the rarely-taken fallbacks are recorded, and `tests/execution/events.rs` asserts them
+  one call at a time.
 
-```fortran
-C---- INSTRUMENTATION: Output BLKIN variables
-      IF (IPRINT .GT. 0) THEN
-        WRITE(IPRINT,'(A)') '=== BLKIN OUTPUT ==='
-        WRITE(IPRINT,'(A,E24.16)') 'X2 =', X2
-        WRITE(IPRINT,'(A,E24.16)') 'U2 =', U2
-        WRITE(IPRINT,'(A,E24.16)') 'T2 =', T2
-        WRITE(IPRINT,'(A,E24.16)') 'D2 =', D2
-        WRITE(IPRINT,'(A,E24.16)') 'H2 =', H2
-        WRITE(IPRINT,'(A,E24.16)') 'HK2 =', HK2
-        WRITE(IPRINT,'(A,E24.16)') 'RT2 =', RT2
-        WRITE(IPRINT,'(A,E24.16)') 'M2 =', M2
-        WRITE(IPRINT,'(A,E24.16)') 'R2 =', R2
-        WRITE(IPRINT,'(A,E24.16)') 'V2 =', V2
-      ENDIF
+Cases are then driven by `cargo xtask fixtures`, which generates panels with yFoil, runs the
+instrumented build via `LOAD`, asserts the bitwise geometry handoff and keeps the dumps with a
+`manifest.json`. Scripts always start `PLOP` / `G F`, and always `LOAD` a `.dat` file — never `NACA`,
+never `PANE`, never `PPAR`, because different panels make any comparison meaningless.
+
+### Comparing values
+
+There is no fixed tolerance ladder. Tolerances are **derived from the reference's own noise floor**
+(`scripts/noise-floor.sh`, `docs/validation/noise-floor.md`) and live as five named constants in
+`tests/utilities/tolerances.rs` — `TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, `TOL_TRANSIENT`,
+`TOL_CROSS_HOST` — with no ad-hoc literals anywhere else.
+
+The error metric is
+
+```
+|a - b| <= tol * max(|a|, |b|, scale_v)
 ```
 
-#### Step 3: Rebuild XFOIL
+with a physical per-variable scale. **Bare relative error must not be used**: it is undefined at
+CL ≈ 0, VDEL ≈ 0 and laminar CTAU ≈ 0, all of which occur in ordinary cases.
 
-```bash
-cd xfoil/xfoil6.99/bin
-make clean
-make
-```
-
-#### Step 4: Run Test Case
-
-```bash
-./xfoil << EOF
-PLOP
-G F
-
-NACA 0012
-OPER
-VISC 1e6
-ITER 20
-ALFA 2
-EOF
-```
-
-#### Step 5: Parse Output
-
-Use the fixture generation script to convert output to JSON.
-
-### Key Subroutines to Instrument
-
-#### Panel Method
-
-| Subroutine | File | Variables to Capture |
-|------------|------|---------------------|
-| PSILIN | xpanel.f | PSI, DZDG, DZDM per panel |
-| QDCALC | xpanel.f | DIJ matrix, CIJ matrix |
-
-#### BL System
-
-| Subroutine | File | Variables to Capture |
-|------------|------|---------------------|
-| BLPRV | xblsys.f | X2, U2, T2, D2, U2_UEI, U2_MS |
-| BLKIN | xblsys.f | M2, R2, H2, HK2, RT2, V2 + derivatives |
-| BLVAR | xblsys.f | HS2, CF2, DI2, US2, HC2, DE2 + derivatives |
-| BLSYS | xblsys.f | VS1, VS2, VSREZ matrices |
-| TRCHEK2 | xblsys.f | AMPL2, XT, transition derivatives |
-
-#### BL Marching
-
-| Subroutine | File | Variables to Capture |
-|------------|------|---------------------|
-| SETBL | xbl.f | VA, VB, VDEL, VM matrices |
-| MRCHUE | xbl.f | Per-station THET, DSTR, CTAU |
-| UPDATE | xbl.f | RMSBL, RMXBL, RLX, changes |
-
-### Precision Requirements
-
-**All output must use E24.16 format** to capture full double-precision values:
-
-```fortran
-WRITE(LU,'(A,E24.16)') 'VAR =', VAR
-```
-
-This gives 16 significant figures, matching IEEE double precision.
-
-### Comparison Tolerance
-
-When comparing yFoil to XFOIL:
-
-| Tolerance | Meaning |
-|-----------|---------|
-| < 1e-14 | Perfect match (roundoff only) |
-| 1e-14 to 1e-10 | Acceptable (numerical precision) |
-| 1e-10 to 1e-6 | Concerning (investigate) |
-| > 1e-6 | Bug (must fix) |
-
-Relative error calculation:
-```
-rel_error = |yfoil - xfoil| / max(|xfoil|, 1e-14)
-```
-
-### Existing Debug Files
-
-The instrumented XFOIL writes to:
-- `/tmp/xfoil_dij.dat`
-- `/tmp/xfoil_viscal_iter.dat`
-- `/tmp/xfoil_inviscid.dat`
-- `/tmp/xfoil_panels.dat`
-- `/tmp/xfoil_bl_debug.dat` (from xbl.f MRCHUE)
-
-These files are overwritten on each run. Copy them before running another case.
+A comparison passes only when the **branch trace is identical as well** as the values being within
+tolerance. XFOIL contains ~130 exact real equalities and ~140 real inequality branches, so a 1-ULP
+difference at a threshold flips a branch and produces O(1) differences that are not translation
+bugs; such a case is recorded as *threshold-straddling*, a third outcome reported separately and
+never silently passed or failed.
 
 ## XFOIL Variable and Control Flow Map
 
@@ -1035,6 +1018,61 @@ names by design; everything yFoil writes uses the yFoil names.
 | COM2 | `station2` | the current station |
 | XT block | `transition` | transition location and sensitivities (table 6) |
 
+### The OPER TYPE command and the meaning of MATYP and RETYP
+
+`MATYP` and `RETYP` appear in Table 3 as enums, but their numeric values carry a physical meaning that the
+mapping alone does not convey, and that meaning decides where each type is valid. XFOIL's own menu text
+(`xoper.f:1105`) is the definition:
+
+```
+ Type   parameters held constant       varying      fixed
+ ----   ------------------------       -------   -----------
+   1    M          , Re            ..   lift     chord, vel.
+   2    M sqrt(CL) , Re sqrt(CL)   ..   vel.     chord, lift
+   3    M          , Re CL         ..   chord    lift , vel.
+```
+
+Each type describes a different physical experiment, and the question each answers is what the aerofoil is
+attached to while α is swept.
+
+**TYPE 1 — fixed Mach and Reynolds number.** The chord and the freestream velocity are both held fixed, so
+Mach and Reynolds number do not change as α is swept, and the lift is simply whatever comes out. This is the
+wind tunnel: a model of fixed size in a flow of fixed speed. `MATYP = 1, RETYP = 1`, and MRCL leaves
+`MINF = MINF1`, `REINF = REINF1` untouched. Every case in the validation set is TYPE 1 unless it says
+otherwise.
+
+**TYPE 2 — fixed lift.** The chord and the *lift* are held fixed and the velocity is the free variable. This
+is an aircraft in steady level flight at a given weight and altitude: as α changes, the speed must adjust so
+that lift still equals weight. From `L = ½ρV²S·CL` at fixed `L`, the speed goes as `V ∝ 1/√CL`, and since
+both Mach and Reynolds number are proportional to V, MRCL sets `MINF = MINF1/√CL` and `REINF = REINF1/√CL`
+(`MATYP = 2, RETYP = 2`). `MINF1` and `REINF1` are therefore not "the Mach number" and "the Reynolds
+number" — they are the values the aircraft would fly at if CL were exactly 1.
+
+The physical reading is also the statement of where TYPE 2 stops being meaningful: **it presupposes that the
+aerofoil is holding up a fixed weight.** At `CL ≤ 0` the speed required to do so is imaginary, and the
+`√CL` in both expressions has no real value. XFOIL does not treat this as an error — MRCL floors the lift
+coefficient at `CLA = MAX(CLS, 1e-6)` and limits the resulting Mach number to 0.99 — with consequences that
+are the subject of xfoil-known-issues §7.10. A symmetric section swept to negative α therefore spends half
+its sweep outside the type's domain of definition.
+
+**TYPE 3 — fixed lift and velocity, varying chord.** The lift and the velocity are held fixed and the
+*chord* is the free variable, so `CL·c` is constant and `c ∝ 1/CL`. The Mach number is unchanged (the speed
+is fixed) while the Reynolds number follows the chord: `MINF = MINF1`, `REINF = REINF1/CL`
+(`MATYP = 1, RETYP = 3`). This is the sizing question — how large a wing is needed to carry a given load at
+a given speed — rather than an operating point of one aerofoil.
+
+Two consequences of the mapping are worth stating explicitly, because the type number and the variable
+values do not correspond one-to-one:
+
+- `MATYP = 3` is **unreachable**. TYPE 3 sets `MATYP = 1, RETYP = 3`, so nothing ever assigns `MATYP = 3`
+  and MRCL's third Mach branch is dead code (xfoil-known-issues §5.4).
+- MRCL has a second clamp that mirrors the Mach one: if `REINF/REINF1` exceeds 100 the Reynolds number is
+  limited to `100·REINF1`. TYPE 3, whose Reynolds number goes as `1/CL` rather than `1/√CL`, reaches it
+  soonest (xfoil-known-issues §4).
+
+Both dependences are re-evaluated by MRCL at every CL update, not once per point, so the Mach and Reynolds
+numbers of a TYPE 2 or TYPE 3 case are themselves solution variables, converged along with everything else.
+
 ### Table 3: `SolverState`, flow conditions, flags, forces
 
 | XFOIL | yFoil | What it is |
@@ -1044,6 +1082,8 @@ names by design; everything yFoil writes uses the yFoil names.
 | MINF | `mach` | Mach at the current CL |
 | REINF | `re` | Reynolds at the current CL |
 | MATYP | `mach_cl_dependence` | enum `Fixed`, `InverseSqrtCl` (was 1/2) |
+| — | `validity` | `ValidityRecord` (`src/solver/validity.rs`): no XFOIL equivalent. The evidence for whether the values currently stored are valid — the smallest Kármán–Tsien denominator of the CLCALC integration and of the stored Cp arrays, whether SPECAL's CL(M) Newton was exhausted, and which of MRCL's three substitutions produced the stored Mach/Re. Written by the routines it describes and never read by the solver (`ci/validity-write-only.sh`); each field describes the stored state, not the history of the point. XFOIL computes most of these tests itself (CPCALC's `DENNEG`, the iteration counters) and discards them — xfoil-known-issues §7.10 |
+| — | `nonfinite_station_failures` | no XFOIL equivalent: station Newton failures with a non-finite residual in the current VISCAL call's marches |
 | RETYP | `re_cl_dependence` | enum `Fixed`, `InverseSqrtCl`, `InverseCl` (was 1/2/3) |
 | IDAMP | `amplification_model` | enum `Envelope` (DAMPL), `ModifiedEnvelope` (DAMPL2) |
 | MINF_CL, REINF_CL | `mach_d_cl`, `re_d_cl` | |
@@ -1251,11 +1291,11 @@ base names are listed with the sensitivities XFOIL carries.
 | CPCALC, CLCALC, CDCALC | `compute_cp`, `compute_cl_cm`, `compute_cd` | |
 | QISET | `set_q_inviscid` | |
 | UICALC | `set_ue_inviscid` | |
-| UECALC | `set_ue_from_q_viscous` | |
+| UECALC | — | never called in 6.99; not translated (known issues §5.1) |
 | QVFUE | `set_q_viscous_from_ue` | |
 | GAMQV | `set_gamma_from_q_viscous` | |
 | UESET | `set_ue_with_sources` | |
-| DSSET | `set_dstar_from_mass` | |
+| DSSET | — | never called in 6.99; not translated (known issues §5.1) |
 | TECALC | `set_te_thickness` | |
 | STFIND, STMOVE | `find_stagnation`, `move_stagnation` | |
 | IBLPAN, XICALC, IBLSYS | `map_stations_to_nodes`, `set_station_xi`, `map_stations_to_rows` | |
@@ -1274,7 +1314,7 @@ base names are listed with the sensitivities XFOIL carries.
 | NCALC, APCALC | `node_normals`, `panel_angles` | |
 | PANGEN | `repanel_by_curvature` (`PangenConfig`); `repanel` (`PanelConfig`) is PANE/PPAR with the trailing-edge treatment and the provenance record | |
 | GETPAN (PPAR menu) | `PanelConfig` / `PangenConfig` fields, `yfoil geometry repanel` flags | see table 12 |
-| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/xfoil_tgap_tests.rs` |
+| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/subroutine/tgap.rs` |
 | — | keep | doc: no XFOIL equivalent |
 | NACA4/NACA5 | `naca_4digit`, `naca_5digit` with a `Thickness` {`Perpendicular`, `Vertical`} argument | the un-suffixed name currently holds the non-XFOIL algorithm; every NACA family (4, 4M, 5, 16, 6, 6A) is `series::Section`, which has no XFOIL equivalent |
 | SCALC + SEGSPL + LEFIND + TECALC + NCALC + APCALC | `panel_foil` | doc lists all six |

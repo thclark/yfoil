@@ -1,0 +1,140 @@
+--- a/src/xfoil.f
++++ b/src/xfoil.f
+@@ -798,6 +798,10 @@
+       REAL M_CLS
+ C
+       CLA = MAX( CLS , 0.000001 )
++C---- INSTRUMENTATION: a CL at or below zero has no real Mach/Re under a CL-dependent
++C     type, so the floor stands in for one. XFOIL does not announce this at all; it only
++C     announces the Mach/Re limits it leads to, and then only on the console.
++      IF(CLS .LE. 0.000001) CALL EVLOG('MRCL_CL_FLOOR', 0, 0, CLS)
+ C
+       IF(RETYP.LT.1 .OR. RETYP.GT.3) THEN
+         WRITE(*,*) 'MRCL:  Illegal Re(CL) dependence trigger.'
+@@ -851,6 +855,9 @@
+         WRITE(*,*)
+         WRITE(*,*) 'MRCL: CL too low for chosen Mach(CL) dependence'
+         WRITE(*,*) '      Aritificially limiting Mach to  0.99'
++C------ INSTRUMENTATION: console only in XFOIL, and it also zeroes M_CLS, which
++C       flattens the Newton in SPECAL that called it
++        CALL EVLOG('MRCL_MACH_LIMIT', 0, 0, MINF)
+         MINF = 0.99
+         M_CLS = 0.
+       ENDIF
+@@ -862,6 +869,8 @@
+         WRITE(*,*)
+         WRITE(*,*) 'MRCL: CL too low for chosen Re(CL) dependence'
+         WRITE(*,*) '      Aritificially limiting Re to ',REINF1*100.0
++C------ INSTRUMENTATION: console only in XFOIL
++        CALL EVLOG('MRCL_RE_LIMIT', 0, 0, REINF)
+         REINF = REINF1*100.0
+         R_CLS = 0.
+       ENDIF
+@@ -1069,23 +1078,36 @@
+       REAL MINF
+ C
+       LOGICAL DENNEG
++C---- INSTRUMENTATION: smallest Karman-Tsien denominator over the nodes
++      REAL EVDMIN
++      INTEGER IEVMIN
+ C
+       BETA = SQRT(1.0 - MINF**2)
+       BFAC = 0.5*MINF**2 / (1.0 + BETA)
+ C
+       DENNEG = .FALSE.
+ C
++      EVDMIN = BETA + BFAC*(1.0 - (Q(1)/QINF)**2)
++      IEVMIN = 1
+       DO 20 I=1, N
+         CPINC = 1.0 - (Q(I)/QINF)**2
+         DEN = BETA + BFAC*CPINC
+         CP(I) = CPINC / DEN
+         IF(DEN .LE. 0.0) DENNEG = .TRUE.
++C------ INSTRUMENTATION
++        IF(DEN .LT. EVDMIN) THEN
++         EVDMIN = DEN
++         IEVMIN = I
++        ENDIF
+   20  CONTINUE
+ C
+       IF(DENNEG) THEN
+        WRITE(*,*)
+        WRITE(*,*) 'CPCALC: Local speed too large. ',
+      &            'Compressibility corrections invalid.'
++C----- INSTRUMENTATION: XFOIL prints this and returns the inverted Cp anyway. The
++C      message goes to the console, which no fixture keeps; the event does not.
++       CALL EVLOG('CPCALC_KT_DOMAIN', 0, IEVMIN, EVDMIN)
+       ENDIF
+ C
+       RETURN
+@@ -1102,6 +1124,9 @@
+ C-----------------------------------------------------------
+       DIMENSION X(N),Y(N), GAM(N), GAM_A(N)
+       REAL MINF
++C---- INSTRUMENTATION: smallest Karman-Tsien denominator of this integration
++      REAL EVDMIN
++      INTEGER IEVMIN
+ C
+ ccC---- moment-reference coordinates
+ cc      XREF = 0.25
+@@ -1134,11 +1159,20 @@
+       CPC_CPI = (1.0 - BFAC*CPG1)/ (BETA + BFAC*CGINC)
+       CPG1_ALF = CPC_CPI*CPI_GAM*GAM_A(I)
+ C
++C---- INSTRUMENTATION: track the smallest denominator (see the EVLOG below)
++      EVDMIN = BETA + BFAC*CGINC
++      IEVMIN = I
++C
+       DO 10 I=1, N
+         IP = I+1
+         IF(I.EQ.N) IP = 1
+ C
+         CGINC = 1.0 - (GAM(IP)/QINF)**2
++C------ INSTRUMENTATION
++        IF(BETA + BFAC*CGINC .LT. EVDMIN) THEN
++         EVDMIN = BETA + BFAC*CGINC
++         IEVMIN = IP
++        ENDIF
+         CPG2     = CGINC/(BETA + BFAC*CGINC)
+         CPG2_MSQ = -CPG2/(BETA + BFAC*CGINC)*(BETA_MSQ + BFAC_MSQ*CGINC)
+ C
+@@ -1171,6 +1205,13 @@
+         CPG1_MSQ = CPG2_MSQ
+    10 CONTINUE
+ C
++C---- INSTRUMENTATION: the Karman-Tsien correction has a pole where this denominator
++C     reaches zero; past it Cp has changed sign and CL/CM/CDP are wrong, not merely
++C     imprecise. CPCALC tests the same expression and at least warns (DENNEG, below);
++C     CLCALC forms it inline and says nothing, so this is the only record that the
++C     forces XFOIL is about to report came from outside the correction's domain.
++      IF(EVDMIN .LE. 0.0) CALL EVLOG('CLCALC_KT_DOMAIN', 0, IEVMIN, EVDMIN)
++C
+       RETURN
+       END ! CLCALC
+ 
+--- a/src/xoper.f
++++ b/src/xoper.f
+@@ -2746,6 +2746,11 @@
+       CALL LOGREAL('ALFA', DBLE(ALFA))
+       CALL LOGBOOL('LGAMU', LGAMU)
+       CALL LOGBOOL('LQAIJ', LQAIJ)
++C---- INSTRUMENTATION: a marker opening this call's span of events.dat, carrying the
++C     alpha. Events record NSETBLC, which is zero throughout an inviscid run, so without
++C     this there is nothing to attribute an inviscid event to; every event between one
++C     marker and the next belongs to that SPECAL call.
++      CALL EVLOG('SPECAL_ENTER', 0, 0, ALFA)
+ C
+ C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
+       IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
+@@ -2807,6 +2812,11 @@
+ C
+   100 CONTINUE
+       WRITE(*,*) 'SPECAL:  Minf convergence failed'
++C---- INSTRUMENTATION: the CL(M) Newton ran all 20 iterations without meeting its
++C     tolerance, so what SPECAL goes on to report is iterate 20, not a solution. XFOIL
++C     says so on the console only; specal_points.dat has no ITCL, so this event is the
++C     only record of it in a fixture.
++      CALL EVLOG('SPECAL_MINF_FAIL', 0, ITCL, DCLM)
+   110 CONTINUE
+ C
+ C---- set final Mach, CL, Cp distributions, and hinge moment

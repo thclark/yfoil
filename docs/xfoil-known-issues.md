@@ -47,13 +47,13 @@ Verified in the source, not inferred:
   corrections), so ~1e-4 relative or better on a converged point; unbounded on an unconverged one.
   On the reference case (NACA 0012, N=60, α=2°, Re=1e6) live and DUMP `H*` differ by ~1e-8.
 
-**yFoil.** The stored arrays are reproduced exactly (`tests/xfoil_mrchdu_tests.rs:60`,
-`tests/xfoil_update_tests.rs:75`, the SETBL gates); the solver is untouched. In the analysis JSON
+**yFoil.** The stored arrays are reproduced exactly (`tests/subroutine/mrchdu.rs`,
+`tests/execution/update.rs`, the SETBL gates); the solver is untouched. In the analysis JSON
 (`BlSideOutput`, `src/output/foil.rs`) the canonical columns `hs, cf, cdis, delta, ctq, uslp` are
 computed *live* by running XFOIL's own BLPRV → BLKIN → BLVAR on the converged primaries, and the lagged
 arrays are emitted verbatim under `stored` (with `hs_dump`, `cf_dump` as DUMP prints them). A
 side-by-side of live `hs` against DUMP's `H*` will differ at the ~RMSBL level by construction;
-`tests/foil_output_tests.rs` bounds it. Column table: `docs/xfoil-reference.md`,
+`tests/application/output.rs` bounds it. Column table: `docs/xfoil-reference.md`,
 "Output" section.
 
 ### 1.2 DUMP's `Ue/Vinf` is signed by GAM — Overcome (output only)
@@ -133,7 +133,7 @@ returned `AMPL2` is the iterated value and may exceed Ncrit; with no transition,
 ### 2.6 VSREZ(4) is stale at MRCHUE's inner-loop entry — Replicated (instrumentation note)
 
 The fourth residual is assigned only in the direct/inverse branch, so a trace written before it holds
-the previous iteration's value; the gate excludes it (`tests/xfoil_mrchue_tests.rs:123`).
+the previous iteration's value; the gate excludes it (`tests/subroutine/mrchue.rs`).
 
 ### 2.7 RADLE stays zero for a flat LE — Replicated
 
@@ -147,11 +147,21 @@ THET, DSTR, UEDG, TAU, DIS, CTQ, DELT and TSTR (`xbl.f:1546-1557`) but not MASS,
 writes `MASS(IBL, 1)` beyond `NBL(1)` (MRCHUE/MRCHDU, UPDATE, DSSET and the SETBL/QVFUE sums all
 run to `NBL(IS)`, and `NBL(1) = IBLTE(1)`). Those slots hold whatever an earlier stagnation-point
 position left there and are read by nothing. yFoil's `mass_defect[1][..]` beyond `n_stations[1]` is
-the same dead storage with a different history, so the replay harness (`tests/utilities/replay.rs`)
+the same dead storage with a different history, so the replay harness (`tests/common/utilities/replay.rs`)
 does not compare it; it surfaced in the polar break-point cases, where IST moves between iterations
 and the instrumented `update_output_<k>.dat` dumps every row up to `NBL(1) + NW`.
 
 ---
+
+### 2.9 The closure log's `s2` at laminar BLVAR calls is not a value BLVAR uses — Out of scope
+
+The reference's closure log (`xfoil_subroutine_log.dat`, cut into `tests/fixtures/subroutines/` by
+`closures = true`) records BLVAR's inputs as they stand in COM2. At some laminar calls (`ityp = 1`,
+the stations near the leading edge) `S2` holds a subnormal (about 3e-314) that changed, with every
+output unchanged, when the instrumentation's dump list grew from 32 to 1000 entries and again when
+patches 20 and 21 were added — a value that depends on memory layout, so not one XFOIL computed for that station. BLVAR(1) does not read `S2`
+(the laminar closures take no shear stress), so the outputs and the gate are unaffected; the input
+is regenerated with the fixtures and `--verify` holds it for a given build. Noted 2026-10-06.
 
 ## 3. Drela's own dated fixes and flagged defects in the shipped source
 
@@ -179,31 +189,34 @@ replicates each (with the message as a code comment) so that its results and bra
 | Where | Behaviour | yFoil |
 |---|---|---|
 | `xfoil.f:796, 801` (MRCL) | `Illegal Re(CL)/Mach(CL) dependence trigger. Setting fixed` — RETYP/MATYP outside 1..3 silently reset to 1 | `src/solver/setbl.rs:39, 43`; unreachable through TYPE (§5.4) |
-| `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; reach notes in `coverage.toml` |
+| `xfoil.f:845, 856` (MRCL) | `CL too low for chosen Mach(CL) dependence — artificially limiting Mach to 0.99`; Re limited to 100× REINF1 | `setbl.rs:77, 86`; the Mach limit and CL floor are checked against XFOIL's events by `tests/known_issues/kt_pole_7_7.rs` on `naca64a010_n60_inviscid_sweep30_type2_m03`; reach notes in `coverage.toml` |
+| `xfoil.f` (CPCALC, CLCALC) | the Kármán–Tsien denominator `DEN = β + BFAC·Cp_inc` goes non-positive once any panel's speed passes `q/Q∞ = √(1 + 2β(1+β)/M∞²)`, so Cp does not merely lose accuracy — it passes through a **pole** and changes sign. CPCALC prints `Local speed too large. Compressibility corrections invalid.` once per call and returns the inverted Cp anyway; **CLCALC forms the same denominator inline and does not warn at all**, so CL/CM/CDP are silently wrong, frequently in sign. At M = 0.3 the threshold is q/Q∞ = 6.513 (a NACA 64A010 at N = 240 crosses it between 19° and 20°); at the M = 0.99 that MRCL's clamp produces it is 1.153, which that section exceeds by α = ±1°. See §7.7 for how TYPE 2 walks into this on its own | Replicated (`clcalc.rs:26` warns as CPCALC does, `:57-69` is the unguarded CLCALC form) |
 | `xutils.f:41-50` (SETEXP) | 100-iteration Newton on the spacing ratio to `|dRatio| < 1e-5`; `Convergence failed. Continuing anyway ...` | `src/solver/xywake.rs:33-49`; the 1e-5 tolerance is load-bearing (§7.1) |
 | `xoper.f` (VISCAL, SPECAL, SPECCL) | `Convergence failed` after ITMAX / 20 / 12 iterations; state kept | `viscal.rs:187`, `specal.rs:110, 172` |
 | `xbl.f:1474` (UPDATE) | under-relaxation whenever a step would change a BL variable by more than 50 % (DLO) | `src/solver/update.rs` |
 | `xbl.f:1515-1517` (UPDATE) | `eliminate absurd transients`: CTAU capped at 0.25 for turbulent stations only | `update.rs:296` |
-| `xbl.f:1537` (UPDATE) | `make sure there are no "islands" of negative Ue` | `update.rs:311` |
-| `xbl.f:785-827`, `:1111-1149` | MRCHUE/MRCHDU non-convergence fallbacks: extrapolate from the previous station when the residual > 0.1 (`garbage solution`) | Translated; still unexercised (every failure so far had DMAX ≤ 0.1), reach notes in `coverage.toml` |
+| `xbl.f:1537` (UPDATE) | `make sure there are no "islands" of negative Ue` | `update.rs:311`; reached only in non-finite reference runs so far (`naca4412_n60_a16_re1e6_m06_iter60`) |
+| `xbl.f:785-827`, `:1111-1149` | MRCHUE/MRCHDU non-convergence fallbacks: extrapolate from the previous station when the residual > 0.1 (`garbage solution`) | Translated. MRCHUE's fallback is exercised at airfoil, wake-start and wake stations by `naca4412_n60_a18_re3e6_iter40` (gated: match); MRCHDU's only ever fired in runs the reference had already driven non-finite (next row), reach notes in `coverage.toml` |
 | `xblsys.f` (BLVAR) | laminar Cf used in the turbulent branch at unreasonably small Rθ | `src/bl/system.rs:1287, 1408` |
 | `xblsys.f` (BLVAR) | `DE` capped at `12·θ` with all four sensitivities zeroed — a Jacobian discontinuity | `system.rs:1458-1465` |
 | `xblsys.f` (BLDIF) | similarity-station amplification row is a dummy `VS2(1,1) = 1` pivot | `system.rs:1744-1746` |
 | `xblsys.f` (BLDIF) | forms `UQ_RTA`, `UQ_T1..UQ_RE` and never uses them | omitted where they feed nothing, `system.rs:1830` |
 | `xpanel.f:1737` (UESET) | `tweak Ue so it's not zero, in case stag. point is right on node` (UEPS = 1e-7) | `pointers.rs:325` |
-| `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; threshold-straddling territory |
+| `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; a divergent comparison wherever it is reached (`docs/conventions/terminology.md`) |
 | `xbl.f` (SETBL) | `SETBL: Xtr???  n1 n2:` diagnostic when the transition interval and ITRAN disagree | `setbl.rs:272` |
-| `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `xfoil-sensitivity` driver detects the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
+| `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `input-sensitivity` driver and the fixture runner detect the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
+| `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the fallback above extrapolates finite values over it and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/validation/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are gated one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
 
 ---
 
 ## 5. Dead and unreachable code in 6.99
 
-### 5.1 Subroutines never called — Out of scope / translated for completeness
+### 5.1 Subroutines never called — Not translated
 
-`UECALC` and `DSSET` are never called anywhere in 6.99 (translated anyway,
-`src/solver/velocity.rs:29, 77`); `DIT`'s only call site is commented out (`xblsys.f:944`, not
-translated). `docs/validation/coverage.md` lists them as the three never-called subroutines.
+`UECALC` and `DSSET` (`xpanel.f`) are never called anywhere in 6.99, and `DIT`'s only call site is
+commented out (`xblsys.f:944`). None of the three is translated: they were carried for completeness
+until 2026-09-13 and removed once the branch-coverage study confirmed no case can reach them, so the
+translated set of `xtask/fixtures-config/coverage.toml` no longer names them.
 
 ### 5.2 LIMAGE is permanently false — Out of scope
 
@@ -222,7 +235,7 @@ GEOLIN (geometric sensitivities) is inverse-design only and also not translated.
 The `TYPE` command maps TYPE 3 to `MATYP = 1, RETYP = 3` (`xoper.f:357-366`); nothing ever sets
 `MATYP = 3`, so MRCL's third Mach branch (`xfoil.f:812, 817`) and SPECAL's `MINF_CLM = 0` branch
 (`xoper.f:2784`) are dead. yFoil's `FlowConditions { mach_cl_dependence: Fixed, re_cl_dependence: InverseCl }` reproduces TYPE 3
-(`tests/xfoil_coverage_tests.rs:290`).
+(`tests/execution/coverage.rs`).
 
 ### 5.5 OPER `DAMP` is reachable and undocumented — Replicated
 
@@ -253,7 +266,7 @@ generators lay the thickness perpendicular to the mean line by default, whatever
 method (`yfoil geometry naca …`, `Section`). XFOIL's model is `--thickness vertical`
 (`naca_4digit_vertical`, `naca_5digit_vertical`): XFOIL's own 245-point NACA4/NACA5 buffer, always
 PANGEN-panelled, and it exists only to replicate the output of XFOIL's `NACA` command bitwise
-(`tests/xfoil_pangen_tests.rs`); the geometry file records `thickness_applied: "vertical"`. This
+(`tests/subroutine/pangen.rs`); the geometry file records `thickness_applied: "vertical"`. This
 never enters a comparison because yFoil generates the panels and XFOIL consumes them (Rule 4).
 Recorded in CLAUDE.md's divergence table, the only row.
 
@@ -284,7 +297,7 @@ spline-parameter tangents), and the surfaces end up `cos(τ/2)` × the requested
 gap already open the direction is the existing gap's unit vector and the requested gap is
 delivered exactly. Measured on the tracked `naca63-415_n160_tgap` case (τ ≈ 7°): `TGAP 0.002`
 gives 2.0012e-3. yFoil's `set_te_gap` reproduces the moved nodes bitwise
-(`tests/xfoil_tgap_tests.rs`); the resulting gap is asserted against the requested one only when a
+(`tests/subroutine/tgap.rs`); the resulting gap is asserted against the requested one only when a
 gap existed. The gap TGAP produces is what `TECALC` then measures, so the `SHARP` decision and
 the base-drag treatment see the delivered gap, not the requested one.
 
@@ -294,7 +307,7 @@ Not XFOIL: the NASA/PDAS `naca456` program that the geometry generators are gate
 (`tests/fixtures/naca456/`) carries `PI = 3.141592654` in its 6-series mean lines and
 `3.14159265` in the φ grid of the 6-series mapping, and inverts its arc-length spline with Brent's
 method at a 1e-6 tolerance, reporting the ordinate at the station reached. yFoil uses π and inverts
-to round-off; the tolerances in `tests/utilities/tolerances.rs` are derived from those three facts.
+to round-off; the tolerances in `tests/common/utilities/tolerances.rs` are derived from those three facts.
 naca456 also reports the aft slope of the 4-digit modified thickness form as dy/d(1 − x).
 
 ---
@@ -309,7 +322,7 @@ Tightening it moves every wake node; ported character for character (`src/solver
 
 `VACC2 = VACC3 = (VACCEL*2.0)/(S(N)-S(1))` gates the sparse-elimination skips; a 1-ULP difference in the
 threshold flips a branch (`src/bl/blsolv.rs:122-124`). A historic "~1 % BLSOLV error" was a yFoil test
-hard-coding `S(N)−S(1) = 2.0` instead of the fixture's 2.0387 (`tests/xfoil_blsolv_tests.rs:9-12`);
+hard-coding `S(N)−S(1) = 2.0` instead of the fixture's 2.0387 (`tests/subroutine/blsolv.rs`);
 BLSOLV is bit-identical.
 
 ### 7.3 Kármán–Tsien TK must be formed as COMSET forms it — Overcome (yFoil bug, fixed)
@@ -325,7 +338,7 @@ matters rather than `powi` (CLAUDE.md conventions). Transcendentals come from th
 codes, so bit-identity is a same-host property: Apple libSystem and glibc differ by 1 ULP on 0.1 % (`exp`,
 `ln`, `pow`) to 18 % (`tanh`) of inputs (measured 2026-09-11), and XFOIL's own post-CL_max wanderings
 differ by O(1) between the two while its converged points move by ≤ 1.4e-11 (`docs/validation/README.md`,
-*Polar break points*; `tests/utilities/host.rs`).
+*Polar break points*; `tests/common/utilities/host.rs`).
 
 ### 7.5 EQUIVALENCE aliasing of UNEW/QNEW onto VA/VB — Overcome (structure only)
 
@@ -343,6 +356,206 @@ smoke case clean; the only raised (untrapped) flag is `IEEE_DIVIDE_BY_ZERO` from
 
 ---
 
+### 7.7 TYPE 2 on a section that can reach negative CL drives itself onto the Kármán–Tsien pole — Replicated
+
+**What TYPE 2 asks XFOIL to do.** TYPE 2 (`MATYP = 2`) is the fixed-lift type: it models an aircraft in
+steady level flight, holding weight and chord fixed and letting the speed vary, so that the Mach number
+follows the lift as `M∞ = M₁/√CL` (the three types are defined in
+[the XFOIL reference](xfoil-reference.md#the-oper-type-command-and-the-meaning-of-matyp-and-retyp)). It therefore does
+not fix the Mach number. It asks for a state in which two conditions hold at once: the Mach number follows
+the lift, `M∞ = M₁/√CL`, and the lift is whatever the aerofoil produces at that Mach, `CL = CL(α, M∞)`. SPECAL (`xoper.f`) solves this by Newton
+iteration on a variable `CLM`, starting from `CLM = 1.0` on every call. That is the whole mechanism, so
+the quality of the answer depends entirely on whether the fixed-point problem is well posed at the given α.
+
+**Why the equation is well posed above zero lift and hostile below it.** The boundary is set by the
+aerofoil's own compressibility correction. CLCALC forms Cp through the Kármán–Tsien denominator
+`DEN = β + BFAC·Cp_inc`, which crosses zero when the local speed reaches `q/Q∞ = √(1 + 2β(1+β)/M∞²)`.
+That is a **pole, not a loss of accuracy**: below it Cp is a smooth function of Mach, above it Cp has
+changed sign (§4, CPCALC/CLCALC row).
+
+At positive lift the coupling is **self-stabilising** — more lift lowers the Mach number, which weakens the
+compressibility correction, which moves the denominator further from zero. At negative lift it is
+**self-trapping**, in four steps:
+
+1. `CL ≤ 0` puts the case outside the type's domain of definition — the speed at which a fixed weight is
+   carried at negative lift is imaginary — so MRCL's floor `CLA = MAX(CLS, 1e-6)` stands in for it, and M∞
+   is pushed to its *maximum* and clamped at 0.99.
+2. At M∞ = 0.99 the pole sits at `q/Q∞ = 1.153`, which a 10 % section exceeds by α = ±1°.
+3. Past the pole the denominator is negative, so **CL comes back positive at negative α**.
+4. A positive CL is perfectly admissible to MRCL, so the fixed-point equation acquires a spurious root.
+   Because `CL(α, M)` has a pole it takes every value in a neighbourhood of it, so a root always exists
+   *adjacent to the pole*. SPECAL converges onto it in a handful of iterations and reports success.
+
+**Method.** Measured on `naca64a010_n240_inviscid_polar30_type2_m03` (2026-09-17) by exact offline replay of
+SPECAL's Newton. The replay is legitimate because on the inviscid path
+`GAM(I) = cos α · GAMU(I,1) + sin α · GAMU(I,2)` is Mach-independent — Mach enters only through `BETA` and
+`BFAC` inside CLCALC — so `CL(α, M)` can be re-evaluated for any M from the GAM already dumped at that α,
+and the whole iteration replayed. The replay reproduces all 61 tracked points with zero relative
+disagreement, so the figures below are XFOIL's own arithmetic.
+
+**Every negative-α point is wrong**, not only the conspicuous ones, and most of them converge:
+
+| α | XFOIL reports | truth (M→0) | Newton | min DEN |
+|---:|---:|---:|---|---:|
+| −30° | **+1.111** | −3.390 | converged, 6 it | −0.949 |
+| −20° | **+1.040** | −2.318 | converged, 5 it | −0.0023 |
+| −10° | **+0.327** | −1.176 | converged, 4 it | −0.0158 |
+| −5° | **+0.128** | −0.590 | converged, 13 it | −0.361 |
+| −1° | **−52.086** | −0.118 | failed, 20 it | −0.030 |
+
+The Newton fails outright (`Minf convergence failed`) at only 6 of the 61 points (α = −11, −8, −3, −2, −1, 0).
+The converged points are the worse case, because they carry no warning at all: XFOIL reports positive lift on
+a symmetric aerofoil at −30° and prints nothing. α = 0 looks innocent only because CL = 0 is pinned by
+symmetry whatever the Mach; its Newton failed just as hard, emitting 186 Mach-limit messages. α = +20° and
+above is the same failure reached from the other side, once the suction peak crosses the M ≈ 0.3 threshold
+of `q/Q∞ = 6.513`.
+
+**The size of the anomaly tracks distance from the pole, not severity of the failure.** At α = −20° the
+Newton converged to `M∞ = 0.294270`, where the minimum denominator is −0.0023 — essentially *on* the pole:
+
+```
+M = 0.294000   DEN = -0.000435   CL =   +59.89
+M = 0.294270   DEN = -0.002316   CL =    +1.07   <- XFOIL's converged answer
+M = 0.295000   DEN = -0.007411   CL =  -137.84
+```
+
+A change of 1e-3 in M∞ moves CL from +60 to −138, and XFOIL happens to land where it reads +1.04. By the same
+token α = −1° reports −52.09 while α = −5° reports +0.128: the first is spectacular only because its
+denominator is −0.030 rather than solidly negative, and the second is tamer for being *more* deeply inverted.
+Both are equally broken. A polar plotted from this case therefore looks locally plausible exactly where it is
+not, and a departure metric built on the size of the anomaly will rank these points in the wrong order.
+
+**These points are ill-conditioned pointwise, not by accumulation** (`docs/conventions/terminology.md`). They reproduce bitwise,
+and forward (−30→+30) and reverse (+30→−30) sweeps agree at all 61 points, because SPECAL resets `CLM = 1.0`
+at every call and GAMU is α-independent: nothing carries between points on the inviscid path. Their wide
+1-ULP twin envelope is pointwise ill-conditioning — each sits next to a pole, so a 1-ULP perturbation
+genuinely does move it by O(1). The case is consequently a useful control for sensitivity studies: a wide
+envelope that is provably non-cumulative. It says nothing either way about accumulation on the viscous
+cases, where BL state really is carried forward.
+
+**yFoil.** Replicated: `set_mach_re_from_cl` (`src/solver/setbl.rs:40-82`) carries both MRCL guards and
+`clcalc.rs:57-69` the unguarded denominator, so yFoil converges onto the same spurious roots — and
+then flags them, rather than reporting the numbers as if they were sound. This case is the worked
+example behind [Solution validity](guide/validity.md), which catalogues every reason yFoil withholds
+a result and what each one means. **Gate:** `tests/known_issues/kt_pole_7_7.rs` sweeps the same section at N = 60
+(`naca64a010_n60_inviscid_sweep30_type2_m03`) and checks yFoil's validity record against XFOIL's own events
+point by point. The measurements above were made at N = 240 (`naca64a010_n240_inviscid_polar30_type2_m03`,
+defined in `cases.toml` and regenerated by `cargo xtask fixtures --case` with that name; untracked). The
+negative leg of such a sweep must not be read as a polar, and it is excluded from any accuracy claim.
+
+---
+
+### 7.8 UPDATE's largest-change report is a console label that rounding can decide — Replicated
+
+UPDATE records the single largest change it is about to make — its size RMXBL, the variable
+VMXBL (`n`/`C`, `T`, `D`, `U`) and the station IMXBL, ISMXBL (`xbl.f:1433-1471`) — and VISCAL only
+prints them (`xoper.f:3001`, `:3003`); nothing reads them back. Convergence is `RMSBL < EPS1`, the
+root-mean-square change over every variable at every station (`xoper.f:3009`), and the relaxation
+factor comes from the changes themselves. Two properties make the label a poor quantity to
+compare: at the similarity station the relative changes of θ and δ* are mathematically equal, so
+which one is reported is decided by the last bit of rounding; and for Ue the stored size is the raw
+change `DUEDG` (`:1468`) while the candidates are ranked by the normalised `DN4`, so the reported
+size changes units with the winner. **yFoil** replicates both (`update.rs`, `residual_max`). The
+step tests compare the size's magnitude and the solution arrays, not the label; the label is
+compared exactly on the well-conditioned reference case (`tests/execution/update.rs`). Not
+corrected: yFoil outputs every distribution in full, so nothing depends on the console label.
+
+### 7.9 MRCHDU's station Newton at a transition station can amplify its seed a thousandfold — Replicated
+
+The station Newton of MRCHDU (`xbl.f`, `DO 100 ITBL=1, 25`, `DEPS = 5.0E-6`) does not always contract: at a
+transition station its residual DMAX can grow for many iterates before converging (on the NACA 0012 at Re 1e6,
+7° of the 0 → 30° sweep, iteration 3, station 8 of the upper side: 18 iterates, DMAX 0.015 at the sixth rising
+to 0.185 at the fifteenth). Through such a phase two runs that enter the station 1e-12 apart leave it 1e-9
+apart, by a constant factor per iterate, on the same trajectory (the same count, DMAX to seven digits). From
+*identical* inputs (yFoil's march seeded with the reference's dumped entering state) the same 18 iterates agree
+to 8e-15 relative — the solver is the same, and the amplification acts on whatever seed it is given, rounding
+included. The reference's own 1-ULP twins are amplified by it too, by factors that depend on the perturbation:
+each independent random-sign ±1-ULP pattern of the panels leaves that station 1e-9 to 7e-9 apart, RLX at the
+next iteration 1e-9 to 1e-8 from the reference, while an all-+1-ULP twin — a translation of the aerofoil —
+leaves it only 1e-10 apart; yFoil enters it 2e-12 apart (its accumulated last-digit rounding, the size of the
+twins' spread everywhere) and leaves it 1e-9 apart — at the bottom of the reference's own range. This is the
+measurement that replaced the pipeline's single +1-ULP twin with five seeded −1/0/+1-ULP twins (CLAUDE.md
+Rule 1). TRCHEK2 (`DAEPS = 5.0E-5`, the transition location's own Newton) is bit-exact from the
+same inputs. It is what UPDATE's RLX
+then reports whenever that station is the one that limits the step (RLX = DLO / DN there, one station,
+undiluted). yFoil follows the same trajectory. **Gate:** `tests/subroutine/mrchdu.rs::
+test_mrchdu_station_newton_replays_from_xfoil_state_at_the_7deg_point` (every iterate of the station Newton
+from XFOIL's exact state at `TOL_PURE`), `tests/subroutine/transition.rs` (TRCHEK2's every iterate from the
+reference's dumped inputs, `trchek2_<k>.dat`), and `tests/execution/steps.rs` (every iteration of the 7° call
+replayed from XFOIL's state, each within four times the step's own measured sensitivity). Each code's own
+march through the call — the amplification acting on each code's own last-bit seed — is a divergent
+comparison in the sense of `docs/conventions/terminology.md` and belongs to the series-cases study. The
+instrumented reference dumps `trchek2_<k>.dat` and `mrchdu_trace_<k>.dat` for every `dump_calls` SETBL call.
+
+### 7.10 The fallback tests are written so that a NaN residual takes the fallback — Replicated
+
+MRCHUE and MRCHDU decide between keeping a failed station's last iterate and the garbage
+extrapolation with `IF(DMAX .LE. 0.1) GO TO 109` (`xbl.f:785, 1109`): the fallback is taken
+whenever the residual is *not* at or below 0.1, which includes a non-finite one. That is how a
+station whose closures went non-finite (§4, TRCHEK2 row) is extrapolated over with finite values
+and the march carries on. The same holds for every comparison in the reference: NaN makes it
+false, and the branch that follows is whichever arm the false case leads to. A reproduction must
+therefore keep each comparison's own operator and operand order — `if !(dmax <= 0.1)`, never the
+complement `if dmax > 0.1`, which agrees for finite values and disagrees for NaN. yFoil does
+(`src/bl/mrchue.rs`, `src/bl/mrchdu.rs`; the negated-comparison lint is allowed for this reason,
+`Cargo.toml`). **Gate:** `tests/execution/events.rs::test_mrchue_garbage_extrapolation_events`
+and `::test_mrchdu_garbage_extrapolation_events_call_1` (the fallback stations of every non-finite
+probe, from XFOIL's own `events.dat`, and the arrays after them, NaN where XFOIL has NaN).
+
+### 7.11 MRCHUE's failure path calls BLVAR(2) and then BLVAR(3) at a wake station — Replicated
+
+After a failed station Newton, MRCHUE recomputes the closures at label 109 with `BLVAR(1)` or
+`BLVAR(2)` *and then* `BLVAR(3)` when the station is in the wake (`xbl.f:820-823`); MRCHDU does
+the same (`xbl.f:1142-1144`). Each call clamps `HK2` in COMMON (§2.4), so a failed wake station
+leaves with the turbulent floor of 1.05 applied before the wake closures are formed, and the
+next station's "1" quantities carry that clamp. The effect is visible whenever
+1.00005 < Hk < 1.05 at a failed wake station — the first march of the NACA 4412 at M 0.6, α 16°
+fails at wake station 40 with Hk = 1.011. yFoil keeps the call sequence in both marches.
+**Gate:** `tests/execution/events.rs::test_mrchue_garbage_extrapolation_events` (that
+case's first march, station 41 side 2 is where a single call would differ) and
+`tests/subroutine/mrchdu.rs` (MRCHDU's failure path on the reference case).
+
+### 7.12 AMI = AMPL2 after a forced transition — Overcome (yFoil bug, fixed)
+
+MRCHUE, MRCHDU and SETBL set `AMI = AMPL2` after every `CALL TRCHEK` (`xbl.f:225`, `:624`, `:815`,
+`:968`, `:1137`), whatever TRCHEK2 decided: after a forced transition (`XIFORC` in the interval — with
+the default `XSTRIP = 1` that is the trailing-edge interval of a side still laminar there) AMPL2 is the
+N2 Newton's converged value. yFoil's `TransitionCheck::Forced` carried no `ampl2`, so its callers kept
+the previous AMI. The converged state is unaffected — AMI at a transition station feeds only the
+starting value of the next TRCHEK2 call at that station — so no value test saw it; it changed the
+number of TRCHEK2 iterates, which `cargo xtask route` found on 2026-10-06 (NACA 0012 at 7° of the
+0 → 30° sweep, lower side, station 29: AMPL2 8.645 against 8.830). Fixed by carrying `ampl2` in
+`Forced`. **Gate:** `tests/subroutine/mrchdu.rs::
+test_mrchdu_station_newton_replays_from_xfoil_state_at_the_7deg_point` (AMPL2 at every station
+iterate, both sides).
+
+### 7.13 Whether a sweep converges, and what it converges to, can depend on the panel count — Replicated
+
+The same OPER script on the same section, panelled at N = 60, 160 and 240 nodes (yFoil's cosine
+sampling; ITER 20, 100 and 200, the settings each was studied at), can differ qualitatively, not by
+a discretisation error that shrinks with N. Measured 2026-10-08 (`cargo xtask fixtures`, reference
+runs; ITER 200 at N = 160 as a control, so the difference is the panelling's and not the iteration
+limit's):
+
+| Case (0 → +30°, `INIT`, 0 → −30° by 1°) | N = 60, ITER 20 | N = 160, ITER 100 | N = 160, ITER 200 | N = 240, ITER 200 |
+|---|---|---|---|---|
+| NACA 16-212, Re 1e6, M 0.7 | first unconverged point 13° | first unconverged 3°; non-finite at −18° and hangs (§4) | first unconverged 3°; runs to its end | first unconverged 23°; CL_max 1.257 at 26° |
+| NACA 64A010, Re 1e6, M 0, TYPE 2 | 5 of 14 points converged | 11 of 13 converged, CL to 0.95; non-finite at 12° and hangs | 11 of 15 converged; non-finite at 14° and hangs | **no point converged** (10 recorded, every one at the limit) |
+| NACA 4412, inviscid, M 0.7 | largest CL 111 (at −15°) | largest CL 18 (16°) | — | largest CL 73 (18°) |
+| NACA 64A010, inviscid, M 0.3, TYPE 2 | largest CL 36 (−1°) | largest CL 18 (−1°) | — | largest CL 28 (−3°) |
+
+The inviscid rows are the Kármán–Tsien pole (§4, §7.7): past it the corrected Cp, and so CL, depend
+on which panel's speed crosses the threshold first and by how much, so their size is the
+panelling's choice. The viscous rows are convergence itself: N = 240 does not converge where N = 160
+does, and the reverse at low alpha on the 16-212. Neither panel count is a reference truth.
+
+Where the sections are attached and well conditioned, N = 160 and N = 240 agree to a few per cent in
+CL and CD and on CL_max and its angle (NACA 0012 and 4412 at Re 1e6, the 4412 at Re 3e6 and M 0.6,
+the Kármán–Trefftz section, the fixed-CL sweep); past stall the branch a sweep follows can differ
+between them, which is expected. That is why the series cases run at N = 160, ITER 100, and these
+four runs are known-issues cases at all three panel counts (`group = "known-issues"`,
+`docs/validation/known-issues/`). yFoil, given the same panels, is to follow XFOIL at each.
+
 ## 8. Open items in yFoil's own tooling
 
 - `src/bin/generate_subroutine_validation.rs:691-695` still emits an `E24.16` instrumentation
@@ -350,3 +563,91 @@ smoke case clean; the only raised (untrapped) flag is `IEEE_DIVIDE_BY_ZERO` from
   gates on that generator's output, but it contradicts §1.5.
 - Two `#[ignore]`d compressible closure unit tests (§2.1, §7.3) await regeneration from the M = 0.3
   coverage case (`tests/IGNORED.txt`).
+
+- About twenty unit tests in `src/` (`bl/transition.rs`, `bl/difference.rs`, `bl/station.rs`,
+  `bl/params.rs`) compare closures with hard-coded values of unknown provenance, three of them
+  `#[ignore]`d (`tests/IGNORED.txt`). The same closures are gated at `TOL_PURE` against the reference's
+  own log, incompressible and at M = 0.3, by `tests/subroutine/closures.rs`; the unit tests are to be
+  moved onto those fixtures (`docs/conventions/testing.md`, Layout).
+- `tests/subroutine/pane_legacy.rs` compares the curvature repanelling with panels XFOIL generated
+  itself (`tests/fixtures/naca0012/panels*.json`, contrary to CLAUDE.md Rule 4); PANGEN is gated against
+  yFoil-generated panels by `tests/subroutine/pangen.rs`.
+- One step of the branch candidates is a divergent comparison
+  (`xtask/fixtures-config/route.toml`: NACA 63-415 M 0.5, SETBL 2, MRCHDU's garbage stations differ);
+  its branches are gated by other steps. The step tests compare a step's outputs, not the route
+  through it; observing the route is the next stage (`docs/conventions/testing.md`, "What gated means").
+- The fixture runner's watchdog used to end a reference run after five minutes of wall-clock, so
+  where it cut a run still going depended on the machine's load: regenerated from scratch on
+  2026-10-07, the twins study reproduced 7 of its 11 N = 240 cases exactly, and the 4 the cap cut
+  differed (the 23012 at 2 recorded points instead of 37). The clock no longer ends a run: a run ends
+  on its own, at XFOIL's plot-label hang (120 s without output, a fixed point of the run), or where a
+  case asks for a deterministic stop (`stop_on_nonfinite`, `stop_after_setbl`, instrumentation
+  patch 20). The twins study was removed on 2026-10-08, superseded by the twins every validation run
+  carries at its own panelling; its slow cases live on as the `pathological` copies, which ask for no
+  stop and run only on request.
+- `xtask/fixtures-config/coverage.toml`'s `[[unreachable]]` annotations are code-reading arguments,
+  and one was wrong: TRCHEK2's `IF(AX .LE. 0.0) GO TO 101` (`xblsys.f:390`) was annotated
+  structurally unreachable, on the argument that AX = AXA + DAX cannot be ≤ 0 while the momentum
+  thicknesses stay positive. A run that has gone non-finite takes it: found 2026-10-07 by comparing
+  the twins-study cases' branches with the tracked cases' (the N = 240 23012 sweep with trips), and
+  reproduced by `naca23012_n100_a1_a2_re1e6_xtr022_0001` at call 2, iteration 2 (SETBL 7), the
+  iteration in which the boundary layer turns non-finite; reached from the 1° solution only, not by a
+  fresh march at 2°, and at N ≥ 100 only. The annotation is removed and the branch is gated (a
+  cover step, `tests/execution/branches.rs`, and every iteration of the call, `tests/execution/steps.rs`).
+  A wrong `[[unreachable]]` hides a reachable branch from the coverage search, so every annotation is
+  to be proved from the source's syntax tree rather than argued (open).
+- **Closed-trailing-edge 6-series sections do not converge in a routine viscous sweep** (2026-10-08). The
+  NACA 63-415 and 64A010 from yFoil's generators have a trailing-edge gap of exactly zero; at N = 160
+  (cosine sampling), ITER 100, Re 1e6, M 0, TYPE 1, neither converges at any point of a polar — the
+  first call's RMSBL is about 3.5e3 from its first iteration and MRCHUE fails at the trailing-edge
+  station of both sides — where every blunt 4- and 5-digit section converges. Whether this is XFOIL's
+  sharp-TE path, the cosine sampling's trailing-edge panels or the generators' closure is open; the
+  series has no 6- or 6A-series member until it is settled. Both runs are known-issues cases
+  (`naca63-415_n160_polar30_re1e6_iter100`, `naca64a010_n160_polar30_re1e6_iter100`).
+- The `pathological` cases (§9) are to be studied: why each is slow or hangs, why the 4412 sweeps
+  hang with a finite boundary layer, and whether yFoil does the same — the first part of a study
+  that replicates every known issue with its yFoil equivalent (open).
+- `scripts/noise-floor.sh` (one all-coordinates +1-ULP twin of the reference case, the origin of the
+  tolerance constants in `tests/common/utilities/tolerances.rs`) predates the seeded twins and moves
+  every coordinate the same way, which `docs/conventions/terminology.md` notes measures little. The
+  reference case's own five twins, which `cargo xtask fixtures` can now run (`twins = true`), are to
+  derive `docs/validation/noise-floor.md` instead, after which the script can be retired (open).
+
+## 9. Pathological cases
+
+Cases whose reference runs are pathologically slow or hang, kept as the `pathological` group of
+`xtask/fixtures-config/cases.toml` (untracked, run only by name or `--group pathological`, never by
+`--big`, never in a routine regeneration). Each was a copy of one of the removed twins study's N = 240,
+ITER 200 cases. They are recorded here with what the run showed and what physics it captures, so
+the insight is kept even though the run is not part of the routine sets; the last column says where
+the same behaviour is gated and shown in routine time.
+
+| Case | What makes it pathological (observed 2026-10-07) | Physical insight / scenario | Where the behaviour is gated and shown |
+|---|---|---|---|
+| `pathological_naca4412_n240_polar30_re1e6_iter200` (NACA 4412, Re 1e6, ±30°) | Past about 30° on the upward leg CL turns non-finite while the boundary-layer state stays finite, and XFOIL hangs formatting the plot label (§4); the downward leg never runs. Twins about 23 min each. | The cambered section through stall: the reference cannot complete a post-stall sweep at this panelling and iteration limit; its twins leave the reference's branch at the stall edge. | Gated: the case-cover member `naca4412_n160_polar_down16_re1e6_iter100` (whole run to call 30, every iteration of call 31) and the tracked N = 60 sweep's steps. Shown: series `naca4412_n160_polar30_re1e6_iter100` (at N = 160 the reference does not hang); the hang itself, reference only: known-issues `naca4412_n240_polar30_re1e6_iter200`. |
+| `pathological_naca4412_n240_polar30_re3e6_iter200` (NACA 4412, Re 3e6, ±30°) | Hangs in the plot label like the Re 1e6 sweep. Twins 80+ min each; one twin goes non-finite at a point the reference converges (CL envelope 0.78). | MRCHUE's garbage extrapolation on the first march at high alpha: at Re 3e6 the fresh march stalls, and the post-stall solution is ill-conditioned. | Gated: case-cover member `naca4412_n60_a18_re3e6_iter40` (every iteration of call 1). Shown: series `naca4412_n160_polar30_re3e6_iter100`; the hang itself, reference only: known-issues `naca4412_n240_polar30_re3e6_iter200`. |
+| `pathological_naca0012_n240_polar30_re1e6_type3_iter200` (NACA 0012, Re 1e6, TYPE 3, ±30°) | Twins up to about 15 min each (reference about 4 min); the twins leave the reference's branch from 17–20° and at −29…−30° (6 completion mismatches, CL envelope 8e-2). | TYPE 3 scales Re with 1/CL: near CL = 0 the Reynolds number runs to MRCL's limit (`MRCL_RE_LIMIT` fires at every call), and in stall the solution is strongly ill-conditioned. | Gated: case-cover member `naca0012_n60_a2_re1e6_type3` (whole run and a step-cover step). Not shown by a series case (removed 2026-10-08 as pathological). |
+| `pathological_naca23012_n240_polar30_re1e6_xtr022_0001_iter200` (NACA 23012, Re 1e6, trips 0.22 / 0.001, ±30°) | Non-finite from the 2° point; every station Newton then fails, about 7 s per SETBL call, and the full sweep runs for hours. | **The lower trip at x/c = 0.001 lies upstream of the stagnation point at positive alpha** (XIFSET's "past trip"): TRCHEK2 is asked for transition upstream of a laminar station, produces a NaN near the leading edge, and the march continues on the fallbacks. Reached from the 1° solution, at N ≥ 100, it takes TRCHEK2's `IF(AX .LE. 0.0)` exit (`xblsys.f:390`), once annotated unreachable (§8). | Gated: case-cover member `naca23012_n60_a4_re1e6_xtr022_0001`, and the non-finite probe `naca23012_n100_a1_a2_re1e6_xtr022_0001` (the `xblsys.f:390` exit: a step-cover step and every iteration of call 2). Shown: known-issues `naca23012_n60_polar30_re1e6_xtr022_0001` (non-finite from 1°, the trip-upstream event at every station of every call after it). |
+
+The removed `…_iter200_stall` copy repeated the first row's conditions exactly and is not kept.
+
+**Slow only through its twins: run time as a symptom of ill-conditioning.** Three of the four cases
+are not slow in their own reference run; their seeded 1-ULP twins are — the same script, every panel
+coordinate moved by −1, 0 or +1 ULP. Measured 2026-10-07 (wall clock; the reference ran alone, its
+five twins together on 8 cores, so some of a ratio can be load, but not a factor of ten or more):
+
+| Case | Reference | Its five twins | Ratio |
+|---|---|---|---|
+| NACA 4412, Re 1e6 | 132 s, of which 120 s is the watchdog's wait at the plot-label hang (about 12 s of computation) | 1302–1423 s each | about 10× on wall time, about 100× on computation |
+| NACA 4412, Re 3e6 | 160 s, of which 120 s is the wait at the hang (about 40 s of computation) | 4855–5134 s each | about 30× on wall time, over 100× on computation |
+| NACA 0012, TYPE 3 | 252 s | 236–874 s (three twins as fast as the reference, two 3.5× slower) | 1–3.5× |
+| NACA 23012, trips | hours in its own run | — | — |
+
+A one-ULP change to the geometry changes the solution time by up to two orders of magnitude: past
+stall the twins leave the reference's branch (the completion mismatches above) and take another route
+through the sweep. Which route, and why it costs so much more — more points iterated to their limit,
+marches on the fallbacks, or not reaching the non-finite CL that ends the reference at the hang — is
+for the later study to establish (§8). Solution time is therefore itself a measure of how ill-conditioned a
+run is, and an interesting case in itself for the later study: the same physics, identical to the last
+bit but one, at a hundred times the cost.
+

@@ -1,24 +1,55 @@
 --- a/src/xoper.f
 +++ b/src/xoper.f
-@@ -2734,7 +2734,14 @@
+@@ -2734,8 +2734,19 @@
  C     Converges to specified alpha.
  C-----------------------------------
        INCLUDE 'XFOIL.INC'
 +      INCLUDE 'XLOG.INC'
++C---- INSTRUMENTATION: SPECAL call counter for specal_points.dat
++      INTEGER NSPECAL
++      SAVE NSPECAL
++      DATA NSPECAL / 0 /
        REAL MINF_CLM, MSQ_CLM
-+C
+ C
 +C---- INSTRUMENTATION: Log subroutine entry
 +      CALL LOGENTER('SPECAL')
 +      CALL LOGREAL('ALFA', DBLE(ALFA))
 +      CALL LOGBOOL('LGAMU', LGAMU)
 +      CALL LOGBOOL('LQAIJ', LQAIJ)
- C
++C
  C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
        IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
-@@ -2812,6 +2819,34 @@
+ C
+@@ -2811,7 +2822,60 @@
+        CALL CPCALC(N,QINV,QINF,MINF,CPI)
        ENDIF
        IF(LFLAP) CALL MHINGE
- C
++C
++C---- INSTRUMENTATION: append this call's point to specal_points.dat
++C     (one block per SPECAL call: the inviscid point every OPER ALFA produces,
++C      with the per-node GAM/QINV/CPI, the gate of an inviscid-only case)
++      NSPECAL = NSPECAL + 1
++      IF(NSPECAL.EQ.1) THEN
++       OPEN(78, FILE='specal_points.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(78, FILE='specal_points.dat', STATUS='OLD',
++     &      POSITION='APPEND')
++      ENDIF
++      WRITE(78,'(A,I5)') 'CALL=', NSPECAL
++      WRITE(78,'(A,L1)') 'LVISC=', LVISC
++      WRITE(78,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(78,'(A,ES24.16)') 'MINF=', MINF
++      WRITE(78,'(A,ES24.16)') 'REINF=', REINF
++      WRITE(78,'(A,ES24.16)') 'CL=', CL
++      WRITE(78,'(A,ES24.16)') 'CM=', CM
++      WRITE(78,'(A,ES24.16)') 'CDP=', CDP
++      WRITE(78,'(A,I5)') 'N=', N
++      DO I=1, N
++        WRITE(78,'(A,I5,A,3ES24.16)') 'NODE(', I, ')=',
++     &        GAM(I), QINV(I), CPI(I)
++      ENDDO
++      CLOSE(78)
++C
 +C---- INSTRUMENTATION: Output inviscid solution to file
 +      OPEN(UNIT=98,FILE='xfoil_inviscid.dat',STATUS='REPLACE')
 +      WRITE(98,*) '=== INVISCID SOLUTION ==='
@@ -39,7 +70,7 @@
 +      ENDDO
 +      CLOSE(98)
 +      WRITE(*,*) '=== Wrote inviscid to xfoil_inviscid.dat ==='
-+C
+ C
 +C---- INSTRUMENTATION: Log subroutine exit
 +      CALL LOGREAL('CL', DBLE(CL))
 +      CALL LOGREAL('CM', DBLE(CM))
@@ -50,7 +81,52 @@
        RETURN
        END ! SPECAL
   
-@@ -2888,11 +2923,45 @@
+@@ -2821,6 +2885,10 @@
+ C     Converges to specified inviscid CL.
+ C-----------------------------------------
+       INCLUDE 'XFOIL.INC'
++C---- INSTRUMENTATION: SPECCL call counter for speccl_points.dat
++      INTEGER NSPECCL
++      SAVE NSPECCL
++      DATA NSPECCL / 0 /
+ C
+ C---- calculate surface vorticity distributions for alpha = 0, 90 degrees
+       IF(.NOT.LGAMU .OR. .NOT.LQAIJ) CALL GGCALC
+@@ -2878,6 +2946,33 @@
+        CALL CPCALC(N,QINV,QINF,MINF,CPI)
+       ENDIF
+       IF(LFLAP) CALL MHINGE
++C
++C---- INSTRUMENTATION: append this call's point to speccl_points.dat
++C     (one block per SPECCL call: CLSPEC, the alpha Newton's exit iteration
++C      ITAL — 21 when the 20-iteration cap was exhausted — and the point)
++      NSPECCL = NSPECCL + 1
++      IF(NSPECCL.EQ.1) THEN
++       OPEN(78, FILE='speccl_points.dat', STATUS='REPLACE')
++      ELSE
++       OPEN(78, FILE='speccl_points.dat', STATUS='OLD',
++     &      POSITION='APPEND')
++      ENDIF
++      WRITE(78,'(A,I5)') 'CALL=', NSPECCL
++      WRITE(78,'(A,L1)') 'LVISC=', LVISC
++      WRITE(78,'(A,ES24.16)') 'CLSPEC=', CLSPEC
++      WRITE(78,'(A,I5)') 'ITAL=', ITAL
++      WRITE(78,'(A,ES24.16)') 'ALFA=', ALFA
++      WRITE(78,'(A,ES24.16)') 'MINF=', MINF
++      WRITE(78,'(A,ES24.16)') 'REINF=', REINF
++      WRITE(78,'(A,ES24.16)') 'CL=', CL
++      WRITE(78,'(A,ES24.16)') 'CM=', CM
++      WRITE(78,'(A,ES24.16)') 'CDP=', CDP
++      WRITE(78,'(A,I5)') 'N=', N
++      DO I=1, N
++        WRITE(78,'(A,I5,A,3ES24.16)') 'NODE(', I, ')=',
++     &        GAM(I), QINV(I), CPI(I)
++      ENDDO
++      CLOSE(78)
+ C
+       RETURN
+       END ! SPECCL
+@@ -2888,11 +2983,45 @@
  C     Converges viscous operating point
  C----------------------------------------
        INCLUDE 'XFOIL.INC'
@@ -96,7 +172,7 @@
  C
  C---- calculate wake trajectory from current inviscid solution if necessary
        IF(.NOT.LWAKE) THEN
-@@ -2926,6 +2995,28 @@
+@@ -2926,6 +3055,28 @@
  C---- set inviscid BL edge velocity UINV from QINV
        CALL UICALC
  C
@@ -125,7 +201,7 @@
        IF(.NOT.LBLINI) THEN
  C
  C----- set initial Ue from inviscid Ue
-@@ -2957,12 +3048,34 @@
+@@ -2957,12 +3108,34 @@
  C---- set up source influence matrix if it doesn't exist
        IF(.NOT.LWDIJ .OR. .NOT.LADIJ) CALL QDCALC
  C
@@ -160,7 +236,7 @@
  C------ fill Newton system for BL variables
          CALL SETBL
  C
-@@ -2989,6 +3102,7 @@
+@@ -2989,6 +3162,7 @@
          CALL GAMQV
  C
  C------ relocate stagnation point
@@ -168,7 +244,7 @@
          CALL STMOVE
  C
  C------ set updated CL,CD
-@@ -2996,6 +3110,40 @@
+@@ -2996,6 +3170,40 @@
       &              CL,CM,CDP,CL_ALF,CL_MSQ)
          CALL CDCALC
  C
@@ -209,7 +285,7 @@
  C------ display changes and test for convergence
          IF(RLX.LT.1.0) 
       &   WRITE(*,2000) ITER, RMSBL, RMXBL, VMXBL,IMXBL,ISMXBL,RLX
-@@ -3005,7 +3153,8 @@
+@@ -3005,7 +3213,8 @@
           WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDPDIF
  c         CDSURF = CDP + CDF
  c         WRITE(*,2025) CDSURF, CDF, CDP
@@ -219,10 +295,11 @@
          IF(RMSBL .LT. EPS1) THEN
           LVCONV = .TRUE.
           AVISC = ALFA
-@@ -3020,8 +3169,117 @@
+@@ -3020,7 +3229,116 @@
        CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
        CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
        IF(LFLAP) CALL MHINGE
+-
 +C
 +      CLOSE(77)
 +C---- INSTRUMENTATION: final state of the first VISCAL call
@@ -334,11 +411,9 @@
 +      WRITE(*,*) '=== Wrote viscal records to viscal_iter.dat, viscal_final.dat, viscal_state_<n>.dat, viscal_points.dat ==='
 +C
  
--
          is = 1
          hkmax = 0.
-         hkm = 0.0
-@@ -3092,7 +3350,20 @@
+@@ -3092,7 +3410,20 @@
          close(lu)
  
  

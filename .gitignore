@@ -49,3 +49,6 @@ xfoil/third-party/xfoil-6.99/plotlib/libPlt*.a
 # Python bytecode from the figure scripts
 __pycache__/
 *.pyc
+
+# LLVM source-coverage profiles (cargo xtask route)
+*.profraw

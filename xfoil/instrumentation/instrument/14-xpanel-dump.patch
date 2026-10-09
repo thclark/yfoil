@@ -181,7 +181,27 @@
        ENDIF
  C
  C---- set up coefficient matrix of dPsi/dm on airfoil surface
-@@ -1387,6 +1497,17 @@
+@@ -1360,12 +1470,19 @@
+ C     location SST and panel index IST.
+ C-----------------------------------------
+       INCLUDE 'XFOIL.INC'
++      LOGICAL LNEG
+ C
++      LNEG = .FALSE.
+       DO 10 I=1, N-1
++        IF(.NOT.LNEG .AND. GAM(I).LT.0.0) THEN
++         LNEG = .TRUE.
++         CALL EVLOG('STFIND_GAM_NEG', 0, I, GAM(I))
++        ENDIF
+         IF(GAM(I).GE.0.0 .AND. GAM(I+1).LT.0.0) GO TO 11
+    10 CONTINUE
+ C
+       WRITE(*,*) 'STFIND: Stagnation point not found. Continuing ...'
++      CALL EVLOG('STFIND_NOT_FOUND', 0, N/2, 0.0)
+       I = N/2
+ C
+    11 CONTINUE
+@@ -1387,6 +1504,17 @@
  C
        SST_GO = (SST  - S(I+1))/DGAM
        SST_GP = (S(I) - SST   )/DGAM
@@ -199,7 +219,7 @@
  C
        RETURN
        END
-@@ -1447,6 +1568,17 @@
+@@ -1447,6 +1575,17 @@
          STOP
        ENDIF
  C
@@ -217,7 +237,7 @@
        LIPAN = .TRUE.
        RETURN
        END
-@@ -1500,6 +1632,41 @@
+@@ -1500,6 +1639,41 @@
          XSSI(IBL1,IS1) = XSSI(IBL1-1,IS1) + DXSSI
          XSSI(IBL2,IS2) = XSSI(IBL2-1,IS2) + DXSSI
     25 CONTINUE
@@ -259,7 +279,7 @@
  C
  C---- trailing edge flap length to TE gap ratio
        TELRAT = 2.50
-@@ -1544,6 +1711,9 @@
+@@ -1544,6 +1718,9 @@
  C     Sets inviscid Ue from panel inviscid tangential velocity
  C--------------------------------------------------------------
        INCLUDE 'XFOIL.INC'
@@ -269,7 +289,7 @@
  C
        DO 10 IS=1, 2
          UINV  (1,IS) = 0.
-@@ -1555,6 +1725,29 @@
+@@ -1555,6 +1732,29 @@
    110   CONTINUE
     10 CONTINUE
  C
@@ -299,3 +319,11 @@
        RETURN
        END
  
+@@ -1735,6 +1935,7 @@
+          DO IBL = 2, NBL(IS)
+            I = IPAN(IBL,IS)
+            IF(UEDG(IBL,IS).LE.UEPS) THEN
++            CALL EVLOG('STMOVE_UEPS', IS, IBL, UEDG(IBL,IS))
+             UEDG(IBL,IS) = UEPS
+             QVIS(I) = VTI(IBL,IS)*UEPS
+             GAM(I)  = VTI(IBL,IS)*UEPS

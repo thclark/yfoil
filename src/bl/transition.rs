@@ -64,6 +64,9 @@ pub enum TransitionCheck {
     Forced {
         /// Transition location (= xiforc)
         transition: Transition,
+        /// Amplification at station 2 from the N2 Newton (XFOIL's callers set AMI = AMPL2
+        /// after every TRCHEK, forced transition included)
+        ampl2: f64,
     },
 }
 
@@ -77,7 +80,6 @@ pub enum TransitionCheck {
 /// recomputed after the loop), `AX <= 0` and non-convergence fall through to the transition
 /// tests rather than returning early, and the returned `ampl2` is the iterated value (which
 /// may exceed Ncrit) — exactly what XFOIL leaves in `AMPL2`.
-#[allow(unused_assignments)] // loop-carried locals mirror the Fortran; the loop always runs
 #[doc(alias = "TRCHEK2")]
 pub fn check_transition(
     s1: &StationState,
@@ -86,6 +88,38 @@ pub fn check_transition(
     acrit: f64,
     xiforc: f64,
     params: &FlowParameters,
+) -> TransitionCheck {
+    check_transition_traced(s1, s2, ampl1, acrit, xiforc, params, None)
+}
+
+/// One iterate of TRCHEK2's N2 Newton, as the reference's instrumented build dumps it
+/// (`trchek2_<k>.dat`: the values in hand just before the convergence test).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TransitionIterate {
+    pub itam: usize,
+    pub ampl2: f64,
+    pub xt: f64,
+    pub ax: f64,
+    pub ax_a2: f64,
+    pub res: f64,
+    pub res_a2: f64,
+    pub da2: f64,
+    pub rlx: f64,
+}
+
+/// `check_transition` with the N2 Newton's iterates recorded into `trace` when given: the
+/// initial guess for AMPL2 goes in as `itam` 0 with everything else zero, each iterate before
+/// its convergence test, and the algorithm is unchanged.
+#[allow(unused_assignments)] // loop-carried locals mirror the Fortran; the loop always runs
+#[allow(clippy::too_many_arguments)]
+pub fn check_transition_traced(
+    s1: &StationState,
+    s2: &StationState,
+    ampl1: f64,
+    acrit: f64,
+    xiforc: f64,
+    params: &FlowParameters,
+    mut trace: Option<&mut Vec<TransitionIterate>>,
 ) -> TransitionCheck {
     const DAEPS: f64 = 5.0e-5;
     let (x1, x2) = (s1.xi, s2.xi);
@@ -105,6 +139,19 @@ pub fn check_transition(
     );
     // set initial guess for iterate N2 (AMPL2) at X2
     let mut ampl2 = ampl1 + r0.rate * (x2 - x1);
+    if let Some(t) = trace.as_mut() {
+        t.push(TransitionIterate {
+            itam: 0,
+            ampl2,
+            xt: 0.0,
+            ax: 0.0,
+            ax_a2: 0.0,
+            res: 0.0,
+            res_a2: 0.0,
+            da2: 0.0,
+            rlx: 0.0,
+        });
+    }
 
     // loop state carried into the post-loop section (as XFOIL's locals/COMMON are)
     let mut amplt_a2 = 0.0;
@@ -115,7 +162,7 @@ pub fn check_transition(
     let mut r = r0.clone();
 
     // solve implicit system for amplification AMPL2
-    for _itam in 1..=30 {
+    for itam in 1..=30 {
         // define weighting factors WF1,WF2 for defining "T" quantities from 1,2
         let (amplt, sfa, sfa_a1, sfa_a2);
         if ampl2 <= acrit {
@@ -221,6 +268,20 @@ pub fn check_transition(
             rlx = 1.0 * (1.0 / da2).abs();
         }
 
+        if let Some(t) = trace.as_mut() {
+            t.push(TransitionIterate {
+                itam,
+                ampl2,
+                xt,
+                ax: r.rate,
+                ax_a2,
+                res,
+                res_a2,
+                da2,
+                rlx,
+            });
+        }
+
         // check if converged
         if da2.abs() < DAEPS {
             break;
@@ -260,7 +321,7 @@ pub fn check_transition(
             xi_transition_d_x_trip: 1.0,
             ..Default::default()
         };
-        return TransitionCheck::Forced { transition };
+        return TransitionCheck::Forced { transition, ampl2 };
     }
 
     // free transition ... set sensitivities of XT
@@ -1100,7 +1161,7 @@ mod tests {
 
         // Should return Forced at xiforc
         match result {
-            TransitionCheck::Forced { transition } => {
+            TransitionCheck::Forced { transition, .. } => {
                 assert_relative_eq!(transition.xi_transition, xiforc, epsilon = 1e-10);
                 assert_relative_eq!(transition.xi_transition_d_x_trip, 1.0, epsilon = 1e-10);
             }

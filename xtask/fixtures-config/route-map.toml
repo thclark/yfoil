@@ -1,0 +1,49 @@
+# XFOIL call sites whose calls yFoil does not make as calls, so that `cargo xtask route` leaves them
+# out of XFOIL's counts before comparing them with yFoil's. Each [[site]] names the line
+# (`file:line` in xfoil/third-party/xfoil-6.99/src), the subroutine calls each call made there
+# accounts for — the called subroutine and what it calls in turn — and why yFoil's translation is
+# equivalent without them. `cargo xtask steps` records each step's calls from these sites (gcov's
+# per-line call counts), so a change here needs `cargo xtask steps` rerun before `cargo xtask route`.
+#
+# Two kinds: work yFoil does inline rather than by calling the translation, and calls whose result
+# nothing reads, which yFoil leaves out (it does not translate dead code).
+
+[[site]]
+site = "xbl.f:50"
+calls = { COMSET = 1 }
+why = "SETBL's COMSET is done inline by FlowParameters::new in assemble_newton_system (src/solver/setbl.rs), with the other gas parameters SETBL sets beside it"
+
+[[site]]
+site = "xbl.f:471"
+calls = { BLMID = 1 }
+why = "SETBL's BLMID(3) at each side's TE station only sets the interval CFM, which the next station's BLSYS recomputes before anything reads it; yFoil makes the BLVAR(3) call and not this one (src/solver/setbl.rs). BLMID(3) calls nothing"
+
+[[site]]
+site = "xbl.f:825"
+calls = { BLMID = 1, CFL = 1 }
+why = "MRCHUE's fallback (a station Newton that did not converge) sets the extrapolated station's BLVAR then BLMID(1); the CFM it sets is not read after this point, and yFoil makes the BLVAR calls only (src/bl/mrchue.rs). BLMID(1) calls CFL"
+
+[[site]]
+site = "xbl.f:826"
+calls = { BLMID = 1, CFT = 1, CFL = 1 }
+why = "MRCHUE's fallback BLMID(2), as for xbl.f:825. BLMID(2) calls CFT and CFL"
+
+[[site]]
+site = "xbl.f:827"
+calls = { BLMID = 1 }
+why = "MRCHUE's fallback BLMID(3) at a wake station, as for xbl.f:825. BLMID(3) calls nothing"
+
+[[site]]
+site = "xbl.f:1147"
+calls = { BLMID = 1, CFL = 1 }
+why = "MRCHDU's fallback BLMID(1), as MRCHUE's at xbl.f:825 (src/bl/mrchdu.rs)"
+
+[[site]]
+site = "xbl.f:1148"
+calls = { BLMID = 1, CFT = 1, CFL = 1 }
+why = "MRCHDU's fallback BLMID(2), as MRCHUE's at xbl.f:826"
+
+[[site]]
+site = "xbl.f:1149"
+calls = { BLMID = 1 }
+why = "MRCHDU's fallback BLMID(3), as MRCHUE's at xbl.f:827"

@@ -2,10 +2,16 @@
   "case": {
     "alphas": [],
     "alphas_after_reinit": [],
+    "closures": false,
     "cls": [],
     "damp": false,
     "dump_calls": [],
+    "events": false,
     "foil": "naca:63-415",
+    "inviscid": false,
+    "keep": [
+      "xfoil_tgap.dat"
+    ],
     "mach": 0.0,
     "matyp": 0,
     "max_iterations": 20,
@@ -14,6 +20,9 @@
     "ncrit": 9.0,
     "polar": false,
     "re": 0.0,
+    "run": false,
+    "run_through": 0,
+    "step_calls": [],
     "tgap": [
       0.002,
       1.0
@@ -25,7 +34,7 @@
   "xfoil_ref": [
     "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
     "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
-    "series_instr_sha256:    faccaf3d80b3dfe87862020e74816b5f958904bb282e2ff8a732b2a0f8d1739e",
+    "series_instr_sha256:    470fa6ab60d01a21f6ef34675cd09f2f0c14ee789989ccb1a034b2ede6fa0024",
     "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
     "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
     "host:                   arm64-Darwin-24.6.0",
