@@ -470,7 +470,7 @@ patch series applied to a staged copy:
 `scripts/xfoil-build.sh` (wrapped by `cargo xtask xfoil-build`) stages each tree under
 `target/xfoil-ref/{pristine,instrumented}/`, applies the series listed in
 `xfoil/instrumentation/series.build` and `series.instrument`, and builds. Two proofs are part of the
-build and re-run nightly:
+build and re-run by the `reference-build` workflow whenever `xfoil/` or the build script changes:
 
 - `--verify` — pristine and instrumented produce byte-identical `cp.dat`, `bl.dat` and OPER summary
   on the smoke case, so **the instrumentation is inert**.
