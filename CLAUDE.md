@@ -334,7 +334,8 @@ target/xfoil-ref/{pristine,instrumented,snan}/ - build output; never edit in pla
 scripts/xfoil-build.sh            - the build; `cargo xtask xfoil-build [--verify] [--snan]` wraps it
 ```
 
-Two proofs are part of the reference build and re-run nightly:
+Two proofs are part of the reference build and re-run by the `reference-build` workflow on every change to
+`xfoil/` or the build script (and on demand):
 
 1. **Inert instrumentation** — pristine-DP and instrumented-DP produce byte-identical `cp.dat`, `bl.dat`
    and OPER summaries on the smoke case (`--verify`). Proven 2026-09-03; the patch-series build is also
@@ -423,7 +424,9 @@ tests/
 ```
 
 One test binary per category (`cargo test --test execution`). CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `fixture-audit`, `ignore-drift`,
-`no-deviations`, `examples`, and nightly `xfoil-parity` (rebuild reference, regenerate, compare).
+`no-deviations`, `examples`, and `reference-build` (its own workflow, on changes to `xfoil/` or the build script:
+rebuild the reference and re-prove it inert and free of uninitialised reads). Fixture byte-identity
+(`cargo xtask fixtures --verify`) is a same-host property, checked locally on the fixtures' host.
 
 **Validation reports are generated, never hand-fed.** `docs/validation/` holds only Markdown and SVG; every
 number in it is derived from a fixture directory (`tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/`

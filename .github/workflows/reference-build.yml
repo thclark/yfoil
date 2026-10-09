@@ -1,0 +1,32 @@
+name: Reference build
+
+# Rebuild the XFOIL reference from xfoil/third-party/ + xfoil/instrumentation/ and re-prove the two
+# properties of the build (CLAUDE.md, "Reference implementation"): the instrumentation is inert
+# (--verify: pristine and instrumented byte-identical on the smoke case) and nothing reads an
+# uninitialised value (--snan). Run whenever the source, the patch series or the build changes,
+# and on demand. Fixture byte-identity (`cargo xtask fixtures --verify`) is a same-host property
+# and is checked locally on the fixtures' host, never here.
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "xfoil/**"
+      - "scripts/xfoil-build.sh"
+      - "scripts/xfoil-build/**"
+      - ".github/workflows/reference-build.yml"
+  push:
+    branches: [ "main" ]
+    paths:
+      - "xfoil/**"
+      - "scripts/xfoil-build.sh"
+      - "scripts/xfoil-build/**"
+      - ".github/workflows/reference-build.yml"
+  workflow_dispatch:
+
+jobs:
+  reference-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gfortran libx11-dev
+      - run: scripts/xfoil-build.sh --verify --snan

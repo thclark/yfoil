@@ -55,21 +55,19 @@ replay value, failing only on those macOS-specific pins.
 - The replay (`tests/common/utilities/replay.rs`) asserted UPDATE's reported limiter letter (VMXBL) exactly; at
   the similarity station it is a rounding-decided tie (dn2 == dn3), now reported as the sweep comparison
   already did.
-- `scripts/xfoil-build.sh` used BSD-only `sed -i ''`, which is why the nightly `xfoil-parity` job died on
+- `scripts/xfoil-build.sh` used BSD-only `sed -i ''`, which is why the former nightly `xfoil-parity` job died on
   GNU sed at the snan stage. Fixed with `sed -i.bak … && rm`.
+- The 4412 twin run regenerated on glibc hung at exit in XFOIL's sequence-plot label loop on a non-finite
+  CL (known-issues §4), even with graphics off; all 34 calls were on disk. `cargo xtask fixtures` now
+  keeps such a run: its watchdog ends a reference that stops producing output and keeps what it wrote.
 - CLAUDE.md, `docs/validation/README.md` (*Polar break points*) and `docs/xfoil-known-issues.md` §7.4
   record the measurement.
 
 ## Still open
 
-- The nightly `xfoil-parity` job's `cargo xtask fixtures --verify` asserts byte-identity with the tracked
-  fixtures, which is same-host by design, so it will not pass on a Linux runner against macOS-generated
-  fixtures. Making that step an ULP-budget comparison is a separate change.
-- The 4412 twin run regenerated on glibc hung at exit in XFOIL's sequence-plot label loop on a non-finite
-  CL (known-issues §4), even with graphics off; all 34 calls were on disk. `cargo xtask fixtures` treats
-  the killed run as a failure.
 - Whether glibc's results are stable across its own versions (2.36 vs 2.39) was not measured; a same-OS
-  libm drift would surface as a `--verify` byte-identity failure on the nightly job.
+  libm drift would surface in `tests/fixtures/cross-host/spread.json` when `scripts/cross-host.sh` is
+  rerun on the newer glibc.
 
 ## Reproducing
 
