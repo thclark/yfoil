@@ -1,0 +1,47 @@
+--- a/src/xblsys.f
++++ b/src/xblsys.f
+@@ -282,6 +282,12 @@
+       INTEGER NTRCDMP
+       COMMON/TRC_INST/ LTRCDMP, NTRCDMP
+       CHARACTER*32 FNTRC
++C---- INSTRUMENTATION: the calls that leave through AX .LE. 0 (trchek2_ax_exit.dat)
++      INTEGER NSETBLC
++      COMMON/EVCOM/ NSETBLC
++      LOGICAL LAXFST
++      SAVE LAXFST
++      DATA LAXFST / .TRUE. /
+       DATA DAEPS / 5.0E-5 /
+ CCC   DATA DAEPS / 1.0D-12 /
+ C
+@@ -304,6 +310,9 @@
+      &   U1, U2, AMPL1, AMPL2, AMCRIT, XIFORC
+       ENDIF
+ C
++C---- INSTRUMENTATION: AMPL2 as the march handed it over
++      AMPL2I = AMPL2
++C
+ C---- set initial guess for iterate N2 (AMPL2) at X2
+       AMPL2 = AMPL1 + AX*(X2-X1)
+ C
+@@ -422,6 +431,21 @@
+      &            HKT,    TT,    RTT, AMPLT,  AMCRIT, IDAMPV,
+      &     AX, AX_HK1, AX_T1, AX_RT1, AX_A1,
+      &         AX_HKT, AX_TT, AX_RTT, AX_AT )
++C
++C---- INSTRUMENTATION: a call that leaves through AX .LE. 0, with its inputs and where it stops
++      IF(AX .LE. 0.0) THEN
++       IF(LAXFST) THEN
++        OPEN(91, FILE='trchek2_ax_exit.dat', STATUS='REPLACE')
++        LAXFST = .FALSE.
++       ELSE
++        OPEN(91, FILE='trchek2_ax_exit.dat', STATUS='OLD',
++     &       POSITION='APPEND')
++       ENDIF
++       WRITE(91,'(A,I6,I3,15ES24.16)') 'EXIT', NSETBLC, ITAM,
++     &   X1, X2, T1, T2, D1, D2, U1, U2, AMPL1, AMPL2I, AMCRIT, XIFORC,
++     &   AMPL2, XT, AX
++       CLOSE(91)
++      ENDIF
+ C
+ C---- punch out early if there is no amplification here
+       IF(AX .LE. 0.0) GO TO 101

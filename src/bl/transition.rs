@@ -107,9 +107,30 @@ pub struct TransitionIterate {
     pub rlx: f64,
 }
 
-/// `check_transition` with the N2 Newton's iterates recorded into `trace` when given: the
-/// initial guess for AMPL2 goes in as `itam` 0 with everything else zero, each iterate before
-/// its convergence test, and the algorithm is unchanged.
+/// How TRCHEK2's N2 Newton ended: the `DO 100 ITAM=1, 30` loop is left by convergence, by the
+/// early exit `IF(AX .LE. 0.0) GO TO 101` (no amplification over the interval), or by running out
+/// its 30 iterates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NewtonExit {
+    /// `IF(ABS(DA2) .LT. DAEPS) GO TO 101` at iterate `itam`
+    Converged { itam: usize },
+    /// `IF(AX .LE. 0.0) GO TO 101` at iterate `itam`, with the AMPL2, XT and AX then in hand
+    NoAmplification { itam: usize, ampl2: f64, xt: f64, ax: f64 },
+    /// all 30 iterates without either ('TRCHEK2: N2 convergence failed.')
+    Exhausted,
+}
+
+/// What `check_transition_traced` records: the iterates and how the Newton ended.
+#[derive(Debug, Clone, Default)]
+pub struct TransitionTrace {
+    /// the initial guess for AMPL2 as `itam` 0 with everything else zero, then each iterate
+    /// before its convergence test
+    pub iterates: Vec<TransitionIterate>,
+    pub exit: Option<NewtonExit>,
+}
+
+/// `check_transition` with the N2 Newton's iterates and its exit recorded into `trace` when
+/// given; the algorithm is unchanged.
 #[allow(unused_assignments)] // loop-carried locals mirror the Fortran; the loop always runs
 #[allow(clippy::too_many_arguments)]
 pub fn check_transition_traced(
@@ -119,7 +140,7 @@ pub fn check_transition_traced(
     acrit: f64,
     xiforc: f64,
     params: &FlowParameters,
-    mut trace: Option<&mut Vec<TransitionIterate>>,
+    mut trace: Option<&mut TransitionTrace>,
 ) -> TransitionCheck {
     const DAEPS: f64 = 5.0e-5;
     let (x1, x2) = (s1.xi, s2.xi);
@@ -140,7 +161,7 @@ pub fn check_transition_traced(
     // set initial guess for iterate N2 (AMPL2) at X2
     let mut ampl2 = ampl1 + r0.rate * (x2 - x1);
     if let Some(t) = trace.as_mut() {
-        t.push(TransitionIterate {
+        t.iterates.push(TransitionIterate {
             itam: 0,
             ampl2,
             xt: 0.0,
@@ -241,6 +262,14 @@ pub fn check_transition_traced(
 
         // punch out early if there is no amplification here
         if r.rate <= 0.0 {
+            if let Some(t) = trace.as_mut() {
+                t.exit = Some(NewtonExit::NoAmplification {
+                    itam,
+                    ampl2,
+                    xt,
+                    ax: r.rate,
+                });
+            }
             break;
         }
 
@@ -269,7 +298,7 @@ pub fn check_transition_traced(
         }
 
         if let Some(t) = trace.as_mut() {
-            t.push(TransitionIterate {
+            t.iterates.push(TransitionIterate {
                 itam,
                 ampl2,
                 xt,
@@ -284,6 +313,9 @@ pub fn check_transition_traced(
 
         // check if converged
         if da2.abs() < DAEPS {
+            if let Some(t) = trace.as_mut() {
+                t.exit = Some(NewtonExit::Converged { itam });
+            }
             break;
         }
 
@@ -295,6 +327,11 @@ pub fn check_transition_traced(
             ampl2 += rlx * da2;
         }
         // (XFOIL prints 'TRCHEK2: N2 convergence failed.' after 30 iterations and continues)
+    }
+    if let Some(t) = trace.as_mut() {
+        if t.exit.is_none() {
+            t.exit = Some(NewtonExit::Exhausted);
+        }
     }
 
     // label 101: test for free or forced transition

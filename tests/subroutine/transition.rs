@@ -7,15 +7,24 @@
 //! final XT within `TOL_PURE`. The calls are the upper-side transition intervals of the eight
 //! iterations of the 7° point of the NACA 0012 polar (known issues §7.9).
 //!
+//! The Newton's early exit `IF(AX .LE. 0.0) GO TO 101` (`xblsys.f:390`, no amplification over
+//! the interval) is taken only in a run the reference drives non-finite. The reference records
+//! every call that takes it, wherever it is called from (`trchek2_ax_exit.dat`: EXIT, the SETBL
+//! call, ITAM, the twelve inputs as above, then AMPL2, XT and AX at the exit); each is replayed
+//! here and must leave by the same exit at the same iterate, with AX, AMPL2 and XT within
+//! `TOL_PURE`.
+//!
 //! Fixtures: `tests/fixtures/xfoil/naca0012_n60_polar30_re1e6/` (`trchek2_<k>.dat`,
-//! `mrchdu_output_<k>.dat`, k = 40–47) — `cargo xtask fixtures --case naca0012_n60_polar30_re1e6`.
+//! `mrchdu_output_<k>.dat`, k = 40–47) — `cargo xtask fixtures --case naca0012_n60_polar30_re1e6`;
+//! `tests/fixtures/xfoil/naca23012_n100_a1_a2_re1e6_xtr022_0001/trchek2_ax_exit.dat` — `cargo
+//! xtask fixtures --case naca23012_n100_a1_a2_re1e6_xtr022_0001`.
 
 use crate::fixtures::cases::load;
 use crate::fixtures::mrchdu_fixtures::parse_bl_dump;
 use crate::utilities::tolerances::{assert_within, TOL_PURE, TOL_SOLVER};
 use yfoil::bl::params::FlowParameters;
 use yfoil::bl::station::StationState;
-use yfoil::bl::transition::{check_transition_traced, TransitionIterate};
+use yfoil::bl::transition::{check_transition_traced, NewtonExit, TransitionIterate, TransitionTrace};
 
 const CASE: &str = "naca0012_n60_polar30_re1e6";
 /// the 7° point
@@ -88,8 +97,9 @@ fn test_trchek2_newton_path_matches_xfoil_at_the_7deg_point() {
         s1.set_kinematic_variables(&params);
         s2.set_primary_variables(x2, ampl2, ampl2, t2, d2, 0.0, u2, &params);
         s2.set_kinematic_variables(&params);
-        let mut trace = vec![];
+        let mut trace = TransitionTrace::default();
         let _ = check_transition_traced(&s1, &s2, ampl1, amcrit, xiforc, &params, Some(&mut trace));
+        let trace = trace.iterates;
         let what = format!("{CASE} SETBL {k}");
         assert_within(
             trace[0].ampl2,
@@ -108,4 +118,69 @@ fn test_trchek2_newton_path_matches_xfoil_at_the_7deg_point() {
             &format!("{what}: final XT"),
         );
     }
+}
+
+/// Laminar stations 1 and 2 of a TRCHEK2 interval as the reference handed it over: CTAU carries
+/// the amplification; no wake gap on the airfoil.
+fn interval(inputs: &[f64; 12], params: &FlowParameters) -> (StationState, StationState) {
+    let [x1, x2, t1, t2, d1, d2, u1, u2, ampl1, ampl2, _, _] = *inputs;
+    let mut s1 = StationState::default();
+    let mut s2 = StationState::default();
+    s1.set_primary_variables(x1, ampl1, ampl1, t1, d1, 0.0, u1, params);
+    s1.set_kinematic_variables(params);
+    s2.set_primary_variables(x2, ampl2, ampl2, t2, d2, 0.0, u2, params);
+    s2.set_kinematic_variables(params);
+    (s1, s2)
+}
+
+#[test]
+fn test_trchek2_no_amplification_exit_matches_xfoil() {
+    let case = "naca23012_n100_a1_a2_re1e6_xtr022_0001";
+    let c = load(case);
+    let mut params = FlowParameters::new(c.spec.mach, c.spec.re.unwrap(), 1.4);
+    params.amplification_model = c.spec.amplification_model;
+    let path = c.dir.join("trchek2_ax_exit.dat");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{}", path.display()));
+    let mut n = 0;
+    for (line, l) in text.lines().enumerate() {
+        let t: Vec<&str> = l.split_whitespace().collect();
+        assert!(
+            t.len() == 18 && t[0] == "EXIT",
+            "{}:{}: malformed: {l}",
+            path.display(),
+            line + 1
+        );
+        let f = |i: usize| -> f64 { t[i].parse().unwrap() };
+        let setbl: usize = t[1].parse().unwrap();
+        let itam: usize = t[2].parse().unwrap();
+        let inputs: [f64; 12] = std::array::from_fn(|i| f(i + 3));
+        let (ampl2, xt, ax) = (f(15), f(16), f(17));
+        let (s1, s2) = interval(&inputs, &params);
+        let mut trace = TransitionTrace::default();
+        let _ = check_transition_traced(&s1, &s2, inputs[8], inputs[10], inputs[11], &params, Some(&mut trace));
+        let what = format!("{case} SETBL {setbl}, exit {}", line + 1);
+        let Some(NewtonExit::NoAmplification {
+            itam: ours_itam,
+            ampl2: ours_ampl2,
+            xt: ours_xt,
+            ax: ours_ax,
+        }) = trace.exit
+        else {
+            panic!(
+                "{what}: XFOIL left through AX <= 0 at iterate {itam}, yFoil by {:?}",
+                trace.exit
+            );
+        };
+        assert_eq!(ours_itam, itam, "{what}: iterate of the AX <= 0 exit");
+        assert!(
+            ours_ax <= 0.0 && ax <= 0.0,
+            "{what}: AX yfoil={ours_ax:.17e} xfoil={ax:.17e}"
+        );
+        assert_within(ours_ax, ax, TOL_PURE, 1.0, &format!("{what}: AX"));
+        assert_within(ours_ampl2, ampl2, TOL_PURE, 1.0, &format!("{what}: AMPL2"));
+        assert_within(ours_xt, xt, TOL_PURE, 1.0, &format!("{what}: XT"));
+        n += 1;
+    }
+    assert!(n > 0, "{case}: the reference recorded no AX <= 0 exit");
+    println!("{case}: {n} AX <= 0 exits of TRCHEK2 reproduced");
 }
