@@ -11,3 +11,4 @@ instrument/19-validity-events.patch
 instrument/20-stop-after-setbl.patch
 instrument/21-closure-log-switch.patch
 instrument/22-dump-transition-location.patch
+instrument/23-trchek2-ax-exit.patch
