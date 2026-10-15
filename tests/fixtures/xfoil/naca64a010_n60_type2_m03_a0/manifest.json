@@ -11,7 +11,8 @@
       1,
       2,
       7,
-      8
+      8,
+      17
     ],
     "events": true,
     "foil": "naca:64A010",
@@ -19,11 +20,13 @@
     "keep": [
       "mrchdu_input_1.dat",
       "mrchdu_output_1.dat",
-      "mrchdu_input_7.dat",
-      "update_output_7.dat",
+      "mrchdu_input_17.dat",
+      "update_output_17.dat",
       "update_output_1.dat",
       "mrchdu_input_2.dat",
       "viscal_points.dat",
+      "mrchdu_input_7.dat",
+      "update_output_7.dat",
       "mrchdu_input_8.dat"
     ],
     "mach": 0.3,
@@ -41,14 +44,15 @@
     "xtr": []
   },
   "generated_by": "cargo xtask fixtures",
-  "panels_dat_sha256": "dbf0652bf8336a60a2fa9213cfd097366eeb4dee9c2897a7858ac4d44414d7d1",
+  "panels_dat_sha256": "03d6da9dbdd86b99b0610ac0743742edfa58c4e5f6e2049f19f97c51899652d4",
   "xfoil_ref": [
     "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
     "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
     "series_instr_sha256:    74a06193233322f4a4fe274c9140fdd3495746e55d11e100b63f58899405e4d9",
     "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
     "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
+    "inputs_fingerprint:     9ac1bc445d0c0150722de65a16fc75577cb6aa4126e53b59f6c162ae5a806bce",
     "host:                   arm64-Darwin-24.6.0",
-    "libm:                   /usr/lib/libSystem.B.dylib 1345.120.2)"
+    "libm:                   CORE-MATH commit=85430b3ef7d2beb0de16d7c569ffa9bb391615ed (-O2 -ffp-contract=off); host /usr/lib/libSystem.B.dylib 1345.120.2)"
   ]
 }

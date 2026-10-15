@@ -22,6 +22,7 @@ use super::super::panel::{
     PANGEN_BUFFER_NODES,
 };
 use super::cosine_stations;
+use cr_libm::{atan2, hypot, pow, sin_cos};
 use serde_json::{json, Value};
 use std::f64::consts::PI;
 
@@ -58,13 +59,13 @@ impl Complex {
     }
     /// Principal-branch power `self^n`
     fn powf(self, n: f64) -> Self {
-        let r = self.re.hypot(self.im);
+        let r = hypot(self.re, self.im);
         if r == 0.0 {
             return Self { re: 0.0, im: 0.0 };
         }
-        let theta = self.im.atan2(self.re);
-        let rn = r.powf(n);
-        let (s, c) = (n * theta).sin_cos();
+        let theta = atan2(self.im, self.re);
+        let rn = pow(r, n);
+        let (s, c) = sin_cos(n * theta);
         Self { re: rn * c, im: rn * s }
     }
 }
@@ -74,8 +75,8 @@ impl KarmanTrefftz {
         if !(0.0..180.0).contains(&te_angle_deg) {
             return Err(KarmanTrefftzError::TrailingEdgeAngle(te_angle_deg));
         }
-        let radius = (1.0 - x_centre).hypot(y_centre);
-        if (-1.0 - x_centre).hypot(y_centre) >= radius {
+        let radius = hypot(1.0 - x_centre, y_centre);
+        if hypot(-1.0 - x_centre, y_centre) >= radius {
             return Err(KarmanTrefftzError::CentreOutside(x_centre, y_centre));
         }
         Ok(Self {
@@ -91,18 +92,18 @@ impl KarmanTrefftz {
     }
 
     fn radius(&self) -> f64 {
-        (1.0 - self.x_centre).hypot(self.y_centre)
+        hypot(1.0 - self.x_centre, self.y_centre)
     }
 
     /// Circle angle of the trailing edge ζ = 1
     fn theta_te(&self) -> f64 {
-        (-self.y_centre).atan2(1.0 - self.x_centre)
+        atan2(-self.y_centre, 1.0 - self.x_centre)
     }
 
     /// The image of the circle point at angle θ, before normalisation
     fn map(&self, theta: f64) -> (f64, f64) {
         let r = self.radius();
-        let (s, c) = theta.sin_cos();
+        let (s, c) = sin_cos(theta);
         let zeta = Complex {
             re: self.x_centre + r * c,
             im: self.y_centre + r * s,
@@ -302,6 +303,7 @@ impl KarmanTrefftz {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cr_libm::atan;
 
     #[test]
     fn joukowski_symmetric_section_is_symmetric_and_closed() {
@@ -324,7 +326,7 @@ mod tests {
         // the surfaces near the TE meet at the TE angle: slopes of the two surfaces differ by τ
         let slope_u = (0.0 - pts[1].1) / (1.0 - pts[1].0);
         let slope_l = (0.0 - pts[1].3) / (1.0 - pts[1].2);
-        let angle = (slope_u.atan() - slope_l.atan()).abs().to_degrees();
+        let angle = (atan(slope_u) - atan(slope_l)).abs().to_degrees();
         assert!((angle - 20.0).abs() < 1.0, "TE angle {angle}");
         // camber: the upper surface is further from the chord line than the lower
         let mid = kt.surface_at(&[0.4])[0];

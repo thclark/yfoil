@@ -270,11 +270,34 @@ fn main() {
         Some("cross-host") => cross_host::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse] | cross-host [--out PATH]>"
+                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse] | cross-host>"
             );
             std::process::exit(2);
         }
     }
+}
+
+/// Builds the reference stage (`instrumented`, or `gcov` with `--gcov`) unless it exists and was
+/// built from the current inputs: its `fingerprint` must equal `scripts/xfoil-build.sh
+/// --fingerprint`. A reference built from older sources, patches or maths library is never used.
+pub(crate) fn ensure_reference(stage: &str) -> PathBuf {
+    let root = root();
+    let dir = root.join("target/xfoil-ref").join(stage);
+    let out = Command::new(root.join("scripts/xfoil-build.sh"))
+        .arg("--fingerprint")
+        .output()
+        .expect("run scripts/xfoil-build.sh --fingerprint");
+    let want = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let have = fs::read_to_string(dir.join("fingerprint")).unwrap_or_default();
+    if !dir.join("bin/xfoil").exists() || have.trim() != want {
+        println!("reference `{stage}` missing or built from other inputs: rebuilding");
+        xfoil_build(&if stage == "gcov" {
+            vec!["--gcov".to_string()]
+        } else {
+            vec![]
+        });
+    }
+    dir.join("bin/xfoil")
 }
 
 fn xfoil_build(flags: &[String]) {
@@ -311,10 +334,7 @@ fn fixtures(flags: &[String]) {
     )
     .expect("parse cases.toml");
     steps::apply_cover(&root, &mut cases.cases);
-    let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
-    if !xfoil.exists() {
-        xfoil_build(&[]);
-    }
+    let xfoil = ensure_reference("instrumented");
     let yfoil = root.join("target/debug/yfoil");
     run(
         Command::new("cargo")
@@ -350,7 +370,7 @@ fn fixtures(flags: &[String]) {
         println!("== {} ==", case.name);
         let work = root.join("target/fixtures").join(&case.name);
         // the case's twins (`cargo xtask twins`, study data) are set aside and put back if the
-        // regenerated run has the same inputs, so regenerating does not discard them
+        // regenerated run has the same inputs and reference, so regenerating does not discard them
         let held = root.join("target/fixtures/.held").join(&case.name);
         let _ = fs::remove_dir_all(&held);
         if work.join("noise_floor.json").exists() {
@@ -360,6 +380,7 @@ fn fixtures(flags: &[String]) {
                 if n.starts_with("ulp")
                     || [
                         "noise_floor.json",
+                        "manifest.json",
                         "panels.dat",
                         "xfoil.inp",
                         "stop_after_setbl.txt",
@@ -651,7 +672,17 @@ fn fixtures(flags: &[String]) {
         let mut twins_ready = false;
         if held.join("noise_floor.json").exists() {
             let same = |f: &str| fs::read(held.join(f)).ok() == fs::read(work.join(f)).ok();
-            if same("panels.dat") && same("xfoil.inp") && same("stop_after_setbl.txt") && same("stop_on_nonfinite.txt")
+            // and the same reference: a rebuilt one (another libm, patch series or toolchain) makes
+            // every twin stale
+            let same_reference = fs::read_to_string(held.join("manifest.json"))
+                .ok()
+                .and_then(|m| serde_json::from_str::<serde_json::Value>(&m).ok())
+                .is_some_and(|m| m["xfoil_ref"] == serde_json::json!(ref_manifest.lines().collect::<Vec<_>>()));
+            if same("panels.dat")
+                && same("xfoil.inp")
+                && same("stop_after_setbl.txt")
+                && same("stop_on_nonfinite.txt")
+                && same_reference
             {
                 for e in fs::read_dir(&held).unwrap().flatten() {
                     let n = e.file_name().to_string_lossy().to_string();
@@ -659,11 +690,11 @@ fn fixtures(flags: &[String]) {
                         let _ = fs::rename(e.path(), work.join(&n));
                     }
                 }
-                println!("  twins kept (same panels and script)");
+                println!("  twins kept (same panels, script and reference)");
                 twins_ready = true;
             } else {
                 println!(
-                    "  twins discarded (the inputs changed): rerun `cargo xtask twins --case {}`",
+                    "  twins discarded (the inputs or the reference changed): rerun `cargo xtask twins --case {}`",
                     case.name
                 );
             }

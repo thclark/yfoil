@@ -1,6 +1,7 @@
 //! BL closure constants (BLPAR.INC, set in BLPINI), the flow-regime selector (XFOIL's ITYP)
 //! and the global BL parameters of XBL.INC's /V_VAR/ block (COMSET / SETBL prologue).
 
+use cr_libm::pow;
 use serde::{Deserialize, Serialize};
 
 /// MATYP (OPER `TYPE`): how the freestream Mach number depends on CL. XFOIL's MRCL resets an
@@ -186,7 +187,7 @@ impl FlowParameters {
         // Stagnation density ratio (isentropic)
         // RST = (1 + (γ-1)/2 M²)^(1/(γ-1))
         let tr = 1.0 + 0.5 * gm1 * msq;
-        let rst = tr.powf(1.0 / gm1);
+        let rst = pow(tr, 1.0 / gm1);
         let rst_ms = 0.5 * rst / tr;
 
         // 1/stagnation enthalpy

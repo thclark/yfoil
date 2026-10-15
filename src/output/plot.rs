@@ -10,6 +10,7 @@ use std::path::Path;
 
 use crate::output::svg::nice_step;
 use crate::output::AnalysisOutput;
+use cr_libm::{cos, sin};
 
 /// Error type for plotting operations
 #[derive(thiserror::Error, Debug)]
@@ -3035,7 +3036,7 @@ fn marker_shape(marker: Marker, s: i32) -> (Verts, Verts, Verts) {
         (0..=16)
             .map(|k| {
                 let t = std::f64::consts::TAU * k as f64 / 16.0;
-                ((r as f64 * t.cos()).round() as i32, (r as f64 * t.sin()).round() as i32)
+                ((r as f64 * cos(t)).round() as i32, (r as f64 * sin(t)).round() as i32)
             })
             .collect()
     };

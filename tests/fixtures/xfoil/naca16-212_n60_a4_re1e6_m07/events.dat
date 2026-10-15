@@ -29,7 +29,7 @@ EV MRCHUE_ITERATE_FALLBACK      0   1    29                      NaN
 EV MRCHUE_ITERATE_FALLBACK      0   1    30                      NaN
 EV MRCHUE_ITERATE_FALLBACK      0   1    31                      NaN
 EV MRCHUE_ITERATE_FALLBACK      0   1    32                      NaN
-EV MRCHUE_ITERATE_FALLBACK      0   2    29   5.4692941107548858E+00
+EV MRCHUE_ITERATE_FALLBACK      0   2    29   5.4692941107371151E+00
 EV MRCHUE_ITERATE_FALLBACK      0   2    31                      NaN
 EV MRCHUE_ITERATE_FALLBACK      0   2    32                      NaN
 EV MRCHUE_ITERATE_FALLBACK      0   2    33                      NaN
@@ -75,8 +75,8 @@ EV MRCHDU_ITERATE_FALLBACK      1   1    29                      NaN
 EV MRCHDU_ITERATE_FALLBACK      1   1    30                      NaN
 EV MRCHDU_ITERATE_FALLBACK      1   1    31                      NaN
 EV MRCHDU_ITERATE_FALLBACK      1   1    32                      NaN
-EV MRCHDU_ITERATE_FALLBACK      1   2    29   2.2240648260020350E+00
-EV MRCHDU_ITERATE_FALLBACK      1   2    30   2.2194011051400491E+00
+EV MRCHDU_ITERATE_FALLBACK      1   2    29   2.2240648260002578E+00
+EV MRCHDU_ITERATE_FALLBACK      1   2    30   2.2194011051386608E+00
 EV MRCHDU_ITERATE_FALLBACK      1   2    31                      NaN
 EV MRCHDU_ITERATE_FALLBACK      1   2    32                      NaN
 EV MRCHDU_ITERATE_FALLBACK      1   2    33                      NaN

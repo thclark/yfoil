@@ -6,6 +6,9 @@ description = "Rust-based aerofoil analysis tool reproducing XFOIL's core functi
 license = "GPL-3.0-or-later"
 
 [dependencies]
+# Correctly rounded transcendentals, the same sources the XFOIL reference is linked against
+cr-libm = { path = "cr-libm" }
+
 # Serialization
 # float_roundtrip: serde_json's default float parser is best-effort (may be 1 ULP off);
 # CLAUDE.md Rule 4 needs bit-exact geometry round-trips.
@@ -40,6 +43,7 @@ plotting = ["plotters", "resvg"]
 [workspace]
 members = [
     ".",
+    "cr-libm",
     "xtask",
     "scripts/input-sensitivity",
     "scripts/xfoil-instrumentation-check",

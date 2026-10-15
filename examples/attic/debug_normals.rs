@@ -1,6 +1,7 @@
 //! Debug normal vectors at TE panels
 
 use yfoil::geometry::{panel_foil, read_dat_file};
+use cr_libm::atan2;
 
 fn main() {
     let (_, geom) =
@@ -13,7 +14,7 @@ fn main() {
     println!("{:>4} {:>10} {:>10} {:>10} {:>10} {:>10}", "j", "nx", "ny", "apanel", "x", "y");
 
     for j in [0, 1, 2, 3, n - 3, n - 2, n - 1] {
-        let apanel = (-airfoil.ny[j]).atan2(-airfoil.nx[j]);
+        let apanel = atan2(-airfoil.ny[j], -airfoil.nx[j]);
         println!("{:4} {:10.6} {:10.6} {:10.6} {:10.6} {:10.6}",
                  j, airfoil.nx[j], airfoil.ny[j], apanel, airfoil.x[j], airfoil.y[j]);
     }

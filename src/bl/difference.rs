@@ -4,6 +4,7 @@
 use super::params::*;
 use super::station::{MidpointCf, StationState};
 use super::transition::{interval_amplification_rate, Transition};
+use cr_libm::{exp, ln};
 
 // ============================================================================
 // Local BL Equation Coefficients
@@ -31,13 +32,13 @@ fn upwinding(s1: &StationState, s2: &StationState, is_wake: bool) -> Upwinding {
 
     // Local upwinding based on log(Hk-1) change
     let arg = ((hk2 - 1.0) / (hk1 - 1.0)).abs();
-    let hl = arg.ln();
+    let hl = ln(arg);
     let hl_hk1 = -1.0 / (hk1 - 1.0);
     let hl_hk2 = 1.0 / (hk2 - 1.0);
 
     // Upwinding parameter: 0.5 = trapezoidal, 1.0 = backward Euler
     let hlsq = (hl * hl).min(15.0);
-    let ehh = (-hlsq * hdcon).exp();
+    let ehh = exp(-hlsq * hdcon);
     let upw = 1.0 - 0.5 * ehh;
     let upw_hl = ehh * hl * hdcon;
     let upw_hd = 0.5 * ehh * hlsq;
@@ -143,10 +144,10 @@ impl IntervalSystem {
             (1.0, BULE, 0.5 * (1.0 - BULE), 0.0, 0.0)
         } else {
             // Normal station: compute from values
-            let xlog = (s2.xi / s1.xi).ln();
-            let ulog = (s2.ue / s1.ue).ln();
-            let tlog = (s2.theta / s1.theta).ln();
-            let hlog = (s2.hstar / s1.hstar).ln();
+            let xlog = ln(s2.xi / s1.xi);
+            let ulog = ln(s2.ue / s1.ue);
+            let tlog = ln(s2.theta / s1.theta);
+            let hlog = ln(s2.hstar / s1.hstar);
             (xlog, ulog, tlog, hlog, 1.0)
         };
 
@@ -271,9 +272,9 @@ impl IntervalSystem {
         let scc_us2 = scc_usa * 0.5;
         let _ = (scc_us1, scc_us2);
 
-        let slog = (s2.sqrtctau / s1.sqrtctau).ln();
+        let slog = ln(s2.sqrtctau / s1.sqrtctau);
         let dxi = s2.xi - s1.xi;
-        let ulog = (s2.ue / s1.ue).ln();
+        let ulog = ln(s2.ue / s1.ue);
 
         let rezc = scc * (cqa - sa * ald) * dxi - dea * 2.0 * slog
             + dea * 2.0 * (uq * dxi - ulog) * LAG_PRESSURE_GRADIENT_WEIGHT;
@@ -787,7 +788,7 @@ impl IntervalSystem {
         // Set initial shear stress: ST = CTR * CQ
         // where CTR = CTRCON * exp(-CTRCEX/(HK-1))
         let hk_minus_one = state.hk - 1.0;
-        let ctr = TRANSITION_SQRTCTAU_FACTOR * (-TRANSITION_SQRTCTAU_EXPONENT / hk_minus_one).exp();
+        let ctr = TRANSITION_SQRTCTAU_FACTOR * exp(-TRANSITION_SQRTCTAU_EXPONENT / hk_minus_one);
         let ctr_hk = ctr * TRANSITION_SQRTCTAU_EXPONENT / (hk_minus_one * hk_minus_one);
 
         let s_t = ctr * state.sqrtctaueq;

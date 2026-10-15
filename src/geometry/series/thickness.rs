@@ -15,6 +15,7 @@
 //! - **6- and 6A-series** (`six_series.rs`): no closed form; tabulated conformal maps.
 
 use super::six_series::{SixSeriesFamily, SixSeriesForm};
+use cr_libm::pow;
 use serde_json::{json, Value};
 
 /// A basic thickness form. `t` is the maximum thickness as a fraction of chord in every family.
@@ -70,7 +71,7 @@ pub fn four_digit_modified_coefficients(t: f64, le_radius_index: f64, x_max_thic
         let omxmt = 1.0 - xmt;
         let v1 = 0.1 / (xmt * xmt * xmt);
         let v2 = (d1 * omxmt - 0.294) / (xmt * omxmt * omxmt);
-        let v3 = (3.0 / 8.0) * a0 / xmt.powf(2.5);
+        let v3 = (3.0 / 8.0) * a0 / pow(xmt, 2.5);
         v1 + v2 - v3
     };
     let a2 = {

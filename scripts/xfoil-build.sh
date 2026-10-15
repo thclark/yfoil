@@ -5,7 +5,7 @@
 #   target/xfoil-ref/pristine/      pristine 6.99 + build-config patches only (double precision)
 #   target/xfoil-ref/instrumented/  the above + instrumentation patches
 #
-# Usage: scripts/xfoil-build.sh [--verify] [--snan] [--gcov]
+# Usage: scripts/xfoil-build.sh [--verify] [--snan] [--gcov] | --fingerprint
 #   --verify   after building, run both binaries on the smoke case and assert
 #              their numeric output is byte-identical (instrumentation is inert)
 #   --snan     additionally build a pristine variant with -finit-real=snan
@@ -13,18 +13,39 @@
 #   --gcov     additionally build target/xfoil-ref/gcov/ — pristine + build series compiled
 #              and linked with -fprofile-arcs -ftest-coverage, the branch-coverage
 #              instrument behind `cargo xtask coverage` (CLAUDE.md Rule 6)
+#   --fingerprint  print the hash of the build's inputs and exit (see fingerprint() below)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/xfoil/third-party/xfoil-6.99"
 PATCHES="$ROOT/xfoil/instrumentation"
 OUT="$ROOT/target/xfoil-ref"
-VERIFY=0; SNAN=0; GCOV=0
-for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; --gcov) GCOV=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
+VERIFY=0; SNAN=0; GCOV=0; FINGERPRINT=0
+for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; --gcov) GCOV=1;; --fingerprint) FINGERPRINT=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
+
+# --- fingerprint of everything a build depends on ----------------------------------
+# The vendored sources' manifests, both patch series, the CORE-MATH shim, the gcov flush and this
+# script (its flags included). Each stage writes it to target/xfoil-ref/<stage>/fingerprint, and the
+# xtask rebuilds a stage whose fingerprint differs (`--fingerprint` prints it and exits), so a
+# reference built from older inputs is never used.
+fingerprint() {
+  cat "$ROOT/xfoil/third-party/xfoil-6.99.sha256" "$ROOT/third-party/core-math.sha256" \
+      "$PATCHES"/series.build "$PATCHES"/series.instrument "$PATCHES"/build/*.patch "$PATCHES"/instrument/*.patch \
+      "$ROOT/scripts/xfoil-build/core_math_libm.c" "$ROOT/scripts/xfoil-build/gcov_flush.c" "$ROOT/scripts/xfoil-build.sh" \
+    | shasum -a 256 | cut -d' ' -f1
+}
+if [ "$FINGERPRINT" = 1 ]; then fingerprint; exit 0; fi
 
 # --- integrity of the vendored tree ------------------------------------------
 ( cd "$SRC" && shasum -a 256 -c --quiet "$ROOT/xfoil/third-party/xfoil-6.99.sha256" ) \
   || { echo "xfoil/third-party/xfoil-6.99 does not match its checksum manifest" >&2; exit 1; }
+
+# --- integrity of the vendored CORE-MATH subset ------------------------------------
+CORE_MATH="$ROOT/third-party/core-math"
+# must equal build.rs's CORE_MATH_CFLAGS
+CORE_MATH_CFLAGS="-O2 -ffp-contract=off"
+( cd "$CORE_MATH" && shasum -a 256 -c --quiet "$ROOT/third-party/core-math.sha256" ) \
+  || { echo "third-party/core-math does not match its checksum manifest" >&2; exit 1; }
 
 # --- stage a tree and apply a series -------------------------------------------
 stage() { # stage <name> <extra-fflags> <series...>
@@ -40,6 +61,14 @@ stage() { # stage <name> <extra-fflags> <series...>
   if [ -n "$extra" ]; then
     sed -i.bak "s|^DBL = \(.*\)$|DBL = \1 $extra|" "$dir/bin/Makefile" && rm -f "$dir/bin/Makefile.bak"
   fi
+  # CORE-MATH's correctly rounded functions in place of the host libm's, the same sources
+  # yFoil's build.rs compiles with the same flags (scripts/xfoil-build/core_math_libm.c)
+  mkdir -p "$dir/core-math"
+  for c in "$CORE_MATH"/src/binary64/*/*.c "$ROOT/scripts/xfoil-build/core_math_libm.c"; do
+    cc -c $CORE_MATH_CFLAGS -o "$dir/core-math/$(basename "$c" .c).o" "$c" \
+      || { echo "$c failed to compile" >&2; exit 1; }
+  done
+  sed -i.bak "s|^	\$(FC) -o xfoil |	\$(FC) -o xfoil $dir/core-math/*.o |" "$dir/bin/Makefile" && rm -f "$dir/bin/Makefile.bak"
   case "$extra" in *profile-arcs*)
     # the link step has no FFLAGS; libgcov must be linked in explicitly. gcov_flush.o writes the
     # counters on SIGTERM, so a run the fixture watchdog ends keeps its counts
@@ -54,6 +83,16 @@ stage() { # stage <name> <extra-fflags> <series...>
     || { echo "plotlib build failed for $name; see $OUT/$name.plotlib.log" >&2; exit 1; }
   ( cd "$dir/bin" && { make -s clean >/dev/null 2>&1 || true; } && rm -f xfoil && { make -s xfoil > "$OUT/$name.xfoil.log" 2>&1 || true; } && [ -x xfoil ] ) \
     || { echo "xfoil build failed for $name; see $OUT/$name.xfoil.log" >&2; exit 1; }
+  # no maths function may still be resolved from the host libm, whatever the compiler lowered an
+  # intrinsic to (Darwin's GCC turns a SIN/COS pair into cexp, glibc's into sincos), except MDES's
+  # cabs and clog (inverse design, out of scope) and sqrt, which IEEE 754 requires correctly rounded
+  # everywhere (glibc's GCC keeps a call beside the inlined instruction, for errno)
+  local leaked
+  leaked="$(nm -u "$dir/bin/xfoil" | awk '{print $NF}' | sed 's/@.*//; s/^_*//' \
+    | grep -xE 'c?(a?(sin|cos|tan)h?|atan2|exp(2|10|m1)?|log(2|10|1p)?|pow|cbrt|hypot|erfc?|[lt]gamma)|sincos|sincos_stret|cexpi' \
+    | grep -vxE 'cabs|clog' || true)"
+  [ -z "$leaked" ] || { echo "$name: host libm still provides: $leaked" >&2; exit 1; }
+  fingerprint > "$dir/fingerprint"
   echo "built $dir/bin/xfoil"
 }
 
@@ -72,8 +111,9 @@ fi
   echo "series_instr_sha256:    $(cat "$PATCHES"/instrument/*.patch | shasum -a 256 | cut -d' ' -f1)"
   echo "gfortran:               $(gfortran --version | head -1)"
   echo "fflags:                 $(grep -m1 '^FFLAGS' "$OUT/pristine/bin/Makefile") / $(grep -m1 '^DBL' "$OUT/pristine/bin/Makefile")"
+  echo "inputs_fingerprint:     $(fingerprint)"
   echo "host:                   $(uname -m)-$(uname -s)-$(uname -r)"
-  echo "libm:                   $( (otool -L "$OUT/pristine/bin/xfoil" 2>/dev/null | grep -m1 libSystem | awk '{print $1, $NF}') || (ldd "$OUT/pristine/bin/xfoil" | grep -m1 libm) )"
+  echo "libm:                   CORE-MATH $(cut -d' ' -f3 "$ROOT/third-party/core-math.ORIGIN") ($CORE_MATH_CFLAGS); host $( (otool -L "$OUT/pristine/bin/xfoil" 2>/dev/null | grep -m1 libSystem | awk '{print $1, $NF}') || (ldd "$OUT/pristine/bin/xfoil" | grep -m1 libm) )"
 } > "$OUT/manifest.txt"
 cat "$OUT/manifest.txt"
 

@@ -10,6 +10,7 @@
 use crate::bl::system::limit_dstar;
 use crate::bl::system::MachClDependence;
 use crate::solver::blstate::SolverState;
+use cr_libm::{atan, cos, sin};
 
 /// VMXBL: which primary variable had the largest normalised Newton change. Displays as
 /// XFOIL's character (`n`, `C`, `T`, `D`, `U`; blank before any change).
@@ -74,7 +75,7 @@ pub enum UpdateEvent {
 /// `minf_cl` is MINF_CL, d(MINF)/d(CL) from the last MRCL (0 for MATYP = 1).
 #[doc(alias = "UPDATE")]
 pub fn apply_newton_update(state: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf_cl: f64) -> UpdateSummary {
-    let pi = 4.0 * (1.0_f64).atan();
+    let pi = 4.0 * atan(1.0_f64);
     let dtor = pi / 180.0;
     let gamm1 = state.gamma_gas - 1.0;
 
@@ -138,8 +139,8 @@ pub fn apply_newton_update(state: &mut SolverState, vdel: &[[[f64; 2]; 3]], minf
     }
 
     // calculate new CL from this new Qtan
-    let sa = state.alpha.sin();
-    let ca = state.alpha.cos();
+    let sa = sin(state.alpha);
+    let ca = cos(state.alpha);
     let beta = (1.0 - state.mach * state.mach).sqrt();
     let beta_msq = -0.5 / beta;
     let bfac = 0.5 * (state.mach * state.mach) / (1.0 + beta);

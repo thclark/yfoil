@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# Measure the reference's own spread between the fixtures' host and glibc, per tracked run case:
-# the floor of the run tests' cross-host tolerance (CLAUDE.md Rule 1, xtask/src/cross_host.rs).
+# Check that the reference reproduces the tracked fixtures byte for byte on glibc: both codes take
+# their maths from CORE-MATH, not the host libm, so the fixtures are host-independent (CLAUDE.md
+# Rule 1, xtask/src/cross_host.rs). Exits non-zero, naming the files, if any record differs.
 #
-#   scripts/cross-host.sh        writes tests/fixtures/cross-host/spread.json
+#   scripts/cross-host.sh
 #
 # Builds the Linux image in scripts/cross-host/, copies the tree into target/cross-host-tree/ (the
 # container never sees the live checkout, so nothing in it can be overwritten; the copy keeps its own
-# build cache between runs), builds the instrumented reference there and runs
-# `cargo xtask cross-host`, then copies the measurement back. Rerun it whenever a tracked run case's
-# fixture is regenerated: the tests refuse a measurement whose records no longer match.
+# build cache between runs, and `cargo xtask` rebuilds the reference there whenever its inputs have
+# changed) and runs `cargo xtask cross-host`.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,6 +22,3 @@ mkdir -p "$tree"
 rsync -a --delete --exclude target --exclude .tmp --exclude .git --exclude 'scripts/*/runs' "$repo_root/" "$tree/"
 docker run --rm -v "$tree":/work -w /work -e CARGO_TARGET_DIR=/work/target "$image" \
     bash -c 'cargo run -q -p xtask -- cross-host'
-mkdir -p "$repo_root/tests/fixtures/cross-host"
-cp "$tree/tests/fixtures/cross-host/spread.json" "$repo_root/tests/fixtures/cross-host/spread.json"
-echo "tests/fixtures/cross-host/spread.json written"

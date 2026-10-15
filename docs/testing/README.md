@@ -44,20 +44,13 @@ reproduces the step. Whether the fourth attempt converges is therefore decided a
 that "carries on" past the break in one code and halts in the other is a divergent comparison, not a
 translation bug, and no test compares the two codes' own marches through it.
 
-The reference's behaviour holds on the host that generated the fixtures (arm64 macOS; each `manifest.json` records
-it). Both codes take `EXP`/`LOG`/`**`/`ATAN2`/`SIN`/`COS`/`TANH` from the host C library, and Apple's
-libSystem and glibc disagree by exactly 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs
-(measured 2026-09-11, 20 000 inputs per function; glibc's results are the same on x86_64 and aarch64). The
-same two cases regenerated on glibc show what that does to the reference itself: every converged point
-before the break moves by ≤ 1.4e-11 in CL, the unconverged wanderings by O(1), and the fourth attempt's
-chance convergence does not survive — on glibc XFOIL fails 22° and −16° as well (its converged points
-agree with the macOS run to 1.4e-11 and 7.5e-11 in CL). Run against the macOS fixtures on
-glibc, yFoil matches every converged call at the same tolerances, parts inside the break call at a
-different iteration, and its one-step replays from XFOIL's dumped state
-differ by 3.6e-10 and 1.2e-10 relative in the largest Newton delta where the same-host replays differ by
-≤ 2e-12 — the libm's 1-ULP differences through one near-singular Newton step, tested by `TOL_CROSS_HOST`
-(`tests/common/utilities/tolerances.rs`); `tests/common/utilities/host.rs` holds a test to `TOL_SOLVER` on
-the fixture's host and to `TOL_CROSS_HOST` on any other.
+The reference's behaviour at the break does not depend on the host. Both codes take their
+transcendentals from CORE-MATH's correctly rounded functions, not the host libm, and the reference
+reproduces every tracked record byte for byte on glibc (`scripts/cross-host.sh`), so a test holds every
+value to the same tolerance everywhere. Until 2026-10-15 both took them from the host libm, Apple's
+libSystem and glibc disagreeing by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, and
+the break was host-dependent: on glibc the fourth attempt's chance convergence did not survive and XFOIL
+failed 22° and −16° as well (`docs/cross-platform-quirks.md`).
 The same cases wake the MRCHUE inverse wake march, the MRCHDU iterate fallback, BLVAR's Us and Hk
 clamps and TRCHEK2's iteration cap that every other case left open ([coverage.md](coverage.md)). Two
 XFOIL quirks surfaced here are registered in `docs/xfoil-known-issues.md` (§2.8, §4): MASS is never

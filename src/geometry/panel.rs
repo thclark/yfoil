@@ -4,6 +4,7 @@
 
 use super::airfoil::{Geometry, InvalidGeometryError, PanelledFoil};
 use super::spline::{spline_derivatives, spline_second_derivative, spline_slope, spline_value};
+use cr_libm::{atan, atan2, cos, exp, pow};
 use serde::{Deserialize, Serialize};
 
 /// XFOIL's `PPAR` parameters of PANGEN (menu keys `P`, `T`, `R`, `XT`, `XB`). The JSON keys of the
@@ -846,15 +847,15 @@ pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> 
         let t_mod = if ratio < 1.0 {
             // Coarser at TE (t=0), finer at LE (t=1)
             // Use power function to redistribute
-            t.powf(1.0 / (1.0 + ratio))
+            pow(t, 1.0 / (1.0 + ratio))
         } else if ratio > 1.0 {
             // Finer at TE, coarser at LE
-            1.0 - (1.0 - t).powf(ratio)
+            1.0 - pow(1.0 - t, ratio)
         } else {
             t
         };
         let theta = std::f64::consts::PI * t_mod;
-        let s_frac = 0.5 * (1.0 - theta.cos());
+        let s_frac = 0.5 * (1.0 - cos(theta));
         s_new.push(s[0] + s_upper_total * s_frac);
     }
 
@@ -866,14 +867,14 @@ pub fn repanel_cosine(geometry: &Geometry, n_nodes: usize, te_le_ratio: f64) -> 
         let t = i as f64 / n_lower as f64;
         let t_mod = if ratio < 1.0 {
             // Finer at LE (t=0), coarser at TE (t=1)
-            1.0 - (1.0 - t).powf(1.0 / (1.0 + ratio))
+            1.0 - pow(1.0 - t, 1.0 / (1.0 + ratio))
         } else if ratio > 1.0 {
-            t.powf(ratio)
+            pow(t, ratio)
         } else {
             t
         };
         let theta = std::f64::consts::PI * t_mod;
-        let s_frac = 0.5 * (1.0 - theta.cos());
+        let s_frac = 0.5 * (1.0 - cos(theta));
         s_new.push(sle + s_lower_total * s_frac);
     }
 
@@ -942,7 +943,7 @@ pub fn set_te_gap(geometry: &Geometry, gap: f64, blend: f64) -> Geometry {
             }
         } else {
             let arg = ((1.0 - xoc) * (1.0 / doc - 1.0)).min(15.0);
-            (-arg).exp()
+            exp(-arg)
         };
 
         if sb[i] <= sble {
@@ -1078,15 +1079,15 @@ fn node_normals(xp: &[f64], yp: &[f64], s: &[f64]) -> (Vec<f64>, Vec<f64>) {
 #[doc(alias = "APCALC")]
 fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Vec<f64> {
     let n = x.len();
-    let pi = 4.0 * (1.0_f64).atan();
+    let pi = 4.0 * atan(1.0_f64);
     let mut apanel = vec![0.0; n];
     for i in 0..n - 1 {
         let sx = x[i + 1] - x[i];
         let sy = y[i + 1] - y[i];
         apanel[i] = if sx == 0.0 && sy == 0.0 {
-            (-ny[i]).atan2(-nx[i])
+            atan2(-ny[i], -nx[i])
         } else {
-            sx.atan2(-sy)
+            atan2(sx, -sy)
         };
     }
     // TE panel
@@ -1096,7 +1097,7 @@ fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Ve
     } else {
         let sx = x[ip] - x[i];
         let sy = y[ip] - y[i];
-        (-sx).atan2(sy) + pi
+        atan2(-sx, sy) + pi
     };
     apanel
 }
@@ -1104,6 +1105,7 @@ fn panel_angles(x: &[f64], y: &[f64], nx: &[f64], ny: &[f64], sharp: bool) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cr_libm::{hypot, sin};
 
     fn source() -> Geometry {
         crate::geometry::naca_4digit("2412", 80, crate::geometry::Thickness::Perpendicular).unwrap()
@@ -1219,7 +1221,7 @@ mod tests {
             ..PanelConfig::default()
         };
         let out = repanel(&g, &gap).unwrap();
-        let d = (out.x[0] - out.x[99]).hypot(out.y[0] - out.y[99]);
+        let d = hypot(out.x[0] - out.x[99], out.y[0] - out.y[99]);
         assert!((d - 0.006).abs() < 1e-12, "gap {d}");
         assert!(repanel(
             &g,
@@ -1253,10 +1255,10 @@ mod tests {
         let n = 36;
         let radius = 1.0;
         let x: Vec<f64> = (0..=n)
-            .map(|i| radius * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos())
+            .map(|i| radius * cos(2.0 * std::f64::consts::PI * i as f64 / n as f64))
             .collect();
         let y: Vec<f64> = (0..=n)
-            .map(|i| radius * (2.0 * std::f64::consts::PI * i as f64 / n as f64).sin())
+            .map(|i| radius * sin(2.0 * std::f64::consts::PI * i as f64 / n as f64))
             .collect();
 
         let s = arc_coordinate(&x, &y);

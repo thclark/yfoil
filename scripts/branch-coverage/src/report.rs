@@ -278,7 +278,6 @@ pub fn summary(
                 "worst_floor_ratio": g.worst_floor_ratio(),
                 "floor_iteration_max": g.floor_iteration_max, "floor_point_max": g.floor_point_max,
             },
-            "fixture_host": g.fixture_host, "same_host": g.same_host,
         }));
     }
     // every DO loop of the analysis path, from the per-case counts: did its body run on the set

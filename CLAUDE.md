@@ -22,24 +22,20 @@ XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it m
 (1-ULP input perturbation, per stage, per variable; results in `docs/testing/noise-floor.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
-Jacobian) can only be compared with a row-scaled metric. Five named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
-`TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10 —
-and `TOL_CROSS_HOST`), with `CROSS_HOST_FACTOR` (4) on the measured cross-host spread of whole runs; no ad-hoc
-literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
-~1e-11, converged Newton state at ~1e-10. Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`) come from the host libm in
-*both* codes: bit-identity is a same-host property, cross-host is an ULP budget. Measured 2026-09-11: Apple libSystem
-and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, identically on x86_64 and
-aarch64; XFOIL's own converged polar points move by ≤ 1.4e-11 between the two, its unconverged post-CL_max
-wanderings by O(1). Every fixture manifest records its host; `tests/common/utilities/host.rs` compares it with the running
-one: on the fixture's host values are held to `TOL_SOLVER`, on any other to `TOL_CROSS_HOST` (the measured spread
-of one replayed step between the two libraries), never skipped. A whole run can move further between the libraries
-than one step — an exhausted Newton or a sweep into a stall break does — so on another host each value of a run
-test is held to `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, *spread* being how far the reference
-itself moves on that case and value between the fixtures' host and the other host's libm: measured, not chosen, by
-`scripts/cross-host.sh` (`cargo xtask cross-host` in a Linux container) into `tests/fixtures/cross-host/spread.json`,
-which names both hosts and fails a test whose fixture records have changed since (rerun it after regenerating a
-run case). Measured 2026-10-08, macOS libSystem against glibc 2.39: ≤ 2.1e-10 on 18 of 21 run cases, up to 2.8e-8
-on the three ill-conditioned ones.
+Jacobian) can only be compared with a row-scaled metric. Four named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
+and `TOL_TRANSIENT` for per-iteration transients inside multi-point sequences — measured 2026-09-04, floor 5.1e-10);
+no ad-hoc literals anywhere else. Expect pure closure functions at ~1e-14, linear solves at
+~1e-11, converged Newton state at ~1e-10.
+
+**The maths library is not the host's.** Transcendentals (`**`, `EXP`, `LOG`, `LOG10`, `TANH`, `SIN`, `COS`, `ATAN`,
+`ATAN2`, `ASIN`) are CORE-MATH's correctly rounded functions in *both* codes, compiled from one vendored copy
+(`third-party/core-math`): the reference links them in place of the host libm (*Reference implementation*), yFoil
+calls them through `cr-libm`. A correctly rounded result is a property of its argument alone, so neither code
+depends on the host and a fixture holds on every host at the same tolerance — there is no cross-host allowance.
+`scripts/cross-host.sh` (`cargo xtask cross-host` in a Linux container) checks it: the reference rerun on glibc
+reproduces every tracked record byte for byte. Until 2026-10-15 both codes used the host libm, Apple libSystem and
+glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs, and the reference's own runs moved
+by up to 2.8e-8 between the two (`docs/cross-platform-quirks.md`).
 
 **The error metric** is `|a − b| ≤ tol · max(|a|, |b|, scale_v)` with a physical per-variable scale. Bare relative
 error is undefined at CL≈0, VDEL≈0 and laminar CTAU≈0 and must not be used.
@@ -226,6 +222,10 @@ solver/     - Pointer layer (IBLPAN/XICALC/IBLSYS/STFIND/STMOVE), velocity layer
 output/     - Results serialisation, optional plotting
 ```
 
+Transcendentals are `cr_libm::{exp, ln, log10, pow, tanh, sin, cos, sin_cos, atan, atan2, asin, hypot}`
+(the workspace crate `cr-libm/`), never `std`'s `f64` methods, which call the host libm: `clippy.toml`
+disallows them. A function not there yet is added to `cr-libm` and to the reference's shim together.
+
 The variable mapping in `docs/xfoil-reference.md` must be kept current whenever a struct
 field or state variable is added, renamed or re-represented.
 
@@ -330,11 +330,16 @@ xfoil/third-party/xfoil-6.99/     - pristine XFOIL 6.99 source (MIT tarball, sha
 xfoil/instrumentation/build/      - build-config patches applied to BOTH reference builds (DP, -ffp-contract=off,
                                     -ffixed-line-length-none, macOS X11 paths)
 xfoil/instrumentation/instrument/ - instrumentation patches (xlog harness + per-file dumps), instrumented build only
+third-party/core-math/            - CORE-MATH's correctly rounded EXP/LOG/LOG10/POW/TANH/SIN/COS/ATAN/ATAN2/ASIN
+                                    (+ sincos, hypot) at a pinned upstream commit (core-math.ORIGIN, .sha256);
+                                    every reference build links them in place of the host libm
+                                    (scripts/xfoil-build/core_math_libm.c), and yFoil's cr-libm compiles the same
+                                    files with the same flags
 target/xfoil-ref/{pristine,instrumented,snan}/ - build output; never edit in place
 scripts/xfoil-build.sh            - the build; `cargo xtask xfoil-build [--verify] [--snan]` wraps it
 ```
 
-Two proofs are part of the reference build and re-run by the `reference-build` workflow on every change to
+Three proofs are part of the reference build and re-run by the `reference-build` workflow on every change to
 `xfoil/` or the build script (and on demand):
 
 1. **Inert instrumentation** — pristine-DP and instrumented-DP produce byte-identical `cp.dat`, `bl.dat`
@@ -343,6 +348,14 @@ Two proofs are part of the reference build and re-run by the `reference-build` w
 2. **No uninitialised reads** — a `-finit-real=snan -ffpe-trap=invalid` build runs the smoke case clean
    (`--snan`). Proven 2026-09-03. The only raised (untrapped) flag is `IEEE_DIVIDE_BY_ZERO` from
    `PLTINI` (`xplots.f:37`, plot-scale setup that runs even with graphics off) — outside the solver.
+3. **No host maths** — every build fails if any maths function is still resolved from the host libm
+   (`nm -u`), whatever the compiler lowered an intrinsic to: GCC turns a `SIN`/`COS` pair of one
+   argument into `sincos` on glibc and into `cexp(i·x)` on Darwin, and both are shimmed onto CORE-MATH.
+   Only MDES's `cabs`/`clog` (inverse design, out of scope) stay with the host.
+
+Every stage records `fingerprint`, the hash of everything the build depends on (sources, patch series,
+shim, build script); every `cargo xtask` that runs the reference rebuilds a stage whose fingerprint is
+not current, and the fixture manifests carry it (`inputs_fingerprint`).
 
 All instrumentation writes into the **working directory** (never `/tmp`) at **`ES24.16`** — 17 significant
 figures, the minimum that round-trips an f64. The original `E24.16`/`E18.10`/`E12.4` formats were 16, 10 and
@@ -398,8 +411,8 @@ which past stall would otherwise run for hours to no purpose) or after N SETBL c
 `STOP_AFTER_SETBL`), both instrumentation patch 20 and inert when not asked for; a run still going after an hour is
 an error that asks for one of them. No case that tests or measures branches (tracked, or in the `branch-coverage`,
 `non-finite` or `series` groups), nor a `known-issues` case, may use either: a stop cuts off the branches only reached later, the non-finite
-fallbacks among them, and `cargo xtask fixtures` refuses it. `--verify` regenerates and asserts byte-identity with what is tracked (same host; cross-host is an ULP
-budget). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
+fallbacks among them, and `cargo xtask fixtures` refuses it. `--verify` regenerates and asserts byte-identity with what is tracked, on any host (the manifest, which names
+the host, aside). `cargo xtask coverage [--big] [--rebuild]` is the Rule 6 measurement over the same cases. Per-case directories, so a sweep of thousands of runs is just more directories and differencing is a
 directory walk.
 
 ## Testing
@@ -425,8 +438,9 @@ tests/
 
 One test binary per category (`cargo test --test execution`). CI jobs: `lint`, `unit` (zero ignores), `fixtures`, `fixture-audit`, `ignore-drift`,
 `no-deviations`, `examples`, and `reference-build` (its own workflow, on changes to `xfoil/` or the build script:
-rebuild the reference and re-prove it inert and free of uninitialised reads). Fixture byte-identity
-(`cargo xtask fixtures --verify`) is a same-host property, checked locally on the fixtures' host.
+rebuild the reference and re-prove it free of host maths, inert and free of uninitialised reads). Fixture byte-identity
+(`cargo xtask fixtures --verify`) holds on any host; the `reference-build` workflow checks it on Linux for the CI
+reference case, and `scripts/cross-host.sh` for every tracked run case.
 
 **Reports are generated, never hand-fed.** They live in two sections (`docs/conventions/testing.md`,
 "Validation and consistency"): `docs/validation/` is the engineering assessment for aerodynamicists (the series

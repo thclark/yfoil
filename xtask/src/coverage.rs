@@ -343,12 +343,13 @@ pub(crate) fn run(flags: &[String]) {
         .collect();
     let gdir = root.join("target/xfoil-ref/gcov");
     let bin = gdir.join("bin");
-    if rebuild || !bin.join("xfoil").exists() {
+    if rebuild {
         super::run(
             Command::new(root.join("scripts/xfoil-build.sh")).arg("--gcov"),
             "scripts/xfoil-build.sh --gcov",
         );
     }
+    super::ensure_reference("gcov");
     // reset the counters: one measurement = one set of cases
     clear_counters(&bin);
 

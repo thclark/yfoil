@@ -7,7 +7,10 @@ icon: lucide/download
 ## From source
 
 yFoil is a Rust crate. With a [recent stable
-toolchain](https://rustup.rs/) installed:
+toolchain](https://rustup.rs/) and a C compiler installed (Xcode's command-line
+tools on macOS, `build-essential` or equivalent on Linux; it compiles the
+correctly rounded maths functions that make yFoil's results the same on every
+host):
 
 ``` sh
 git clone https://github.com/thclark/yfoil.git

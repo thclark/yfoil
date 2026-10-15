@@ -6,6 +6,7 @@
 use super::airfoil::Geometry;
 use super::panel::{repanel_by_curvature, PangenConfig};
 use super::series::Section;
+use cr_libm::pow;
 
 /// How a NACA section's thickness distribution is applied to its camber line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
@@ -102,7 +103,7 @@ fn xfoil_naca_xx(nside: usize) -> Vec<f64> {
             if i == nside {
                 1.0
             } else {
-                1.0 - anp * frac * (1.0 - frac).powf(an) - (1.0 - frac).powf(anp)
+                1.0 - anp * frac * pow(1.0 - frac, an) - pow(1.0 - frac, anp)
             }
         })
         .collect()

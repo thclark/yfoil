@@ -5,9 +5,8 @@
 //! A step is one VISCAL iteration (iteration `i` of call `c`, global SETBL call `k`). The branch
 //! cover names a whole VISCAL call (`iteration = 0`) where the point is part of an `ASEQ`; every
 //! iteration of that call is then replayed as its own step. Steps are chosen by `cargo xtask steps`, which admits only
-//! decisions are compared exactly. Values are compared within the named tolerance (`TOL_SOLVER`
-//! on the host the fixture was generated on, `TOL_CROSS_HOST` elsewhere, `common/utilities/host.rs`)
-//! or within four times the step's own sensitivity, whichever is larger: the same step is also
+//! decisions are compared exactly. Values are compared within the named tolerance (`TOL_SOLVER`,
+//! on every host) or within four times the step's own sensitivity, whichever is larger: the same step is also
 //! replayed from five jogged copies of its inputs (every panel coordinate, from which yFoil builds
 //! the inviscid side, and every BL entry of XFOIL's state moved by −1, 0 or +1 ULP), and a value may differ from XFOIL's by
 //! up to four times the furthest any jog moved it. That is the step's own conditioning, measured in
@@ -31,9 +30,7 @@
 use crate::fixtures;
 use crate::fixtures::cases::{blocks, dump, jog_dump, load, prologue_jogged, seed, Op};
 use crate::fixtures::mrchdu_fixtures::BlDump;
-use crate::utilities::cross_host::allowance;
-use crate::utilities::host::same_host;
-use crate::utilities::tolerances::{assert_within, TOL_CROSS_HOST, TOL_SOLVER};
+use crate::utilities::tolerances::{assert_within, TOL_SOLVER};
 use std::collections::HashMap;
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::analysis::Session;
@@ -124,7 +121,7 @@ pub fn replay(case: &str, call: usize, iteration: usize, setbl: usize) {
         return;
     }
     let c = load(case);
-    let tol = if same_host(&c.dir) { TOL_SOLVER } else { TOL_CROSS_HOST };
+    let tol = TOL_SOLVER;
     let nit: usize = c.points[call - 1]["NITDONE"].parse().unwrap();
     let (first, last) = if iteration == 0 {
         (1, nit)
@@ -269,9 +266,6 @@ pub fn replay(case: &str, call: usize, iteration: usize, setbl: usize) {
 /// record of the point before.
 pub fn replay_inviscid(case: &str, call: usize) {
     let c = load(case);
-    // on another host each value is held to no less than the reference's own measured
-    // cross-host spread (`common/utilities/cross_host.rs`)
-    same_host(&c.dir);
     let g = read_geometry_from_file(c.dir.join("panels.json").to_str().unwrap()).expect("panels.json");
     let mut session = Session::new(&panel_foil(&g), c.spec.clone());
     let n_before = |pred: fn(&Op) -> bool| c.ops[..call].iter().filter(|o| pred(o)).count();
@@ -333,8 +327,7 @@ pub fn replay_inviscid(case: &str, call: usize) {
         ("CDP", st.cd_pressure),
         ("MINF", st.mach),
     ] {
-        let g = allowance(case, &c.dir, "point", name, TOL_SOLVER);
-        assert_within(ours, h[name], g.tol, 1.0, &format!("{what}: {name}{}", g.note));
+        assert_within(ours, h[name], TOL_SOLVER, 1.0, &format!("{what}: {name}"));
     }
     assert_eq!(nodes.len(), st.n_foil_nodes, "{what}: node count");
     for (i, r) in nodes.iter().enumerate() {
@@ -344,8 +337,7 @@ pub fn replay_inviscid(case: &str, call: usize) {
             (1, "QINV", st.q_inviscid[n]),
             (2, "CPI", st.cp_inviscid[n]),
         ] {
-            let g = allowance(case, &c.dir, "node", name, TOL_SOLVER);
-            assert_within(ours, r[k], g.tol, 1.0, &format!("{what}: {name}({n}){}", g.note));
+            assert_within(ours, r[k], TOL_SOLVER, 1.0, &format!("{what}: {name}({n})"));
         }
     }
 }

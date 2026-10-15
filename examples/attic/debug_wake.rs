@@ -3,6 +3,7 @@
 use yfoil::bl::FlowConditions;
 use yfoil::geometry::{panel_foil, naca_4digit};
 use yfoil::solver::{solve_viscous, ViscalConfig};
+use cr_libm::pow;
 
 fn main() {
     let geom = naca_4digit("0012", 160).unwrap();
@@ -54,7 +55,7 @@ fn main() {
         let h = wake_end.h;
         let ue = wake_end.ue;
         let exponent = 0.5 * (5.0 + h);
-        let theta_inf = theta * ue.powf(exponent);
+        let theta_inf = theta * pow(ue, exponent);
         let cd_manual = 2.0 * theta_inf / airfoil.chord;
         println!("\nManual Squire-Young:");
         println!("  exponent = 0.5 * (5 + {:.4}) = {:.4}", h, exponent);

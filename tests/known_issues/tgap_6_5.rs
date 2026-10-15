@@ -7,13 +7,14 @@
 
 use crate::fixtures::tgap_fixtures::load;
 use crate::utilities::tolerances::{assert_within, TOL_PURE};
+use cr_libm::hypot;
 use yfoil::geometry::set_te_gap;
 
 fn resulting_gap(case: &str) -> (f64, f64, f64) {
     let (panels, d, [gap, blend]) = load(case);
     let moved = set_te_gap(&panels, gap, blend);
     let nb = moved.x.len();
-    let new_gap = (moved.x[0] - moved.x[nb - 1]).hypot(moved.y[0] - moved.y[nb - 1]);
+    let new_gap = hypot(moved.x[0] - moved.x[nb - 1], moved.y[0] - moved.y[nb - 1]);
     (d.header["GAP"], gap, new_gap)
 }
 

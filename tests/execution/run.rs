@@ -7,18 +7,16 @@
 //! MINF and REINF within the tolerance; the converged point (ALFA, CL, CM, CD, CDF, CDP, the
 //! transition points, MINF, REINF; IST and ITRAN exactly) within `TOL_SOLVER`. The per-iteration
 //! tolerance is `TOL_SOLVER` for a run's first call and `TOL_TRANSIENT` for the calls after it,
-//! which carry the previous point's state. On a host other than the fixture's every value is held to
-//! `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × the reference's own measured cross-host
-//! spread of that value on that case)` (`common/utilities/cross_host.rs`). There is no third outcome: a run whose
+//! which carry the previous point's state, on every host: both codes take their transcendentals from
+//! the same correctly rounded functions (CORE-MATH), so neither depends on the host's libm. There is
+//! no third outcome: a run whose
 //! route differs from XFOIL's anywhere is a divergent comparison and not a run test
 //! (`docs/conventions/testing.md`, rule 3) — such cases are tested by single steps. An inviscid
 //! case's points are compared one by one (`step.rs`, `replay_inviscid`).
 
 use crate::fixtures::cases::{load, Op};
 use crate::step::replay_inviscid;
-use crate::utilities::cross_host::allowance;
 use crate::utilities::fortran::real;
-use crate::utilities::host::same_host;
 use crate::utilities::tolerances::{assert_within, TOL_SOLVER, TOL_TRANSIENT};
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::analysis::{PointResult, Session};
@@ -53,9 +51,6 @@ pub fn compare_run(case: &str, through: usize) -> Vec<PointResult> {
         }
         return vec![];
     }
-    // announces, once, when the fixture is from another host: every value is then held by
-    // `allowance` at no less than the reference's own measured cross-host spread
-    same_host(&c.dir);
     let its = iterations(&c.dir);
     assert_eq!(
         c.points.len(),
@@ -103,8 +98,7 @@ pub fn compare_run(case: &str, through: usize) -> Vec<PointResult> {
                 ("MINF", y.mach, r[11], 1.0),
                 ("REINF", y.re, r[12], r[12]),
             ] {
-                let g = allowance(case, &c.dir, "iteration", name, tol);
-                assert_within(ours, theirs, g.tol, scale, &format!("{ictx}: {name}{}", g.note));
+                assert_within(ours, theirs, tol, scale, &format!("{ictx}: {name}"));
             }
         }
         let st = session.state();
@@ -121,8 +115,7 @@ pub fn compare_run(case: &str, through: usize) -> Vec<PointResult> {
             ("MINF", st.mach, 1.0),
             ("REINF", st.re, st.re),
         ] {
-            let g = allowance(case, &c.dir, "point", name, TOL_SOLVER);
-            assert_within(ours, real(&x[name]), g.tol, scale, &format!("{ctx}: {name}{}", g.note));
+            assert_within(ours, real(&x[name]), TOL_SOLVER, scale, &format!("{ctx}: {name}"));
         }
         assert_eq!(st.i_stagnation_node, x["IST"].parse::<usize>().unwrap(), "{ctx}: IST");
         assert_eq!(

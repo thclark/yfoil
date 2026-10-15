@@ -7,6 +7,7 @@ use crate::bl::gauss::gauss_solve_4x4;
 use crate::bl::system::{check_transition, limit_dstar, FlowParameters, IntervalSystem, TransitionCheck};
 use crate::solver::blstate::SolverState;
 use crate::solver::pointers::xi_trip;
+use cr_libm::pow;
 
 /// One Newton iteration of one station, as the reference trace records it.
 #[derive(Debug, Clone, Default)]
@@ -80,8 +81,8 @@ pub fn march_direct(
         let xsi0 = state.xi[side][ibl0];
         let uei0 = state.ue[side][ibl0];
         let bule = 1.0_f64;
-        let ucon = uei0 / xsi0.powf(bule);
-        let tsq = 0.45 / (ucon * (5.0 * bule + 1.0) * params.re) * xsi0.powf(1.0 - bule);
+        let ucon = uei0 / pow(xsi0, bule);
+        let tsq = 0.45 / (ucon * (5.0 * bule + 1.0) * params.re) * pow(xsi0, 1.0 - bule);
         let mut thi = tsq.sqrt();
         let mut dsi = 2.2 * thi;
         let mut ami = 0.0;
@@ -381,8 +382,8 @@ pub fn march_direct(
                     // the current solution is garbage --> extrapolate values instead
                     if i_station > 3 {
                         if i_station <= state.i_te_station[side] {
-                            thi = state.theta[side][ibm] * (state.xi[side][i_station] / state.xi[side][ibm]).powf(0.5);
-                            dsi = state.dstar[side][ibm] * (state.xi[side][i_station] / state.xi[side][ibm]).powf(0.5);
+                            thi = state.theta[side][ibm] * pow(state.xi[side][i_station] / state.xi[side][ibm], 0.5);
+                            dsi = state.dstar[side][ibm] * pow(state.xi[side][i_station] / state.xi[side][ibm], 0.5);
                         } else if i_station == state.i_te_station[side] + 1 {
                             cti = cte;
                             thi = tte;

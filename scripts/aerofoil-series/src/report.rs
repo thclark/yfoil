@@ -3,13 +3,14 @@
 
 use crate::naca456::CaseComparison;
 use crate::study::{validation_set, SeriesStudy, N_NODES};
+use cr_libm::hypot;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 
 fn te_gap(g: &yfoil::geometry::Geometry) -> f64 {
     let n = g.x.len();
-    (g.x[0] - g.x[n - 1]).hypot(g.y[0] - g.y[n - 1])
+    hypot(g.x[0] - g.x[n - 1], g.y[0] - g.y[n - 1])
 }
 
 fn max_thickness(g: &yfoil::geometry::Geometry) -> f64 {
