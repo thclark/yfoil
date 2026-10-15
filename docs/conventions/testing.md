@@ -48,8 +48,8 @@ Every test performs one, and only one, of the following functions.
    `non-finite` and `series` case — carries its own five 1-ULP twins (`twins = true`), at its own
    panelling, which is the only way to know whether XFOIL was ill-conditioned at a given point; a
    twin of a different case, or of the same section at another panel count, says nothing about it.
-7. **A test asserts something.** A diagnostic that only prints is not a test; it goes in
-   `examples/attic/`.
+7. **A test asserts something.** A diagnostic that only prints is not a test, and is not
+   committed: it is written under `.tmp/` and discarded.
 8. **A missing fixture fails the test** (`require_fixture`); it is never skipped.
 
 ## Validation and consistency
