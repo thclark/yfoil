@@ -37,7 +37,7 @@ point, met by **each code on its own**: XFOIL disagrees with itself under a one-
 of its input, and so does yFoil.
 
 Ill-conditioned solutions are not to be avoided in testing. Most of XFOIL's rarely-taken branches
-— the extrapolation fallback of a failed station, the relaxation limits, the negative-Ue islands,
+— the iterate fallback of a failed station, the relaxation limits, the negative-Ue islands,
 the stagnation-point fallbacks — exist precisely to cope with them, so the tests must reach them
 to cover those branches.
 

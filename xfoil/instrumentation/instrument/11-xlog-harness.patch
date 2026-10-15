@@ -366,7 +366,7 @@
 +C     the SETBL call it happened in (0 before the first SETBL), the
 +C     side and station, and one real (the value that decided it).
 +C     The events are the branch trace of the rarely-taken fallbacks
-+C     (garbage extrapolation, Ue floors, negative-Ue islands, ...)
++C     (iterate fallbacks, Ue floors, negative-Ue islands, ...)
 +C     that yFoil's replay tests assert one call at a time.
 +C------------------------------------------------------------------
 +      INCLUDE 'XLOG.INC'

@@ -21,7 +21,7 @@ why = "SETBL's BLMID(3) at each side's TE station only sets the interval CFM, wh
 [[site]]
 site = "xbl.f:825"
 calls = { BLMID = 1, CFL = 1 }
-why = "MRCHUE's fallback (a station Newton that did not converge) sets the extrapolated station's BLVAR then BLMID(1); the CFM it sets is not read after this point, and yFoil makes the BLVAR calls only (src/bl/mrchue.rs). BLMID(1) calls CFL"
+why = "MRCHUE's fallback (a station Newton that did not converge) sets the station's BLVAR then BLMID(1); the CFM it sets is not read after this point, and yFoil makes the BLVAR calls only (src/bl/mrchue.rs). BLMID(1) calls CFL"
 
 [[site]]
 site = "xbl.f:826"

@@ -58,7 +58,7 @@ differ by 3.6e-10 and 1.2e-10 relative in the largest Newton delta where the sam
 ≤ 2e-12 — the libm's 1-ULP differences through one near-singular Newton step, tested by `TOL_CROSS_HOST`
 (`tests/common/utilities/tolerances.rs`); `tests/common/utilities/host.rs` holds a test to `TOL_SOLVER` on
 the fixture's host and to `TOL_CROSS_HOST` on any other.
-The same cases wake the MRCHUE inverse wake march, the MRCHDU extrapolation fallback, BLVAR's Us and Hk
+The same cases wake the MRCHUE inverse wake march, the MRCHDU iterate fallback, BLVAR's Us and Hk
 clamps and TRCHEK2's iteration cap that every other case left open ([coverage.md](coverage.md)). Two
 XFOIL quirks surfaced here are registered in `docs/xfoil-known-issues.md` (§2.8, §4): MASS is never
 written on side 1's wake slots, and ASEQ's sequence-plot label loops forever on a non-finite CL/CM even

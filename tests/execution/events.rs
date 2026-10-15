@@ -16,8 +16,8 @@
 //!
 //! | event | branch | case, SETBL call | what is replayed |
 //! |---|---|---|---|
-//! | `MRCHUE_GARBAGE` (the extrapolation fallback; the tag is the instrumentation's) | xbl.f:788–827 | 16-212 M 0.7, 4412 N=160 M 0.5 … (first march) | MRCHUE from the VISCAL prologue, against `mrchdu_input_1.dat` |
-//! | `MRCHDU_GARBAGE` | xbl.f:1111–1135 | every non-finite case, call 1 | MRCHDU from `mrchdu_input_1.dat`, against `mrchdu_output_1.dat` |
+//! | `MRCHUE_ITERATE_FALLBACK` | xbl.f:788–827 | 16-212 M 0.7, 4412 N=160 M 0.5 … (first march) | MRCHUE from the VISCAL prologue, against `mrchdu_input_1.dat` |
+//! | `MRCHDU_ITERATE_FALLBACK` | xbl.f:1111–1135 | every non-finite case, call 1 | MRCHDU from `mrchdu_input_1.dat`, against `mrchdu_output_1.dat` |
 //! | `UPDATE_RDN4` | xbl.f:1474 | 64A010 TYPE 2 M 0.3, call 7 | SETBL/BLSOLV/UPDATE from `mrchdu_input_7.dat`, against `update_output_7.dat` |
 //! | `UPDATE_ISLAND` | xbl.f:1537 | 4412 M 0.6 ITER 60, call 51 | the same at call 51 |
 //! | `STMOVE_UEPS` | xpanel.f:1737 | 63-415 M 0.5, call 18 | UPDATE 18 then QVFUE/GAMQV/STMOVE, against `mrchdu_input_19.dat` |
@@ -231,15 +231,15 @@ fn assert_itran(session: &Session, o: &BlDump, what: &str) {
     );
 }
 
-/// MRCHUE (the first march) with its extrapolation-fallback events, against `mrchdu_input_1`.
+/// MRCHUE (the first march) with its iterate-fallback events, against `mrchdu_input_1`.
 fn check_mrchue(name: &str) {
     let c = case(name);
     let ev = events(&c.dir);
     // the first march runs inside SETBL call 1; the instrumentation stamps its events with the
     // counter as it was at MRCHUE's call (0 or 1)
-    let mut expected: Vec<(usize, usize)> = at(&ev, "MRCHUE_GARBAGE", 0);
-    expected.extend(at(&ev, "MRCHUE_GARBAGE", 1));
-    assert!(!expected.is_empty(), "{name}: no MRCHUE_GARBAGE events");
+    let mut expected: Vec<(usize, usize)> = at(&ev, "MRCHUE_ITERATE_FALLBACK", 0);
+    expected.extend(at(&ev, "MRCHUE_ITERATE_FALLBACK", 1));
+    assert!(!expected.is_empty(), "{name}: no MRCHUE_ITERATE_FALLBACK events");
     let (mut session, mut jogged) = prologue(&c);
     let (params, acrit) = params_of(&mut session);
     let mut trace = MrchueTrace::default();
@@ -248,19 +248,19 @@ fn check_mrchue(name: &str) {
         let (p, a) = params_of(j);
         march_direct(j.state_mut(), &p, a, None);
     }
-    let ours: Vec<(usize, usize)> = trace.rejected.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
-    assert_eq!(ours, expected, "{name}: MRCHUE rejected stations (IBL, IS)");
+    let ours: Vec<(usize, usize)> = trace.iterate_fallbacks.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
+    assert_eq!(ours, expected, "{name}: MRCHUE iterate-fallback stations (IBL, IS)");
     let o = dump(&c, "mrchdu_input_1.dat");
     assert_itran(&session, &o, &format!("{name} MRCHUE"));
     assert_arrays(&session, &jogged, &o, &format!("{name} MRCHUE"));
-    println!("{name}: MRCHUE extrapolation fallback at {ours:?} reproduced");
+    println!("{name}: MRCHUE iterate fallback at {ours:?} reproduced");
 }
 
-/// MRCHDU at SETBL call `k` with its extrapolation-fallback events, against `mrchdu_output_k`.
+/// MRCHDU at SETBL call `k` with its iterate-fallback events, against `mrchdu_output_k`.
 fn check_mrchdu(name: &str, k: usize) {
     let c = case(name);
     let ev = events(&c.dir);
-    let expected = at(&ev, "MRCHDU_GARBAGE", k);
+    let expected = at(&ev, "MRCHDU_ITERATE_FALLBACK", k);
     let (mut session, mut jogged) = seeded(&c, k);
     let (params, acrit) = params_of(&mut session);
     let mut trace = MrchduTrace::default();
@@ -269,12 +269,15 @@ fn check_mrchdu(name: &str, k: usize) {
         let (p, a) = params_of(j);
         march_prescribed_dstar(j.state_mut(), &p, a, None);
     }
-    let ours: Vec<(usize, usize)> = trace.rejected.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
-    assert_eq!(ours, expected, "{name} call {k}: MRCHDU rejected stations (IBL, IS)");
+    let ours: Vec<(usize, usize)> = trace.iterate_fallbacks.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
+    assert_eq!(
+        ours, expected,
+        "{name} call {k}: MRCHDU iterate-fallback stations (IBL, IS)"
+    );
     let o = dump(&c, &format!("mrchdu_output_{k}.dat"));
     assert_itran(&session, &o, &format!("{name} MRCHDU call {k}"));
     assert_arrays(&session, &jogged, &o, &format!("{name} MRCHDU call {k}"));
-    println!("{name} call {k}: MRCHDU extrapolation fallback at {ours:?} reproduced");
+    println!("{name} call {k}: MRCHDU iterate fallback at {ours:?} reproduced");
 }
 
 /// One SETBL/BLSOLV/UPDATE iteration at call `k`; returns the session after UPDATE and its events.
@@ -313,7 +316,7 @@ fn iterate(c: &Case, k: usize) -> (Session, Vec<Session>, Vec<UpdateEvent>) {
 }
 
 #[test]
-fn test_mrchue_extrapolation_fallback_events() {
+fn test_mrchue_iterate_fallback_events() {
     for name in [
         "naca16-212_n60_a4_re1e6_m07",
         "naca63-415_n60_a14_re1e6_m05",
@@ -326,7 +329,7 @@ fn test_mrchue_extrapolation_fallback_events() {
 }
 
 #[test]
-fn test_mrchdu_extrapolation_fallback_events_call_1() {
+fn test_mrchdu_iterate_fallback_events_call_1() {
     for name in [
         "naca16-212_n60_a4_re1e6_m07",
         "naca63-415_n60_a14_re1e6_m05",

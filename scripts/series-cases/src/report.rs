@@ -143,7 +143,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           the point, or where the point comes after one that parted in the same leg — it then started from a \
           state the reference did not compute, and its comparison is informational. An orange outer square \
           marks a point during which that code went through a non-finite value: a station Newton whose residual \
-          was NaN (the extrapolation fallback then carries the march past it — for the reference, any `NaN` it \
+          was NaN (the iterate fallback then carries the march past it — for the reference, any `NaN` it \
           printed during the call; for yFoil, its own count of such stations) or a non-finite RMSBL, CL, CD or CM \
           in any iteration; where the plotted value is itself NaN and cannot be placed, an orange tick at the top \
           of the panel marks its α. A black outer diamond marks a point within which yFoil parts from the \
