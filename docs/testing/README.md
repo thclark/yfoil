@@ -35,12 +35,13 @@ tested is recorded beside it in `xtask/fixtures-config/cases.toml`: the calls be
 
 | Case (`tests/fixtures/xfoil/…`) | OPER script | Reference behaviour | Tested as |
 |---|---|---|---|
-| `naca0012_n160_polar_up22_re1e6_iter100` | `ALFA 0 / ASEQ 0.5 22 0.5` | 20.5°–21.5° unconverged; 22° converges on the separated branch (CL ≈ 0.35) in 7 iterations, its 1-ULP twins do not | run through call 41; every iteration of call 42 as a step |
-| `naca4412_n160_polar_down16_re1e6_iter100` | `ALFA 0 / INIT / ALFA 0 / ASEQ -0.5 -16 -0.5` | −14.5°–−15.5° unconverged; −16° converges on the separated branch (CL ≈ +0.05) in 39 iterations, its twins do not | run through call 30; every iteration of call 31 as a step |
+| `naca0012_n160_polar_up22_re1e6_iter100` | `ALFA 0 / ASEQ 0.5 22 0.5` | 20.5°–22° unconverged (on the host-libm reference, before 2026-10-15, 22° converged on the separated branch in 7 iterations) | run through call 41; every iteration of call 42 as a step |
+| `naca4412_n160_polar_down16_re1e6_iter100` | `ALFA 0 / INIT / ALFA 0 / ASEQ -0.5 -16 -0.5` | −14.5° converges on the separated branch (CL ≈ +0.10) in 53 iterations, its 1-ULP twins do not (four wander for 105, one converges elsewhere); −15° to −16° follow on that branch (CL ≈ +0.05 at −16°). On the host-libm reference −14.5° to −15.5° were unconverged and −16° converged in 39 | run through call 30; every iteration of call 31 as a step |
 
 In both cases the reference's own 1-ULP twins part from the reference, and flip its stagnation and
 transition stations, before yFoil does, and every step replayed from XFOIL's dumped state at the break
-reproduces the step. Whether the fourth attempt converges is therefore decided at the noise floor; a polar
+reproduces the step. Which attempt converges is therefore decided at the noise floor — changing the
+reference's libm moved it in both cases; a polar
 that "carries on" past the break in one code and halts in the other is a divergent comparison, not a
 translation bug, and no test compares the two codes' own marches through it.
 

@@ -8,20 +8,14 @@
     "cls": [],
     "damp": false,
     "dump_calls": [
-      1,
-      51,
-      52
+      1
     ],
     "events": true,
     "foil": "naca4:4412",
     "inviscid": false,
     "keep": [
       "mrchdu_input_1.dat",
-      "mrchdu_output_1.dat",
-      "mrchdu_input_51.dat",
-      "update_output_51.dat",
-      "mrchdu_input_52.dat",
-      "viscal_points.dat"
+      "mrchdu_output_1.dat"
     ],
     "mach": 0.6,
     "matyp": 0,

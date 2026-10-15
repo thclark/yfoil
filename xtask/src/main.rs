@@ -905,11 +905,16 @@ fn audit(root: &Path) {
         .split('\0')
         .filter(|f| !f.is_empty() && !f.ends_with(".rs") && !f.ends_with("README.md"))
         .map(|f| root.join(f))
+        // a file git still lists but a regeneration removed is a deletion to commit, not a fixture
+        .filter(|f| f.exists())
         .collect();
     let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(946_684_800);
     for chunk in files.chunks(500) {
         run(
-            Command::new("touch").args(["-a", "-t", "200001010000"]).args(chunk),
+            // -c: a file git still lists but a regeneration removed must not be recreated, empty
+            Command::new("touch")
+                .args(["-a", "-c", "-t", "200001010000"])
+                .args(chunk),
             "touch -a",
         );
     }
@@ -960,12 +965,17 @@ fn audit_by_test(root: &Path) {
         .split('\0')
         .filter(|f| !f.is_empty() && !f.ends_with(".rs") && !f.ends_with("README.md"))
         .map(|f| root.join(f))
+        // a file git still lists but a regeneration removed is a deletion to commit, not a fixture
+        .filter(|f| f.exists())
         .collect();
     let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(946_684_800);
     let reset = || {
         for chunk in files.chunks(500) {
             run(
-                Command::new("touch").args(["-a", "-t", "200001010000"]).args(chunk),
+                // -c: a file git still lists but a regeneration removed must not be recreated, empty
+                Command::new("touch")
+                    .args(["-a", "-c", "-t", "200001010000"])
+                    .args(chunk),
                 "touch -a",
             );
         }

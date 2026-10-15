@@ -12,7 +12,7 @@ yFoil's boundary-layer closure functions against the calls the instrumented XFOI
 | DIL | 200 | 200 | 0 | 0.00e0 | ✓ |
 | HST | 200 | 200 | 0 | 0.00e0 | ✓ |
 | CFT | 200 | 200 | 0 | 0.00e0 | ✓ |
-| DAMPL | 200 | 200 | 0 | 3.59e-15 | ✓ |
+| DAMPL | 200 | 200 | 0 | 2.20e-15 | ✓ |
 
 ## What is compared
 
@@ -20,10 +20,10 @@ Each fixture is one call of the closure inside a real run of the instrumented do
 
 | Case | Reference build host | libm |
 |------|------|------|
-| `closures_naca0012_n60_re1e6` | arm64-Darwin-24.6.0 | /usr/lib/libSystem.B.dylib 1345.120.2) |
-| `closures_naca0012_n60_re1e6_m03` | arm64-Darwin-24.6.0 | /usr/lib/libSystem.B.dylib 1345.120.2) |
+| `closures_naca0012_n60_re1e6` | arm64-Darwin-24.6.0 | CORE-MATH commit=85430b3ef7d2beb0de16d7c569ffa9bb391615ed (-O2 -ffp-contract=off); host /usr/lib/libSystem.B.dylib 1345.120.2) |
+| `closures_naca0012_n60_re1e6_m03` | arm64-Darwin-24.6.0 | CORE-MATH commit=85430b3ef7d2beb0de16d7c569ffa9bb391615ed (-O2 -ffp-contract=off); host /usr/lib/libSystem.B.dylib 1345.120.2) |
 
-This report was generated on `aarch64-macos`. On the reference's own host both codes take their transcendentals (`exp`, `log`, `tanh`, `**`) from the same libm, and the reference is built with `-ffp-contract=off`, so a translation that evaluates each expression in XFOIL's order gives the same bits: an error of exactly 0 means bit-identical, which is what most closures show. A non-zero error on that host means the translation does not evaluate the expression bit for bit as XFOIL does: DAMPL's, about 16 ULP, is within `TOL_PURE` and has not been traced to the operation. On another host the libm differs by one ULP on a fraction of inputs (CLAUDE.md Rule 1) and some errors become non-zero at that level.
+This report was generated on `aarch64-macos`. Both codes take their transcendentals (`exp`, `log`, `tanh`, `**`) from the same correctly rounded functions (CORE-MATH, `cr-libm`), whose results do not depend on the host, and the reference is built with `-ffp-contract=off`, so a translation that evaluates each expression in XFOIL's order gives the same bits: an error of exactly 0 means bit-identical, which is what most closures show. A non-zero error means the translation does not evaluate the expression bit for bit as XFOIL does: DAMPL's, a few ULP (the table above), is within `TOL_PURE` and has not been traced to the operation.
 
 ## Tolerance
 

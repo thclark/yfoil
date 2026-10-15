@@ -323,6 +323,7 @@ fn test_mrchue_iterate_fallback_events() {
         "naca4412_n60_a16_re1e6_m06_iter60",
         "naca4412_n160_a16_re1e6_m05",
         "naca64a010_n60_type2_m03_a0",
+        "naca2412_n60_a14_re1e6_m05_iter60",
     ] {
         check_mrchue(name);
     }
@@ -336,6 +337,7 @@ fn test_mrchdu_iterate_fallback_events_call_1() {
         "naca4412_n60_a16_re1e6_m06_iter60",
         "naca4412_n160_a16_re1e6_m05",
         "naca64a010_n60_type2_m03_a0",
+        "naca2412_n60_a14_re1e6_m05_iter60",
     ] {
         check_mrchdu(name, 1);
     }
