@@ -72,7 +72,7 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
-# how tested: route identical to XFOIL, RMSBL drifts 1.2e-9 over TOL_SOLVER at iteration 3 (ill-conditioned solution): every iteration as a single step
+# how tested: route identical to XFOIL, RMSBL drifts 3.1e-9 over TOL_SOLVER at iteration 3 (ill-conditioned solution): every iteration as a single step
 step_calls = [1]
 track = true
 
@@ -99,7 +99,7 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 dump_calls = [18, 19]                    # replay harness: iteration 19 is where the unconverged trajectories part
-# how tested: route identical, RMSBL drifts 5.9e-10 over TOL_SOLVER at iteration 6: every iteration as a single step
+# how tested: route identical, RMSBL drifts 4.7e-10 over TOL_SOLVER at iteration 6: every iteration as a single step
 step_calls = [1]
 track = true
 
@@ -297,7 +297,7 @@ polar = true
 dump_calls = [237, 238]                  # replay harness: iterations 31 and 32 of the 20.5° call (call 42), where the runs part
 run = true
 run_through = 41
-# how tested: calls 1-41 take XFOIL's route; the break call 42 drifts (RMSBL 6e-9 at iteration 6): run through call 41, call 42 as single steps
+# how tested: calls 1-41 take XFOIL's route; the break call 42 drifts (RLX 1.1e-9 at iteration 5): run through call 41, call 42 as single steps
 step_calls = [42]
 track = true
 
@@ -317,7 +317,7 @@ polar = true
 dump_calls = [181, 182]                  # replay harness: iterations 15 and 16 of the -14.5° call (call 31), where the runs part
 run = true
 run_through = 30
-# how tested: calls 1-30 take XFOIL's route; the break call 31 drifts (RMSBL 1e-9 at iteration 4): run through call 30, call 31 as single steps
+# how tested: calls 1-30 take XFOIL's route; the break call 31 parts (XFOIL converges in 53 iterations; yFoil and four of the reference's five 1-ULP twins do not): run through call 30, call 31 as single steps
 step_calls = [31]
 track = true
 
@@ -455,7 +455,7 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 20
-# how tested: route identical, RMSBL drifts 2.3e-9 over TOL_TRANSIENT at call 2 iteration 11: every iteration as a single step
+# how tested: route identical, RMSBL drifts 1.2e-9 over TOL_TRANSIENT at call 2 iteration 5: every iteration as a single step
 step_calls = [1, 2]
 track = true
 
@@ -486,7 +486,7 @@ re = 3.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 40
-# how tested: route identical, RLX drifts 1.2e-10 over TOL_SOLVER at iteration 23: every iteration as a single step
+# how tested: route identical, RMSBL drifts 1.5e-10 over TOL_SOLVER at iteration 25: every iteration as a single step
 step_calls = [1]
 track = true
 
@@ -501,7 +501,7 @@ re = 1.0e6
 mach = 0.0
 ncrit = 9.0
 max_iterations = 50
-# how tested: route identical, RMSBL drifts 1.1e-10 over TOL_SOLVER at iteration 8: every iteration as a single step
+# how tested: route identical, RMSBL drifts 7.3e-9 over TOL_SOLVER at iteration 19: every iteration as a single step
 step_calls = [1]
 track = true
 
@@ -700,7 +700,7 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 polar = true
-# how tested: calls 1-7 take XFOIL's route; the 7 deg call 8 drifts (RLX 1.4e-9 at iteration 4, known issues 7.9): run through call 7, calls 8, 16 and 18 as single steps; TRCHEK2 and the station Newton of call 8 replayed from their dumped inputs (tests/subroutine/)
+# how tested: calls 1-7 take XFOIL's route; the 7 deg call 8 drifts (RLX 1.6e-9 at iteration 4, known issues 7.9): run through call 7, calls 8, 16 and 18 as single steps; TRCHEK2 and the station Newton of call 8 replayed from their dumped inputs (tests/subroutine/)
 run = true
 run_through = 7
 step_calls = [8, 16, 18]
@@ -718,12 +718,13 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 20
 polar = true
-# how tested: the +22 deg call 23 is an ill-conditioned solution (the reference's own floor grows from 1e-10 to 1e-2 within two iterations): every iteration of call 23 as a single step
+# how tested: the +22 deg call 23 is an ill-conditioned solution (yFoil's whole run converges it in 24 iterations, XFOIL in 18;
+# on the host-libm reference the reference's own floor grew from 1e-10 to 1e-2 within two iterations): every iteration of call 23 as a single step
 step_calls = [23]
 track = true
 
 [[case]]
-name = "naca4412_n160_polar30_re1e6_m05"    # NACA 4412 polar, N = 160, M 0.5, ITER 20: an EPS1 straddle at -5 deg; BLVAR's wake Us clamp in stall
+name = "naca4412_n160_polar30_re1e6_m05"    # NACA 4412 polar, N = 160, M 0.5, ITER 20: a compressible polar through stall; BLVAR's wake Us clamp in stall
 foil = "naca4:4412"
 n_nodes = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -733,8 +734,12 @@ mach = 0.5
 ncrit = 9.0
 max_iterations = 20
 polar = true
-# how tested: the -5 deg call 37 converges in 18 iterations where XFOIL takes 19 (RMSBL at the EPS1 test straddles): every iteration of call 37 as a single step
-step_calls = [37]
+# how tested: calls 1-20 take XFOIL's route; the 20 deg call 21 drifts (RMSBL 3.6e-9 at iteration 3) and the 27 deg call 28 is the
+# first whose iteration count differs (yFoil 19, XFOIL 13): run through call 20, calls 21 and 28 as single steps. (On the host-libm
+# reference the run parted at the -5 deg call 37, an EPS1 straddle.)
+run = true
+run_through = 20
+step_calls = [21, 28]
 track = true
 
 # ---- series cases (scripts/series-cases, untracked) --------------------------------------------

@@ -117,6 +117,12 @@ fn naca23012_n60_a4_re1e6_xtr022_0001_run() {
     compare_run("naca23012_n60_a4_re1e6_xtr022_0001", 0);
 }
 
+/// `naca4412_n160_polar30_re1e6_m05`: calls 1–20.
+#[test]
+fn naca4412_n160_polar30_re1e6_m05_run() {
+    compare_run("naca4412_n160_polar30_re1e6_m05", 20);
+}
+
 /// `naca0012_n60_polar30_re1e6`: calls 1–7.
 #[test]
 fn naca0012_n60_polar30_re1e6_run() {

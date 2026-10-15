@@ -97,7 +97,7 @@ fn naca4412_n60_polar30_re3e6_every_iteration() {
     every_iteration("naca4412_n60_polar30_re3e6");
 }
 
-/// `naca4412_n160_polar30_re1e6_m05`: calls [37].
+/// `naca4412_n160_polar30_re1e6_m05`: calls [21, 28].
 #[test]
 fn naca4412_n160_polar30_re1e6_m05_every_iteration() {
     every_iteration("naca4412_n160_polar30_re1e6_m05");
