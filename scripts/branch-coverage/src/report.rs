@@ -432,7 +432,7 @@ Every branch of the analysis path has exactly one of five statuses, drawn in the
   that any finite candidate takes, and the study stops with an error if it does not.\n\
 - **taken by the non-finite set** (blue) — the edge is taken only on runs of the `non-finite` group, whose \
   reference output contains `NaN`. In every case found so far XFOIL produced the non-finite value in \
-  TRCHEK2, whose transition-point Newton lands on the interval end; the MRCHUE/MRCHDU extrapolation fallback \
+  TRCHEK2, whose transition-point Newton lands on the interval end; the MRCHUE/MRCHDU iterate fallback \
   then puts finite values on the station and the run carries on. These runs cannot be compared whole, \
   because the reference's own 1-ULP twins wander by O(10²) on them. Each edge is tested instead as an \
   **event**: the instrumented reference writes `events.dat` (site, SETBL call, side, station, deciding value) \

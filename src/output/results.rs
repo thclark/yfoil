@@ -21,8 +21,9 @@ pub enum Reason {
     ClNewtonExhausted,
     /// VISCAL finished without LVCONV: the viscous-inviscid iteration did not converge
     ViscousNotConverged,
-    /// A station Newton failed with a non-finite residual, the march rejected its iterate and
-    /// carried on past it by the extrapolation fallback: the run went through a NaN
+    /// A station Newton failed with a non-finite residual and the march carried on past it by
+    /// the iterate fallback (beyond station 3 the station is set from the one upstream, at
+    /// stations 1–3 the non-finite iterate is kept): the run went through a NaN
     NonFiniteStationFailure,
     /// The sweep halted before reaching this alpha, so it was never attempted
     SequenceHalted,

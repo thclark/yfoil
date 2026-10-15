@@ -478,7 +478,7 @@
  C------ the current unconverged solution might still be reasonable...
  CCC        IF(DMAX .LE. 0.1) GO TO 110
          IF(DMAX .LE. 0.1) GO TO 109
-+        CALL EVLOG('MRCHUE_GARBAGE', IS, IBL, DMAX)
++        CALL EVLOG('MRCHUE_ITERATE_FALLBACK', IS, IBL, DMAX)
  C
  C------- the current solution is garbage --> extrapolate values instead
           IF(IBL.GT.3) THEN 
@@ -603,7 +603,7 @@
  C------ the current unconverged solution might still be reasonable...
  CCC        IF(DMAX .LE. 0.1) GO TO 110
          IF(DMAX .LE. 0.1) GO TO 109
-+        CALL EVLOG('MRCHDU_GARBAGE', IS, IBL, DMAX)
++        CALL EVLOG('MRCHDU_ITERATE_FALLBACK', IS, IBL, DMAX)
  C
  C------- the current solution is garbage --> extrapolate values instead
           IF(IBL.GT.3) THEN

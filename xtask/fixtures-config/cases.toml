@@ -476,7 +476,7 @@ run = true
 track = true
 
 [[case]]
-name = "naca4412_n60_a18_re3e6_iter40"    # stalled first march at Re 3e6: MRCHUE's extrapolation fallback at airfoil, wake-start and wake stations, ITRAN reset, wake closures after a failure
+name = "naca4412_n60_a18_re3e6_iter40"    # stalled first march at Re 3e6: MRCHUE's iterate fallback at airfoil, wake-start and wake stations, ITRAN reset, wake closures after a failure
 group = "branch-coverage"
 twins = true
 foil = "naca4:4412"
@@ -521,7 +521,7 @@ damp = true
 # ---- non-finite probes (scripts/branch-coverage, untracked) ------------------------------------
 # The stalled compressible and closed-TE-stall candidates of the branch-coverage search. Each
 # reaches analysis-path branches no finite case reaches, but only after XFOIL has produced a NaN
-# (TRCHEK2's transition-point Newton landing on the interval end, then MRCHUE/MRCHDU's extrapolation
+# (TRCHEK2's transition-point Newton landing on the interval end, then MRCHUE/MRCHDU's iterate
 # fallback carrying on). They are tracked but never part of the default selection: the study
 # measures them (`--with-group non-finite`) and reports the branches they alone reach as
 # *non-finite only*. The whole run cannot be compared, but each event is: the instrumentation writes
@@ -759,7 +759,7 @@ track = false
 twins = true
 
 [[case]]
-name = "naca4412_n160_polar30_re3e6_iter100"    # NACA 4412, Re 3e6: a stalled first march takes MRCHUE's extrapolation (cover: naca4412_n60_a18_re3e6_iter40)
+name = "naca4412_n160_polar30_re3e6_iter100"    # NACA 4412, Re 3e6: a stalled first march takes MRCHUE's iterate fallback (cover: naca4412_n60_a18_re3e6_iter40)
 foil = "naca4:4412"
 n_nodes = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]

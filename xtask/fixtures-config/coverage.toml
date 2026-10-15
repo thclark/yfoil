@@ -471,36 +471,36 @@ test = "tests/execution/events.rs::test_stmove_ue_floor_after_call_18"
 file = "xbl.f"
 line = 788
 branch = 1
-reach = "MRCHUE Newton failure with residual > 0.1 at IBL <= 3 (no extrapolation possible) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/); IBL = 3 reached there, IBL = 2 by none"
-test = "tests/execution/events.rs::test_mrchue_extrapolation_fallback_events"
+reach = "MRCHUE Newton failure with residual > 0.1 at IBL <= 3 (the rejected iterate is kept) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/); IBL = 3 reached there, IBL = 2 by none"
+test = "tests/execution/events.rs::test_mrchue_iterate_fallback_events"
 
 [[note]]
 file = "xbl.f"
 line = 792
 branch = 0
 reach = "MRCHUE Newton failure with residual > 0.1 at the first wake station (IBL = IBLTE+1: TE values used) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
-test = "tests/execution/events.rs::test_mrchue_extrapolation_fallback_events"
+test = "tests/execution/events.rs::test_mrchue_iterate_fallback_events"
 
 [[note]]
 file = "xbl.f"
 line = 1111
 branch = 1
 reach = "MRCHDU Newton failure with residual > 0.1 at IBL <= 3 — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
-test = "tests/execution/events.rs::test_mrchdu_extrapolation_fallback_events_call_1"
+test = "tests/execution/events.rs::test_mrchdu_iterate_fallback_events_call_1"
 
 [[note]]
 file = "xbl.f"
 line = 1116
 branch = 0
 reach = "MRCHDU Newton failure with residual > 0.1 at the first wake station — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
-test = "tests/execution/events.rs::test_mrchdu_extrapolation_fallback_events_call_1"
+test = "tests/execution/events.rs::test_mrchdu_iterate_fallback_events_call_1"
 
 [[note]]
 file = "xbl.f"
 line = 1135
 branch = 1
 reach = "MRCHDU Newton failure with residual > 0.1 at the similarity station — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
-test = "tests/execution/events.rs::test_mrchdu_extrapolation_fallback_events_call_1"
+test = "tests/execution/events.rs::test_mrchdu_iterate_fallback_events_call_1"
 
 [[note]]
 file = "xbl.f"
@@ -731,7 +731,7 @@ why = "VISCAL is only ever called under IF(LVISC) (xoper.f:435, 492, 527, 680) a
 file = "xbl.f"
 line = 628
 class = "structural"
-why = "CTI enters MRCHUE as 0.03 (xbl.f:583), is only changed at IBL >= ITRAN, and every such Newton update is clamped to >= 1e-7 (xbl.f:757) before the next TRCHEK; the extrapolation fallback sets it to 0.05 or the upstream CTAU (also clamped); NaN compares false. CTI <= 0 at the transition check cannot occur"
+why = "CTI enters MRCHUE as 0.03 (xbl.f:583), is only changed at IBL >= ITRAN, and every such Newton update is clamped to >= 1e-7 (xbl.f:757) before the next TRCHEK; the iterate fallback sets it to 0.05 or the upstream CTAU (also clamped); NaN compares false. CTI <= 0 at the transition check cannot occur"
 
 [[unreachable]]
 file = "xbl.f"

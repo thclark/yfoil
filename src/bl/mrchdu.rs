@@ -50,10 +50,12 @@ pub struct MrchduTrace {
     pub iters: Vec<MrchduIter>,
     /// (IBL, IS, DMAX) for every station whose 25 Newton iterations did not converge
     pub failed: Vec<(usize, usize, f64)>,
-    /// the subset whose residual was above 0.1 (or non-finite), so that their last iterate was
-    /// rejected: beyond station 3 the extrapolation fallback replaced it with values extrapolated
-    /// from the station upstream
-    pub rejected: Vec<(usize, usize, f64)>,
+    /// the subset whose residual was above 0.1 (or non-finite), so that the march took
+    /// the iterate fallback: XFOIL rejects the iterate and, beyond station 3, sets the station from
+    /// the one upstream (θ and δ* scaled by √(ξ/ξ_prev) on the aerofoil, the trailing-edge values at
+    /// the first wake station, δ* relaxed towards θ further down the wake); at stations 1–3 it keeps
+    /// the rejected iterate
+    pub iterate_fallbacks: Vec<(usize, usize, f64)>,
 }
 
 /// MRCHDU. Requires the pointer layer (XSSI, IBLTE, NBL, WGAP), the current
@@ -372,7 +374,7 @@ pub fn march_prescribed_dstar(
                 // whose closures went non-finite) as XFOIL does (docs/xfoil-known-issues.md §7.10)
                 if !(dmax <= 0.1) {
                     if let Some(t) = trace.as_mut() {
-                        t.rejected.push((i_station, side, dmax));
+                        t.iterate_fallbacks.push((i_station, side, dmax));
                     }
                     if !dmax.is_finite() {
                         state.nonfinite_station_failures += 1;
