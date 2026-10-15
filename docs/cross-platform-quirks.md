@@ -1,5 +1,8 @@
 # Cross-platform quirks
 
+Superseded by the resolution below: since 2026-10-15 neither code takes its maths from the host. The
+notes above it record why that was needed.
+
 Raw notes from the 2026-09-11 investigation of the Build and Test workflow failing on GitHub (Linux runner)
 while every test passed on the fixture host (arm64 macOS). To be tidied into a coherent overview of
 cross-platform issues. Branch `fix-ci-cross-host`, PR #9.
@@ -63,11 +66,36 @@ replay value, failing only on those macOS-specific pins.
 - CLAUDE.md, `docs/testing/README.md` (*Polar break points*) and `docs/xfoil-known-issues.md` §7.4
   record the measurement.
 
-## Still open
+## Resolution: one correctly rounded libm for both codes (2026-10-15)
 
-- Whether glibc's results are stable across its own versions (2.36 vs 2.39) was not measured; a same-OS
-  libm drift would surface in `tests/fixtures/cross-host/spread.json` when `scripts/cross-host.sh` is
-  rerun on the newer glibc.
+The host dependence is removed at its source rather than budgeted for. Both codes now take every
+transcendental from CORE-MATH's correctly rounded functions, compiled from one vendored copy
+(`third-party/core-math`, upstream commit in `core-math.ORIGIN`) with the same flags: the reference is
+linked against them through `scripts/xfoil-build/core_math_libm.c`, yFoil calls them through the
+`cr-libm` crate, and `clippy.toml` disallows `std`'s `f64` methods. A correctly rounded result is a
+property of its argument alone, so it is the same on every host, and the same in both codes.
+
+What it took, found on the way:
+
+| Finding | Consequence |
+|---|---|
+| Linking CORE-MATH in place of `exp`, `log`, `pow`… was not enough. GCC fuses a `SIN`/`COS` pair of one argument: into `sincos` on glibc, and into `cexp(i·x)` on Darwin, which has no `sincos` | Both are shimmed. The Darwin `cexp` leak alone moved one inviscid TYPE 2 case (`naca64a010_n60_inviscid_type2_m03`, the `CL 8` point) by 1 ULP in `SIN(ALFA)` inside CLCALC, located by forward-stepping a probe through SPECCL on both hosts |
+| A shim can fail silently | Every build now fails if `nm -u` shows any maths function left to the host libm, except MDES's `cabs`/`clog` (inverse design, out of scope) and `sqrt`, which IEEE 754 requires correctly rounded |
+| The cross-host container reused a reference binary built a week earlier, and `cargo xtask fixtures` reused any existing binary | Each build stage records a fingerprint of everything it depends on; every xtask that runs the reference rebuilds a stage whose fingerprint is not current, and the fixture manifests carry it (`inputs_fingerprint`). Twins are kept on regeneration only if the reference is unchanged too |
+| CORE-MATH compiled by Apple clang and by GCC | Identical hashes of 5 million outputs per function, all 11 functions; `cr_sincos` equals `cr_sin`/`cr_cos` on 20 million inputs |
+| The smoke case | `cp.dat`, `bl.dat` and the console output byte-identical between arm64 macOS and aarch64 glibc |
+
+Changing the libm moved the reference's own trajectories wherever they are ill-conditioned: the
+non-finite probes' rarely taken branches now fall at other SETBL calls (`UPDATE_RDN4` in the 64A010
+TYPE 2 M 0.3 case moved from call 7 to call 17), which is why the fixtures, the step cover and the
+coverage measurement are regenerated together.
+
+With the host's libm out of both codes, the cross-host tolerances (`TOL_CROSS_HOST`,
+`CROSS_HOST_FACTOR`), the measured spread (`tests/fixtures/cross-host/spread.json`) and the host check
+(`tests/common/utilities/host.rs`) described above were removed: every test holds its values to the same
+tolerance on every host. `scripts/cross-host.sh` now checks that the reference reproduces every tracked
+record byte for byte on glibc, and the `reference-build` workflow that the CI reference case regenerates
+byte for byte on Linux. Whether glibc's own versions agree is no longer a question for either code.
 
 ## Reproducing
 

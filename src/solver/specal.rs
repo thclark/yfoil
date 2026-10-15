@@ -9,6 +9,7 @@ use crate::solver::ggcalc::{build_inviscid_system, InviscidSystem};
 use crate::solver::pointers::set_te_thickness;
 use crate::solver::setbl::set_mach_re_from_cl;
 use crate::solver::velocity::set_q_inviscid;
+use cr_libm::{cos, sin};
 
 /// OPER's `ALFA` command: sets LALFA, ALFA (radians) and QINF = 1, runs SPECAL, then
 /// invalidates the wake and the converged flag when alpha or Mach moved by more than 1e-5
@@ -57,8 +58,8 @@ pub fn solve_inviscid_at_alpha(state: &mut SolverState, sys: &mut Option<Invisci
         *sys = Some(build_inviscid_system(state));
     }
 
-    let cosa = state.alpha.cos();
-    let sina = state.alpha.sin();
+    let cosa = cos(state.alpha);
+    let sina = sin(state.alpha);
 
     // superimpose suitably weighted  alpha = 0, 90  distributions (GAMU(I,·) = QINVU(I,·) on
     // the airfoil nodes; PSIO is not kept)
@@ -158,8 +159,8 @@ pub fn solve_inviscid_at_cl(state: &mut SolverState, sys: &mut Option<InviscidSy
 
     // current alpha is the initial guess for Newton variable ALFA
     let set_gam = |state: &mut SolverState| {
-        let cosa = state.alpha.cos();
-        let sina = state.alpha.sin();
+        let cosa = cos(state.alpha);
+        let sina = sin(state.alpha);
         for i in 1..=state.n_foil_nodes {
             state.gamma[i] = cosa * state.q_inviscid_basis[1][i] + sina * state.q_inviscid_basis[2][i];
             state.gamma_d_alpha[i] = -sina * state.q_inviscid_basis[1][i] + cosa * state.q_inviscid_basis[2][i];

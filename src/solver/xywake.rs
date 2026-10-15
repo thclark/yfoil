@@ -3,6 +3,7 @@
 
 use crate::solver::blstate::SolverState;
 use crate::solver::psilin::panel_influence;
+use cr_libm::{atan2, pow};
 
 /// SETEXP: geometrically stretched array S(1..=nn) with S(1) = 0, S(2)-S(1) = ds1, S(nn) = smax.
 /// Ported character for character: the ratio is found by Newton iteration to |dRatio| < 1e-5
@@ -35,9 +36,9 @@ pub fn exponential_spacing(ds1: f64, smax: f64, nn: usize) -> Vec<f64> {
         let mut converged = false;
         for _ in 0..100 {
             let sigman = (ratio.powi(nex as i32) - 1.0) / (ratio - 1.0);
-            let res = sigman.powf(rni) - sigma.powf(rni);
+            let res = pow(sigman, rni) - pow(sigma, rni);
             let dresdr =
-                rni * sigman.powf(rni) * (rnex * ratio.powi(nex as i32 - 1) - sigman) / (ratio.powi(nex as i32) - 1.0);
+                rni * pow(sigman, rni) * (rnex * ratio.powi(nex as i32 - 1) - sigman) / (ratio.powi(nex as i32) - 1.0);
             let dratio = -res / dresdr;
             ratio += dratio;
             if dratio.abs() < 1.0e-5 {
@@ -96,7 +97,7 @@ pub fn build_wake(state: &mut SolverState, waklen: f64) {
     state.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
 
     // set angle of wake panel normal
-    state.panel_angle[i] = psi_y.atan2(psi_x);
+    state.panel_angle[i] = atan2(psi_y, psi_x);
 
     // set rest of wake points
     for i in (n + 2)..=(n + nw) {
@@ -119,7 +120,7 @@ pub fn build_wake(state: &mut SolverState, waklen: f64) {
         state.normal_y[i + 1] = -psi_y / (psi_x * psi_x + psi_y * psi_y).sqrt();
 
         // set angle of wake panel normal
-        state.panel_angle[i] = psi_y.atan2(psi_x);
+        state.panel_angle[i] = atan2(psi_y, psi_x);
     }
     // LWAKE = .TRUE., AWAKE = ALFA, LWDIJ = .FALSE. (new wake geometry invalidates the wake DIJ)
     state.wake_built = true;

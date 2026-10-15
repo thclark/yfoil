@@ -4,6 +4,7 @@
 
 use std::f64::consts::PI;
 use yfoil::geometry::{panel_foil, read_dat_file};
+use cr_libm::{ln, atan2};
 
 const QOPI: f64 = 0.25 / PI;
 
@@ -21,7 +22,7 @@ fn main() {
     // Compute panel angles
     let mut apanel = vec![0.0; n];
     for j in 0..n {
-        apanel[j] = (-airfoil.ny[j]).atan2(-airfoil.nx[j]);
+        apanel[j] = atan2(-airfoil.ny[j], -airfoil.nx[j]);
     }
 
     // Control point i=0 (first node, upper TE)
@@ -83,20 +84,20 @@ fn main() {
         let (g1, t1) = if i == jo || rs1 < 1e-24 {
             (0.0, 0.0)
         } else {
-            (rs1.ln(), (sgn * x1).atan2(sgn * yy))
+            (ln(rs1), atan2(sgn * x1, sgn * yy))
         };
 
         let (g2, t2) = if i == jp || rs2 < 1e-24 {
             (0.0, 0.0)
         } else {
-            (rs2.ln(), (sgn * x2).atan2(sgn * yy))
+            (ln(rs2), atan2(sgn * x2, sgn * yy))
         };
 
         // Midpoint quantities
         let x0 = 0.5 * (x1 + x2);
         let rs0 = x0 * x0 + yy * yy;
-        let g0 = if rs0 > 1e-24 { rs0.ln() } else { 0.0 };
-        let t0 = (sgn * x0).atan2(sgn * yy);
+        let g0 = if rs0 > 1e-24 { ln(rs0) } else { 0.0 };
+        let t0 = atan2(sgn * x0, sgn * yy);
 
         // First half-panel (1 to 0)
         let dxinv_10 = if (x1 - x0).abs() > 1e-14 {

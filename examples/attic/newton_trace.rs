@@ -8,6 +8,7 @@ use yfoil::bl::{cf_laminar, cf_turbulent, cdiss_laminar, hkin, hstar_laminar, hs
 use yfoil::geometry::{panel_foil, Geometry};
 use yfoil::panel::solve_inviscid;
 use yfoil::solver::{extract_upper_surface, find_stagnation_point};
+use cr_libm::{exp, ln};
 
 /// Load geometry from JSON file
 fn load_geometry(path: &str) -> Geometry {
@@ -183,9 +184,9 @@ fn solve_station_instrumented(
         let use_log_form = s1 > 1e-6;
 
         let (r1, dr1_dt2, dr1_dd2) = if use_log_form {
-            let tlog = (theta2 / theta1).ln();
-            let ulog = (ue2 / ue1).ln();
-            let xlog = (s2 / s1).ln();
+            let tlog = ln(theta2 / theta1);
+            let ulog = ln(ue2 / ue1);
+            let xlog = ln(s2 / s1);
             let btmp = h_avg + 2.0 - cond.msq;
 
             let cfx = 0.5 * cf_mid.val * s_avg / theta_avg + 0.25 * (cf1.val * s1 / theta1 + cf_res.val * s2 / theta2);
@@ -216,15 +217,15 @@ fn solve_station_instrumented(
         let upw = {
             let hdcon = 5.0 / hk2.powi(2);
             let arg = ((hk2 - 1.0) / (hk1 - 1.0).max(0.01)).abs();
-            let hl = arg.ln();
+            let hl = ln(arg);
             let hlsq = hl.powi(2).min(15.0);
-            1.0 - 0.5 * (-hlsq * hdcon).exp()
+            1.0 - 0.5 * exp(-hlsq * hdcon)
         };
 
         let (r2, dr2_dt2, dr2_dd2) = if use_log_form {
-            let hlog = (hs_res.val / hs1.val).ln();
-            let ulog = (ue2 / ue1).ln();
-            let xlog = (s2 / s1).ln();
+            let hlog = ln(hs_res.val / hs1.val);
+            let ulog = ln(ue2 / ue1);
+            let xlog = ln(s2 / s1);
             let btmp_h = 1.0 - h_avg;
 
             let xot1 = s1 / theta1;

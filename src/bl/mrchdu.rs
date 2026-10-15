@@ -10,6 +10,7 @@ use crate::bl::hk_from_h;
 use crate::bl::system::{check_transition, limit_dstar, FlowParameters, FlowRegime, IntervalSystem, TransitionCheck};
 use crate::solver::blstate::SolverState;
 use crate::solver::pointers::xi_trip;
+use cr_libm::pow;
 
 /// One Newton iteration of one station, as the reference trace records it.
 #[derive(Debug, Clone, Default)]
@@ -382,8 +383,8 @@ pub fn march_prescribed_dstar(
                     // the current solution is garbage --> extrapolate values instead
                     if i_station > 3 {
                         if i_station <= state.i_te_station[side] {
-                            thi = state.theta[side][ibm] * (state.xi[side][i_station] / state.xi[side][ibm]).powf(0.5);
-                            dsi = state.dstar[side][ibm] * (state.xi[side][i_station] / state.xi[side][ibm]).powf(0.5);
+                            thi = state.theta[side][ibm] * pow(state.xi[side][i_station] / state.xi[side][ibm], 0.5);
+                            dsi = state.dstar[side][ibm] * pow(state.xi[side][i_station] / state.xi[side][ibm], 0.5);
                             uei = state.ue[side][ibm];
                         } else if i_station == state.i_te_station[side] + 1 {
                             cti = cte;

@@ -15,9 +15,6 @@ use yfoil::solver::analysis::{FlowConditions, Session};
 pub struct CaseComparison {
     pub name: String,
     pub calls: Vec<CallReport>,
-    /// the fixture's host (its manifest) and whether this is it
-    pub fixture_host: String,
-    pub same_host: bool,
     /// the reference's own 1-ULP spread: worst per-iteration and per-point values over the case
     pub floor_iteration_max: f64,
     pub floor_point_max: f64,
@@ -103,8 +100,6 @@ pub fn compare(root: &Path, case: &Case) -> CaseComparison {
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = panel_foil(&geometry);
     let rec = load(&dir);
-    let fixture_host = crate::utilities::host::Host::of_fixture(&dir);
-    let same_host = fixture_host == crate::utilities::host::Host::running();
     let mut session = Session::new(&airfoil, conditions(case));
     let mut calls: Vec<CallReport> = vec![];
     if case.inviscid {
@@ -172,8 +167,6 @@ pub fn compare(root: &Path, case: &Case) -> CaseComparison {
     CaseComparison {
         name: case.name.clone(),
         calls,
-        fixture_host: fixture_host.to_string(),
-        same_host,
         floor_iteration_max: fi,
         floor_point_max: fp,
         reference_iterations,

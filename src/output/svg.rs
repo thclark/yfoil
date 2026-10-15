@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::output::plot::PlotError;
+use cr_libm::{log10, pow};
 
 /// Pixel margins around the plot area
 #[derive(Debug, Clone, Copy)]
@@ -118,7 +119,7 @@ pub(crate) fn escape_xml(s: &str) -> String {
 /// A nice step size for axis ticks (1, 2, 5 × decade)
 pub(crate) fn nice_step(range: f64, target_ticks: usize) -> f64 {
     let rough_step = range / target_ticks as f64;
-    let magnitude = 10.0_f64.powf(rough_step.log10().floor());
+    let magnitude = pow(10.0_f64, log10(rough_step).floor());
     let normalized = rough_step / magnitude;
 
     let nice = if normalized < 1.5 {
@@ -454,7 +455,7 @@ fn tick_label(v: f64, step: f64) -> String {
     let decimals = if step >= 1.0 {
         0
     } else {
-        (-step.log10().floor()) as usize
+        (-log10(step).floor()) as usize
     };
     let s = format!("{:.*}", decimals, v);
     if s == "-0" || s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') {

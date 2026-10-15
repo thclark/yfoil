@@ -1,4 +1,4 @@
-# The other host of the cross-host measurement (scripts/cross-host.sh): Ubuntu 24.04, glibc 2.39,
+# The other host of the cross-host check (scripts/cross-host.sh): Ubuntu 24.04, glibc 2.39,
 # gfortran and Rust, the same toolchain classes as the CI runner (.github/workflows/build-and-test.yml).
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive

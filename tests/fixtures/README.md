@@ -34,19 +34,15 @@ cargo xtask steps --from-json              # the cover from the route-agreeing s
 
 and `cargo xtask fixtures` then adds the dumps the chosen steps need. `cargo xtask route` needs
 `rustup component add llvm-tools`; its reference runs, with every SETBL call dumped, live in
-`target/route/` and are not tracked. Fixture data is a property of
-the host it was generated on (manifest `host:` line); on another host the tests use
-`TOL_CROSS_HOST`, and the whole-run tests no less than `CROSS_HOST_FACTOR` × the reference's own
-spread between the two hosts' maths libraries on that case and value, measured into
-`tests/fixtures/cross-host/spread.json`:
+`target/route/` and are not tracked. Fixture data does not depend on the host it was generated
+on: both codes take their maths from CORE-MATH's correctly rounded functions, not the host libm, so
+the tests hold every value to the same tolerance on every host. That the reference reproduces the
+fixtures bit for bit elsewhere is checked by
 
 ```bash
 scripts/cross-host.sh    # needs docker: reruns the reference on glibc on every tracked run case's
-                         # own panels.dat and xfoil.inp, compares with the tracked records
+                         # own panels.dat and xfoil.inp; fails unless every record is byte-identical
 ```
-
-The file names both hosts and records the length and hash of every record it was measured
-against; a test fails when they have changed, so rerun it after regenerating a run case.
 
 ## Study data (untracked)
 

@@ -117,12 +117,6 @@ fn naca23012_n60_a4_re1e6_xtr022_0001_run() {
     compare_run("naca23012_n60_a4_re1e6_xtr022_0001", 0);
 }
 
-/// `naca0012_n60_a8_re1e4_damp`: the whole run.
-#[test]
-fn naca0012_n60_a8_re1e4_damp_run() {
-    compare_run("naca0012_n60_a8_re1e4_damp", 0);
-}
-
 /// `naca0012_n60_polar30_re1e6`: calls 1–7.
 #[test]
 fn naca0012_n60_polar30_re1e6_run() {

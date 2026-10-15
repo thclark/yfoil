@@ -527,8 +527,9 @@ damp = true
 # *non-finite only*. The whole run cannot be compared, but each event is: the instrumentation writes
 # `events.dat` (site, SETBL call, side, station, value) and `dump_calls` keeps the state dumps of
 # those calls, so tests/xfoil_nonfinite_events_tests.rs replays one call at a time.
-# how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
-run = true
+# how tested: route identical, RMSBL drifts 2.4e-10 over TOL_SOLVER at iteration 8, where the reference's own
+# 1-ULP twins spread by 5.3e-9 (since the CORE-MATH reference, 2026-10-15): every iteration as a single step
+step_calls = [1]
 track = true
 
 [[case]]
@@ -588,7 +589,7 @@ events = true
 track = true
 
 [[case]]
-name = "naca4412_n60_a16_re1e6_m06_iter60" # deep stall at M 0.6, ITER 60: UPDATE's island of negative Ue (reference prints NaN)
+name = "naca4412_n60_a16_re1e6_m06_iter60" # deep stall at M 0.6, ITER 60: the MRCHUE/MRCHDU iterate fallbacks (reference prints NaN); its UPDATE island moved off this run with the CORE-MATH reference (naca2412_n60_a14_re1e6_m05_iter60)
 group = "non-finite"
 twins = true
 foil = "naca4:4412"
@@ -599,8 +600,25 @@ mach = 0.6
 ncrit = 9.0
 max_iterations = 60
 # how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
-dump_calls = [1, 51]
-keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_51.dat", "update_output_51.dat"]
+dump_calls = [1]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat"]
+events = true
+track = true
+
+[[case]]
+name = "naca2412_n60_a14_re1e6_m05_iter60" # deep stall at M 0.5, ITER 60: UPDATE's island of negative Ue (reference prints NaN)
+group = "non-finite"
+twins = true
+foil = "naca4:2412"
+n_nodes = 60
+alphas = [14.0]
+re = 1.0e6
+mach = 0.5
+ncrit = 9.0
+max_iterations = 60
+# how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
+dump_calls = [1, 45]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_45.dat", "update_output_45.dat"]
 events = true
 track = true
 
@@ -634,8 +652,8 @@ ncrit = 9.0
 max_iterations = 20
 matyp = 2
 # how tested: the non-finite events of this run, one step each (tests/execution/events.rs)
-dump_calls = [1, 7]
-keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_7.dat", "update_output_7.dat"]
+dump_calls = [1, 17]
+keep = ["mrchdu_input_1.dat", "mrchdu_output_1.dat", "mrchdu_input_17.dat", "update_output_17.dat"]
 events = true
 track = true
 

@@ -1,0 +1,1 @@
+source_git https://gitlab.inria.fr/core-math/core-math.git commit=85430b3ef7d2beb0de16d7c569ffa9bb391615ed (2026-09-20) subset=src/binary64/{asin,atan,atan2,cos,exp,hypot,log,log10,pow,sin,sincos,tanh} (each function's .c and the headers it includes, transitively) + LICENSE

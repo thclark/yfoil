@@ -18,6 +18,7 @@
 //! tracked XFOIL fixtures were generated with.
 
 use super::spline_fmm::table_lookup_linear;
+use cr_libm::ln;
 use serde_json::{json, Value};
 
 /// A mean line. `p` is the chordwise position of maximum camber (fraction of chord), `cl` the
@@ -89,8 +90,8 @@ fn six_series_unit(a: f64, x: f64) -> (f64, f64) {
         if x < END_GUARD || omx < END_GUARD {
             return (0.0, 0.0);
         }
-        let ym = -(omx * omx.ln() + x * x.ln()) * (0.25 / PI);
-        let ymp = (omx.ln() - x.ln()) * (0.25 / PI);
+        let ym = -(omx * ln(omx) + x * ln(x)) * (0.25 / PI);
+        let ymp = (ln(omx) - ln(x)) * (0.25 / PI);
         return (ym, ymp);
     }
     if x < END_GUARD || omx.abs() < END_GUARD {
@@ -99,20 +100,20 @@ fn six_series_unit(a: f64, x: f64) -> (f64, f64) {
     let (g, h) = if a.abs() < END_GUARD {
         (-0.25, -0.5)
     } else {
-        let g = -(a * a * (0.5 * a.ln() - 0.25) + 0.25) / oma;
-        let h = g + (0.5 * oma * oma * oma.ln() - 0.25 * oma * oma) / oma;
+        let g = -(a * a * (0.5 * ln(a) - 0.25) + 0.25) / oma;
+        let h = g + (0.5 * oma * oma * ln(oma) - 0.25 * oma * oma) / oma;
         (g, h)
     };
     let amx = a - x;
     let (term1, term1p) = if amx.abs() < END_GUARD {
         (0.0, 0.0)
     } else {
-        (amx * amx * (2.0 * amx.abs().ln() - 1.0), -amx * amx.abs().ln())
+        (amx * amx * (2.0 * ln(amx.abs()) - 1.0), -amx * ln(amx.abs()))
     };
-    let term2 = omx * omx * (1.0 - 2.0 * omx.ln());
-    let term2p = omx * omx.ln();
-    let ym = 0.25 * (term1 + term2) / oma - x * x.ln() + g - h * x;
-    let ymp = (term1p + term2p) / oma - 1.0 - x.ln() - h;
+    let term2 = omx * omx * (1.0 - 2.0 * ln(omx));
+    let term2p = omx * ln(omx);
+    let ym = 0.25 * (term1 + term2) / oma - x * ln(x) + g - h * x;
+    let ymp = (term1p + term2p) / oma - 1.0 - ln(x) - h;
     (ym / (two_pi * (a + 1.0)), ymp / (two_pi * (a + 1.0)))
 }
 

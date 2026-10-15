@@ -186,6 +186,7 @@ fn find_interval(ss: f64, s: &[f64]) -> usize {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+    use cr_libm::{cos, sin};
 
     #[test]
     fn test_spline_linear_data() {
@@ -261,16 +262,16 @@ mod tests {
         // Test with sine wave - common in airfoil upper/lower surface
         let n = 20;
         let s: Vec<f64> = (0..=n).map(|i| i as f64 * std::f64::consts::PI / n as f64).collect();
-        let x: Vec<f64> = s.iter().map(|&si| si.sin()).collect();
+        let x: Vec<f64> = s.iter().map(|&si| sin(si)).collect();
         let xp = spline_derivatives(&x, &s);
 
         // Check interpolation at quarter points
         let s_test = std::f64::consts::PI / 4.0;
-        let expected = s_test.sin();
+        let expected = sin(s_test);
         assert_relative_eq!(spline_value(s_test, &x, &xp, &s), expected, epsilon = 0.01);
 
         // Check derivative (should be cos(s))
-        let expected_deriv = s_test.cos();
+        let expected_deriv = cos(s_test);
         assert_relative_eq!(spline_slope(s_test, &x, &xp, &s), expected_deriv, epsilon = 0.05);
     }
 
@@ -324,7 +325,7 @@ mod tests {
         // Test with non-uniformly spaced data (like cosine-spaced airfoil points)
         let n = 10;
         let s: Vec<f64> = (0..=n)
-            .map(|i| 0.5 * (1.0 - (std::f64::consts::PI * i as f64 / n as f64).cos()))
+            .map(|i| 0.5 * (1.0 - cos(std::f64::consts::PI * i as f64 / n as f64)))
             .collect();
         let x: Vec<f64> = s.iter().map(|&si| si * (1.0 - si)).collect(); // Parabola
 

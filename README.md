@@ -70,7 +70,8 @@ Claude Fable 5.1 was used heavily for the instrumentation of xfoil, translation 
 
 ### Developing
 
-**Prerequisites.** A current stable Rust toolchain (`rustup`), plus [`uv`](https://docs.astral.sh/uv/) for the docs
+**Prerequisites.** A current stable Rust toolchain (`rustup`) and a C compiler (`cc`; it builds the vendored
+CORE-MATH functions, `cr-libm`), plus [`uv`](https://docs.astral.sh/uv/) for the docs
 site and `pre-commit` for the QA hooks. Rebuilding the XFOIL reference additionally needs `gfortran` and X11 headers.
 
 **Build, test, lint.** These are exactly what CI runs:

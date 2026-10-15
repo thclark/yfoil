@@ -3,6 +3,7 @@
 
 use super::params::*;
 use super::station::StationState;
+use cr_libm::{exp, log10, pow, tanh};
 
 // ============================================================================
 // Transition Location and Derivatives
@@ -512,16 +513,16 @@ pub fn amplification_rate(hk: f64, th: f64, rt: f64) -> AmplificationRate {
     let hmi_hk = -hmi * hmi;
 
     // log10(Critical Rth) - H correlation for Falkner-Skan profiles
-    let aa = 2.492 * hmi.powf(0.43);
+    let aa = 2.492 * pow(hmi, 0.43);
     let aa_hk = (aa / hmi) * 0.43 * hmi_hk;
 
-    let bb = (14.0 * hmi - 9.24).tanh();
+    let bb = tanh(14.0 * hmi - 9.24);
     let bb_hk = (1.0 - bb * bb) * 14.0 * hmi_hk;
 
     let grcrit = aa + 0.7 * (bb + 1.0);
     let grc_hk = aa_hk + 0.7 * bb_hk;
 
-    let gr = rt.log10();
+    let gr = log10(rt);
     let gr_rt = 1.0 / (2.3025851 * rt);
 
     if gr < grcrit - DGR {
@@ -545,7 +546,7 @@ pub fn amplification_rate(hk: f64, th: f64, rt: f64) -> AmplificationRate {
         let arg = 3.87 * hmi - 2.52;
         let arg_hk = 3.87 * hmi_hk;
 
-        let ex = (-arg * arg).exp();
+        let ex = exp(-arg * arg);
         let ex_hk = ex * (-2.0 * arg * arg_hk);
 
         let dadr = 0.028 * (hk - 1.0) - 0.0345 * ex;
@@ -583,16 +584,16 @@ pub fn amplification_rate_modified(hk: f64, th: f64, rt: f64) -> AmplificationRa
     let hmi_hk = -hmi * hmi;
 
     // log10(Critical Rth) -- H   correlation for Falkner-Skan profiles
-    let aa = 2.492 * hmi.powf(0.43);
+    let aa = 2.492 * pow(hmi, 0.43);
     let aa_hk = (aa / hmi) * 0.43 * hmi_hk;
 
-    let bb = (14.0 * hmi - 9.24).tanh();
+    let bb = tanh(14.0 * hmi - 9.24);
     let bb_hk = (1.0 - bb * bb) * 14.0 * hmi_hk;
 
     let grc = aa + 0.7 * (bb + 1.0);
     let grc_hk = aa_hk + 0.7 * bb_hk;
 
-    let gr = rt.log10();
+    let gr = log10(rt);
     let gr_rt = 1.0 / (2.3025851 * rt);
 
     let (mut ax, mut ax_hk, mut ax_th, mut ax_rt);
@@ -624,7 +625,7 @@ pub fn amplification_rate_modified(hk: f64, th: f64, rt: f64) -> AmplificationRa
         let arg = 3.87 * hmi - 2.52;
         let arg_hk = 3.87 * hmi_hk;
 
-        let ex = (-arg * arg).exp();
+        let ex = exp(-arg * arg);
         let ex_hk = ex * (-2.0 * arg * arg_hk);
 
         let dadr = 0.028 * (hk - 1.0) - 0.0345 * ex;
@@ -632,8 +633,8 @@ pub fn amplification_rate_modified(hk: f64, th: f64, rt: f64) -> AmplificationRa
 
         // set conversion factor from d/d(Rtheta) to d/dx: AF = Theta d(Rtheta)/dx = f(H)
         let brg = -20.0 * hmi;
-        let af = -0.05 + 2.7 * hmi - 5.5 * hmi * hmi + 3.0 * hmi * hmi * hmi + 0.1 * brg.exp();
-        let af_hmi = 2.7 - 11.0 * hmi + 9.0 * hmi * hmi - 2.0 * brg.exp();
+        let af = -0.05 + 2.7 * hmi - 5.5 * hmi * hmi + 3.0 * hmi * hmi * hmi + 0.1 * exp(brg);
+        let af_hmi = 2.7 - 11.0 * hmi + 9.0 * hmi * hmi - 2.0 * exp(brg);
         let af_hk = af_hmi * hmi_hk;
 
         // set amplification rate with respect to x, with RFAC shutting off amplification below Rcrit
@@ -673,16 +674,16 @@ pub fn amplification_rate_modified(hk: f64, th: f64, rt: f64) -> AmplificationRa
     let ax1_rt = ax_rt;
 
     // set modified amplification rate AX2
-    let gr0 = 0.30 + 0.35 * (-0.15 * (hk - 5.0)).exp();
-    let gr0_hk = -0.35 * (-0.15 * (hk - 5.0)).exp() * 0.15;
+    let gr0 = 0.30 + 0.35 * exp(-0.15 * (hk - 5.0));
+    let gr0_hk = -0.35 * exp(-0.15 * (hk - 5.0)) * 0.15;
 
-    let tnr = (1.2 * (gr - gr0)).tanh();
+    let tnr = tanh(1.2 * (gr - gr0));
     let tnr_rt = (1.0 - tnr * tnr) * 1.2 * gr_rt;
     let tnr_hk = -(1.0 - tnr * tnr) * 1.2 * gr0_hk;
 
     let (mut ax2, mut ax2_hk, mut ax2_rt, mut ax2_th);
-    ax2 = (0.086 * tnr - 0.25 / (hk - 1.0).powf(1.5)) / th;
-    ax2_hk = (0.086 * tnr_hk + 1.5 * 0.25 / (hk - 1.0).powf(2.5)) / th;
+    ax2 = (0.086 * tnr - 0.25 / pow(hk - 1.0, 1.5)) / th;
+    ax2_hk = (0.086 * tnr_hk + 1.5 * 0.25 / pow(hk - 1.0, 2.5)) / th;
     ax2_rt = (0.086 * tnr_rt) / th;
     ax2_th = -ax2 / th;
 
@@ -782,7 +783,7 @@ pub fn interval_amplification_rate(
     let (exn, exn_a1, exn_a2) = if arg <= 0.0 {
         (1.0, 0.0, 0.0)
     } else {
-        let exn = (-arg).exp();
+        let exn = exp(-arg);
         (exn, 20.0 * 0.5 * exn, 20.0 * 0.5 * exn)
     };
 

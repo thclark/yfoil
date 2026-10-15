@@ -1,8 +1,8 @@
 //! (a) Subroutine equivalence: the BL pointer layer (STFIND, IBLPAN, XICALC, IBLSYS) and the inviscid velocity
 //! layer (QISET, UICALC) against `xfoil_pointers.dat` / `xfoil_uinv.dat` from the tracked
 //! reference case. Integer pointers must be exactly equal; pure-arithmetic reals bit-identical;
-//! quantities that pass through libm (`cos`, `sin`) or yFoil's own spline derivatives are
-//! held to `TOL_PURE`.
+//! quantities that pass through `cos`/`sin` or yFoil's own spline derivatives are held to
+//! `TOL_PURE`.
 //!
 //! Fixtures: `tests/fixtures/xfoil/naca0012_n60_a2_re1e6/` — `cargo xtask fixtures --case naca0012_n60_a2_re1e6`.
 
@@ -145,7 +145,7 @@ fn test_qiset_and_uicalc_match_xfoil() {
     st.q_inviscid_basis[1] = u.qinvu1.clone();
     st.q_inviscid_basis[2] = u.qinvu2.clone();
     set_q_inviscid(&mut st, u.alfa);
-    // cos/sin come from libm: same host gives identical bits, other hosts an ULP — TOL_PURE
+    // through cos/sin — TOL_PURE
     for i in 1..=(f.n + f.nw) {
         assert_within(st.q_inviscid[i], u.qinv[i], TOL_PURE, 1.0, &format!("QINV({i})"));
         assert_within(

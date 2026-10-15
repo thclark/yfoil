@@ -79,6 +79,12 @@ fn naca4412_n60_a20_re1e6_iter50_every_iteration() {
     every_iteration("naca4412_n60_a20_re1e6_iter50");
 }
 
+/// `naca0012_n60_a8_re1e4_damp`: calls [1].
+#[test]
+fn naca0012_n60_a8_re1e4_damp_every_iteration() {
+    every_iteration("naca0012_n60_a8_re1e4_damp");
+}
+
 /// `naca0012_n60_polar30_re1e6`: calls [8, 16, 18].
 #[test]
 fn naca0012_n60_polar30_re1e6_every_iteration() {

@@ -7,6 +7,7 @@
 //! Z_QDOF*) and the LIMAGE ground-image branch — neither is reachable in analysis mode.
 
 use crate::solver::blstate::SolverState;
+use cr_libm::{atan, atan2, cos, ln, sin};
 
 /// Everything PSILIN leaves in COMMON that analysis mode reads.
 #[derive(Debug, Clone)]
@@ -27,7 +28,7 @@ pub struct PanelInfluence {
 
 /// XFOIL's INIT: PI = 4.0*ATAN(1.0), HOPI = 0.5/PI, QOPI = 0.25/PI — computed the same way.
 pub fn pi_consts() -> (f64, f64, f64) {
-    let pi = 4.0 * (1.0_f64).atan();
+    let pi = 4.0 * atan(1.0_f64);
     (pi, 0.50 / pi, 0.25 / pi)
 }
 
@@ -53,8 +54,8 @@ pub fn panel_influence(
     // distance tolerance for determining if two points are the same
     let seps = (s[n] - s[1]) * 1.0e-5;
     let io = i;
-    let cosa = state.alpha.cos();
-    let sina = state.alpha.sin();
+    let cosa = cos(state.alpha);
+    let sina = sin(state.alpha);
 
     let mut out = PanelInfluence {
         psi: 0.0,
@@ -136,15 +137,15 @@ pub fn panel_influence(
 
         // set log(r^2) and arctan(x/y), correcting for reflection if any
         if io != jo && rs1 > 0.0 {
-            g1 = rs1.ln();
-            t1 = (sgn * x1).atan2(sgn * yy) + (0.5 - 0.5 * sgn) * pi;
+            g1 = ln(rs1);
+            t1 = atan2(sgn * x1, sgn * yy) + (0.5 - 0.5 * sgn) * pi;
         } else {
             g1 = 0.0;
             t1 = 0.0;
         }
         if io != jp && rs2 > 0.0 {
-            g2 = rs2.ln();
-            t2 = (sgn * x2).atan2(sgn * yy) + (0.5 - 0.5 * sgn) * pi;
+            g2 = ln(rs2);
+            t2 = atan2(sgn * x2, sgn * yy) + (0.5 - 0.5 * sgn) * pi;
         } else {
             g2 = 0.0;
             t2 = 0.0;
@@ -162,8 +163,8 @@ pub fn panel_influence(
             // set up midpoint quantities
             let x0 = 0.5 * (x1 + x2);
             let rs0 = x0 * x0 + yy * yy;
-            let g0 = rs0.ln();
-            let t0 = (sgn * x0).atan2(sgn * yy) + (0.5 - 0.5 * sgn) * pi;
+            let g0 = ln(rs0);
+            let t0 = atan2(sgn * x0, sgn * yy) + (0.5 - 0.5 * sgn) * pi;
 
             // calculate source contribution to Psi for 1-0 half-panel
             let dxinv = 1.0 / (x1 - x0);

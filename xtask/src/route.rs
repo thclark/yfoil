@@ -192,8 +192,7 @@ pub fn route(flags: &[String]) {
     let base = root.join("target/route");
 
     // 1. the reference runs, every SETBL call dumped
-    let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
-    assert!(xfoil.exists(), "build the reference first: cargo xtask xfoil-build");
+    let xfoil = super::ensure_reference("instrumented");
     for case in &cases {
         let work = root.join("target/fixtures").join(case);
         let dir = base.join("fixtures").join(case);

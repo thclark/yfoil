@@ -1,25 +1,31 @@
 name: Reference build
 
-# Rebuild the XFOIL reference from xfoil/third-party/ + xfoil/instrumentation/ and re-prove the two
-# properties of the build (CLAUDE.md, "Reference implementation"): the instrumentation is inert
-# (--verify: pristine and instrumented byte-identical on the smoke case) and nothing reads an
-# uninitialised value (--snan). Run whenever the source, the patch series or the build changes,
-# and on demand. Fixture byte-identity (`cargo xtask fixtures --verify`) is a same-host property
-# and is checked locally on the fixtures' host, never here.
+# Rebuild the XFOIL reference from xfoil/third-party/ + xfoil/instrumentation/ + third-party/core-math/
+# and re-prove the three properties of the build (CLAUDE.md, "Reference implementation"): no maths
+# function is left to the host libm (every build), the instrumentation is inert (--verify: pristine
+# and instrumented byte-identical on the smoke case) and nothing reads an uninitialised value
+# (--snan); then that the CI reference case's fixture regenerates here byte for byte (`cargo xtask
+# fixtures --verify`). Run whenever the source, the patch series or the build changes, and on demand.
 on:
   pull_request:
     branches: [ "main" ]
     paths:
       - "xfoil/**"
+      - "third-party/core-math/**"
+      - "third-party/core-math.*"
       - "scripts/xfoil-build.sh"
       - "scripts/xfoil-build/**"
+      - "cr-libm/**"
       - ".github/workflows/reference-build.yml"
   push:
     branches: [ "main" ]
     paths:
       - "xfoil/**"
+      - "third-party/core-math/**"
+      - "third-party/core-math.*"
       - "scripts/xfoil-build.sh"
       - "scripts/xfoil-build/**"
+      - "cr-libm/**"
       - ".github/workflows/reference-build.yml"
   workflow_dispatch:
 
@@ -30,3 +36,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y gfortran libx11-dev
       - run: scripts/xfoil-build.sh --verify --snan
+      # the maths is CORE-MATH's in both codes, not the host's: the CI reference case, generated on the
+      # fixtures' host, regenerates here byte for byte
+      - run: cargo run -q -p xtask -- fixtures --verify --case naca0012_n60_a2_re1e6

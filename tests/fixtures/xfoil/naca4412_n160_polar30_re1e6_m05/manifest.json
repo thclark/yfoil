@@ -95,6 +95,7 @@
       260,
       261,
       262,
+      334,
       335,
       336,
       337,
@@ -112,8 +113,7 @@
       349,
       350,
       351,
-      352,
-      353
+      352
     ],
     "events": false,
     "foil": "naca4:4412",
@@ -170,6 +170,8 @@
       "mrchdu_input_262.dat",
       "update_output_262.dat",
       "viscal_points.dat",
+      "update_output_334.dat",
+      "mrchdu_input_334.dat",
       "update_output_335.dat",
       "mrchdu_input_335.dat",
       "update_output_336.dat",
@@ -205,9 +207,7 @@
       "update_output_351.dat",
       "mrchdu_input_351.dat",
       "update_output_352.dat",
-      "mrchdu_input_352.dat",
-      "update_output_353.dat",
-      "mrchdu_input_353.dat"
+      "mrchdu_input_352.dat"
     ],
     "mach": 0.5,
     "matyp": 0,
@@ -226,14 +226,15 @@
     "xtr": []
   },
   "generated_by": "cargo xtask fixtures",
-  "panels_dat_sha256": "208bb4397521d30dfc1da270488b3a413cbd149cbb9b1ce0b53e1dbe1cdfa737",
+  "panels_dat_sha256": "aec18ad5a846d66acef007661584182c79ecd19838dc5852ff181d6a2f05bd3f",
   "xfoil_ref": [
     "source_sha256_manifest: 10062de3b4eb2ca7b2389cc16c949fe99a1731741d031af30d980bbc30b9e962",
     "series_build_sha256:    ed72a974293d8269413ad438888b7ed2b193e09d516ef038a01aefe52042f2f6",
-    "series_instr_sha256:    470fa6ab60d01a21f6ef34675cd09f2f0c14ee789989ccb1a034b2ede6fa0024",
+    "series_instr_sha256:    74a06193233322f4a4fe274c9140fdd3495746e55d11e100b63f58899405e4d9",
     "gfortran:               GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0",
     "fflags:                 FFLAGS  = -O  / DBL = -fdefault-real-8 -std=legacy -fallow-argument-mismatch -ffp-contract=off -ffixed-line-length-none",
+    "inputs_fingerprint:     9ac1bc445d0c0150722de65a16fc75577cb6aa4126e53b59f6c162ae5a806bce",
     "host:                   arm64-Darwin-24.6.0",
-    "libm:                   /usr/lib/libSystem.B.dylib 1345.120.2)"
+    "libm:                   CORE-MATH commit=85430b3ef7d2beb0de16d7c569ffa9bb391615ed (-O2 -ffp-contract=off); host /usr/lib/libSystem.B.dylib 1345.120.2)"
   ]
 }

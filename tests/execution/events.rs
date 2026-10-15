@@ -18,8 +18,8 @@
 //! |---|---|---|---|
 //! | `MRCHUE_ITERATE_FALLBACK` | xbl.f:788–827 | 16-212 M 0.7, 4412 N=160 M 0.5 … (first march) | MRCHUE from the VISCAL prologue, against `mrchdu_input_1.dat` |
 //! | `MRCHDU_ITERATE_FALLBACK` | xbl.f:1111–1135 | every non-finite case, call 1 | MRCHDU from `mrchdu_input_1.dat`, against `mrchdu_output_1.dat` |
-//! | `UPDATE_RDN4` | xbl.f:1474 | 64A010 TYPE 2 M 0.3, call 7 | SETBL/BLSOLV/UPDATE from `mrchdu_input_7.dat`, against `update_output_7.dat` |
-//! | `UPDATE_ISLAND` | xbl.f:1537 | 4412 M 0.6 ITER 60, call 51 | the same at call 51 |
+//! | `UPDATE_RDN4` | xbl.f:1474 | 64A010 TYPE 2 M 0.3, call 17 | SETBL/BLSOLV/UPDATE from `mrchdu_input_17.dat`, against `update_output_17.dat` |
+//! | `UPDATE_ISLAND` | xbl.f:1537 | 2412 M 0.5 ITER 60, call 45 | the same at call 45 |
 //! | `STMOVE_UEPS` | xpanel.f:1737 | 63-415 M 0.5, call 18 | UPDATE 18 then QVFUE/GAMQV/STMOVE, against `mrchdu_input_19.dat` |
 //! | `STFIND_NOT_FOUND` | xpanel.f:1364 | 16-212 M 0.7, call 1 | UPDATE 1 then STMOVE, against `mrchdu_input_2.dat` |
 //! | `STFIND_GAM_NEG` | xpanel.f:1365 | 63-415 M 0.5, VISCAL prologue | STFIND on the prologue state |
@@ -34,7 +34,7 @@
 //! wake station where XFOIL makes two, `BLVAR(2)` then `BLVAR(3)` (§7.11). Both are fixed; keep
 //! these tests in CI for exactly that reason.
 
-//! Fixtures: `tests/fixtures/xfoil/<case>/` of the five non-finite probes (`events.dat`, the dumps of
+//! Fixtures: `tests/fixtures/xfoil/<case>/` of the six non-finite probes (`events.dat`, the dumps of
 //! their event calls) — `cargo xtask fixtures --case <case>`.
 
 use crate::fixtures::cases::{dump as step_dump, jog_dump, load, prologue_jogged, seed, Case};
@@ -355,37 +355,37 @@ fn test_mrchdu_trip_upstream_of_a_laminar_station_call_2() {
 }
 
 #[test]
-fn test_update_ue_relaxation_below_low_call_7() {
+fn test_update_ue_relaxation_below_low_call_17() {
     let name = "naca64a010_n60_type2_m03_a0";
     let c = case(name);
-    let expected: Vec<UpdateEvent> = at(&events(&c.dir), "UPDATE_RDN4", 7)
+    let expected: Vec<UpdateEvent> = at(&events(&c.dir), "UPDATE_RDN4", 17)
         .into_iter()
         .map(|(station, side)| UpdateEvent::UeRelaxationBelowLow { side, station })
         .collect();
-    assert!(!expected.is_empty(), "{name}: no UPDATE_RDN4 at call 7");
-    let (_, _, ours) = iterate(&c, 7);
+    assert!(!expected.is_empty(), "{name}: no UPDATE_RDN4 at call 17");
+    let (_, _, ours) = iterate(&c, 17);
     let ours: Vec<UpdateEvent> = ours
         .into_iter()
         .filter(|e| matches!(e, UpdateEvent::UeRelaxationBelowLow { .. }))
         .collect();
-    assert_eq!(ours, expected, "{name} call 7: UPDATE Ue relaxation-below-low events");
+    assert_eq!(ours, expected, "{name} call 17: UPDATE Ue relaxation-below-low events");
 }
 
 #[test]
-fn test_update_negative_ue_island_call_51() {
-    let name = "naca4412_n60_a16_re1e6_m06_iter60";
+fn test_update_negative_ue_island_call_45() {
+    let name = "naca2412_n60_a14_re1e6_m05_iter60";
     let c = case(name);
-    let expected: Vec<UpdateEvent> = at(&events(&c.dir), "UPDATE_ISLAND", 51)
+    let expected: Vec<UpdateEvent> = at(&events(&c.dir), "UPDATE_ISLAND", 45)
         .into_iter()
         .map(|(station, side)| UpdateEvent::NegativeUeIsland { side, station })
         .collect();
-    assert!(!expected.is_empty(), "{name}: no UPDATE_ISLAND at call 51");
-    let (_, _, ours) = iterate(&c, 51);
+    assert!(!expected.is_empty(), "{name}: no UPDATE_ISLAND at call 45");
+    let (_, _, ours) = iterate(&c, 45);
     let ours: Vec<UpdateEvent> = ours
         .into_iter()
         .filter(|e| matches!(e, UpdateEvent::NegativeUeIsland { .. }))
         .collect();
-    assert_eq!(ours, expected, "{name} call 51: UPDATE negative-Ue island events");
+    assert_eq!(ours, expected, "{name} call 45: UPDATE negative-Ue island events");
 }
 
 /// UPDATE at call `k`, then QVFUE/GAMQV/STMOVE as VISCAL runs them, against the state entering

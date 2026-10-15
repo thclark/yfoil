@@ -1,6 +1,7 @@
 //! Driving the instrumented reference and reading its per-call records back.
 
 use crate::{perturb, Family, Level, ITER, MACH, NCRIT, NPOINTS, REYNOLDS, RUN_TIMEOUT_SECS, SEED, STALL_SECS};
+use cr_libm::log10;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -518,7 +519,7 @@ fn label_tex(level: &Level, actual_nodes: Option<usize>) -> String {
         if v == perturb::ULP {
             "1 ULP".to_string()
         } else {
-            format!("$10^{{{}}}$", v.log10().round() as i32)
+            format!("$10^{{{}}}$", log10(v).round() as i32)
         }
     };
     if level.magnitude == 0.0 {
@@ -541,7 +542,7 @@ fn label_tex(level: &Level, actual_nodes: Option<usize>) -> String {
                 format!(
                     "$\\Delta\\alpha = {}^\\circ + 10^{{{}}}{{}}^\\circ$",
                     crate::ALPHA_STEP_DEG,
-                    level.raw.log10().round() as i32
+                    log10(level.raw).round() as i32
                 )
             }
         }

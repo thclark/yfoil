@@ -3,12 +3,13 @@
 //! Line-for-line translations on the 1-based `SolverState`.
 
 use crate::solver::blstate::SolverState;
+use cr_libm::{cos, sin};
 
 /// QISET: inviscid panel tangential velocity for the current alpha from the alpha=0,90 solutions.
 #[doc(alias = "QISET")]
 pub fn set_q_inviscid(state: &mut SolverState, alfa: f64) {
-    let cosa = alfa.cos();
-    let sina = alfa.sin();
+    let cosa = cos(alfa);
+    let sina = sin(alfa);
     for i in 1..=(state.n_foil_nodes + state.n_wake_nodes) {
         state.q_inviscid[i] = cosa * state.q_inviscid_basis[1][i] + sina * state.q_inviscid_basis[2][i];
         state.q_inviscid_d_alpha[i] = -sina * state.q_inviscid_basis[1][i] + cosa * state.q_inviscid_basis[2][i];

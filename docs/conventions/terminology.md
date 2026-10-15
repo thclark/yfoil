@@ -11,15 +11,14 @@ every time. So is yFoil. Never describe either as *nondeterministic*, *random* o
 
 Two qualifications, neither of which is nondeterminism:
 
-- **Host dependence.** Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`, `TANH`) come from the host
-  libm in both codes. Apple libSystem and glibc differ by one ULP on a fraction of inputs, so
-  the same input can give different bits on different hosts. Deterministic per host; an ULP
-  budget across hosts (CLAUDE.md Rule 1). A host-independent Rust libm (the `libm` crate, a port
-  of musl's; or correctly rounded functions such as CORE-MATH, whose result is the same on every
-  host by definition) would make yFoil's own bits host-independent, but on its own it would only
-  move the 1-ULP difference from between hosts to between yFoil and the reference on every host.
-  Bit-identity across hosts needs both codes on the same functions: the reference linked against
-  the same library as yFoil.
+- **Host dependence, removed.** Transcendentals (`**`, `EXP`, `LOG`, `LOG10`, `TANH`, `SIN`, `COS`,
+  `ATAN`, `ATAN2`, `ASIN`) are CORE-MATH's correctly rounded functions in both codes, compiled from
+  one vendored copy (`third-party/core-math`): the reference is linked against them
+  (`scripts/xfoil-build/core_math_libm.c`), yFoil calls them through `cr-libm`, and `clippy.toml`
+  disallows `std`'s `f64` methods, which call the host libm. A correctly rounded result is a property
+  of its argument alone, so neither code's bits depend on the host. Until 2026-10-15 both took them
+  from the host libm, where Apple libSystem and glibc differ by one ULP on 0.1 % (`exp`, `ln`, `pow`)
+  to 18 % (`tanh`) of inputs, and bit-identity was a same-host property (`docs/cross-platform-quirks.md`).
 - **Ill-conditioned solutions** and **divergent comparisons**, below.
 
 ## Tested, compared, covered — not "gated"
@@ -48,8 +47,8 @@ A result can be ill-conditioned and still valid: conditioning is Class C in
 
 A **comparison is divergent** when XFOIL and yFoil, run on the same input, take different routes
 through the code: at some real comparison `IF (A .GT. B)` the operands are equal to within
-rounding, and the last-bit difference between the two codes (different association, a host libm
-ULP) falls on opposite sides. XFOIL has about 140 real inequality branches; the ones met in
+rounding, and the last-bit difference between the two codes (a different association of the same
+operations) falls on opposite sides. XFOIL has about 140 real inequality branches; the ones met in
 practice include `AMPL > ACRIT` (the transition station), `RMSBL < EPS1` (convergence) and the
 station at which UPDATE's relaxation factor is limited.
 

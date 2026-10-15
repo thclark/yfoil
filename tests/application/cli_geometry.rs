@@ -5,6 +5,7 @@
 //!
 //! Fixtures: none.
 
+use cr_libm::hypot;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -228,7 +229,10 @@ fn trailing_edge_treatment_is_applied_after_panelling() {
     ]);
     let g = json(&c.path("g.json"));
     let (x, y) = (g["x"].as_array().unwrap(), g["y"].as_array().unwrap());
-    let d = (x[0].as_f64().unwrap() - x[99].as_f64().unwrap()).hypot(y[0].as_f64().unwrap() - y[99].as_f64().unwrap());
+    let d = hypot(
+        x[0].as_f64().unwrap() - x[99].as_f64().unwrap(),
+        y[0].as_f64().unwrap() - y[99].as_f64().unwrap(),
+    );
     assert!((d - 0.004).abs() < 1e-12, "gap {d}");
     assert_eq!(
         g["generator"]["panelling"]["te_gap"],

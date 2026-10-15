@@ -21,23 +21,6 @@ pub const TOL_SOLVER: f64 = 1e-10;
 /// absolute while the converged per-point CL/CD/CM move by ≤ 8e-14 and XTR by ≤ 1e-12. Converged
 /// points therefore stay at `TOL_SOLVER`; transients are held to floor × 2.
 pub const TOL_TRANSIENT: f64 = 1e-9;
-/// One step replayed from XFOIL's dumped state (`tests/execution/step.rs`) on a host other than
-/// the one the fixture was generated on (`tests/common/utilities/host.rs`). Both codes take their transcendentals
-/// from the host libm, and Apple libSystem and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`,
-/// `powf`) to 18 % (`tanh`) of inputs (measured 2026-09-11, 20 000 inputs per function).
-/// Measured on the same date from identical dumped inputs, the yFoil step on glibc 2.39 differs
-/// from the yFoil step on libSystem 1345.120.2 by 1.2e-10 and 3.6e-10 relative in RMXBL (the
-/// largest Newton delta, at the polar break points' near-singular iterations) — while the same
-/// step on the fixture's own host reproduces XFOIL to ≤ 2e-12. Cross-host tolerances are that
-/// measured spread × ~3; same-host stays at `TOL_SOLVER`.
-pub const TOL_CROSS_HOST: f64 = 1e-9;
-/// The factor on the reference's own measured cross-host spread that a whole run is held to on a
-/// host other than its fixture's: `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, the
-/// spread being how far XFOIL itself moves between the two hosts' maths libraries on that case and
-/// value (`tests/fixtures/cross-host/spread.json`, `cargo xtask cross-host`,
-/// `tests/common/utilities/cross_host.rs`). Four, as for the step tests' own measured sensitivity
-/// (CLAUDE.md Rule 1). Same-host comparison never uses it.
-pub const CROSS_HOST_FACTOR: f64 = 4.0;
 /// The one error metric: `|a − b| ≤ tol · max(|a|, |b|, scale)`. Bare relative error is
 /// undefined at CL≈0, VDEL≈0, laminar CTAU≈0; `scale` is the physical scale of the variable.
 pub fn within(a: f64, b: f64, tol: f64, scale: f64) -> bool {

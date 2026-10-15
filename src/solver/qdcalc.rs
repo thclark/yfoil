@@ -5,6 +5,7 @@ use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::ludcmp::lu_back_substitute;
 use crate::solver::psilin::{panel_influence, pi_consts};
+use cr_libm::{atan2, ln};
 
 /// What PSWLIN returns: Psi, dPsi/dn, and the wake-source sensitivities (indexed n+1..=n+nw).
 #[derive(Debug, Clone)]
@@ -76,12 +77,12 @@ pub fn wake_source_influence(
         };
 
         let (g1, t1) = if io != jo && rs1 > 0.0 {
-            (rs1.ln(), (sgn * x1).atan2(sgn * yy) - (0.5 - 0.5 * sgn) * pi)
+            (ln(rs1), atan2(sgn * x1, sgn * yy) - (0.5 - 0.5 * sgn) * pi)
         } else {
             (0.0, 0.0)
         };
         let (g2, t2) = if io != jp && rs2 > 0.0 {
-            (rs2.ln(), (sgn * x2).atan2(sgn * yy) - (0.5 - 0.5 * sgn) * pi)
+            (ln(rs2), atan2(sgn * x2, sgn * yy) - (0.5 - 0.5 * sgn) * pi)
         } else {
             (0.0, 0.0)
         };
@@ -93,8 +94,8 @@ pub fn wake_source_influence(
         // set up midpoint quantities
         let x0 = 0.5 * (x1 + x2);
         let rs0 = x0 * x0 + yy * yy;
-        let g0 = rs0.ln();
-        let t0 = (sgn * x0).atan2(sgn * yy) - (0.5 - 0.5 * sgn) * pi;
+        let g0 = ln(rs0);
+        let t0 = atan2(sgn * x0, sgn * yy) - (0.5 - 0.5 * sgn) * pi;
 
         // calculate source contribution to Psi for 1-0 half-panel
         let dxinv = 1.0 / (x1 - x0);

@@ -10,6 +10,8 @@
 //! - Drela, M., Giles, M. "Viscous-Inviscid Analysis of Transonic and Low Reynolds Number Airfoils"
 //!   AIAA Journal, Oct. 1987
 
+use cr_libm::{exp, ln, pow, tanh};
+
 /// Result type for closure relations that includes sensitivities
 #[derive(Debug, Clone, Copy)]
 pub struct Closure {
@@ -134,8 +136,8 @@ pub fn hstar_laminar(hk: f64, _rt: f64, _msq: f64) -> Closure {
 #[doc(alias = "DIL")]
 pub fn cdiss_laminar(hk: f64, rt: f64) -> Closure {
     let (di, di_hk) = if hk < 4.0 {
-        let di = (0.00205 * (4.0 - hk).powf(5.5) + 0.207) / rt;
-        let di_hk = (-0.00205 * 5.5 * (4.0 - hk).powf(4.5)) / rt;
+        let di = (0.00205 * pow(4.0 - hk, 5.5) + 0.207) / rt;
+        let di_hk = (-0.00205 * 5.5 * pow(4.0 - hk, 4.5)) / rt;
         (di, di_hk)
     } else {
         let hkb = hk - 4.0;
@@ -174,16 +176,16 @@ pub fn cf_turbulent(hk: f64, rt: f64, msq: f64, cffac: f64) -> Closure {
     let gm1 = GAM - 1.0;
 
     let fc = (1.0 + 0.5 * gm1 * msq).sqrt();
-    let grt = (rt / fc).ln().max(3.0);
+    let grt = ln(rt / fc).max(3.0);
 
     let gex = -1.74 - 0.31 * hk;
     let arg = (-1.33 * hk).max(-20.0);
-    let thk = (4.0 - hk / 0.875).tanh();
+    let thk = tanh(4.0 - hk / 0.875);
 
-    let cfo = cffac * 0.3 * arg.exp() * (grt / 2.3026).powf(gex);
+    let cfo = cffac * 0.3 * exp(arg) * pow(grt / 2.3026, gex);
     let cf = (cfo + 1.1e-4 * (thk - 1.0)) / fc;
 
-    let cf_hk = (-1.33 * cfo - 0.31 * (grt / 2.3026).ln() * cfo - 1.1e-4 * (1.0 - thk.powi(2)) / 0.875) / fc;
+    let cf_hk = (-1.33 * cfo - 0.31 * ln(grt / 2.3026) * cfo - 1.1e-4 * (1.0 - thk.powi(2)) / 0.875) / fc;
     let cf_rt = gex * cfo / (fc * grt) / rt;
     let cf_msq = gex * cfo / (fc * grt) * (-0.25 * gm1 / fc.powi(2)) - 0.25 * gm1 * cf / fc.powi(2);
 
@@ -231,7 +233,7 @@ pub fn hstar_turbulent(hk: f64, rt: f64, msq: f64) -> Closure {
         (hs, hs_hk, hs_rt)
     } else {
         // Separated branch
-        let grt = rtz.ln();
+        let grt = ln(rtz);
         let hdif = hk - ho;
         let rtmp = hk - ho + 4.0 / grt;
         let htmp = 0.007 * grt / rtmp.powi(2) + DHSINF / hk;

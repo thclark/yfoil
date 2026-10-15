@@ -1,4 +1,5 @@
 use yfoil::bl::{amplification_rate, rtheta_crit};
+use cr_libm::{pow, tanh};
 
 fn main() {
     println!("=== Critical Rtheta vs Hk ===\n");
@@ -8,7 +9,7 @@ fn main() {
 
     for hk in [2.2_f64, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.2, 3.5, 4.0] {
         let grcrit = rtheta_crit(hk);
-        let rcrit = 10.0_f64.powf(grcrit);
+        let rcrit = pow(10.0_f64, grcrit);
         println!("{:>6.2} {:>12.4} {:>12.1}", hk, grcrit, rcrit);
     }
 
@@ -20,10 +21,10 @@ fn main() {
     println!("From xblsys.f, same formula. Let's verify:");
     for hk in [2.3_f64, 2.5, 2.7, 3.0] {
         let hmi: f64 = 1.0 / (hk - 1.0);
-        let aa = 2.492 * hmi.powf(0.43);
-        let bb = (14.0 * hmi - 9.24).tanh();
+        let aa = 2.492 * pow(hmi, 0.43);
+        let bb = tanh(14.0 * hmi - 9.24);
         let grcrit = aa + 0.7 * (bb + 1.0);
-        let rcrit = 10.0_f64.powf(grcrit);
+        let rcrit = pow(10.0_f64, grcrit);
         println!("Hk={:.1}: hmi={:.4}, aa={:.4}, bb={:.4}, log10(Rcrit)={:.4}, Rcrit={:.1}",
             hk, hmi, aa, bb, grcrit, rcrit);
     }

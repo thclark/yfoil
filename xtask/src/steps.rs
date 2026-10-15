@@ -41,11 +41,7 @@ const SEEDS: [u64; 5] = [1, 2, 3, 4, 5];
 
 pub fn twins(flags: &[String]) {
     let root = super::root();
-    let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
-    assert!(
-        xfoil.exists(),
-        "no instrumented reference: run `cargo xtask xfoil-build`"
-    );
+    let xfoil = super::ensure_reference("instrumented");
     let names: Vec<&str> = flags
         .windows(2)
         .filter(|w| w[0] == "--case")

@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::f64::consts::PI;
 use yfoil::geometry::{panel_foil, read_dat_file};
+use cr_libm::{ln, atan2};
 
 const QOPI: f64 = 0.25 / PI;
 
@@ -28,16 +29,16 @@ fn main() {
         let sy = airfoil.y[jp] - airfoil.y[j];
 
         if sx == 0.0 && sy == 0.0 {
-            apanel[j] = (-airfoil.ny[j]).atan2(-airfoil.nx[j]);
+            apanel[j] = atan2(-airfoil.ny[j], -airfoil.nx[j]);
         } else if j == n - 1 {
             // TE panel
             if airfoil.sharp_te {
                 apanel[j] = std::f64::consts::PI;
             } else {
-                apanel[j] = (-sx).atan2(sy) + std::f64::consts::PI;
+                apanel[j] = atan2(-sx, sy) + std::f64::consts::PI;
             }
         } else {
-            apanel[j] = sx.atan2(-sy);
+            apanel[j] = atan2(sx, -sy);
         }
     }
 
@@ -95,19 +96,19 @@ fn main() {
         let (g1, t1) = if i == jo || rs1 < 1e-24 {
             (0.0, 0.0)
         } else {
-            (rs1.ln(), (sgn * x1).atan2(sgn * yy))
+            (ln(rs1), atan2(sgn * x1, sgn * yy))
         };
 
         let (g2, t2) = if i == jp || rs2 < 1e-24 {
             (0.0, 0.0)
         } else {
-            (rs2.ln(), (sgn * x2).atan2(sgn * yy))
+            (ln(rs2), atan2(sgn * x2, sgn * yy))
         };
 
         let x0 = 0.5 * (x1 + x2);
         let rs0 = x0 * x0 + yy * yy;
-        let g0 = if rs0 > 1e-24 { rs0.ln() } else { 0.0 };
-        let t0 = (sgn * x0).atan2(sgn * yy);
+        let g0 = if rs0 > 1e-24 { ln(rs0) } else { 0.0 };
+        let t0 = atan2(sgn * x0, sgn * yy);
 
         // First half-panel
         let dxinv_10 = if (x1 - x0).abs() > 1e-14 {

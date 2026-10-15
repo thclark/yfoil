@@ -2,6 +2,7 @@
 
 use std::f64::consts::PI;
 use yfoil::geometry::{panel_foil, read_dat_file};
+use cr_libm::{sin, cos, atan2};
 
 fn main() {
     println!("=== Debug Bisector Condition ===\n");
@@ -37,10 +38,10 @@ fn main() {
 
     // XFOIL-style angles
     // AG1 = ATAN2(-YP(1), -XP(1)) - reversed tangent at upper TE
-    let ag1 = (-dy1 / ds1).atan2(-dx1 / ds1);
+    let ag1 = atan2(-dy1 / ds1, -dx1 / ds1);
 
     // AG2 = ATANC(YP(N), XP(N), AG1) - tangent at lower TE
-    let mut ag2 = (dyn_te / dsn).atan2(dxn / dsn);
+    let mut ag2 = atan2(dyn_te / dsn, dxn / dsn);
 
     // Adjust for branch cut
     while ag2 - ag1 > PI {
@@ -55,8 +56,8 @@ fn main() {
 
     // Bisector angle
     let a_bis = 0.5 * (ag1 + ag2);
-    let c_bis = a_bis.cos();
-    let s_bis = a_bis.sin();
+    let c_bis = cos(a_bis);
+    let s_bis = sin(a_bis);
 
     println!("\nA_BIS = {:.6} ({:.2} deg)", a_bis, a_bis.to_degrees());
     println!("C_BIS = {:.6}", c_bis);

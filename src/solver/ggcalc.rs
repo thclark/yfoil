@@ -5,6 +5,7 @@
 use crate::solver::blstate::SolverState;
 use crate::solver::ludcmp::{lu_back_substitute, lu_decompose, LuFactors};
 use crate::solver::psilin::panel_influence;
+use cr_libm::{atan2, cos, sin};
 
 /// The linear system GGCALC leaves behind: factored dPsi/dGam (AIJ, (N+1)×(N+1)) and
 /// dPsi/dSig (BIJ, (N+1)×(N+NW); wake columns filled by QDCALC). 1-based.
@@ -21,7 +22,7 @@ pub struct InviscidSystem {
 pub fn continuous_atan2(y: f64, x: f64, thold: f64) -> f64 {
     let pi: f64 = "3.1415926535897932384".parse().unwrap();
     let tpi: f64 = "6.2831853071795864769".parse().unwrap();
-    let thnew = y.atan2(x);
+    let thnew = atan2(y, x);
     let dthet = thnew - thold;
     let dtcorr = dthet - tpi * ((dthet + pi.copysign(dthet)) / tpi).trunc();
     thold + dtcorr
@@ -87,11 +88,11 @@ pub fn build_inviscid_system(state: &mut SolverState) -> InviscidSystem {
 
     if state.sharp_te {
         // zero internal velocity in TE corner: TE bisector angle
-        let ag1 = (-state.dyds[1]).atan2(-state.dxds[1]);
+        let ag1 = atan2(-state.dyds[1], -state.dxds[1]);
         let ag2 = continuous_atan2(state.dyds[n], state.dxds[n], ag1);
         let abis = 0.5 * (ag1 + ag2);
-        let cbis = abis.cos();
-        let sbis = abis.sin();
+        let cbis = cos(abis);
+        let sbis = sin(abis);
         // minimum panel length adjacent to TE
         let ds1 = ((state.x[1] - state.x[2]).powi(2) + (state.y[1] - state.y[2]).powi(2)).sqrt();
         let ds2 = ((state.x[n] - state.x[n - 1]).powi(2) + (state.y[n] - state.y[n - 1]).powi(2)).sqrt();

@@ -5,6 +5,7 @@ use super::closure::{
     cdiss_laminar, cdiss_wake, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent, hstarstar,
 };
 use super::params::*;
+use cr_libm::{ln, pow, tanh};
 
 /// Mirrors XFOIL's `COM1`, `COM2`, `V_VAR1`, `V_VAR2`.
 ///
@@ -236,9 +237,9 @@ impl StationState {
 
         // Edge static density (isentropic)
         // R = RST * TR^(-1/(γ-1))
-        self.rho = rst * tr.powf(-1.0 / gm1);
+        self.rho = rst * pow(tr, -1.0 / gm1);
         self.rho_d_ue = -self.rho / tr * 0.5 * self.machsqd_edge_d_ue;
-        self.rho_d_machsqd = -self.rho / tr * 0.5 * self.machsqd_edge_d_machsqd + rst_ms * tr.powf(-1.0 / gm1);
+        self.rho_d_machsqd = -self.rho / tr * 0.5 * self.machsqd_edge_d_machsqd + rst_ms * pow(tr, -1.0 / gm1);
 
         // Shape factor H = δ*/θ
         self.h = d / t;
@@ -476,7 +477,7 @@ impl StationState {
                 let mut di_re = di_hs * self.hstar_d_re + di_us * self.us_d_re + di_cf2t * cf2t_re;
 
                 // set minimum Hk for wake layer to still exist
-                let grt = rt.ln();
+                let grt = ln(rt);
                 let hmin = 1.0 + 2.1 / grt;
                 let hm_rt = -(2.1 / (grt * grt)) / rt;
 
@@ -484,7 +485,7 @@ impl StationState {
                 let fl = (hk - 1.0) / (hmin - 1.0);
                 let fl_hk = 1.0 / (hmin - 1.0);
                 let fl_rt = (-fl / (hmin - 1.0)) * hm_rt;
-                let tfl = fl.tanh();
+                let tfl = tanh(fl);
                 let dfac = 0.5 + 0.5 * tfl;
                 let df_fl = 0.5 * (1.0 - tfl * tfl);
                 let df_hk = df_fl * fl_hk;

@@ -23,6 +23,7 @@
 
 use super::six_series_tables as tables;
 use super::spline_fmm::{fmm_spline, segment_inverse, spline_eval, Segment};
+use cr_libm::{exp, hypot, sin_cos};
 
 /// The eight tabulated families
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,8 +123,8 @@ struct Complex {
 
 impl Complex {
     fn exp(self) -> Self {
-        let (s, c) = self.im.sin_cos();
-        let e = self.re.exp();
+        let (s, c) = sin_cos(self.im);
+        let e = exp(self.re);
         Self { re: e * c, im: e * s }
     }
     fn mul(self, o: Self) -> Self {
@@ -140,7 +141,7 @@ impl Complex {
         }
     }
     fn abs(self) -> f64 {
-        self.re.hypot(self.im)
+        hypot(self.re, self.im)
     }
 }
 

@@ -23,6 +23,8 @@
 //! designation, the thickness form and mean line with their parameter values, how the thickness
 //! was applied, and the references that define the family — the provenance of the coordinates.
 
+use cr_libm::{atan, cos, sin};
+
 mod karman_trefftz;
 mod mean_line;
 mod six_series;
@@ -314,12 +316,12 @@ impl Section {
     pub fn surface_at(&self, x: f64) -> (f64, f64, f64, f64) {
         let (yt, _) = self.thickness_form.at(x);
         let (yc, dyc_dx) = self.mean_line.at(x);
-        let theta = dyc_dx.atan();
+        let theta = atan(dyc_dx);
         (
-            x - yt * theta.sin(),
-            yc + yt * theta.cos(),
-            x + yt * theta.sin(),
-            yc - yt * theta.cos(),
+            x - yt * sin(theta),
+            yc + yt * cos(theta),
+            x + yt * sin(theta),
+            yc - yt * cos(theta),
         )
     }
 
@@ -420,7 +422,7 @@ pub fn cosine_stations(n_nodes: usize) -> Vec<f64> {
         .map(|i| {
             let beta = std::f64::consts::PI * (i as f64 + 0.5) / (n_half as f64 - 0.5);
             let beta = beta.min(std::f64::consts::PI); // Cap at π for last point
-            0.5 * (1.0 - beta.cos())
+            0.5 * (1.0 - cos(beta))
         })
         .collect()
 }

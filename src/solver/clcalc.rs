@@ -1,6 +1,7 @@
 //! CPCALC, CLCALC, CDCALC (xfoil.f) and COMSET on `SolverState`, line-for-line.
 
 use crate::solver::blstate::SolverState;
+use cr_libm::{cos, pow, sin};
 
 /// COMSET: Kármán–Tsien parameter TKLAM and its M² derivative for the current MINF.
 /// (CPSTAR/QSTAR, the sonic Cp and speed, are plotting quantities and are not kept.)
@@ -44,8 +45,8 @@ pub fn compute_cl_cm(state: &mut SolverState) {
     let (xref, yref) = (state.cm_ref_x, state.cm_ref_y);
     let (minf, qinf) = (state.mach, state.qinf);
 
-    let sa = state.alpha.sin();
-    let ca = state.alpha.cos();
+    let sa = sin(state.alpha);
+    let ca = cos(state.alpha);
 
     let beta = (1.0 - minf * minf).sqrt();
     let beta_msq = -0.5 / beta;
@@ -118,8 +119,8 @@ pub fn compute_cl_cm(state: &mut SolverState) {
 /// Kármán–Tsien correction) and the friction drag CDF from the surface TAU integral.
 #[doc(alias = "CDCALC")]
 pub fn compute_cd(state: &mut SolverState) {
-    let sa = state.alpha.sin();
-    let ca = state.alpha.cos();
+    let sa = sin(state.alpha);
+    let ca = cos(state.alpha);
 
     if state.viscous && state.bl_initialised {
         // set variables at the end of the wake
@@ -131,7 +132,7 @@ pub fn compute_cd(state: &mut SolverState) {
 
         // extrapolate wake to downstream infinity using Squire-Young relation
         // (reduces errors of the wake not being long enough)
-        state.cd = 2.0 * thwake * (uewake / state.qinf).powf(0.5 * (5.0 + shwake));
+        state.cd = 2.0 * thwake * pow(uewake / state.qinf, 0.5 * (5.0 + shwake));
     } else {
         state.cd = 0.0;
     }

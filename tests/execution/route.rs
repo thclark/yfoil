@@ -36,7 +36,7 @@
 #![cfg(yfoil_route)]
 
 use crate::fixtures::cases::{dump, load, prologue_jogged, seed, Case, Op};
-use crate::utilities::tolerances::TOL_CROSS_HOST;
+use crate::utilities::tolerances::TOL_SOLVER;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
@@ -96,7 +96,7 @@ fn seeded(c: &Case, call: usize, k: usize) -> Session {
     let d = dump(c, &format!("mrchdu_input_{k}.dat"));
     let alpha = (!matches!(c.ops[call - 1], Op::Cl(_))).then(|| d.real("ALFA"));
     let mut session = prologue_jogged(c, call, alpha, None);
-    seed(&mut session, &d, TOL_CROSS_HOST);
+    seed(&mut session, &d, TOL_SOLVER);
     session
 }
 

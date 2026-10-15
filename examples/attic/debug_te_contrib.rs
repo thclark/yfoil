@@ -2,6 +2,7 @@
 
 use std::f64::consts::PI;
 use yfoil::geometry::{panel_foil, read_dat_file};
+use cr_libm::{ln, atan2};
 
 const HOPI: f64 = 0.5 / PI;
 
@@ -93,12 +94,12 @@ fn main() {
     let (g1, t1) = if i == jo || rs1 < 1e-24 {
         (0.0, 0.0)
     } else {
-        (rs1.ln(), x1.atan2(yy))
+        (ln(rs1), atan2(x1, yy))
     };
     let (g2, t2) = if i == jp || rs2 < 1e-24 {
         (0.0, 0.0)
     } else {
-        (rs2.ln(), x2.atan2(yy))
+        (ln(rs2), atan2(x2, yy))
     };
 
     println!("apan = {:.6} ({:.2} deg)", apan, apan.to_degrees());
