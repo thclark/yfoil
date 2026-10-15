@@ -127,7 +127,7 @@ that angle.
 
 XFOIL's output formats are fixed-width Fortran (`G15.7`, `F9.4`, `F11.5`). They
 cannot represent a result to better than about 1e-5, which makes them useless as
-a validation gate and awkward as an automation interface. JSON with full
+a validation reference and awkward as an automation interface. JSON with full
 round-tripping precision is both.
 
 The names follow [the naming conventions](../conventions/naming.md): symbols

@@ -503,7 +503,7 @@ reason earlier fixtures were not bit-exact; `E24.16` is *not* enough for a doubl
 `xlog.f` JSON harness (`LOGENTER`/`LOGINT`/`LOGREAL`/`LOGBOOL`/`LOGARR1`/`LOGARR2`) for new work;
 the per-file `.dat` dumps are legacy and are being migrated stage by stage.
 
-Nothing gates on XFOIL's *formatted* output files — `PSAVE` is `G15.7`, `.pol` is `F9.4/F10.5`,
+No test compares against XFOIL's *formatted* output files — `PSAVE` is `G15.7`, `.pol` is `F9.4/F10.5`,
 `DUMP` is `F9.5/F10.6`, `CPWR` is `F11.5`, none of which can support a comparison below ~1e-5.
 
 ### Adding new instrumentation
@@ -549,7 +549,7 @@ never `PANE`, never `PPAR`, because different panels make any comparison meaning
 ### Comparing values
 
 There is no fixed tolerance ladder. Tolerances are **derived from the reference's own noise floor**
-(`scripts/noise-floor.sh`, `docs/validation/noise-floor.md`) and live as five named constants in
+(`scripts/noise-floor.sh`, `docs/testing/noise-floor.md`) and live as five named constants in
 `tests/utilities/tolerances.rs` — `TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, `TOL_TRANSIENT`,
 `TOL_CROSS_HOST` — with no ad-hoc literals anywhere else.
 
@@ -1314,7 +1314,7 @@ base names are listed with the sensitivities XFOIL carries.
 | NCALC, APCALC | `node_normals`, `panel_angles` | |
 | PANGEN | `repanel_by_curvature` (`PangenConfig`); `repanel` (`PanelConfig`) is PANE/PPAR with the trailing-edge treatment and the provenance record | |
 | GETPAN (PPAR menu) | `PanelConfig` / `PangenConfig` fields, `yfoil geometry repanel` flags | see table 12 |
-| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; gated by `tests/subroutine/tgap.rs` |
+| TGAP | `set_te_gap` (`gap`, `blend` = XFOIL's DOC) | GDES trailing-edge gap; tested by `tests/subroutine/tgap.rs` |
 | — | keep | doc: no XFOIL equivalent |
 | NACA4/NACA5 | `naca_4digit`, `naca_5digit` with a `Thickness` {`Perpendicular`, `Vertical`} argument | the un-suffixed name currently holds the non-XFOIL algorithm; every NACA family (4, 4M, 5, 16, 6, 6A) is `series::Section`, which has no XFOIL equivalent |
 | SCALC + SEGSPL + LEFIND + TECALC + NCALC + APCALC | `panel_foil` | doc lists all six |
