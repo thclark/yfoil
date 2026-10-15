@@ -1,7 +1,7 @@
 //! (b) Execution equivalence: UPDATE against the reference, as the last step of a replayed VISCAL iteration.
 //!
 //! For VISCAL iterations 1..3, XFOIL's state entering SETBL's march is loaded, then
-//! SETBL → BLSOLV → UPDATE is run (the first two already gated at 1e-10 / bit-identity), and
+//! SETBL → BLSOLV → UPDATE is run (the first two already held to 1e-10 / bit-identity), and
 //! the post-UPDATE state and diagnostics (RLX, RMSBL, RMXBL/VMXBL/IMXBL/ISMXBL, DAC, CL) are
 //! compared with `update_output_<k>.dat`.
 //!

@@ -34,7 +34,7 @@ def polar_figure(stem: Path, run: dict) -> None:
     from matplotlib.lines import Line2D
     width = style.TEXT_WIDTH_PT
     gutter, left, bottom, top = 34.0, 44.0, 28.0, 14.0
-    legend_h = 11.0 * 8 + 8.0
+    legend_h = 11.0 * 9 + 8.0
     panel_w = (width - left - gutter - 8) / 2
     panel_h = 118.0
     # the state row only for a case that kept the reference's per-call state records
@@ -47,7 +47,7 @@ def polar_figure(stem: Path, run: dict) -> None:
     panels += [("trpos_upper", "transition position in its interval, upper", False),
                ("trpos_lower", "transition position in its interval, lower", False)]
     if has_state:
-        panels += [("state_ratio", "worst state array: $|\\Delta|$ / gate", True),
+        panels += [("state_ratio", "worst state array: $|\\Delta|$ / tolerance", True),
                    ("state_diff", "worst state array: $|\\Delta|$, floor (red)", True)]
     rows = (len(panels) + 1) // 2
     height = top + rows * panel_h + bottom + (rows - 1) * 30.0 + legend_h
@@ -77,7 +77,7 @@ def polar_figure(stem: Path, run: dict) -> None:
             t = p["transition_position"][0 if key == "trpos_upper" else 1]
             return None if t is None or t["at_te"] else t["fraction"]
         if key == "state_ratio":
-            # the reference has no ratio: its own twin's spread is the floor the gate is built on
+            # the reference has no ratio: its own twin's spread is the floor the tolerance is built on
             return (p["state"][0]["ratio"] if p.get("state") else None) if code == "yfoil" else None
         if key == "state_diff":
             if not p.get("state"):
@@ -95,7 +95,7 @@ def polar_figure(stem: Path, run: dict) -> None:
         a = [p["alpha_deg"] for p in pts]
         for key, ax in axes.items():
             # the reference first, so that yFoil's markers sit on top where they coincide
-            # the reference has no series in the ratio panel (its twin's spread is the gate)
+            # the reference has no series in the ratio panel (its twin's spread is the tolerance)
             xp = [] if key in ("state_ratio", "trpos_upper", "trpos_lower") else [p for p in pts if p["xfoil"] is not None]
             xa = [p["alpha_deg"] for p in xp]
             xy = [value(p, "xfoil", key) for p in xp]
@@ -133,7 +133,7 @@ def polar_figure(stem: Path, run: dict) -> None:
         if key == "rmsbl":
             ax.set_ylim(bottom=1e-8)
         if key == "state_ratio":
-            # the gate itself: above it the array is outside what the twin allows
+            # the tolerance itself: above it the array is outside what the twin allows
             ax.axhline(1.0, color="black", linewidth=0.5, linestyle=":")
         if key in ("trpos_upper", "trpos_lower"):
             ax.set_ylim(-0.02, 1.02)
@@ -144,8 +144,9 @@ def polar_figure(stem: Path, run: dict) -> None:
                     transform=ax.get_xaxis_transform(), linestyle="none", clip_on=False)
     handles = [
         Line2D([0], [0], color=XFOIL_COLOUR, linestyle="--", marker="x", markersize=3.2, linewidth=0.9),
-        Line2D([0], [0], color=YFOIL_COLOUR, linestyle="-", marker="o", markersize=2.4, markerfacecolor=YFOIL_COLOUR, linewidth=0.8),
-        Line2D([0], [0], color=YFOIL_COLOUR, linestyle="-", marker="o", markersize=2.4, markerfacecolor="none", linewidth=0.8),
+        Line2D([0], [0], color=YFOIL_COLOUR, linestyle="-", linewidth=0.8),
+        Line2D([0], [0], color=YFOIL_COLOUR, linestyle="none", marker="o", markersize=2.4, markerfacecolor=YFOIL_COLOUR),
+        Line2D([0], [0], color=YFOIL_COLOUR, linestyle="none", marker="o", markersize=2.4, markerfacecolor="none"),
         Line2D([0], [0], color=NONFINITE_COLOUR, linestyle="none", marker="s", markersize=5.2, markerfacecolor="none"),
         Line2D([0], [0], color=NONFINITE_COLOUR, linestyle="none", marker="|", markersize=4),
         Line2D([0], [0], color="black", linestyle="none", marker="D", markersize=5.8, markerfacecolor="none"),
@@ -154,12 +155,13 @@ def polar_figure(stem: Path, run: dict) -> None:
     ]
     labels = [
         "XFOIL (reference)",
-        "yFoil, followed to the end of the point",
-        "yFoil, not followed, or not gated after an earlier departure",
+        "yFoil",
+        "yFoil point: every iteration agrees with XFOIL's",
+        "yFoil point: parts from XFOIL within it, or after a point that did (informational)",
         "went through a non-finite value within the point",
         "plotted value is NaN (tick at its α)",
-        "threshold: run departs where the reference is unstable against its 1-ULP twins",
-        "mismatch: run departs where the reference is stable against its 1-ULP twins",
+        "parts where XFOIL is ill-conditioned (its own 1-ULP twins part there too)",
+        "parts where XFOIL is well-conditioned (its twins agree): a mismatch, replayed step by step",
         "final stagnation or transition station (IST, ITRAN) differs between the codes",
     ]
     fig.legend(handles, labels, loc="lower left", ncol=1, fontsize=style.LEGEND_PT, frameon=False,
@@ -217,10 +219,10 @@ def transition_positions(stem: Path, s: dict) -> None:
         Line2D([0], [0], color="black", linestyle="none", marker="D", markersize=5.0, markerfacecolor="black", alpha=0.35),
     ]
     labels = [
-        "point followed to the end",
-        "point not followed, or not gated after an earlier departure",
-        "threshold: run departs where the reference is unstable against its 1-ULP twins",
-        "mismatch: run departs where the reference is stable against its 1-ULP twins",
+        "every iteration of the point agrees with XFOIL's",
+        "parts from XFOIL within the point, or after a point that did (informational)",
+        "parts where XFOIL is ill-conditioned (its own 1-ULP twins part there too)",
+        "parts where XFOIL is well-conditioned (its twins agree): a mismatch, replayed step by step",
     ]
     fig.legend(handles, labels, loc="lower left", ncol=1, fontsize=style.LEGEND_PT, frameon=False,
                bbox_to_anchor=(0.0, 0.0))

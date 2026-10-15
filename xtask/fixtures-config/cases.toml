@@ -6,7 +6,7 @@
 # untracked cases stay in target/fixtures/<name>/ and are regenerated on demand.
 
 [[case]]
-name = "naca0012_n60_a2_re1e6"          # CI smoke/gate case, small enough to track
+name = "naca0012_n60_a2_re1e6"          # CI smoke-test case, small enough to track
 foil = "naca4:0012"
 n_nodes = 60
 alphas = [2.0]
@@ -20,7 +20,7 @@ run = true
 track = true
 
 [[case]]
-name = "naca0012_n60_polar_re1e6"        # polar state machine gate (S10): ALFA 0, ASEQ 1..5, INIT, ALFA 0, ASEQ -1..-5
+name = "naca0012_n60_polar_re1e6"        # polar state machine test (S10): ALFA 0, ASEQ 1..5, INIT, ALFA 0, ASEQ -1..-5
 foil = "naca4:0012"
 n_nodes = 60
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
@@ -378,15 +378,18 @@ events = true
 track = true
 
 [[case]]
-name = "naca64a010_n60_inviscid_sweep30_type2_m03"    # inviscid TYPE 2 at M 0.3, one SPECAL per degree from -30 to 30: MRCL's CL floor and Mach limit, SPECAL's CL(M) Newton exhausted, the Karman-Tsien pole (known issues 7.10)
+name = "naca64a010_n60_inviscid_type2_m03_am23_a0_a19"    # inviscid TYPE 2 at M 0.3, one SPECAL each at -23, 0 and 19 deg: MRCL's CL floor and Mach limit, SPECAL's CL(M) Newton exhausted, the Karman-Tsien pole (known issues 7.7). Inviscid points carry nothing between them; these three take the same 191 branches, with the same events at each angle, as the -30..30 deg sweep by 1 deg they replace (measured 2026-10-14)
 group = "branch-coverage"
 twins = true
 foil = "naca:64A010"
 n_nodes = 60
-alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas = [-23.0, 0.0, 19.0]
 mach = 0.3
 matyp = 2
 inviscid = true
+# how tested: every inviscid point replayed and compared with XFOIL's record (tests/execution/runs.rs)
+run = true
+keep = ["specal_points.dat"]
 events = true
 track = true
 
@@ -473,7 +476,7 @@ run = true
 track = true
 
 [[case]]
-name = "naca4412_n60_a18_re3e6_iter40"    # stalled first march at Re 3e6: MRCHUE's garbage extrapolation at airfoil, wake-start and wake stations, ITRAN reset, wake closures after a failure
+name = "naca4412_n60_a18_re3e6_iter40"    # stalled first march at Re 3e6: MRCHUE's extrapolation fallback at airfoil, wake-start and wake stations, ITRAN reset, wake closures after a failure
 group = "branch-coverage"
 twins = true
 foil = "naca4:4412"
@@ -518,10 +521,10 @@ damp = true
 # ---- non-finite probes (scripts/branch-coverage, untracked) ------------------------------------
 # The stalled compressible and closed-TE-stall candidates of the branch-coverage search. Each
 # reaches analysis-path branches no finite case reaches, but only after XFOIL has produced a NaN
-# (TRCHEK2's transition-point Newton landing on the interval end, then MRCHUE/MRCHDU's "garbage"
-# extrapolation carrying on). They are tracked but never part of the default selection: the study
+# (TRCHEK2's transition-point Newton landing on the interval end, then MRCHUE/MRCHDU's extrapolation
+# fallback carrying on). They are tracked but never part of the default selection: the study
 # measures them (`--with-group non-finite`) and reports the branches they alone reach as
-# *non-finite only*. The whole run is not gateable, but each event is: the instrumentation writes
+# *non-finite only*. The whole run cannot be compared, but each event is: the instrumentation writes
 # `events.dat` (site, SETBL call, side, station, value) and `dump_calls` keeps the state dumps of
 # those calls, so tests/xfoil_nonfinite_events_tests.rs replays one call at a time.
 # how tested: the whole run takes XFOIL's route with values within the named tolerances (run probe 2026-10-06)
@@ -561,12 +564,14 @@ xtr = [0.22, 0.001]
 # XFOIL's state (tests/execution/steps.rs), and the branch cover's step for that branch
 # (tests/execution/branches.rs). Found 2026-10-07 by the twins-case branch comparison: the N = 240
 # 0 -> 30 deg sweep took it; N = 100 is the smallest panelling that does (N = 60 and 80 do not), and the
-# 2 deg point solved fresh does not
+# 2 deg point solved fresh does not. Every TRCHEK2 call that takes the exit is also replayed on its own
+# from the reference's record of it (trchek2_ax_exit.dat, tests/subroutine/transition.rs)
 step_calls = [2]
+keep = ["trchek2_ax_exit.dat"]
 track = true
 
 [[case]]
-name = "naca16-212_n60_a4_re1e6_m07"       # 16-series at M 0.7: SETBL 'Xtr???', MRCHUE garbage at IBL <= 3, MRCHDU garbage at airfoil, wake-start and similarity stations, TRCHEK2 trip upstream of a laminar station (NaN from iteration 1)
+name = "naca16-212_n60_a4_re1e6_m07"       # 16-series at M 0.7: SETBL 'Xtr???', MRCHUE fallback at IBL <= 3, MRCHDU fallback at airfoil, wake-start and similarity stations, TRCHEK2 trip upstream of a laminar station (NaN from iteration 1)
 group = "non-finite"
 twins = true
 foil = "naca:16-212"
@@ -1221,7 +1226,7 @@ track = false
 # (2026-10-07). Untracked and outside every default selection, `--big` included: run only by name
 # or `--group pathological`. No deterministic end is set — a later study is to watch them run and
 # establish why they are slow, why the 4412 sweeps hang while the BL state stays finite, and whether
-# yFoil does the same. What each showed, the physics it captures, and where that behaviour is gated
+# yFoil does the same. What each showed, the physics it captures, and where that behaviour is tested
 # and shown in routine time: docs/xfoil-known-issues.md §9. Nothing runs them yet.
 
 [[case]]
@@ -1281,3 +1286,4 @@ xtr = [0.22, 0.001]
 polar = true
 group = "pathological"
 track = false
+

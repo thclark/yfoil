@@ -1,10 +1,10 @@
 //! (b) Execution equivalence, branch by branch: every branch of the translated subroutines that
-//! a step of a reference run takes is gated by replaying one step that takes it (`step.rs`) and
+//! a step of a reference run takes is tested by replaying one step that takes it (`step.rs`) and
 //! whose route yFoil is observed to follow — the same call count of every translated subroutine
 //! in the step as XFOIL's (`cargo xtask route`, `xtask/fixtures-config/route.toml`). The steps are
 //! the cover `cargo xtask steps` chose, listed with the branches each takes in
 //! `xtask/fixtures-config/step-cover.toml`, which also lists any branch taken only at a step whose
-//! route diverges (`docs/conventions/testing.md`, "What gated means").
+//! route diverges (`docs/conventions/testing.md`, 'What "tested" means for a branch').
 //!
 //! Fixtures: `tests/fixtures/xfoil/<case>/`, the files each step reads — `cargo xtask fixtures
 //! --case <case>` (the cover adds the dumps and the files to the case).
@@ -101,10 +101,10 @@ fn naca63_415_n60_a14_re1e6_m05_call_1_iteration_18() {
     replay("naca63-415_n60_a14_re1e6_m05", 1, 18, 18);
 }
 
-/// `naca64a010_n60_inviscid_type2_m03`, inviscid point 1: 186 branches.
+/// `naca64a010_n60_inviscid_type2_m03_am23_a0_a19`, inviscid point 1: 187 branches.
 #[test]
-fn naca64a010_n60_inviscid_type2_m03_point_1() {
-    replay_inviscid("naca64a010_n60_inviscid_type2_m03", 1);
+fn naca64a010_n60_inviscid_type2_m03_am23_a0_a19_point_1() {
+    replay_inviscid("naca64a010_n60_inviscid_type2_m03_am23_a0_a19", 1);
 }
 
 /// `naca64a010_n60_type2_a0_re1e6`, VISCAL call 1, iteration 1 (SETBL 1): 855 branches.

@@ -77,7 +77,7 @@ fn check_dij(st: &SolverState, tol: f64, what: &str) -> (f64, usize, usize) {
 /// The whole prologue from yFoil's geometry. DIJ's sensitivity to a wake node position is
 /// O(1/distance) ≈ 3e2 here, and XYWAKE places the nodes within ~1e-12 of XFOIL's (its input
 /// GAM is 4e-14 off after the LU solve), so the DIJ floor for this chained test is ~3e-10:
-/// gated at TOL_SOLVER, not TOL_LINALG. The isolated test above is the translation gate.
+/// held to TOL_SOLVER, not TOL_LINALG. The isolated test above is the translation test.
 #[test]
 fn test_prologue_dij_from_yfoil_geometry() {
     let (mut st, mut sys, u) = prologue_to_specal();

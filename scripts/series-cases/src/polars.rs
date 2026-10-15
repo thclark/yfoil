@@ -4,7 +4,7 @@
 //! ALFA 0 / ASEQ -1 -30 -1`, ITMAX + 5 per ASEQ point, the sequence halting after NSEQEX = 4
 //! consecutive unconverged points). yFoil is driven the same way through its `Session`, applying
 //! the same halting rule to its own convergence, and every point the reference recorded is
-//! compared with `compare_call` (the whole-run gate), matched by the point it computed (leg and
+//! compared with `compare_call` (the whole-run comparison), matched by the point it computed (leg and
 //! alpha), never by running index: a sequence may halt at a different point in the two codes.
 //! The reference may have fewer points than the script: its sequence halted, or the fixture
 //! driver's watchdog ended a run that had gone non-finite and hung in XFOIL's plot-label loop.
@@ -30,7 +30,7 @@ pub struct PolarPoint {
     pub yfoil: (f64, f64, f64, f64, usize, bool),
     /// the same from the reference, when it recorded the call
     pub xfoil: Option<(f64, f64, f64, f64, usize, bool)>,
-    /// match | divergent | mismatch | ungated (the leg had already departed), when the call was
+    /// match | divergent | mismatch | informational (the leg had already parted), when the call was
     /// compared
     pub outcome: Option<String>,
     /// whether the reference itself was ill-conditioned at this point, from its twins
@@ -39,7 +39,7 @@ pub struct PolarPoint {
     pub parted_iteration: Option<usize>,
     /// iterations of the call compared within tolerance (all of them when yFoil followed the
     /// reference to the end of the call, whatever the twin did)
-    pub gated_iterations: Option<usize>,
+    pub compared_iterations: Option<usize>,
     /// a non-finite value (RMSBL, CL, CD or CM) in any iteration of the point, or in the point
     /// itself — yFoil's run, and the reference's records
     pub yfoil_nonfinite: bool,
@@ -54,7 +54,7 @@ pub struct PolarPoint {
     pub yfoil_stations: [usize; 3],
     pub xfoil_stations: Option<[usize; 3]>,
     /// yFoil's final state against the reference's `viscal_state_<k>.dat`,
-    /// array by array, worst ratio to the gate first
+    /// array by array, worst ratio to the tolerance first
     pub state: Option<Vec<ArrayDiff>>,
     /// where transition sits within its station interval at the end of the point, per side
     /// (index 1 upper, 2 lower; slot 0 unused), from yFoil's state
@@ -128,7 +128,7 @@ impl PolarRun {
     /// yFoil followed the reference to the end of this call: every iteration within tolerance
     /// (a match, or divergent only because the reference's own twin flipped its trace)
     fn followed(p: &PolarPoint) -> bool {
-        match (&p.xfoil, p.gated_iterations) {
+        match (&p.xfoil, p.compared_iterations) {
             (Some(x), Some(g)) => g == x.4,
             _ => false,
         }
@@ -153,7 +153,7 @@ impl PolarRun {
             "points": self.points.iter().map(|p| json!({
                 "leg": p.leg, "alpha_deg": p.alpha_deg, "yfoil": pt(&p.yfoil),
                 "xfoil": p.xfoil.as_ref().map(pt), "outcome": p.outcome, "xfoil_ill_conditioned": p.xfoil_ill_conditioned, "parted_iteration": p.parted_iteration,
-                "gated_iterations": p.gated_iterations, "followed": Self::followed(p),
+                "compared_iterations": p.compared_iterations, "followed": Self::followed(p),
                 "yfoil_nonfinite": p.yfoil_nonfinite, "xfoil_nonfinite": p.xfoil_nonfinite,
                 "yfoil_nonfinite_stations": p.yfoil_nonfinite_stations, "xfoil_nan_tokens": p.xfoil_nan_tokens,
                 "yfoil_transition": p.yfoil_transition, "xfoil_transition": p.xfoil_transition,
@@ -267,7 +267,7 @@ pub fn inviscid_sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
             alpha_deg: *a,
             yfoil: (p.cl, p.cd_pressure, p.cm, f64::NAN, 0, true),
             xfoil: x.map(|x| (x.0, x.2, x.1, f64::NAN, 0, true)),
-            gated_iterations: (outcome.as_deref() == Some("match")).then_some(0),
+            compared_iterations: (outcome.as_deref() == Some("match")).then_some(0),
             outcome,
             xfoil_ill_conditioned: x.and(ill),
             parted_iteration: None,
@@ -369,15 +369,17 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
             let mut xfoil_transition = None;
             let mut xfoil_stations = None;
             let state = k.and_then(|k| compare_state(&rec, &dir, k, session.state()));
-            let (xfoil, outcome, parted, gated) = if let Some(k) = k {
+            let (xfoil, outcome, parted, compared) = if let Some(k) = k {
                 let r = compare_call(&rec, k, &p, session.state(), transient_tol(k));
                 let (o, at) = match &r.outcome {
                     Outcome::Match => ("match".to_string(), None),
                     Outcome::Divergent { at_iteration, .. } => ("divergent".to_string(), Some(*at_iteration)),
-                    Outcome::Mismatch { .. } if departed => ("ungated".to_string(), Some(r.gated_iterations + 1)),
-                    Outcome::Mismatch { .. } => ("mismatch".to_string(), Some(r.gated_iterations + 1)),
+                    Outcome::Mismatch { .. } if departed => {
+                        ("informational".to_string(), Some(r.compared_iterations + 1))
+                    }
+                    Outcome::Mismatch { .. } => ("mismatch".to_string(), Some(r.compared_iterations + 1)),
                 };
-                if r.gated_iterations < r.iterations.1 {
+                if r.compared_iterations < r.iterations.1 {
                     departed = true;
                 }
                 xfoil_transition = Some(r.xfoil_transition);
@@ -393,7 +395,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                     )),
                     Some(o),
                     at,
-                    Some(r.gated_iterations),
+                    Some(r.compared_iterations),
                 )
             } else {
                 (None, None, None, None)
@@ -420,7 +422,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                 outcome,
                 xfoil_ill_conditioned: k.and_then(|k| reference_ill_conditioned(&rec, k)),
                 parted_iteration: parted,
-                gated_iterations: gated,
+                compared_iterations: compared,
                 yfoil_nonfinite,
                 xfoil_nonfinite,
                 yfoil_nonfinite_stations: p.nonfinite_station_failures,

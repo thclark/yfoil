@@ -4,7 +4,7 @@
 //! Each output is compared within `TOL_PURE` by the Rule 1 metric, on the scale of the largest
 //! magnitude that output takes in the fixture set (several are near zero at some inputs: a
 //! derivative with respect to MSQ at M = 0, the amplification rate below critical). BLVAR's log
-//! records its values and not their derivatives, so the values are what is gated there.
+//! records its values and not their derivatives, so the values are what is tested there.
 //!
 //! Fixtures: `tests/fixtures/subroutines/<closure>/<case>_NNN.json` and `manifest.json` — `cargo
 //! xtask fixtures --case closures_naca0012_n60_re1e6 --case closures_naca0012_n60_re1e6_m03`

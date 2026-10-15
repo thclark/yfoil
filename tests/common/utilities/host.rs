@@ -6,7 +6,7 @@
 //! disagree by exactly 1 ULP on 0.1 % (`exp`, `ln`, `powf`) to 18 % (`tanh`) of inputs, on
 //! `x86_64` and `aarch64` alike (glibc's results are identical on both). So bit-identity with a
 //! fixture is a property of the host it was generated on (CLAUDE.md Rule 1); on any other host
-//! the comparison is an ULP budget: a step replayed from XFOIL's dumped state is gated at
+//! the comparison is an ULP budget: a step replayed from XFOIL's dumped state is held to
 //! `TOL_SOLVER` on the fixture's host and at `TOL_CROSS_HOST` elsewhere.
 
 #![allow(dead_code)]
@@ -78,12 +78,12 @@ impl std::fmt::Display for Host {
 }
 
 /// Whether the fixture in `dir` was generated on this host. When it was not, prints how values are
-/// gated instead, once per call.
+/// held instead, once per call.
 pub fn same_host(dir: &Path) -> bool {
     let (fixture, running) = (Host::of_fixture(dir), Host::running());
     if fixture != running {
         println!(
-            "CROSS-HOST: fixture generated on {fixture} ({}), running on {running}: transcendentals come from a different libm (1-ULP differences), so values are gated at TOL_CROSS_HOST, and a whole run at no less than the reference's own measured cross-host spread × CROSS_HOST_FACTOR",
+            "CROSS-HOST: fixture generated on {fixture} ({}), running on {running}: transcendentals come from a different libm (1-ULP differences), so values are held to TOL_CROSS_HOST, and a whole run at no less than the reference's own measured cross-host spread × CROSS_HOST_FACTOR",
             Host::libm_of_fixture(dir)
         );
     }

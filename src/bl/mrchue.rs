@@ -42,9 +42,10 @@ pub struct MrchueIter {
 #[derive(Debug, Clone, Default)]
 pub struct MrchueTrace {
     pub iters: Vec<MrchueIter>,
-    /// (IBL, IS, DMAX) for every station whose failed Newton left a residual above 0.1 (or
-    /// non-finite): the 'garbage' extrapolation replaced its solution
-    pub garbage: Vec<(usize, usize, f64)>,
+    /// (IBL, IS, DMAX) for every station whose Newton failed with a residual above 0.1 (or
+    /// non-finite), so that its last iterate was rejected: beyond station 3 the extrapolation
+    /// fallback replaced it with values extrapolated from the station upstream
+    pub rejected: Vec<(usize, usize, f64)>,
 }
 
 /// MRCHUE. Requires the pointer layer (XSSI, IPAN, IBLTE, NBL, WGAP), UEDG initialised
@@ -364,11 +365,13 @@ pub fn march_direct(
             if !converged {
                 // 'MRCHUE: Convergence failed at IBL side IS Res = DMAX'
                 // the current unconverged solution might still be reasonable...
-                // `IF(DMAX .LE. 0.1) GO TO 109`: written as XFOIL tests it, so that a NaN residual
-                // (a station whose closures went non-finite) takes the garbage path as it does there
+                // `IF(DMAX .LE. 0.1) GO TO 109`, negated with its own operator rather than written
+                // as the complement `dmax > 0.1`: the two agree for a finite residual, but every
+                // comparison with NaN is false, so only this form rejects a NaN residual (a station
+                // whose closures went non-finite) as XFOIL does (docs/xfoil-known-issues.md §7.10)
                 if !(dmax <= 0.1) {
                     if let Some(t) = trace.as_mut() {
-                        t.garbage.push((i_station, side, dmax));
+                        t.rejected.push((i_station, side, dmax));
                     }
                     if !dmax.is_finite() {
                         state.nonfinite_station_failures += 1;

@@ -12,7 +12,28 @@ use std::path::Path;
 use yfoil::bl::system::amplification_rate;
 use yfoil::bl::{cdiss_laminar, cf_laminar, cf_turbulent, hk_from_h, hstar_laminar, hstar_turbulent};
 
+/// `TOL_PURE` of `tests/common/utilities/tolerances.rs`, which a binary cannot import
 const REL_TOL: f64 = 1e-12;
+
+/// (case, host, libm) of every reference run the fixtures were cut from, from their manifest.
+fn reference_provenance(fixture_dir: &Path) -> Vec<(String, String, String)> {
+    let text = fs::read_to_string(fixture_dir.join("manifest.json")).unwrap_or_default();
+    let doc: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+    let mut out = vec![];
+    for (case, v) in doc["cases"].as_object().into_iter().flatten() {
+        let field = |key: &str| -> String {
+            v["xfoil_ref"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|l| l.as_str())
+                .find_map(|l| l.strip_prefix(&format!("{key}:")).map(|r| r.trim().to_string()))
+                .unwrap_or_else(|| "unrecorded".into())
+        };
+        out.push((case.clone(), field("host"), field("libm")));
+    }
+    out
+}
 
 /// Calculate relative error
 fn relative_error(expected: f64, actual: f64) -> f64 {
@@ -616,14 +637,14 @@ fn validate_dampl(fixture_dir: &Path) -> ValidationResult {
     result
 }
 
-fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std::io::Result<()> {
+fn write_summary_report(results: &[ValidationResult], fixture_dir: &Path, output_dir: &Path) -> std::io::Result<()> {
     let mut file = File::create(output_dir.join("README.md"))?;
 
-    writeln!(file, "# Subroutine Validation")?;
+    writeln!(file, "# Subroutine comparison")?;
     writeln!(file)?;
     writeln!(
         file,
-        "This report validates yFoil's boundary layer closure functions against XFOIL reference values."
+        "yFoil's boundary-layer closure functions against the calls the instrumented XFOIL reference made to the same functions."
     )?;
     writeln!(file)?;
     writeln!(file, "## Summary")?;
@@ -647,101 +668,67 @@ fn write_summary_report(results: &[ValidationResult], output_dir: &Path) -> std:
     }
 
     writeln!(file)?;
+    writeln!(file, "## What is compared")?;
+    writeln!(file)?;
+    writeln!(
+        file,
+        "Each fixture is one call of the closure inside a real run of the instrumented double-precision \
+         reference (CLAUDE.md, *Reference implementation*): its inputs and outputs, dumped at 17 significant \
+         digits (`ES24.16`, the minimum that round-trips an f64) while the reference ran the cases below. \
+         yFoil's function is called on the same inputs here and its outputs compared with the dumped ones. \
+         The error is relative, absolute below 1e-15."
+    )?;
+    writeln!(file)?;
+    writeln!(file, "| Case | Reference build host | libm |")?;
+    writeln!(file, "|------|------|------|")?;
+    for (case, host, libm) in reference_provenance(fixture_dir) {
+        writeln!(file, "| `{case}` | {host} | {libm} |")?;
+    }
+    writeln!(file)?;
+    writeln!(
+        file,
+        "This report was generated on `{}-{}`. On the reference's own host both codes take their \
+         transcendentals (`exp`, `log`, `tanh`, `**`) from the same libm, and the reference is built with \
+         `-ffp-contract=off`, so a translation that evaluates each expression in XFOIL's order gives the same \
+         bits: an error of exactly 0 means bit-identical, which is what most closures show. A non-zero error \
+         on that host means the translation does not evaluate the expression bit for bit as XFOIL does: \
+         DAMPL's, about 16 ULP, is within `TOL_PURE` and has not been traced to the operation. On another host \
+         the libm differs by one ULP on a fraction of inputs (CLAUDE.md Rule 1) and some errors become \
+         non-zero at that level.",
+        std::env::consts::ARCH,
+        std::env::consts::OS
+    )?;
+    writeln!(file)?;
     writeln!(file, "## Tolerance")?;
     writeln!(file)?;
-    writeln!(file, "All tests use a relative tolerance of **{:.0e}**, ensuring at least 12 significant figures match between yFoil and XFOIL.", REL_TOL)?;
+    writeln!(
+        file,
+        "A case passes within **{:.0e}**, the value of `TOL_PURE` in `tests/common/utilities/tolerances.rs`, \
+         to which the tests in `tests/subroutine/closures.rs` hold the same fixtures.",
+        REL_TOL
+    )?;
     writeln!(file)?;
     writeln!(file, "## Test Fixtures")?;
     writeln!(file)?;
     writeln!(
         file,
-        "Fixture data is stored in [`tests/fixtures/subroutines/`](../../../tests/fixtures/subroutines/):"
+        "Fixture data is stored in [`tests/fixtures/subroutines/`](../../../tests/fixtures/subroutines/), one \
+         directory per closure, one JSON file per call, with the reference's provenance in `manifest.json`. \
+         They are cut from the reference's closure log by `cargo xtask fixtures` for the cases with \
+         `closures = true` in `xtask/fixtures-config/cases.toml`."
     )?;
     writeln!(file)?;
-    writeln!(file, "```")?;
-    writeln!(file, "tests/fixtures/subroutines/")?;
-    writeln!(file, "├── hkin/     - Kinematic shape factor (HKIN)")?;
-    writeln!(file, "├── hsl/      - Laminar energy shape factor (HSL)")?;
-    writeln!(file, "├── hst/      - Turbulent energy shape factor (HST)")?;
-    writeln!(file, "├── cfl/      - Laminar skin friction (CFL)")?;
-    writeln!(file, "├── cft/      - Turbulent skin friction (CFT)")?;
-    writeln!(file, "├── dil/      - Laminar dissipation (DIL)")?;
-    writeln!(file, "└── dampl/    - Amplification rate (DAMPL)")?;
-    writeln!(file, "```")?;
-    writeln!(file)?;
-    writeln!(
-        file,
-        "Each fixture is a JSON file containing input parameters and expected XFOIL output."
-    )?;
-    writeln!(file)?;
-    writeln!(file, "## XFOIL Instrumentation")?;
-    writeln!(file)?;
-    writeln!(
-        file,
-        "Test fixtures were generated by instrumenting XFOIL with WRITE statements to log"
-    )?;
-    writeln!(
-        file,
-        "subroutine inputs and outputs. The instrumentation was added to `xfoil/xfoil6.99/src/xbl.f`."
-    )?;
-    writeln!(file)?;
-    writeln!(file, "**Example instrumentation (HKIN subroutine):**")?;
-    writeln!(file)?;
-    writeln!(file, "```fortran")?;
-    writeln!(file, "C---- Log inputs and outputs for validation")?;
-    writeln!(file, "      WRITE(96,'(A)') '=== HKIN ==='")?;
-    writeln!(file, "      WRITE(96,'(A,E24.16)') 'H=', H")?;
-    writeln!(file, "      WRITE(96,'(A,E24.16)') 'MSQ=', MSQ")?;
-    writeln!(file, "      WRITE(96,'(A,E24.16)') 'HK=', HK")?;
-    writeln!(file, "      WRITE(96,'(A,E24.16)') 'HK_H=', HK_H")?;
-    writeln!(file, "      WRITE(96,'(A,E24.16)') 'HK_MSQ=', HK_MSQ")?;
-    writeln!(file, "```")?;
-    writeln!(file)?;
-    writeln!(
-        file,
-        "Similar instrumentation was added to each closure subroutine (HSL, HST, CFL, CFT, DIL, DAMPL)."
-    )?;
-    writeln!(
-        file,
-        "The instrumented XFOIL writes to unit 96, which outputs `xfoil_subroutine_log.dat`."
-    )?;
-    writeln!(file)?;
-    writeln!(file, "**XFOIL script used to generate fixture data:**")?;
-    writeln!(file)?;
-    writeln!(file, "```")?;
-    writeln!(file, "PLOP")?;
-    writeln!(file, "G F")?;
-    writeln!(file)?;
-    writeln!(file, "NACA 0012")?;
-    writeln!(file, "OPER")?;
-    writeln!(file, "VISC 1e6")?;
-    writeln!(file, "ITER 50")?;
-    writeln!(file, "ALFA 0")?;
-    writeln!(file, "ALFA 2")?;
-    writeln!(file, "ALFA 5")?;
-    writeln!(file, "ALFA 8")?;
-    writeln!(file, "ALFA 10")?;
-    writeln!(file)?;
-    writeln!(file, "QUIT")?;
-    writeln!(file, "```")?;
-    writeln!(file)?;
-    writeln!(
-        file,
-        "Running this script with instrumented XFOIL produces the log file, which is then"
-    )?;
-    writeln!(
-        file,
-        "parsed by `examples/generate_subroutine_fixtures.rs` to create JSON fixtures."
-    )?;
-    writeln!(file)?;
-    writeln!(file, "## Regenerating Validation")?;
+    writeln!(file, "## Regenerating")?;
     writeln!(file)?;
     writeln!(file, "```bash")?;
-    writeln!(file, "# Regenerate validation report (uses existing fixtures)")?;
+    writeln!(file, "# Regenerate this report (uses the tracked fixtures)")?;
     writeln!(file, "cargo run --bin generate_subroutine_validation")?;
     writeln!(file)?;
-    writeln!(file, "# To regenerate fixtures from instrumented XFOIL:")?;
-    writeln!(file, "cargo run --example generate_subroutine_fixtures")?;
+    writeln!(file, "# To regenerate the fixtures from the instrumented reference:")?;
+    writeln!(
+        file,
+        "cargo xtask fixtures --case closures_naca0012_n60_re1e6 --case closures_naca0012_n60_re1e6_m03"
+    )?;
     writeln!(file, "```")?;
     writeln!(file)?;
     writeln!(file, "## Detailed Reports")?;
@@ -879,7 +866,7 @@ fn write_transition_report(results: &[ValidationResult], output_dir: &Path) -> s
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let fixture_dir = project_root.join("tests/fixtures/subroutines");
-    let output_dir = project_root.join("docs/validation/subroutines");
+    let output_dir = project_root.join("docs/testing/subroutines");
 
     fs::create_dir_all(&output_dir)?;
 
@@ -905,7 +892,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\nWriting reports to {}", output_dir.display());
-    write_summary_report(&results, &output_dir)?;
+    write_summary_report(&results, &fixture_dir, &output_dir)?;
     write_closure_report(&results, &output_dir)?;
     write_transition_report(&results, &output_dir)?;
 

@@ -16,7 +16,7 @@
 //!   per-iteration classification below, and a call that still matches to its end while the
 //!   twin flipped inside it is reported as divergent rather than passed);
 //! - every earlier iteration matched, and at this iteration the reference's own 1-ULP spread
-//!   exceeds `DIVERGENCE_FLOOR`: the runs are allowed to part here — in any gated transient (RMSBL,
+//!   exceeds `DIVERGENCE_FLOOR`: the runs are allowed to part here — in any compared transient (RMSBL,
 //!   RLX, CL, …), in the branch trace (IST/ITRAN), in the reported limiter, or at the convergence
 //!   test itself (`RMSBL < EPS1`: the iteration counts differ, every common iteration matched, and
 //!   the reference's RMSBL at the last common one moves by more than `DIVERGENCE_FLOOR`) — the
@@ -302,7 +302,7 @@ pub fn state_arrays(st: &SolverState) -> BTreeMap<String, Vec<f64>> {
 
 /// One array's comparison of a call's final state: the worst |yfoil − xfoil| over its entries,
 /// where (0-based file index; node number for a node array, row index for a station array),
-/// the twin's floor for the array, and the ratio of the difference to the gate
+/// the twin's floor for the array, and the ratio of the difference to the tolerance
 /// `allowed(TOL_SOLVER, floor)` — above 1 the array is outside what the reference's own 1-ULP
 /// twin allows.
 #[derive(Debug, Clone)]
@@ -341,7 +341,7 @@ pub fn compare_state(rec: &Records, case_dir: &Path, k: usize, st: &SolverState)
         for (i, (x, y)) in a.iter().zip(b).enumerate() {
             let d = (x - y).abs();
             // NaN on both sides is agreement (the non-finite region); on one side it is a
-            // difference no gate accepts
+            // difference no tolerance accepts
             let (d, ratio) = if x.is_nan() && y.is_nan() {
                 (0.0, 0.0)
             } else if d.is_nan() {
@@ -408,20 +408,20 @@ pub struct CallReport {
     pub xfoil_stations: [usize; 3],
     /// iterations compared within tolerance before the runs were allowed to part (all of them
     /// on a match)
-    pub gated_iterations: usize,
-    /// worst |diff| / (the reference's own 1-ULP floor) over the gated transients
+    pub compared_iterations: usize,
+    /// worst |diff| / (the reference's own 1-ULP floor) over the compared transients
     pub worst_floor_ratio: f64,
-    /// max |yfoil − xfoil| over the gated iterations, per transient (RMSBL, RLX, CL, CD, CM, ALFA)
+    /// max |yfoil − xfoil| over the compared iterations, per transient (RMSBL, RLX, CL, CD, CM, ALFA)
     pub transient_diff: Vec<(&'static str, f64)>,
     /// |yfoil − xfoil| at the converged point (CL, CD, CM, CDF, CDP, XOCTR1, XOCTR2), only when
-    /// the point itself was gated (a match)
+    /// the point itself was compared (a match)
     pub point_diff: Vec<(&'static str, f64)>,
     pub outcome: Outcome,
 }
 
 fn value_ok(a: f64, b: f64, tol: f64, scale: f64, floor: f64, what: &str) -> Result<(), String> {
     // a non-finite reference value is reproduced only by the same non-finite value (NaN by NaN,
-    // an infinity by the same infinity): the branch trace through it is still gated exactly
+    // an infinity by the same infinity): the branch trace through it is still compared exactly
     if a.is_nan() && b.is_nan() {
         return Ok(());
     }
@@ -440,7 +440,7 @@ fn value_ok(a: f64, b: f64, tol: f64, scale: f64, floor: f64, what: &str) -> Res
 }
 
 /// Compare VISCAL call `k` (1-based) of the reference with a `Session` result, asserting the
-/// gates (`compare_call` with a panic on a mismatch).
+/// tests (`compare_call` with a panic on a mismatch).
 pub fn check_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, transient_tol: f64) -> Outcome {
     let r = compare_call(rec, k, p, st, transient_tol);
     if let Outcome::Mismatch { why } = &r.outcome {
@@ -481,10 +481,10 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
     };
     // the twin changed its branch trace in an earlier call: this call is divergent
     // from iteration 0 whatever its values do. The comparison still runs below, so that
-    // `gated_iterations` and the diffs record how far yFoil follows anyway (the branch-case
+    // `compared_iterations` and the diffs record how far yFoil follows anyway (the branch-case
     // polars tabulate it); no value can turn the outcome into a mismatch here
     let earlier = flips_at(&|c| c.is_none_or(|c| c < k));
-    let ungated = if earlier.is_empty() {
+    let informational = if earlier.is_empty() {
         None
     } else {
         let why = format!(
@@ -497,12 +497,12 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         );
         Some(why)
     };
-    let ungated_flag = ungated.is_some();
+    let informational_flag = informational.is_some();
     let mismatch = |report: &mut CallReport, why: String| {
-        if !ungated_flag {
+        if !informational_flag {
             println!("{ctx}: MISMATCH — {why}");
         }
-        // for an ungated call this is converted to the divergent outcome after the loop
+        // for an informational call this is converted to the divergent outcome after the loop
         report.outcome = Outcome::Mismatch { why };
     };
     assert_eq!(k, x["CALL"].parse::<usize>().unwrap());
@@ -512,7 +512,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
     let fl = |m: Option<&HashMap<String, f64>>, name: &str| m.and_then(|h| h.get(name)).copied().unwrap_or(0.0);
 
     // the twin itself changes this call's iteration count or convergence: the count is then not
-    // a gate, the common iterations are, and the call is divergent at the end of them
+    // compared, the common iterations are, and the call is divergent at the end of them
     let count_flip = within_call
         .iter()
         .any(|l| l.contains("NITDONE") || l.contains("iteration count") || l.contains("LVCONV"));
@@ -607,8 +607,8 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             }
         }
 
-        // every gated transient of this iteration, in the order they are reported
-        let gated = [
+        // every compared transient of this iteration, in the order they are reported
+        let compared = [
             ("RMSBL", y.residual, r[1], 1.0),
             ("RLX", y.relaxation, r[2], 1.0),
             ("CL", y.cl, r[3], 1.0),
@@ -618,7 +618,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             ("MINF", y.mach, r[11], 1.0),
             ("REINF", y.re, r[12], r[12]),
         ];
-        let parted_value = gated.iter().find(|(name, ours, theirs, scale)| {
+        let parted_value = compared.iter().find(|(name, ours, theirs, scale)| {
             (ours - theirs).abs() > allowed(*ours, *theirs, transient_tol, *scale, fl(fi, name))
         });
         let trace_ok =
@@ -639,14 +639,14 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
                 "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {DIVERGENCE_FLOOR:.0e}) under 1 ULP and the runs part ({parted})",
                 y.iteration
             );
-            println!("{ictx}: DIVERGENT — {why}. Values from here on are not gated; the one-step replay from XFOIL's state is the evidence that the step itself is faithful.");
+            println!("{ictx}: DIVERGENT — {why}. Values from here on are not compared; the one-step replay from XFOIL's state is the evidence that the step itself is faithful.");
             report.outcome = Outcome::Divergent {
                 at_iteration: y.iteration,
                 why,
             };
             break;
         }
-        for (m, (name, ours, theirs, scale)) in gated.iter().enumerate() {
+        for (m, (name, ours, theirs, scale)) in compared.iter().enumerate() {
             let floor = fl(fi, name);
             if let Err(why) = value_ok(*ours, *theirs, transient_tol, *scale, floor, &format!("{ictx}: {name}")) {
                 mismatch(&mut report, why);
@@ -687,7 +687,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             );
             break;
         }
-        report.gated_iterations = y.iteration;
+        report.compared_iterations = y.iteration;
     }
     report.worst_floor_ratio = worst_ratio;
     report.transient_diff = names.iter().zip(tdiff).map(|(n, d)| (*n, d)).collect();
@@ -703,7 +703,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             let why = format!(
                 "the common {common} iterations matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {common} the reference itself moves by {floor_rmsbl:.2e} (> {DIVERGENCE_FLOOR:.0e}) under 1 ULP and the runs part at the convergence test there ({counts})"
             );
-            if !ungated_flag {
+            if !informational_flag {
                 println!("{ctx}: DIVERGENT — {why}");
             }
             report.outcome = Outcome::Divergent {
@@ -714,9 +714,9 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             mismatch(&mut report, format!("{ctx}: {counts} (the common iterations matched; RMSBL floor at iteration {common} {floor_rmsbl:.2e})"));
         }
     }
-    if let Some(why) = ungated {
+    if let Some(why) = informational {
         // whatever the values did, the call is divergent from iteration 0; what they did is
-        // kept in the reason and in `gated_iterations`
+        // kept in the reason and in `compared_iterations`
         let note = match &report.outcome {
             Outcome::Match => "yfoil followed the reference to the end of the call anyway".to_string(),
             Outcome::Divergent { at_iteration, why: w } => {
@@ -724,7 +724,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             }
             Outcome::Mismatch { why: w } => format!("the runs would part: {w}"),
         };
-        println!("{ctx}: (ungated) {note}");
+        println!("{ctx}: (informational) {note}");
         report.outcome = Outcome::Divergent {
             at_iteration: 0,
             why: format!("{why}; {note}"),
@@ -811,7 +811,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
 
 /// Compare an inviscid-only call — SPECAL (`kind = "specal"`, one per OPER ALFA) or SPECCL
 /// (`"speccl"`, one per OPER CL) — with a `Session` result: SPECCL's exit iteration ITAL is the
-/// branch trace, ALFA/CL/CM/CDP and the per-node GAM/QINV/CPI the values, gated at `TOL_SOLVER`
+/// branch trace, ALFA/CL/CM/CDP and the per-node GAM/QINV/CPI the values, held to `TOL_SOLVER`
 /// or the twin's own spread × `FLOOR_FACTOR`.
 pub fn compare_inviscid_call(rec: &Records, kind: &str, k: usize, p: &PointResult, st: &SolverState) -> CallReport {
     let (points, floors) = match kind {

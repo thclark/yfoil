@@ -1,6 +1,6 @@
 //! (d) Known XFOIL weakness: known issues §6.5: TGAP on a sharp trailing edge does not deliver the requested gap. XFOIL's
 //! direction there is the mean of the two end tangents, whose length is cos(half the TE angle)
-//! times the spline-parameter stretch, not 1. yFoil replicates it (the nodes are gated against
+//! times the spline-parameter stretch, not 1. yFoil replicates it (the nodes are tested against
 //! XFOIL in `subroutine/tgap.rs`); this defines the resulting gap on both branches.
 //!
 //! Fixtures: `tests/fixtures/xfoil/*_tgap/` — `cargo xtask fixtures --case <name>`.

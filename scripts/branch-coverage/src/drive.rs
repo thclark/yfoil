@@ -11,8 +11,8 @@ use yfoil::bl::system::{AmplificationModel, MachClDependence, ReClDependence};
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
 use yfoil::solver::analysis::{FlowConditions, Session};
 
-/// What the gate of one case concluded.
-pub struct CaseGate {
+/// What the whole-run comparison of one case concluded.
+pub struct CaseComparison {
     pub name: String,
     pub calls: Vec<CallReport>,
     /// the fixture's host (its manifest) and whether this is it
@@ -29,7 +29,7 @@ pub struct CaseGate {
     pub ill_conditioned_calls: Option<Vec<usize>>,
 }
 
-impl CaseGate {
+impl CaseComparison {
     /// match | divergent | mismatch, over every call
     pub fn verdict(&self) -> &'static str {
         if self.calls.iter().any(|c| matches!(c.outcome, Outcome::Mismatch { .. })) {
@@ -48,7 +48,7 @@ impl CaseGate {
     pub fn parted_at(&self) -> Option<(usize, usize)> {
         self.calls.iter().find_map(|c| match &c.outcome {
             Outcome::Divergent { at_iteration, .. } => Some((c.call, *at_iteration)),
-            Outcome::Mismatch { .. } => Some((c.call, c.gated_iterations + 1)),
+            Outcome::Mismatch { .. } => Some((c.call, c.compared_iterations + 1)),
             Outcome::Match => None,
         })
     }
@@ -98,7 +98,7 @@ pub fn conditions(case: &Case) -> FlowConditions {
     }
 }
 
-pub fn gate(root: &Path, case: &Case) -> CaseGate {
+pub fn compare(root: &Path, case: &Case) -> CaseComparison {
     let dir = root.join("target/fixtures").join(&case.name);
     let geometry = read_geometry_from_file(dir.join("panels.json").to_str().unwrap()).expect("panels.json");
     let airfoil = panel_foil(&geometry);
@@ -169,7 +169,7 @@ pub fn gate(root: &Path, case: &Case) -> CaseGate {
         }
     }
     let reference_iterations = calls.iter().map(|c| c.iterations.1).sum();
-    CaseGate {
+    CaseComparison {
         name: case.name.clone(),
         calls,
         fixture_host: fixture_host.to_string(),

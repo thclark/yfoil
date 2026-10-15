@@ -7,7 +7,7 @@
 //! the lower-cased Fortran names), at most `CAP` per closure and case. A case's files carry its
 //! name as their prefix, so several cases (incompressible and compressible) share a closure's
 //! directory; `tests/fixtures/subroutines/manifest.json` records, per case, the reference build
-//! that produced them. The gates are `tests/subroutine/closures.rs` and `axset.rs`.
+//! that produced them. The tests are `tests/subroutine/closures.rs` and `axset.rs`.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;

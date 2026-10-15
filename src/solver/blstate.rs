@@ -137,8 +137,8 @@ pub struct SolverState {
     pub dij_wake_built: bool,
     pub viscous: bool,
     /// Diagnostic, not part of XFOIL's state: station Newton failures whose residual was
-    /// non-finite in the marches of the current VISCAL call (reset at its entry). The garbage
-    /// extrapolation carries the march over them, so nothing else in the state records that the
+    /// non-finite in the marches of the current VISCAL call (reset at its entry). The extrapolation
+    /// fallback carries the march past them, so nothing else in the state records that the
     /// run went through a NaN; validity reports it.
     pub nonfinite_station_failures: usize,
     /// Diagnostic, not part of XFOIL's state: the evidence for whether the values currently

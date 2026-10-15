@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Measure the reference's own spread between the fixtures' host and glibc, per tracked run case:
-# the floor of the run tests' cross-host gate (CLAUDE.md Rule 1, xtask/src/cross_host.rs).
+# the floor of the run tests' cross-host tolerance (CLAUDE.md Rule 1, xtask/src/cross_host.rs).
 #
 #   scripts/cross-host.sh        writes tests/fixtures/cross-host/spread.json
 #

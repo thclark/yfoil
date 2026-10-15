@@ -86,7 +86,7 @@
 //!
 //! ### Methods
 //!
-//! **`pangen` (default)**: XFOIL's PANGEN, line for line ([`repanel_by_curvature`], gated against the
+//! **`pangen` (default)**: XFOIL's PANGEN, line for line ([`repanel_by_curvature`], tested against the
 //! `pangen_*` fixtures). The curvature along the splined input is smoothed, a fictitious curvature
 //! is added at the trailing edge (CTERAT) and inside the refinement windows (CTRRAT), and the nodes
 //! are placed so that `(1 + 6·CVPAR·curvature)·Δs` is equal on every panel.
@@ -94,7 +94,7 @@
 //! **`cosine`**: yFoil's own arc-length cosine spacing ([`repanel_cosine`]), no XFOIL equivalent,
 //! its parameter warped by a power law set by `--cosine-te-bias`: 1 is a plain cosine, below 1
 //! coarser at the trailing edge and finer at the leading edge, above 1 finer at the trailing
-//! edge; its node positions are gated by `tests/application/repanel_cosine.rs`.
+//! edge; its node positions are tested by `tests/application/repanel_cosine.rs`.
 //! On the generators `cosine` is the analytic sampling at cosine chord stations and has no bias.
 //!
 //! Examples:

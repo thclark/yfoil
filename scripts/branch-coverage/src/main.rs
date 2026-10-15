@@ -1,11 +1,11 @@
-//! Branch-coverage study (`docs/validation/branch-coverage/`).
+//! Branch-coverage study (`docs/testing/branch-coverage/`).
 //!
 //! CLAUDE.md Rule 6: "numerically exact" is claimable only over branches that have been
 //! exercised. `cargo xtask coverage` measures which branches of the translated XFOIL subroutines
 //! the reference takes over *all* tracked cases; this study asks the sharper question — what is
 //! the **minimum set of cases** that takes every branch of the *analysis path* (the panelling
-//! generators and their spline/geometry helpers are excluded: they are gated by the `pangen_*`
-//! cases, `docs/validation/geometry/`) — and then gates every case of that set against its
+//! generators and their spline/geometry helpers are excluded: they are tested by the `pangen_*`
+//! cases, `docs/testing/geometry/`) — and then compares every case of that set with its
 //! instrumented reference, so that the coverage claim and the equivalence claim are made over
 //! the same runs.
 //!
@@ -38,7 +38,7 @@
 //! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`; the
 //! figures are drawn from `summary.json` by `plot.py` through `scripts/figures/render.sh`
 //! (matplotlib, presentation only). With `--docs` the Markdown page and the SVG figures are also
-//! written to `docs/validation/branch-coverage/`, the only tracked products.
+//! written to `docs/testing/branch-coverage/`, the only tracked products.
 //!
 //! Usage (from the repository root):
 //!
@@ -57,7 +57,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 /// Files and subroutines of the translated set that belong to panelling / geometry generation,
-/// not to the analysis path (covered by the `pangen_*` and `naca456` gates).
+/// not to the analysis path (covered by the `pangen_*` and `naca456` tests).
 pub const GEOMETRY_FILES: &[&str] = &["naca.f", "xgeom.f", "spline.f"];
 pub const GEOMETRY_SUBROUTINES: &[&str] = &["xfoil.f:NACA", "xfoil.f:PANGEN"];
 
@@ -204,9 +204,10 @@ pub struct Branch {
     pub class: String,
     #[serde(default)]
     pub why: Option<String>,
-    /// the test gating the branch as an event (`tests/…::test_…`), for non-finite-only branches
+    /// the test that replays the branch as an event (`tests/…::test_…`), for branches taken only
+    /// by the non-finite set
     #[serde(default)]
-    pub gate: Option<String>,
+    pub test: Option<String>,
 }
 impl Branch {
     pub fn key(&self) -> String {
@@ -325,10 +326,15 @@ fn main() {
     for case in cases
         .cases
         .iter()
-        .filter(|c| c.is_solver_case() || c.group.as_deref() == Some("non-finite"))
+        .filter(|c| c.is_solver_case() || matches!(c.group.as_deref(), Some("non-finite") | Some("pathological")))
     {
         let dir = root.join("target/coverage/per-case").join(&case.name);
         let Ok(text) = std::fs::read_to_string(dir.join("branches.json")) else {
+            // the pathological cases are measured only on request (`cargo xtask coverage
+            // --per-case --with-group pathological`): their reference runs hang or take hours
+            if case.group.as_deref() == Some("pathological") {
+                continue;
+            }
             eprintln!(
                 "  {}: no per-case measurement (not in the universe run) — skipped",
                 case.name
@@ -415,20 +421,23 @@ fn main() {
         );
     }
 
-    // 4. gate every case of the cover against its fixture
-    let mut gated: Vec<drive::CaseGate> = vec![];
+    // 4. compare every case of the cover with its fixture
+    let mut compared: Vec<drive::CaseComparison> = vec![];
     for name in &cover {
         let cand = candidates.iter().find(|c| &c.case.name == name).unwrap();
         println!("== {name} ==");
-        gated.push(drive::gate(&root, &cand.case));
+        compared.push(drive::compare(&root, &cand.case));
     }
 
-    // 4b. the whole-run gate on the non-finite probes too — not a claim (their reference cannot
+    // 4b. the whole-run comparison on the non-finite probes too — not a claim (their reference cannot
     // reproduce itself), a measurement of how far yFoil follows each one before the runs part
-    let mut nonfinite_gated: Vec<drive::CaseGate> = vec![];
-    for cand in candidates.iter().filter(|c| c.non_finite) {
+    let mut nonfinite_compared: Vec<drive::CaseComparison> = vec![];
+    for cand in candidates
+        .iter()
+        .filter(|c| c.non_finite && c.case.group.as_deref() != Some("pathological"))
+    {
         println!("== {} (non-finite, whole run) ==", cand.case.name);
-        nonfinite_gated.push(drive::gate(&root, &cand.case));
+        nonfinite_compared.push(drive::compare(&root, &cand.case));
     }
 
     // 5. outputs
@@ -450,7 +459,14 @@ fn main() {
         serde_json::to_string_pretty(&metadata).unwrap(),
     )
     .unwrap();
-    let summary = report::summary(&universe, &candidates, &cover, &gated, &nonfinite_gated, group_matches);
+    let summary = report::summary(
+        &universe,
+        &candidates,
+        &cover,
+        &compared,
+        &nonfinite_compared,
+        group_matches,
+    );
     std::fs::write(
         run_dir.join("summary.json"),
         serde_json::to_string_pretty(&summary).unwrap(),
@@ -460,7 +476,7 @@ fn main() {
     report::write_index_tex(&run_dir, &summary);
     let drawn = render(&run_dir);
     if docs {
-        let docs_dir = root.join("docs/validation/branch-coverage");
+        let docs_dir = root.join("docs/testing/branch-coverage");
         std::fs::create_dir_all(&docs_dir).unwrap();
         report::write_docs(&docs_dir, &run_dir, &summary, &universe, &candidates, drawn);
         println!("docs written to {}", docs_dir.display());
