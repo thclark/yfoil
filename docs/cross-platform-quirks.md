@@ -45,7 +45,7 @@ replay value, failing only on those macOS-specific pins.
 
 - `tests/common/utilities/host.rs` compares each fixture's recorded host (`manifest.json`, `host:` line) with
   the running one. Same-host pins are asserted on the fixture's host and reported on any other, never
-  skipped (CLAUDE.md Rule 1's third outcome). Gated on every host: the converged calls before the break,
+  skipped (CLAUDE.md Rule 1's third outcome). Tested on every host: the converged calls before the break,
   the straddle classification by the reference's own floor, the replay within `TOL_CROSS_HOST`
   (`tests/common/utilities/tolerances.rs`, 1e-9 from the measured 3.6e-10), and the polar driver's bookkeeping
   against the sweep's own outcomes.
@@ -60,7 +60,7 @@ replay value, failing only on those macOS-specific pins.
 - The 4412 twin run regenerated on glibc hung at exit in XFOIL's sequence-plot label loop on a non-finite
   CL (known-issues §4), even with graphics off; all 34 calls were on disk. `cargo xtask fixtures` now
   keeps such a run: its watchdog ends a reference that stops producing output and keeps what it wrote.
-- CLAUDE.md, `docs/validation/README.md` (*Polar break points*) and `docs/xfoil-known-issues.md` §7.4
+- CLAUDE.md, `docs/testing/README.md` (*Polar break points*) and `docs/xfoil-known-issues.md` §7.4
   record the measurement.
 
 ## Still open

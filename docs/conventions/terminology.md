@@ -14,8 +14,19 @@ Two qualifications, neither of which is nondeterminism:
 - **Host dependence.** Transcendentals (`**`, `EXP`, `LOG`, `ATAN2`, `TANH`) come from the host
   libm in both codes. Apple libSystem and glibc differ by one ULP on a fraction of inputs, so
   the same input can give different bits on different hosts. Deterministic per host; an ULP
-  budget across hosts (CLAUDE.md Rule 1).
+  budget across hosts (CLAUDE.md Rule 1). A host-independent Rust libm (the `libm` crate, a port
+  of musl's; or correctly rounded functions such as CORE-MATH, whose result is the same on every
+  host by definition) would make yFoil's own bits host-independent, but on its own it would only
+  move the 1-ULP difference from between hosts to between yFoil and the reference on every host.
+  Bit-identity across hosts needs both codes on the same functions: the reference linked against
+  the same library as yFoil.
 - **Ill-conditioned solutions** and **divergent comparisons**, below.
+
+## Tested, compared, covered — not "gated"
+
+A behaviour or a branch is **tested** when a test asserts it; a value is **held to** a tolerance; a
+study **compares** a whole run with the reference. A branch is **covered** by the set of runs or
+steps that takes it. *Gate* and *gated* (switched, let in or let out) are not used for any of these.
 
 ## Ill-conditioned solution
 
@@ -26,7 +37,7 @@ point, met by **each code on its own**: XFOIL disagrees with itself under a one-
 of its input, and so does yFoil.
 
 Ill-conditioned solutions are not to be avoided in testing. Most of XFOIL's rarely-taken branches
-— the garbage extrapolation of a failed station, the relaxation limits, the negative-Ue islands,
+— the extrapolation fallback of a failed station, the relaxation limits, the negative-Ue islands,
 the stagnation-point fallbacks — exist precisely to cope with them, so the tests must reach them
 to cover those branches.
 
@@ -89,14 +100,14 @@ analysis path a finite run can reach. It is chosen by the branch-coverage study
 (`scripts/branch-coverage`) from each candidate case's gcov counts, and its members are the cases
 with `group = "branch-coverage"` in `xtask/fixtures-config/cases.toml`. A **case-cover member** is
 one of those cases (for example `naca0012_n60_a8_re1e4_damp`). It is a study's claim that this set
-of runs exercises the analysis path; the tests do not gate branches through it.
+of runs exercises the analysis path; the tests do not cover branches through it.
 
 The **step cover** is the fewest single steps — one Newton iteration of one VISCAL call, or one
 inviscid call — that together take every branch any candidate step takes. It is chosen by
 `cargo xtask steps` from every tracked case's steps, only among steps through which
 `cargo xtask route` observed yFoil take XFOIL's route, and is recorded in
 `xtask/fixtures-config/step-cover.toml`. A **step-cover member** is one such step, replayed by one
-test in `tests/execution/branches.rs`. This is the cover the tests gate branches with
+test in `tests/execution/branches.rs`. This is the cover the tests cover branches with
 ([testing.md](testing.md), "How branch coverage is established").
 
 Say which cover is meant; "the cover" alone is ambiguous.

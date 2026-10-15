@@ -34,7 +34,7 @@ result, and the record always carries a `status`:
 that flag changes **only** whether the numbers are present, never the status or the reasons, so a
 result carrying numbers can still be recognised as one that should not be trusted.
 
-For `yfoil analyse` the same gate covers `surface` (the q and Cp distributions) and
+For `yfoil analyse` the same rule covers `surface` (the q and Cp distributions) and
 `boundary_layer`, because those are results too — on an out-of-domain point the Cp field is
 precisely what went wrong. `conditions` and `geometry` are *inputs*, so they are always present.
 
@@ -107,7 +107,7 @@ inferred from the size or the smoothness of a returned number; see
 | `MachClNewtonExhausted` | B | `SPECAL`'s CL(M) Newton used all 20 iterations without reaching `\|DCLM\| ≤ 1e-6`. | What is reported is iterate 20, not a solution. Only reachable under `TYPE 2`/`TYPE 3`, where the Mach number follows the lift. |
 | `ClNewtonExhausted` | B | `SPECCL`'s alpha Newton used all 20 iterations without reaching `\|DALFA\| ≤ 1e-6`. | The alpha reported does not deliver the CL you asked for. Typically a CL beyond what the section can reach. |
 | `ViscousNotConverged` | B | `VISCAL` finished without `LVCONV`: the viscous–inviscid iteration did not converge in `--max-iterations`. | The BL and the outer flow are not consistent with each other. Common past stall; raising `--max-iterations` sometimes helps and sometimes does not. |
-| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's garbage extrapolation. | The run passed through a NaN and kept going with extrapolated values. See [known issues §4](../xfoil-known-issues.md), the TRCHEK2 row. |
+| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's extrapolation fallback. | The run passed through a NaN and kept going with extrapolated values. See [known issues §4](../xfoil-known-issues.md), the TRCHEK2 row. |
 | `SequenceHalted` | — | Only on `NotAttempted` points: the sweep stopped before this alpha. | Nothing was computed. |
 
 ## Diagnostics

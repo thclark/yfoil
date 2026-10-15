@@ -16,7 +16,7 @@ x_l = x + y_t \sin\theta,\quad y_l = y_c - y_t \cos\theta,\qquad
 
 The formulas below are those of the NASA ordinate program
 ([ladson1996](../references.md#ladson1996)) and its public-domain revision `naca456`
-([carmichael2001](../references.md#carmichael2001)), against which yFoil's generators are gated
+([carmichael2001](../references.md#carmichael2001)), against which yFoil's generators are tested
 (see [validation](../validation/aerofoil-series/README.md)). Every generated file carries a
 [provenance record](#provenance) naming the family, the parameters and these references.
 
@@ -227,7 +227,7 @@ The 4-digit families keep a finite trailing-edge thickness; the 6-series, 6A-ser
 Kármán–Trefftz sections close exactly. XFOIL does not blunt a sharp trailing edge anywhere:
 `PANGEN` keeps the buffer's end points, `TECALC` detects sharpness geometrically
 (`SHARP = DSTE < 10⁻⁴ CHORD`) and the panel method, the wake and the boundary layer switch
-branches on it, all of which yFoil translates and gates. yFoil therefore generates each section
+branches on it, all of which yFoil translates and tests. yFoil therefore generates each section
 as defined. Two adjustments are available, both recorded in the provenance record:
 
 - `--sharp` moves the two trailing-edge nodes to their midpoint (a closed 4-digit section);

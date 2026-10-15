@@ -11,7 +11,7 @@ This explains how branches are created, named, pushed, and kept up to date. Open
 
 ## Never push to a protected branch
 
-Never `git push` to `main` or any protected branch, even with admin/bypass rights and even if asked. Branch protection routes changes through CI and PR review; bypassing it skips those gates. Push a feature branch and open a PR instead — if the user wants a direct push to a protected branch, they must do it themselves.
+Never `git push` to `main` or any protected branch, even with admin/bypass rights and even if asked. Branch protection routes changes through CI and PR review; bypassing it skips those checks. Push a feature branch and open a PR instead — if the user wants a direct push to a protected branch, they must do it themselves.
 
 If push output contains `Bypassed rule violations` or any sign a protection rule was overridden, that means the wrong thing just happened — flag it immediately.
 

@@ -80,7 +80,7 @@ cargo build --all-targets
 cargo test --all-targets --no-fail-fast                       # fixtures are tracked, so this needs no XFOIL build
 cargo test --all-targets --features plotting --no-fail-fast   # plotting is behind a cargo feature
 cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings
-ci/no-deviations.sh                                           # Rule 2 grep gate (see CLAUDE.md)
+ci/no-deviations.sh                                           # Rule 2 grep check (see CLAUDE.md)
 ci/ignore-drift.sh                                            # every #[ignore] is tagged and listed in tests/IGNORED.txt
 ```
 
@@ -93,7 +93,7 @@ for `yfoil plot`. See `yfoil --help` and the [user guide](docs/guide/index.md).
 cargo xtask xfoil-build [--verify] [--snan]        # build the DP reference into target/xfoil-ref/ (and prove
                                                    #   instrumentation is inert / no uninitialised reads)
 cargo xtask fixtures [--case NAME] [--verify] [--big]   # regenerate fixtures from xtask/fixtures-config/cases.toml
-cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/validation/coverage.md
+cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/testing/coverage.md
 ```
 
 **Documentation.** The docs site is built with [Zensical](https://zensical.org/) (the successor to Material for MkDocs)

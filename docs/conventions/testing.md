@@ -38,19 +38,33 @@ Every test performs one, and only one, of the following functions.
 5. **Divergence belongs to the studies.** Explaining that an XFOIL–yFoil difference in a polar is
    a divergent comparison, not an error, is the job of the studies and of the validation reports —
    not of a test. No test reads twin data.
-6. **Studies demonstrate; tests gate.** A study shows an external reader how a condition, regime
-   or behaviour arises and whether yFoil follows the reference through it; a test gates correct,
+6. **Studies demonstrate; tests check.** A study shows an external reader how a condition, regime
+   or behaviour arises and whether yFoil follows the reference through it; a test checks correct,
    consistent functionality as minimally and quickly as it can. So one behaviour may need both: a
-   minimal test (a step or an event) that gates it, and a study run that shows it arising — a
+   minimal test (a step or an event) that tests it, and a study run that shows it arising — a
    `series` case for a section or regime under normal conditions, a `known-issues` case for one of
    XFOIL's known issues (`docs/xfoil-known-issues.md`). A run whose only purpose is a known issue is
-   a `known-issues` case, never a `series` one. Every validation run — each `branch-coverage`,
+   a `known-issues` case, never a `series` one. Every study run — each `branch-coverage`,
    `non-finite` and `series` case — carries its own five 1-ULP twins (`twins = true`), at its own
    panelling, which is the only way to know whether XFOIL was ill-conditioned at a given point; a
    twin of a different case, or of the same section at another panel count, says nothing about it.
 7. **A test asserts something.** A diagnostic that only prints is not a test; it goes in
    `examples/attic/`.
 8. **A missing fixture fails the test** (`require_fixture`); it is never skipped.
+
+## Validation and consistency
+
+The reference cases serve two audiences, and their reports live in two places:
+
+- **Validation** (`docs/validation/`) is the engineering assessment: whether yFoil stacks up
+  sensibly against XFOIL on the aerofoil series and flow regimes an aerodynamicist would run. Its
+  cases are the `series` group, whose results read as polars and boundary layers, and the selection
+  of aerofoils they are run on.
+- **Consistency** (`docs/testing/`) is how the test suite tracks yFoil against XFOIL, for software
+  developers (and aerodynamicists deep into XFOIL's edge cases): branch coverage and which test
+  covers each branch, the minimal `branch-coverage` (finite) and `non-finite` sets, the
+  `known-issues` and `pathological` runs, the reference's noise floor, and the subroutine and
+  geometry comparisons.
 
 ## Layout
 
@@ -115,12 +129,12 @@ a fixture with a manifest, never against literals typed into the source.
    `tests/execution/branches.rs`; the fixture generator adds the dumps and files those steps need.
    Every step is eligible, ill-conditioned solutions included, except the divergent ones; the
    twins' conditioning of each step is recorded beside it for information.
-4. **The record.** `docs/validation/branch-gating.md` (generated) lists every candidate case and
-   how it is tested, every chosen step with its branches, and the branches no test gates.
+4. **The record.** `docs/testing/branch-tests.md` (generated) lists every candidate case and
+   how it is tested, every chosen step with its branches, and the branches no test covers.
 
-## What "gated" means
+## What "tested" means for a branch
 
-A branch is **gated** when a test replays a step in which XFOIL took the branch, compares the step's
+A branch is **tested** when a test replays a step in which XFOIL took the branch, compares the step's
 decisions exactly and its values as above, **and** yFoil's own route through that step is observed
 to equal XFOIL's (`cargo xtask route`). The route is observed at the granularity of subroutine call
 counts: every translated subroutine is called the same number of times in the step by both codes.
@@ -128,7 +142,7 @@ That detects a divergent route wherever it changes what is called — a differen
 station, a different number of TRCHEK2 or station-Newton iterates, a fallback taken or not — and
 the step's compared decisions (IST, ITRAN, the iteration count, RLX, convergence) cover the
 decisions those reach. A branch inside a subroutine that changes no call count and no compared
-decision is gated only through the step's values; observing it directly needs a line map between
+decision is tested only through the step's values; observing it directly needs a line map between
 the Fortran and the Rust, which is not built yet.
 
 Measured 2026-10-06 over 870 steps of 36 candidate cases. The first measurement found 6 divergent
@@ -138,10 +152,10 @@ transition, which changed no converged value and so no value test), and after th
 measured step's route agrees. One step remains excluded, found from the branch events rather than
 the call counts (MRCHDU's fallback at a different station with the same counts, `route.toml`).
 Every branch any candidate step takes is taken by a step whose route agrees, so none is left
-ungated by the exclusion.
+untested by the exclusion.
 
 ## Status
 
 This convention was adopted on 2026-10-06 and every test lives in its category binary. One exception
 remains: `subroutine/pane_legacy.rs` compares against panels XFOIL generated itself (CLAUDE.md Rule 4);
-PANGEN is gated against yFoil-generated panels by `subroutine/pangen.rs`.
+PANGEN is tested against yFoil-generated panels by `subroutine/pangen.rs`.
