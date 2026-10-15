@@ -10,9 +10,8 @@
     "dump_calls": [
       1,
       2,
-      7,
-      8,
-      17
+      17,
+      18
     ],
     "events": true,
     "foil": "naca:64A010",
@@ -25,9 +24,7 @@
       "update_output_1.dat",
       "mrchdu_input_2.dat",
       "viscal_points.dat",
-      "mrchdu_input_7.dat",
-      "update_output_7.dat",
-      "mrchdu_input_8.dat"
+      "mrchdu_input_18.dat"
     ],
     "mach": 0.3,
     "matyp": 2,

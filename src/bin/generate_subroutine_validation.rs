@@ -692,7 +692,7 @@ fn write_summary_report(results: &[ValidationResult], fixture_dir: &Path, output
          not depend on the host, and the reference is built with `-ffp-contract=off`, so a translation that \
          evaluates each expression in XFOIL's order gives the same bits: an error of exactly 0 means \
          bit-identical, which is what most closures show. A non-zero error means the translation does not \
-         evaluate the expression bit for bit as XFOIL does: DAMPL's, about 16 ULP, is within `TOL_PURE` and \
+         evaluate the expression bit for bit as XFOIL does: DAMPL's, a few ULP (the table above), is within `TOL_PURE` and \
          has not been traced to the operation.",
         std::env::consts::ARCH,
         std::env::consts::OS

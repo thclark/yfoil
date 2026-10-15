@@ -17,10 +17,10 @@ fn kt_n60_inviscid_a4_cl05_cl8_point_3() {
     replay_inviscid("kt_n60_inviscid_a4_cl05_cl8", 3);
 }
 
-/// `naca0012_n60_a2_re1e6_type2`, VISCAL call 1, iteration 2 (SETBL 2): 519 branches.
+/// `naca0012_n60_a2_re1e6_type2`, VISCAL call 1, iteration 1 (SETBL 1): 835 branches.
 #[test]
-fn naca0012_n60_a2_re1e6_type2_call_1_iteration_2() {
-    replay("naca0012_n60_a2_re1e6_type2", 1, 2, 2);
+fn naca0012_n60_a2_re1e6_type2_call_1_iteration_1() {
+    replay("naca0012_n60_a2_re1e6_type2", 1, 1, 1);
 }
 
 /// `naca0012_n60_a2_re1e6_type3`, VISCAL call 1, iteration 1 (SETBL 1): 833 branches.
@@ -39,6 +39,12 @@ fn naca0012_n60_a2_repeat_re1e6_call_2_iteration_1() {
 #[test]
 fn naca0012_n60_a8_re1e4_damp_call_1_iteration_3() {
     replay("naca0012_n60_a8_re1e4_damp", 1, 3, 3);
+}
+
+/// `naca0012_n60_polar30_re1e6`, VISCAL call 12, every iteration (SETBL 67–91): 701 branches.
+#[test]
+fn naca0012_n60_polar30_re1e6_call_12() {
+    replay("naca0012_n60_polar30_re1e6", 12, 0, 67);
 }
 
 /// `naca16-212_n60_a4_re1e6_m07`, VISCAL call 1, iteration 1 (SETBL 1): 916 branches.
@@ -65,22 +71,16 @@ fn naca23012_n60_a4_re1e6_xtr022_0001_call_1_iteration_4() {
     replay("naca23012_n60_a4_re1e6_xtr022_0001", 1, 4, 4);
 }
 
+/// `naca2412_n60_a14_re1e6_m05_iter60`, VISCAL call 1, iteration 45 (SETBL 45): 542 branches.
+#[test]
+fn naca2412_n60_a14_re1e6_m05_iter60_call_1_iteration_45() {
+    replay("naca2412_n60_a14_re1e6_m05_iter60", 1, 45, 45);
+}
+
 /// `naca4412_n160_a16_re1e6_m05`, VISCAL call 1, iteration 8 (SETBL 8): 552 branches.
 #[test]
 fn naca4412_n160_a16_re1e6_m05_call_1_iteration_8() {
     replay("naca4412_n160_a16_re1e6_m05", 1, 8, 8);
-}
-
-/// `naca4412_n160_polar30_re1e6_m05`, VISCAL call 27, every iteration (SETBL 238–262): 744 branches.
-#[test]
-fn naca4412_n160_polar30_re1e6_m05_call_27() {
-    replay("naca4412_n160_polar30_re1e6_m05", 27, 0, 238);
-}
-
-/// `naca4412_n60_a16_re1e6_m06_iter60`, VISCAL call 1, iteration 51 (SETBL 51): 532 branches.
-#[test]
-fn naca4412_n60_a16_re1e6_m06_iter60_call_1_iteration_51() {
-    replay("naca4412_n60_a16_re1e6_m06_iter60", 1, 51, 51);
 }
 
 /// `naca4412_n60_cl1_clm05_re1e6`, VISCAL call 1, iteration 1 (SETBL 1): 861 branches.
@@ -95,7 +95,7 @@ fn naca4412_n60_cl1_clm05_re1e6_call_2_iteration_1() {
     replay("naca4412_n60_cl1_clm05_re1e6", 2, 1, 7);
 }
 
-/// `naca63-415_n60_a14_re1e6_m05`, VISCAL call 1, iteration 18 (SETBL 18): 564 branches.
+/// `naca63-415_n60_a14_re1e6_m05`, VISCAL call 1, iteration 18 (SETBL 18): 565 branches.
 #[test]
 fn naca63_415_n60_a14_re1e6_m05_call_1_iteration_18() {
     replay("naca63-415_n60_a14_re1e6_m05", 1, 18, 18);
@@ -107,20 +107,14 @@ fn naca64a010_n60_inviscid_type2_m03_am23_a0_a19_point_1() {
     replay_inviscid("naca64a010_n60_inviscid_type2_m03_am23_a0_a19", 1);
 }
 
-/// `naca64a010_n60_type2_a0_re1e6`, VISCAL call 1, iteration 1 (SETBL 1): 855 branches.
-#[test]
-fn naca64a010_n60_type2_a0_re1e6_call_1_iteration_1() {
-    replay("naca64a010_n60_type2_a0_re1e6", 1, 1, 1);
-}
-
-/// `naca64a010_n60_type2_m03_a0`, VISCAL call 1, iteration 1 (SETBL 1): 912 branches.
+/// `naca64a010_n60_type2_m03_a0`, VISCAL call 1, iteration 1 (SETBL 1): 911 branches.
 #[test]
 fn naca64a010_n60_type2_m03_a0_call_1_iteration_1() {
     replay("naca64a010_n60_type2_m03_a0", 1, 1, 1);
 }
 
-/// `naca64a010_n60_type2_m03_a0`, VISCAL call 1, iteration 7 (SETBL 7): 504 branches.
+/// `naca64a010_n60_type2_m03_a0`, VISCAL call 1, iteration 17 (SETBL 17): 520 branches.
 #[test]
-fn naca64a010_n60_type2_m03_a0_call_1_iteration_7() {
-    replay("naca64a010_n60_type2_m03_a0", 1, 7, 7);
+fn naca64a010_n60_type2_m03_a0_call_1_iteration_17() {
+    replay("naca64a010_n60_type2_m03_a0", 1, 17, 17);
 }

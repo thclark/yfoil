@@ -9,7 +9,8 @@
     "damp": false,
     "dump_calls": [
       1,
-      45
+      45,
+      46
     ],
     "events": true,
     "foil": "naca4:2412",
@@ -18,7 +19,9 @@
       "mrchdu_input_1.dat",
       "mrchdu_output_1.dat",
       "mrchdu_input_45.dat",
-      "update_output_45.dat"
+      "update_output_45.dat",
+      "mrchdu_input_46.dat",
+      "viscal_points.dat"
     ],
     "mach": 0.5,
     "matyp": 0,

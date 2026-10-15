@@ -8,16 +8,15 @@
     "cls": [],
     "damp": false,
     "dump_calls": [
-      2,
-      3
+      1,
+      2
     ],
     "events": false,
     "foil": "naca4:0012",
     "inviscid": false,
     "keep": [
+      "update_output_1.dat",
       "mrchdu_input_2.dat",
-      "update_output_2.dat",
-      "mrchdu_input_3.dat",
       "viscal_points.dat",
       "viscal_iters_all.dat"
     ],
