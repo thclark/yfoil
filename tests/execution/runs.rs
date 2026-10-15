@@ -99,6 +99,12 @@ fn kt_n60_inviscid_a4_cl05_cl8_run() {
     compare_run("kt_n60_inviscid_a4_cl05_cl8", 0);
 }
 
+/// `naca64a010_n60_inviscid_type2_m03_am23_a0_a19`: every inviscid point.
+#[test]
+fn naca64a010_n60_inviscid_type2_m03_am23_a0_a19_run() {
+    compare_run("naca64a010_n60_inviscid_type2_m03_am23_a0_a19", 0);
+}
+
 /// `naca64a010_n60_inviscid_type2_m03`: every inviscid point.
 #[test]
 fn naca64a010_n60_inviscid_type2_m03_run() {
