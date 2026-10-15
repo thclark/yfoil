@@ -3,7 +3,7 @@
 //! the instrumented reference's `viscal_final.dat` / `viscal_iter.dat` on the same panels.
 //!
 //! Everything upstream of the Newton loop is yFoil's here (GGCALC, XYWAKE, QDCALC, MRCHUE), so
-//! this is the propagated-floor comparison: the S3/S4 gates put the wake position and DIJ at
+//! this is the propagated-floor comparison: the S3/S4 tests put the wake position and DIJ at
 //! ~5e-11, which is what bounds the final forces (TOL_SOLVER is at the measured noise floor).
 //!
 //! Fixtures: `tests/fixtures/xfoil/naca0012_n60_a2_re1e6/` — `cargo xtask fixtures --case naca0012_n60_a2_re1e6`.

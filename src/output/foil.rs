@@ -14,7 +14,7 @@
 //! Newton correction (bounded by the RMSBL < 1e-4 convergence test on a converged point; unbounded
 //! on an unconverged one).
 //!
-//! yFoil reproduces those stored arrays exactly (they are fixture-gated). The `closures` of
+//! yFoil reproduces those stored arrays exactly (they are fixture-tested). The `closures` of
 //! [`SideStations`] are therefore computed *live* here by running XFOIL's own BLPRV → BLKIN → BLVAR
 //! on the converged `primaries`, and the lagged arrays are emitted verbatim under
 //! [`SideStations::lagged_closures`] only when asked for (`--include-lagged-closures`), so a

@@ -2,7 +2,7 @@
 //! equivalent and no external reference; what it must do is keep producing exactly what it
 //! produces today. The snapshot files under `tests/fixtures/repanel_cosine/` were written by this
 //! test (`UPDATE_SNAPSHOT=1`; last on 2026-09-11, when the historic extra node was removed so that
-//! it writes exactly n nodes), and every node is gated at `TOL_PURE`.
+//! it writes exactly n nodes), and every node is held to `TOL_PURE`.
 //!
 //! Fixtures: `tests/fixtures/repanel_cosine/` — regression snapshots, rewritten by `UPDATE_SNAPSHOT=1 cargo test --test application`.
 

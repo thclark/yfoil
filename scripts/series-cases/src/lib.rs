@@ -17,7 +17,8 @@
 //! `summary.json` (every point of every polar, both codes, with the outcome of each comparison),
 //! `README.md` / `README.tex`; the figure (`polars.svg`, `polars.pdf`) is drawn from
 //! `summary.json` by `plot.py` through `scripts/figures/render.sh`. With `--docs` the Markdown
-//! page and the SVG are also written to `docs/validation/series-cases/`.
+//! page and the SVG are also written to `docs/validation/series-cases/` (the known-issues cases'
+//! to `docs/testing/known-issues/`).
 //!
 //! The library runs any [`Study`]: the series cases (`cargo run --release -p series-cases -- [--docs]`)
 //! and the known-issues cases (`cargo run --release -p known-issues -- [--docs]`) share every
@@ -234,8 +235,11 @@ pub fn descriptions(root: &Path) -> std::collections::BTreeMap<String, String> {
 /// its pages introduce themselves. The series cases and the known-issues cases share every
 /// comparison, table and figure.
 pub struct Study {
-    /// the crate and the docs directory (`scripts/<slug>/`, `docs/validation/<slug>/`)
+    /// the crate and the docs directory (`scripts/<slug>/`, `docs/<section>/<slug>/`)
     pub slug: &'static str,
+    /// the docs section it belongs to: `validation` (the engineering assessment) or `testing`
+    /// (consistency with XFOIL, for developers; `docs/conventions/testing.md`)
+    pub section: &'static str,
     /// the `group` of `xtask/fixtures-config/cases.toml` it runs
     pub group: &'static str,
     /// the page title
@@ -255,6 +259,7 @@ impl Study {
 /// The series cases (`docs/validation/series-cases/`).
 pub const SERIES: Study = Study {
     slug: "series-cases",
+    section: "validation",
     group: "series",
     title: "Series cases",
     purpose: "Runs of the aerofoil series and flow regimes of interest under normal conditions, shown to an \
@@ -265,9 +270,10 @@ pub const SERIES: Study = Study {
     purpose_tex: "Runs of the aerofoil series and flow regimes of interest under normal conditions: that yFoil follows the reference through each of them.",
 };
 
-/// The known-issues cases (`docs/validation/known-issues/`).
+/// The known-issues cases (`docs/testing/known-issues/`).
 pub const KNOWN_ISSUES: Study = Study {
     slug: "known-issues",
+    section: "testing",
     group: "known-issues",
     title: "Known-issues cases",
     purpose: "Runs that show one of XFOIL's known issues (`docs/xfoil-known-issues.md`) arising, and whether \
@@ -279,7 +285,7 @@ pub const KNOWN_ISSUES: Study = Study {
     purpose_tex: "Runs that show one of XFOIL's known issues arising, and whether yFoil does the same.",
 };
 
-/// Run a study over its cases' fixtures; `--docs` also writes its page under `docs/validation/`.
+/// Run a study over its cases' fixtures; `--docs` also writes its page under `docs/<section>/`.
 pub fn run(study: &Study) {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let docs = args.iter().any(|a| a == "--docs");
@@ -342,7 +348,7 @@ pub fn run(study: &Study) {
     report::write_index_tex(study, &run_dir, &summary);
     let drawn = render(study, &run_dir);
     if docs {
-        let docs_dir = root.join("docs/validation").join(study.slug);
+        let docs_dir = root.join("docs").join(study.section).join(study.slug);
         std::fs::create_dir_all(&docs_dir).unwrap();
         report::write_docs(study, &docs_dir, &run_dir, &summary, drawn);
         println!("docs written to {}", docs_dir.display());

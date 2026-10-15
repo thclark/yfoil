@@ -2,9 +2,9 @@
 //! branch at a time.
 //!
 //! The `non-finite` cases of `cases.toml` are the probes of the branch-coverage study whose
-//! reference run prints NaN: a whole-run gate is impossible there (the reference cannot
+//! reference run prints NaN: a whole-run comparison is impossible there (the reference cannot
 //! reproduce itself, and NaN arithmetic is where two correct translations may legitimately
-//! differ). What *can* be gated is each rarely-taken branch they reach, as XFOIL's own event:
+//! differ). What *can* be tested is each rarely-taken branch they reach, as XFOIL's own event:
 //! the instrumented reference writes `events.dat` — one line per event with its site, SETBL call,
 //! side, station and the value that decided it — and `dump_calls` keeps the state dumps of those
 //! calls. Each test seeds yFoil with XFOIL's exact state entering that call (`step.rs`: the
@@ -16,7 +16,7 @@
 //!
 //! | event | branch | case, SETBL call | what is replayed |
 //! |---|---|---|---|
-//! | `MRCHUE_GARBAGE` | xbl.f:788–827 | 16-212 M 0.7, 4412 N=160 M 0.5 … (first march) | MRCHUE from the VISCAL prologue, against `mrchdu_input_1.dat` |
+//! | `MRCHUE_GARBAGE` (the extrapolation fallback; the tag is the instrumentation's) | xbl.f:788–827 | 16-212 M 0.7, 4412 N=160 M 0.5 … (first march) | MRCHUE from the VISCAL prologue, against `mrchdu_input_1.dat` |
 //! | `MRCHDU_GARBAGE` | xbl.f:1111–1135 | every non-finite case, call 1 | MRCHDU from `mrchdu_input_1.dat`, against `mrchdu_output_1.dat` |
 //! | `UPDATE_RDN4` | xbl.f:1474 | 64A010 TYPE 2 M 0.3, call 7 | SETBL/BLSOLV/UPDATE from `mrchdu_input_7.dat`, against `update_output_7.dat` |
 //! | `UPDATE_ISLAND` | xbl.f:1537 | 4412 M 0.6 ITER 60, call 51 | the same at call 51 |
@@ -26,12 +26,12 @@
 //! | `TRCHEK2_TRIP_UPSTREAM` | xblsys.f:432 | 16-212 M 0.7, call 2 | MRCHDU at call 2 (the check runs inside it) |
 //! | `BLVAR_WAKE_US` | xblsys.f:843 | 4412 N=160 M 0.5, call 8 | MRCHDU and the iteration at call 8 |
 //!
-//! These replays are the only gates that exercise the fallbacks with non-finite inputs, and when
+//! These replays are the only tests that exercise the fallbacks with non-finite inputs, and when
 //! they were first written (2026-09-13) two of them failed on translation defects the finite
-//! cases could not see: the garbage test had been written as `if dmax > 0.1`, the complement of
+//! cases could not see: the fallback test had been written as `if dmax > 0.1`, the complement of
 //! XFOIL's `IF(DMAX .LE. 0.1) GO TO 109`, which is the opposite for a NaN residual
-//! (docs/xfoil-known-issues.md §7.4); and MRCHUE's failure path made a single closure call at a
-//! wake station where XFOIL makes two, `BLVAR(2)` then `BLVAR(3)` (§7.5). Both are fixed; keep
+//! (docs/xfoil-known-issues.md §7.10); and MRCHUE's failure path made a single closure call at a
+//! wake station where XFOIL makes two, `BLVAR(2)` then `BLVAR(3)` (§7.11). Both are fixed; keep
 //! these tests in CI for exactly that reason.
 
 //! Fixtures: `tests/fixtures/xfoil/<case>/` of the five non-finite probes (`events.dat`, the dumps of
@@ -231,7 +231,7 @@ fn assert_itran(session: &Session, o: &BlDump, what: &str) {
     );
 }
 
-/// MRCHUE (the first march) with its garbage-extrapolation events, against `mrchdu_input_1`.
+/// MRCHUE (the first march) with its extrapolation-fallback events, against `mrchdu_input_1`.
 fn check_mrchue(name: &str) {
     let c = case(name);
     let ev = events(&c.dir);
@@ -248,18 +248,15 @@ fn check_mrchue(name: &str) {
         let (p, a) = params_of(j);
         march_direct(j.state_mut(), &p, a, None);
     }
-    let ours: Vec<(usize, usize)> = trace.garbage.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
-    assert_eq!(
-        ours, expected,
-        "{name}: MRCHUE garbage-extrapolation stations (IBL, IS)"
-    );
+    let ours: Vec<(usize, usize)> = trace.rejected.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
+    assert_eq!(ours, expected, "{name}: MRCHUE rejected stations (IBL, IS)");
     let o = dump(&c, "mrchdu_input_1.dat");
     assert_itran(&session, &o, &format!("{name} MRCHUE"));
     assert_arrays(&session, &jogged, &o, &format!("{name} MRCHUE"));
-    println!("{name}: MRCHUE garbage extrapolation at {ours:?} reproduced");
+    println!("{name}: MRCHUE extrapolation fallback at {ours:?} reproduced");
 }
 
-/// MRCHDU at SETBL call `k` with its garbage-extrapolation events, against `mrchdu_output_k`.
+/// MRCHDU at SETBL call `k` with its extrapolation-fallback events, against `mrchdu_output_k`.
 fn check_mrchdu(name: &str, k: usize) {
     let c = case(name);
     let ev = events(&c.dir);
@@ -272,15 +269,12 @@ fn check_mrchdu(name: &str, k: usize) {
         let (p, a) = params_of(j);
         march_prescribed_dstar(j.state_mut(), &p, a, None);
     }
-    let ours: Vec<(usize, usize)> = trace.garbage.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
-    assert_eq!(
-        ours, expected,
-        "{name} call {k}: MRCHDU garbage-extrapolation stations (IBL, IS)"
-    );
+    let ours: Vec<(usize, usize)> = trace.rejected.iter().map(|(ibl, is, _)| (*ibl, *is)).collect();
+    assert_eq!(ours, expected, "{name} call {k}: MRCHDU rejected stations (IBL, IS)");
     let o = dump(&c, &format!("mrchdu_output_{k}.dat"));
     assert_itran(&session, &o, &format!("{name} MRCHDU call {k}"));
     assert_arrays(&session, &jogged, &o, &format!("{name} MRCHDU call {k}"));
-    println!("{name} call {k}: MRCHDU garbage extrapolation at {ours:?} reproduced");
+    println!("{name} call {k}: MRCHDU extrapolation fallback at {ours:?} reproduced");
 }
 
 /// One SETBL/BLSOLV/UPDATE iteration at call `k`; returns the session after UPDATE and its events.
@@ -319,7 +313,7 @@ fn iterate(c: &Case, k: usize) -> (Session, Vec<Session>, Vec<UpdateEvent>) {
 }
 
 #[test]
-fn test_mrchue_garbage_extrapolation_events() {
+fn test_mrchue_extrapolation_fallback_events() {
     for name in [
         "naca16-212_n60_a4_re1e6_m07",
         "naca63-415_n60_a14_re1e6_m05",
@@ -332,7 +326,7 @@ fn test_mrchue_garbage_extrapolation_events() {
 }
 
 #[test]
-fn test_mrchdu_garbage_extrapolation_events_call_1() {
+fn test_mrchdu_extrapolation_fallback_events_call_1() {
     for name in [
         "naca16-212_n60_a4_re1e6_m07",
         "naca63-415_n60_a14_re1e6_m05",
@@ -347,7 +341,7 @@ fn test_mrchdu_garbage_extrapolation_events_call_1() {
 #[test]
 fn test_mrchdu_trip_upstream_of_a_laminar_station_call_2() {
     // TRCHEK2's `TRFORC = XIFORC.GT.X1 .AND. XIFORC.LE.X2` with XIFORC <= X1 fires inside this
-    // MRCHDU; the gate is the march reproducing XFOIL's transition and arrays through it
+    // MRCHDU; the test is the march reproducing XFOIL's transition and arrays through it
     let name = "naca16-212_n60_a4_re1e6_m07";
     let ev = events(&case(name).dir);
     assert!(
@@ -489,7 +483,7 @@ fn test_stfind_negative_te_vorticity_in_the_prologue() {
 
 #[test]
 fn test_blvar_wake_us_clamp_call_8() {
-    // BLVAR's wake Us clamp fires inside MRCHDU and SETBL at this call; the gate is the march
+    // BLVAR's wake Us clamp fires inside MRCHDU and SETBL at this call; the test is the march
     // and the iteration reproducing XFOIL through it
     let name = "naca4412_n160_a16_re1e6_m05";
     let c = case(name);

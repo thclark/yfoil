@@ -3,7 +3,7 @@
 //! run's QINVU and DIJ dumps. The whole VISCAL prologue is exercised: GGCALC → QISET →
 //! SPECAL's GAM → XYWAKE → QWCALC → QDCALC.
 //!
-//! DIJ is gated with the row-scaled metric (plan addendum R3): `|a−b| ≤ tol·max(|a|,|b|,rowmax)`.
+//! DIJ is compared with the row-scaled metric (plan addendum R3): `|a−b| ≤ tol·max(|a|,|b|,rowmax)`.
 //! Element-wise relative error is meaningless on its near-zero entries — the noise-floor
 //! measurement shows a 1-ULP geometry perturbation moves some of them by 5e-6 relative.
 //!

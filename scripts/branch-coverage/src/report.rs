@@ -1,7 +1,7 @@
 //! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/validation/branch-coverage/README.md`).
+//! documentation page (`docs/testing/branch-coverage/README.md`).
 
-use crate::drive::CaseGate;
+use crate::drive::CaseComparison;
 use crate::utilities::records::Outcome;
 use crate::{Branch, Candidate, Universe};
 use serde_json::{json, Value};
@@ -43,8 +43,8 @@ pub fn summary(
     universe: &Universe,
     candidates: &[Candidate],
     cover: &[String],
-    gated: &[CaseGate],
-    nonfinite_gates: &[CaseGate],
+    compared: &[CaseComparison],
+    nonfinite_comparisons: &[CaseComparison],
     group_matches: bool,
 ) -> Value {
     let root = crate::repo_root();
@@ -58,7 +58,10 @@ pub fn summary(
     // who takes each analysis branch, among finite candidates and among all
     let mut takers_finite: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let mut takers_all: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for c in candidates {
+    for c in candidates
+        .iter()
+        .filter(|c| c.case.group.as_deref() != Some("pathological"))
+    {
         for id in &c.taken {
             takers_all.entry(id.as_str()).or_default().push(c.case.name.as_str());
             if !c.non_finite {
@@ -72,23 +75,37 @@ pub fn summary(
         .flat_map(|c| c.taken.iter().map(String::as_str))
         .collect();
 
-    // per-branch status over this study: cover | finite (taken by a finite candidate outside the
-    // cover only) | nonfinite (taken only by NaN-tainted candidates) | open | loop_entry | unreachable
+    // the branches taken by the measured `pathological` cases (only when their per-case
+    // measurement exists: their reference runs hang or run for hours, so they are not measured by
+    // default)
+    let takers_pathological: BTreeSet<&str> = candidates
+        .iter()
+        .filter(|c| c.case.group.as_deref() == Some("pathological"))
+        .flat_map(|c| c.taken.iter().map(String::as_str))
+        .collect();
+    // per-branch status over this study: cover (taken by the finite set) | nonfinite (taken by the
+    // non-finite set, not the finite one) | pathological (taken only by a pathological case) |
+    // unreachable | loop_entry | open (taken by nothing). The finite set is a cover of every branch
+    // any finite candidate takes, so a branch taken by a finite candidate and not by the set is a
+    // defect of the cover, not a status.
     let study_status = |b: &Branch| -> &'static str {
         if cover_taken.contains(b.id.as_str()) {
             "cover"
         } else if takers_finite.contains_key(b.id.as_str()) {
-            "finite"
+            panic!("{}: taken by a finite candidate and not by the finite set", b.id)
         } else if takers_all.contains_key(b.id.as_str()) {
             "nonfinite"
+        } else if takers_pathological.contains(b.id.as_str()) {
+            "pathological"
         } else {
             match b.status.as_str() {
                 "open" => "open",
                 "loop_entry" => "loop_entry",
                 "unreachable" => "unreachable",
-                // taken in the universe run by a case that is not a candidate here (e.g. an
-                // untracked --big case): reported as finite-reachable, outside the cover
-                _ => "finite",
+                _ => panic!(
+                    "{}: taken in the coverage measurement by a case that is not a candidate here (no per-case measurement)",
+                    b.id
+                ),
             }
         }
     };
@@ -101,11 +118,11 @@ pub fn summary(
         *universe_status.entry(b.status.as_str()).or_default() += 1;
     }
     let mut unreachable_by_class: BTreeMap<String, usize> = BTreeMap::new();
-    let mut nonfinite_gated = 0usize;
+    let mut nonfinite_event_tested = 0usize;
     for b in &analysis {
         match study_status(b) {
             "unreachable" => *unreachable_by_class.entry(b.class.clone()).or_default() += 1,
-            "nonfinite" if b.gate.is_some() => nonfinite_gated += 1,
+            "nonfinite" if b.test.is_some() => nonfinite_event_tested += 1,
             _ => {}
         }
     }
@@ -140,7 +157,7 @@ pub fn summary(
         }
         subroutines.push(json!({
             "key": key, "file": file, "name": name, "calls": calls, "branches": bs.len(),
-            "cover": count("cover"), "finite": count("finite"), "nonfinite": count("nonfinite"),
+            "cover": count("cover"), "nonfinite": count("nonfinite"), "pathological": count("pathological"),
             "open": count("open"), "loop_entry": count("loop_entry"), "unreachable": count("unreachable"),
             "covered_by": covered_by,
         }));
@@ -173,7 +190,7 @@ pub fn summary(
             })
         })
         .collect();
-    let gate_json = |g: &CaseGate, c: &Candidate| -> Value {
+    let comparison_json = |g: &CaseComparison, c: &Candidate| -> Value {
         let calls: Vec<Value> = g
             .calls
             .iter()
@@ -182,7 +199,7 @@ pub fn summary(
                     "call": r.call, "alpha_deg": r.alpha_deg,
                     "iterations_yfoil": r.iterations.0, "iterations_xfoil": r.iterations.1,
                     "converged_yfoil": r.converged.0, "converged_xfoil": r.converged.1,
-                    "gated_iterations": r.gated_iterations, "worst_floor_ratio": r.worst_floor_ratio,
+                    "compared_iterations": r.compared_iterations, "worst_floor_ratio": r.worst_floor_ratio,
                     "outcome": match &r.outcome {
                         Outcome::Match => json!("match"),
                         Outcome::Divergent { at_iteration, why } => json!({"divergent": {"at_iteration": at_iteration, "why": why}}),
@@ -198,7 +215,7 @@ pub fn summary(
             "inviscid": c.case.inviscid, "nan_count": c.nan_count,
             "calls": calls, "reference_iterations": g.reference_iterations,
             "verdict": g.verdict(), "parted_at": g.parted_at(), "ill_conditioned_calls": g.ill_conditioned_calls,
-            "gated_iterations": g.calls.iter().map(|r| r.gated_iterations).sum::<usize>(),
+            "compared_iterations": g.calls.iter().map(|r| r.compared_iterations).sum::<usize>(),
             "metrics": {
                 "cl": point("CL"), "cd": point("CD"), "cm": point("CM"),
                 "rmsbl": g.max_transient("RMSBL"), "rlx": g.max_transient("RLX"),
@@ -207,14 +224,14 @@ pub fn summary(
             },
         })
     };
-    let nonfinite_runs: Vec<Value> = nonfinite_gates
+    let nonfinite_runs: Vec<Value> = nonfinite_comparisons
         .iter()
-        .map(|g| gate_json(g, candidates.iter().find(|c| c.case.name == g.name).unwrap()))
+        .map(|g| comparison_json(g, candidates.iter().find(|c| c.case.name == g.name).unwrap()))
         .collect();
     let mut cases = vec![];
     for name in cover {
         let c = candidates.iter().find(|c| &c.case.name == name).unwrap();
-        let g = gated.iter().find(|g| &g.name == name).unwrap();
+        let g = compared.iter().find(|g| &g.name == name).unwrap();
         let unique: Vec<&str> = c
             .taken
             .iter()
@@ -234,7 +251,7 @@ pub fn summary(
                     "call": r.call, "alpha_deg": r.alpha_deg,
                     "iterations_yfoil": r.iterations.0, "iterations_xfoil": r.iterations.1,
                     "converged_yfoil": r.converged.0, "converged_xfoil": r.converged.1,
-                    "gated_iterations": r.gated_iterations, "worst_floor_ratio": r.worst_floor_ratio,
+                    "compared_iterations": r.compared_iterations, "worst_floor_ratio": r.worst_floor_ratio,
                     "outcome": match &r.outcome {
                         Outcome::Match => json!("match"),
                         Outcome::Divergent { at_iteration, why } => json!({"divergent": {"at_iteration": at_iteration, "why": why}}),
@@ -327,15 +344,22 @@ pub fn summary(
             "exit_arm": exit,
         }));
     }
-    // open and non-finite-only branches of the analysis path
+    // the branches not taken by the finite set and not unreachable: the non-finite set's, the
+    // pathological cases' and the ones nothing takes
     let mut open = vec![];
     for b in &analysis {
         let st = study_status(b);
-        if st == "open" || st == "nonfinite" {
+        if st == "open" || st == "nonfinite" || st == "pathological" {
             open.push(json!({
                 "id": b.id, "subroutine": b.key(), "line": b.line, "branch": b.branch, "source": b.source,
-                "status": st, "class": b.class, "why": b.why, "gate": b.gate,
-                "taken_by": takers_all.get(b.id.as_str()).cloned().unwrap_or_default(),
+                "status": st, "class": b.class, "why": b.why, "test": b.test,
+                "taken_by": takers_all.get(b.id.as_str()).cloned().unwrap_or_else(|| {
+                    candidates
+                        .iter()
+                        .filter(|c| c.taken.contains(&b.id))
+                        .map(|c| c.case.name.as_str())
+                        .collect()
+                }),
             }));
         }
     }
@@ -366,7 +390,8 @@ pub fn summary(
             "universe_status": universe_status,
             "study_status": by_status,
             "unreachable_by_class": unreachable_by_class,
-            "nonfinite_gated": nonfinite_gated,
+            "nonfinite_event_tested": nonfinite_event_tested,
+            "pathological_measured": candidates.iter().filter(|c| c.case.group.as_deref() == Some("pathological")).count(),
             "finite_candidates": finite.len(),
             "candidates": candidates.len(),
         },
@@ -386,85 +411,87 @@ pub fn summary(
 
 /// What each status in the tables and figures means. Everything here is measured on the
 /// *reference* (gcov on pristine double-precision XFOIL); yFoil is never instrumented — its side
-/// of the claim is the gate, which asserts that on every run of the set yFoil follows XFOIL's
-/// branch trace and values.
+/// of the claim is the whole-run comparison, which asserts that on every run of the finite set
+/// yFoil follows XFOIL's branch trace and values.
 pub const CLASSIFICATION_MD: &str = "\
 ### What the statuses mean\n\n\
 A *branch* is one outgoing edge of a conditional as gfortran emitted it for the reference build: an `IF` \
-gives two edges, every operand of a `.AND.`/`.OR.` chain its own pair, a `DO` line the pair of the loop-control test gfortran placed there (iterate again, or leave the \\
-loop by its count), and a \
-loop whose back-edge test lands on its last statement a pair there. Which arm is *fallthrough* and which is \
-*jump* is the compiler's choice, so an edge is named by line and index, never by true/false; the source line \
-and the counts of its sibling edges identify the arm. Every count is gcov's on the **reference**: XFOIL \
-6.99, pristine, double precision, compiled with `-fprofile-arcs -ftest-coverage`. yFoil is not instrumented \
-and its own control flow is never measured; yFoil's side of the claim is the gate, which asserts that on each \
-run of the set it reproduces XFOIL's branch trace (iteration counts, IST/ITRAN, LVCONV, SPECCL's ITAL) and \
-values. A branch is therefore *covered* when the reference took it on a run that yFoil matched.\n\n\
-The never-covered branches fall into two families. **Logically unreachable** edges cannot be taken by any \
-execution of XFOIL's analysis path, whatever the input: the argument is about the reference's own source. \
-**Practically unreachable** edges can be taken by XFOIL, but not by any finite input we can construct: \
-either the reference has to be in its undefined region (a NaN somewhere in the trajectory) to reach them, or \
-a floating-point coincidence has to occur. Neither family is a statement about yFoil.\n\n\
-- **covered** — the edge counter is > 0 on at least one run of the `branch-coverage` group, and every run \
-  of the group is gated.\n\
-- **taken only by finite cases outside the set** — taken on some finite candidate that the cover does not \
-  need. Zero here means the set covers everything any finite candidate reaches.\n\
-- **non-finite only** (practically unreachable) — taken, but only on runs whose reference output contains \
-  `NaN`: XFOIL produced a non-finite value somewhere in that trajectory (in every case found so far, \
-  TRCHEK2's transition-point Newton landing on the interval end, after which the MRCHUE/MRCHDU fallback \
-  extrapolates finite values over the station and the run carries on). The whole run cannot be gated: the \
-  reference's own 1-ULP twins wander by O(10²) on it. What is gated is the **event**: the instrumented \
-  reference writes `events.dat` (site, SETBL call, side, station, deciding value) and keeps the state dumps \
-  of those calls, and `tests/execution/events.rs` seeds yFoil with XFOIL's exact state entering \
-  the call, runs the one subroutine or the one iteration, asserts that yFoil's branch trace records the same \
-  event, and compares the result with the reference's dump — NaN where the reference has NaN. The table \
-  *Not covered* names the test gating each edge; an edge with a gate is faithful at the call where XFOIL \
-  took it, and only the claim that yFoil follows the *whole* non-finite run is not made. The probes are \
-  tracked cases (`group = \"non-finite\"`), never in the default selection.\n\
-- **open** — never taken on any measured run, finite or not, and not annotated. This is a statement about \
-  the search, not about the code: no case has been constructed that reaches the edge. Each open edge \
-  carries a *reach* note — the input the code reading says would reach it — and stays open until a \
-  finite case takes it.\n\
-- **annotated unreachable** — a recorded claim (`xtask/fixtures-config/coverage.toml`, with a class and the \
-  reason) that no input reaches the edge. It is a code-reading argument about the reference's own source, \
-  never \"we could not build a case\" and never a statement about yFoil. Every claim is falsifiable by the \
-  measurement: a case that takes an annotated edge makes the tool report the annotation as stale (this \
-  happened to `xoper.f:2784` branch 5, whose claim missed that MRCL's Mach clamp sets `M_CLS = 0`; the \
-  claim was withdrawn and the edge is now covered). The first four classes are logically unreachable, the \
-  fifth practically:\n\
-  - *structural* — impossible by construction of the data the analysis path feeds the routine: coincident \
-    consecutive nodes that `LOAD` removes, `IBL ≤ 2` inside an `IF(IBL.GT.3)` block, a quantity kept \
-    positive by every update that touches it, a subroutine only ever called under the flag it tests;\n\
-  - *mode* — guarded by a flag the analysis path never sets: inverse design (`GEOLIN`), the image airfoil \
-    (`LIMAGE`, whose only toggle is commented out), flap hinge moments, interactive prompts. These are \
-    features outside yFoil's scope, and the edges are unreachable in XFOIL too when driven as the fixture \
-    pipeline drives it;\n\
-  - *guard* — array-bound and illegal-input `STOP`s on Fortran's fixed dimensions (`IVX`, `IWX`, …); yFoil \
-    has no fixed dimensions and the cases are within XFOIL's;\n\
-  - *compiler* — edges gfortran emits that correspond to no decision in the source;\n\
-  - *numerical* — reachable in principle, but only by a floating-point coincidence (a real landing bitwise \
-    on a threshold: the stagnation point exactly on a node, SETEXP's initial guess exactly 1.0) or by \
-    exhausting the iteration cap of a Newton iteration that converges on every analysis-path input \
-    (SETEXP's 100, SINVRT's 10, MRCHUE's 25 at the similarity station). No input can be designed to reach \
-    them; if anything does, it is the \
-    parameter/fuzz harness.\n\
-- **DO-line edge** (logically unreachable) — a Fortran `DO` loop is compiled with a control test: *iterate again* or *leave the loop \\
-  by its count* (the count exhausted, or zero to begin with). gfortran attributes that test to the `DO` line as \\
-  a pair of edges, and the measured counts show two shapes: for a top-tested loop the second arm is the loop's \\
-  normal completion, taken once per execution; for a loop gfortran rotated, the real exit sits on the loop's \\
-  last statement and the `DO` line's second arm is a duplicate that is never taken. Neither arm is a body \\
-  that ran zero times as distinct from a body that ran and finished: the analysis path's station, node and \\
-  wake counts never make a loop empty, and the counts cannot tell an empty pass from a completed one. The \\
-  *iterate* arm is an ordinary edge, covered whenever a run of the set executed the body, and it appears in \\
-  the branch map as a coloured cell beside its partner. This bucket holds the never-taken second arms: a \\
-  loop always left early by a `GO TO` or `RETURN` (its normal completion never happens), a rotated loop's \\
-  duplicate, or both arms of a loop inside a block that is never reached. Whether each loop's body actually \\
-  ran on the set is stated explicitly, from the execution count of the first line of its body, in the table \\
-  *DO loops of the analysis path* below. A `DO` line that is an iteration budget (a Newton loop that could \\
-  be exhausted: SPECCL's twenty attempts, SPECAL's CL(M) loop) is different: its second arm is the exhausted \\
-  budget, a real outcome, so it carries a reach note and both arms are counted like any other conditional.\\n\\n\\
+gives two edges, every operand of a `.AND.`/`.OR.` chain its own pair, a `DO` line the pair of the \
+loop-control test gfortran placed there (iterate again, or leave the loop by its count), and a loop whose \
+back-edge test lands on its last statement a pair there. Which arm is *fallthrough* and which is *jump* is \
+the compiler's choice, so an edge is named by line and index, never by true/false; the source line and the \
+counts of its sibling edges identify the arm. Every count is gcov's on the **reference**: XFOIL 6.99, \
+pristine, double precision, compiled with `-fprofile-arcs -ftest-coverage`. yFoil is not instrumented and \
+its own control flow is never measured; yFoil's side of the claim is the whole-run comparison below, which \
+asserts that on each run of the finite set yFoil reproduces XFOIL's branch trace (iteration counts, IST/ITRAN, \
+LVCONV, SPECCL's ITAL) and values. A branch taken by the finite set is therefore one the reference took on \
+a run that yFoil matched.\n\n\
+Every branch of the analysis path has exactly one of five statuses, drawn in these colours in the branch map:\n\n\
+- **taken by the finite set** (green) — the reference took the edge on at least one run of the \
+  `branch-coverage` group, and yFoil matches every run of that group. The set is chosen to take every branch \
+  that any finite candidate takes, and the study stops with an error if it does not.\n\
+- **taken by the non-finite set** (blue) — the edge is taken only on runs of the `non-finite` group, whose \
+  reference output contains `NaN`. In every case found so far XFOIL produced the non-finite value in \
+  TRCHEK2, whose transition-point Newton lands on the interval end; the MRCHUE/MRCHDU extrapolation fallback \
+  then puts finite values on the station and the run carries on. These runs cannot be compared whole, \
+  because the reference's own 1-ULP twins wander by O(10²) on them. Each edge is tested instead as an \
+  **event**: the instrumented reference writes `events.dat` (site, SETBL call, side, station, deciding value) \
+  and keeps the state dumps of those calls, and a test in `tests/execution/events.rs` seeds yFoil with \
+  XFOIL's exact state entering the call, runs the one subroutine or the one iteration, asserts that yFoil's \
+  branch trace records the same event, and compares the result with the reference's dump — NaN where the \
+  reference has NaN. (TRCHEK2's `AX ≤ 0` exit, taken many times within one call, is recorded \
+  call by call instead — `trchek2_ax_exit.dat`, the inputs of each TRCHEK2 call that takes it — and \
+  `tests/subroutine/transition.rs` replays each one.) The non-finite set is part of the test suite (`group = \"non-finite\"`, tracked), so \
+  these branches are covered by tests one call at a time; what is not claimed is that yFoil follows a whole \
+  non-finite run. The table *Branches taken only by the non-finite set* names the test of each edge.\n\
+- **taken only in pathological cases** (orange) — the edge is taken only by a case of the `pathological` \
+  group: copies of the runs that hang in XFOIL's plot label or take hours (known issues §4), which cannot be \
+  tests. Those cases are measured only on request (`cargo xtask coverage --per-case --with-group \
+  pathological`); the status table says whether this run measured them.\n\
+- **not reachable** (grey) — no execution of XFOIL's analysis path takes the edge. Either a recorded \
+  code-reading argument says so (*annotated unreachable*, in one of the five classes below), or the edge is \
+  the never-taken arm of a `DO` line's loop-control test.\n\
+- **not taken** (red) — no measured run took the edge, and no argument says it cannot be taken. This is a \
+  statement about the search, not about the code: no case has yet been constructed that reaches the edge. \
+  Each such edge carries a *reach* note — the input the code reading says would reach it.\n\n\
+An **annotated unreachable** edge has a recorded claim (`xtask/fixtures-config/coverage.toml`, with a class \
+and the reason) that no input reaches it. The claim is a code-reading argument about the reference's own \
+source, never \"we could not build a case\" and never a statement about yFoil. Every claim is falsifiable \
+by the measurement: a case that takes an annotated edge makes the tool report the annotation as stale (this \
+happened to `xoper.f:2784` branch 5, whose claim missed that MRCL's Mach clamp sets `M_CLS = 0`; the claim \
+was withdrawn and the edge is now taken). The classes are:\n\n\
+- *structural* — impossible by construction of the data the analysis path feeds the routine: coincident \
+  consecutive nodes that `LOAD` removes, `IBL ≤ 2` inside an `IF(IBL.GT.3)` block, a quantity kept positive \
+  by every update that touches it, a subroutine only ever called under the flag it tests;\n\
+- *mode* — guarded by a flag the analysis path never sets: inverse design (`GEOLIN`), the image airfoil \
+  (`LIMAGE`, whose only toggle is commented out), flap hinge moments, interactive prompts. These are \
+  features outside yFoil's scope, and the edges are unreachable in XFOIL too when driven as the fixture \
+  pipeline drives it;\n\
+- *guard* — array-bound and illegal-input `STOP`s on Fortran's fixed dimensions (`IVX`, `IWX`, …); yFoil \
+  has no fixed dimensions and the cases are within XFOIL's;\n\
+- *compiler* — edges gfortran emits that correspond to no decision in the source;\n\
+- *numerical* — reachable in principle, but only by a floating-point coincidence (a real landing bitwise \
+  on a comparison's other operand: the stagnation point exactly on a node, SETEXP's initial guess exactly \
+  1.0) or by exhausting the iteration cap of a Newton iteration that converges on every analysis-path input \
+  (SETEXP's 100, SINVRT's 10, MRCHUE's 25 at the similarity station). No input can be designed to reach \
+  them; if anything does, it is the parameter/fuzz harness.\n\n\
+A **DO-line edge** comes from the control test a Fortran `DO` loop is compiled with: *iterate again* or \
+*leave the loop by its count* (the count exhausted, or zero to begin with). gfortran attributes that test to \
+the `DO` line as a pair of edges, and the measured counts show two shapes: for a top-tested loop the second \
+arm is the loop's normal completion, taken once per execution; for a loop gfortran rotated, the real exit \
+sits on the loop's last statement and the `DO` line's second arm is a duplicate that is never taken. Neither \
+arm is a body that ran zero times as distinct from a body that ran and finished: the analysis path's \
+station, node and wake counts never make a loop empty, and the counts cannot tell an empty pass from a \
+completed one. The *iterate* arm is an ordinary edge, taken whenever a run executed the body, and it appears \
+in the branch map beside its partner. The grey DO-line edges are the never-taken second arms: a loop always \
+left early by a `GO TO` or `RETURN` (its normal completion never happens), a rotated loop's duplicate, or \
+both arms of a loop inside a block that is never reached. Whether each loop's body actually ran on the set \
+is stated explicitly, from the execution count of the first line of its body, in the table *DO loops of the \
+analysis path* below. A `DO` line that is an iteration budget (a Newton loop that could be exhausted: \
+SPECCL's twenty attempts, SPECAL's CL(M) loop) is different: its second arm is the exhausted budget, a real \
+outcome, so it carries a reach note and both arms are counted like any other conditional.\n\n\
 The same classes, with every annotated edge and its reason, are listed in [coverage.md](../coverage.md); \
-that page is the union over every tracked case, this one the minimal set and its gates.\n";
+that page is the union over every tracked case, this one the minimal set.\n";
 
 fn verdict_word(v: &str) -> &str {
     match v {
@@ -514,8 +541,8 @@ fn case_table_md(s: &Value) -> String {
     t
 }
 
-/// The gate table (difference metrics) as Markdown rows.
-fn gate_table_md(s: &Value) -> String {
+/// The whole-run comparison table (difference metrics) as Markdown rows.
+fn comparison_table_md(s: &Value) -> String {
     let mut t = String::from(
         "| case | calls | ref. iterations | outcome | parts at | XFOIL ill-conditioned at (its twins) | max \\|ΔCL\\| | max \\|ΔCD\\| | max \\|ΔCM\\| | max \\|ΔRMSBL\\| / \\|ΔGAM\\| | worst diff/floor | ref. 1-ULP spread |\n|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|\n",
     );
@@ -558,7 +585,7 @@ fn gate_table_md(s: &Value) -> String {
 /// The whole-run outcome of every non-finite probe.
 fn nonfinite_table_md(s: &Value) -> String {
     let mut t = String::from(
-        "| case | OPER | `NaN` in reference output | ref. iterations | gated | outcome | parts at | max \\|ΔRMSBL\\| (gated) | worst diff/floor | ref. 1-ULP spread |\n|---|---|---:|---:|---:|---|---|---:|---:|---:|\n",
+        "| case | OPER | `NaN` in reference output | ref. iterations | compared | outcome | parts at | max \\|ΔRMSBL\\| (compared) | worst diff/floor | ref. 1-ULP spread |\n|---|---|---:|---:|---:|---|---|---:|---:|---:|\n",
     );
     for c in s["nonfinite_runs"].as_array().unwrap() {
         t += &format!(
@@ -567,7 +594,7 @@ fn nonfinite_table_md(s: &Value) -> String {
             c["script"].as_str().unwrap(),
             c["nan_count"],
             c["reference_iterations"],
-            c["gated_iterations"],
+            c["compared_iterations"],
             verdict_word(c["verdict"].as_str().unwrap()),
             parted(c),
             metric(c, "rmsbl"),
@@ -582,69 +609,83 @@ fn status_table_md(s: &Value) -> String {
     let u = &s["universe"];
     let st = |k: &str| u["study_status"][k].as_u64().unwrap_or(0);
     let cls = |k: &str| u["unreachable_by_class"][k].as_u64().unwrap_or(0);
-    let gated = u["nonfinite_gated"].as_u64().unwrap_or(0);
-    let logical = cls("structural") + cls("mode") + cls("guard") + cls("compiler");
+    let tested = u["nonfinite_event_tested"].as_u64().unwrap_or(0);
+    let measured = u["pathological_measured"].as_u64().unwrap_or(0);
+    let pathological = if measured == 0 {
+        "not measured in this run".to_string()
+    } else {
+        format!("{} (over {measured} measured cases)", st("pathological"))
+    };
     format!(
         "| | branches |\n|---|---:|\n\
          | translated set (all files) | {} |\n\
          | analysis path (panelling generators excluded) | {} |\n\
-         | **covered** — taken by the minimal set, gated | **{}** |\n\
-         | taken only by finite cases outside the set | {} |\n\
-         | **practically unreachable** — no finite input reaches them | {} |\n\
-         | &nbsp;&nbsp;&nbsp;&nbsp;taken only in non-finite reference runs, gated as events | {} |\n\
-         | &nbsp;&nbsp;&nbsp;&nbsp;taken only in non-finite reference runs, not gated | {} |\n\
-         | &nbsp;&nbsp;&nbsp;&nbsp;*numerical*: a floating-point coincidence or an exhausted Newton cap | {} |\n\
-         | **logically unreachable** — no execution of XFOIL's analysis path takes them | {} |\n\
-         | &nbsp;&nbsp;&nbsp;&nbsp;*structural* / *mode* / *guard* / *compiler* | {} / {} / {} / {} |\n\
+         | **taken by the finite set** (green) | **{}** |\n\
+         | **taken by the non-finite set** (blue) | {} |\n\
+         | &nbsp;&nbsp;&nbsp;&nbsp;with a test that replays it | {} |\n\
+         | &nbsp;&nbsp;&nbsp;&nbsp;without one | {} |\n\
+         | **taken only in pathological cases** (orange) | {} |\n\
+         | **not reachable** (grey) | {} |\n\
+         | &nbsp;&nbsp;&nbsp;&nbsp;annotated *structural* / *mode* / *guard* / *compiler* / *numerical* | {} / {} / {} / {} / {} |\n\
          | &nbsp;&nbsp;&nbsp;&nbsp;never-taken DO-line edges (loop left early or never reached) | {} |\n\
-         | **open** — never taken, no case constructed, reach note | {} |\n",
+         | **not taken** (red) | {} |\n",
         u["branches_translated_set"],
         u["branches_analysis"],
         st("cover"),
-        st("finite"),
-        st("nonfinite") + cls("numerical"),
-        gated,
-        st("nonfinite") - gated,
-        cls("numerical"),
-        logical + st("loop_entry"),
+        st("nonfinite"),
+        tested,
+        st("nonfinite") - tested,
+        pathological,
+        st("unreachable") + st("loop_entry"),
         cls("structural"),
         cls("mode"),
         cls("guard"),
         cls("compiler"),
+        cls("numerical"),
         st("loop_entry"),
         st("open")
     )
 }
 
-fn open_table_md(s: &Value) -> String {
-    let mut t = String::from("| branch | source | status | reach | event gate |\n|---|---|---|---|---|\n");
-    for o in s["open"].as_array().unwrap() {
-        let taken_by = o["taken_by"].as_array().unwrap();
-        let status = match o["status"].as_str().unwrap() {
-            "nonfinite" => format!(
-                "non-finite only ({})",
-                taken_by
-                    .iter()
-                    .map(|v| format!("`{}`", v.as_str().unwrap()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            s => s.to_string(),
-        };
-        let gate = o["gate"]
+/// The rows of `s["open"]` with the given status, as a Markdown table: the source, which cases
+/// take the edge, the reach note and the test of its event.
+fn branch_list_md(s: &Value, status: &str) -> String {
+    let rows: Vec<&Value> = s["open"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|o| o["status"].as_str() == Some(status))
+        .collect();
+    if rows.is_empty() {
+        return String::new();
+    }
+    let mut t = String::from("| branch | source | taken by | how it is reached | test |\n|---|---|---|---|---|\n");
+    for o in rows {
+        let taken_by = o["taken_by"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| format!("`{}`", v.as_str().unwrap()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let test = o["test"]
             .as_str()
             .map(|g| {
                 let (file, test) = g.split_once("::").unwrap_or((g, ""));
-                format!("`{}` in `{file}`", test)
+                format!("`{test}` in `{file}`")
             })
-            .unwrap_or_else(|| "—".into());
+            .unwrap_or_else(|| "none yet".into());
         t += &format!(
             "| `{}` | `{}` | {} | {} | {} |\n",
             o["id"].as_str().unwrap(),
             o["source"].as_str().unwrap().replace('|', "\\|"),
-            status,
+            if taken_by.is_empty() {
+                "—".to_string()
+            } else {
+                taken_by
+            },
             o["why"].as_str().unwrap_or(""),
-            gate
+            test
         );
     }
     t
@@ -731,31 +772,33 @@ fn excluded_md(s: &Value) -> String {
 fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
     let u = &s["universe"];
     let mut m = String::new();
-    m += "## The universe\n\n";
+    m += "## Which branches are counted\n\n";
+    m += "Before a minimal set can be chosen, the branches it has to take must be fixed: this section \
+          defines them, and every count on the page is out of this total.\n\n";
     m += &format!(
         "The translated set is the {} subroutines of `xtask/fixtures-config/coverage.toml`, measured by \
-         gcov on the pristine double-precision reference (`docs/validation/coverage.md`). ",
+         gcov on the pristine double-precision reference ([coverage.md](../coverage.md)). ",
         s["universe"]["subroutines_translated_set"]
     );
-    m += "The analysis path \
-          leaves out the panelling generators and their helpers (`naca.f`, `xgeom.f`, `spline.f`, and \
-          `NACA`/`PANGEN` in `xfoil.f`): those are gated bitwise by the `pangen_*` cases \
-          (`docs/validation/geometry/`). A branch is one outgoing edge of a conditional as gfortran emitted \
-          it; the counts below are edges.\n\n";
+    m += "The *analysis path* is the translated set without the panelling generators and their helpers \
+          (`naca.f`, `xgeom.f`, `spline.f`, and `NACA`/`PANGEN` in `xfoil.f`), which the `pangen_*` cases test \
+          bitwise ([geometry](../geometry/README.md)). A branch is one outgoing edge of a conditional as \
+          gfortran emitted it; the counts below are edges.\n\n";
     m += &status_table_md(s);
     m += "\n";
     m += CLASSIFICATION_MD;
     m += &format!(
         "\n{} tracked solver cases were measured one at a time; {} have a finite reference run and are the \
-         candidates of the cover. A case whose reference prints `NaN` is not a candidate: a non-finite \
-         trajectory is not reproducible by translation (NaN comparisons and `MIN`/`MAX` are where two \
-         correct codes legitimately differ), so a branch reached only that way cannot be gated.\n\n",
+         candidates for the finite set. A case whose reference prints `NaN` is not a candidate: a non-finite \
+         trajectory cannot be compared as a whole run (NaN comparisons and `MIN`/`MAX` are where two \
+         correct codes legitimately differ), so the branches only such a run reaches are tested as events \
+         instead.\n\n",
         u["candidates"], u["finite_candidates"]
     );
-    m += "## The minimal set\n\n";
+    m += "## The minimal finite set\n\n";
     m += "Branches taken by exactly one finite candidate make that candidate essential; the remainder is \
           covered greedily by marginal gain and pruned until no case can be removed. The set is recorded as \
-          `group = \"branch-coverage\"` in `xtask/fixtures-config/cases.toml` and this study refuses to \
+          `group = \"branch-coverage\"` in `xtask/fixtures-config/cases.toml`, and this study refuses to \
           generate if the two differ. *Branches* is the number of analysis-path edges the case takes; \
           *unique* the ones no other finite candidate takes.\n\n";
     m += &case_table_md(s);
@@ -764,52 +807,79 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
     if figures {
         m += &format!(
             "![Branch map]({figure_prefix}branch-map.svg)\n\n*Every branch of the analysis path, one row per \
-             subroutine in XFOIL's file order: taken by the minimal set (dark), taken only by cases outside it \
-             (light), taken only in non-finite reference runs (orange), open (red), annotated unreachable \
-             (grey), never-taken DO-line edges — the loop was always left early or never reached (light grey).*\n\n\
+             subroutine in XFOIL's file order: taken by the finite set (green), taken by the non-finite set \
+             (blue), taken only in pathological cases (orange), not reachable — annotated unreachable or a \
+             never-taken DO-line edge (grey), not taken (red).*\n\n\
              ![Case × subroutine]({figure_prefix}case-matrix.svg)\n\n*Fraction of each subroutine's branches \
              taken by each case of the set; a dot marks a subroutine in which the case takes a branch no other \
              finite candidate takes. The three columns on the right count, per subroutine, every branch, \
              the reachable ones (not annotated unreachable and not a never-taken DO-line edge) and those taken \
-             on any measured run, the non-finite probes included.*\n\n"
+             on any measured run, the non-finite set included.*\n\n"
         );
     }
     m += "## DO loops of the analysis path\n\n";
     m += &do_loop_table_md(s);
-    m += "## The gates\n\n";
+    m += "## Whole-run comparison of the finite set\n\n";
     m += "Each case of the set is run through yFoil's `Session` exactly as its OPER script drove XFOIL and \
-          compared with its fixture by the studies' floor comparison (`scripts/study-support/records.rs`; the tests compare single steps instead): \
-          iteration count, LVCONV, IST and ITRAN exact; every per-iteration transient and the converged point \
-          within `max(tol · scale, FLOOR_FACTOR · floor)`, where *floor* is the reference's own 1-ULP spread \
-          of that value; **divergent** when every earlier iteration matched and the reference \
-          itself moves by more than `DIVERGENCE_FLOOR` there. The differences are absolute, maxima over the \
-          gated calls and iterations. *Worst diff/floor* is the largest gated difference relative to the \
-          reference's own spread of the same value (a value below `FLOOR_FACTOR` = 4 is inside the gate); \
-          *ref. 1-ULP spread* is the largest spread the twin showed on the case, per-iteration (viscous) or \
-          per-point (inviscid) — when it is large the gate is only as sharp as the reference itself. \
-          † inviscid case: the per-node |ΔGAM| maximum (RMSBL does not exist).\n\n";
-    m += &gate_table_md(s);
-    m += "\n## The non-finite probes, whole run\n\n";
-    m += "Not a claim — the reference cannot reproduce itself on these runs — but a measurement of how far \
-          yFoil follows each one. The same gate as above is applied call by call: *parts at* is the first \
+          compared with its fixture by the studies' floor comparison (`scripts/study-support/records.rs`; the \
+          tests compare single steps instead): iteration count, LVCONV, IST and ITRAN exact; every \
+          per-iteration transient and the converged point within `max(tol · scale, FLOOR_FACTOR · floor)`, \
+          where *floor* is the reference's own 1-ULP spread of that value; **divergent** when every earlier \
+          iteration matched and the reference itself moves by more than `DIVERGENCE_FLOOR` there. The \
+          differences are absolute, maxima over the compared calls and iterations. *Worst diff/floor* is the \
+          largest difference relative to the reference's own spread of the same value (a value below \
+          `FLOOR_FACTOR` = 4 is within tolerance); *ref. 1-ULP spread* is the largest spread the twins showed \
+          on the case, per-iteration (viscous) or per-point (inviscid) — when it is large the comparison is \
+          only as sharp as the reference itself. † inviscid case: the per-node |ΔGAM| maximum (RMSBL does not \
+          exist).\n\n";
+    m += &comparison_table_md(s);
+    m += "\n## Whole-run comparison of the non-finite set\n\n";
+    m += "This is a measurement, not a claim — the reference cannot reproduce itself on these runs — of how \
+          far yFoil follows each one. The comparison above is applied call by call: *parts at* is the first \
           iteration at which the runs were allowed to part (the reference's own 1-ULP spread exceeds \
           `DIVERGENCE_FLOOR` there and the values differ) or, for a mismatch, the iteration after the last one \
-          gated; *gated* counts the iterations matched before that. The NaN count is the number of `NaN` \
-          tokens in the reference's own output for the run.\n\n";
+          compared; *compared* counts the iterations matched before that. The NaN count is the number of \
+          `NaN` tokens in the reference's own output for the run.\n\n";
     m += &nonfinite_table_md(s);
     m += "\n## Full polars\n\nFull ±30° polars of the aerofoil series and regimes of interest are the \
-          [series-cases](../series-cases/README.md) study, and the runs that show XFOIL's known issues the \
-          [known-issues](../known-issues/README.md) study. Those sweeps are measured here like every tracked case \
-          (their branches count as taken) but are never candidates for the cover: the cover is the minimal set of \
-          single operating points.\n";
-    m += "\n## Not covered\n\n";
-    m += "Analysis-path branches no case of the set takes, with the recorded way to reach them. *Non-finite \
-          only* branches were taken during this study's candidate search, but only in runs where the reference \
-          had produced a NaN (the stalled compressible and closed-TE stall probes); each is gated as an event \
-          by the test named in the last column (`events.dat` of the probe, replayed from the dumped state of \
-          that SETBL call).\n\n";
-    m += &open_table_md(s);
-    m += "\n## Candidates excluded for a non-finite reference run\n\n";
+          [series-cases](../../validation/series-cases/README.md) validation study, and the runs that show \
+          XFOIL's known issues the [known-issues](../known-issues/README.md) study. Those sweeps are not \
+          candidates for the finite set, which is a minimal set of single operating points.\n";
+    m += "\n## Branches taken only by the non-finite set\n\n";
+    let nonfinite = branch_list_md(s, "nonfinite");
+    if nonfinite.is_empty() {
+        m += "None.\n";
+    } else {
+        m += "The non-finite set takes these branches and the finite set does not. The last column names the \
+              test that replays each one: as an event, seeding yFoil with XFOIL's state dumped entering the \
+              SETBL call at which `events.dat` records the event and requiring the same event and XFOIL's \
+              state after it, or, for TRCHEK2's `AX ≤ 0` exit, each TRCHEK2 call the reference recorded \
+              taking it.\n\n";
+        m += &nonfinite;
+    }
+    m += "\n## Branches taken only in pathological cases\n\n";
+    let pathological = branch_list_md(s, "pathological");
+    m += &if u["pathological_measured"].as_u64().unwrap_or(0) == 0 {
+        "The `pathological` cases were not measured in this run (`cargo xtask coverage --per-case \
+         --with-group pathological`; their reference runs hang or take hours).\n"
+            .to_string()
+    } else if pathological.is_empty() {
+        "None: every branch the measured pathological cases take is taken by one of the sets above.\n".to_string()
+    } else {
+        pathological
+    };
+    m += "\n## Branches not taken\n\n";
+    let open = branch_list_md(s, "open");
+    if open.is_empty() {
+        m += "None: every branch of the analysis path is taken by one of the sets above or is not reachable.\n";
+    } else {
+        m += "No measured run takes these branches and no argument says they cannot be taken; the reach note \
+              is the input the code reading says would reach each one.\n\n";
+        m += &open;
+    }
+    m += "\n## The non-finite set\n\n";
+    m += "The tracked candidates whose reference run printed a non-finite value, and so are not candidates for \
+          the finite set.\n\n";
     m += &excluded_md(s);
     m
 }
@@ -865,7 +935,7 @@ pub fn write_index_tex(run_dir: &Path, s: &Value) {
         "% Generated by `cargo run --release -p branch-coverage`; tables from summary.json. Needs booktabs.",
     );
     w(&mut f, "\\section*{Branch-coverage study}");
-    w(&mut f, "\\noindent The minimal set of cases taking every finite-reachable branch of XFOIL's translated analysis path, each gated against its instrumented double-precision reference. Provenance in \\texttt{metadata.json}, every number in \\texttt{summary.json}.");
+    w(&mut f, "\\noindent The minimal set of cases taking every finite-reachable branch of XFOIL's translated analysis path, each compared with its instrumented double-precision reference. Provenance in \\texttt{metadata.json}, every number in \\texttt{summary.json}.");
     // case table
     w(&mut f, "\\begin{table}[h]\\centering\\small");
     w(&mut f, "\\caption{The minimal case set: section, OPER script, analysis-path branches taken and the branches no other finite candidate takes.}");
@@ -900,9 +970,9 @@ pub fn write_index_tex(run_dir: &Path, s: &Value) {
         );
     }
     w(&mut f, "\\bottomrule\\end{tabular}\\end{table}");
-    // gate table
+    // whole-run comparison table
     w(&mut f, "\\begin{table}[h]\\centering\\small");
-    w(&mut f, "\\caption{The gates: every case of the set against its fixture. Differences are absolute maxima over the gated calls and iterations; \\emph{worst diff/floor} is relative to the reference's own 1-ULP spread of the same value; $\\dagger$ inviscid case, per-node $|\\Delta\\mathrm{GAM}|$ in place of RMSBL.}");
+    w(&mut f, "\\caption{Whole-run comparison: every case of the set against its fixture. Differences are absolute maxima over the compared calls and iterations; \\emph{worst diff/floor} is relative to the reference's own 1-ULP spread of the same value; $\\dagger$ inviscid case, per-node $|\\Delta\\mathrm{GAM}|$ in place of RMSBL.}");
     w(&mut f, "\\begin{tabular}{@{}lrrlrrrrrr@{}}\\toprule");
     w(&mut f, "Case & Calls & Iter. & Outcome & $|\\Delta C_L|$ & $|\\Delta C_D|$ & $|\\Delta C_M|$ & $|\\Delta\\mathrm{RMSBL}|$ & diff/floor & 1-ULP spread \\\\ \\midrule");
     for c in s["cases"].as_array().unwrap() {
@@ -953,54 +1023,65 @@ pub fn write_index_tex(run_dir: &Path, s: &Value) {
         ),
     );
     let cls = |k: &str| u["unreachable_by_class"][k].as_u64().unwrap_or(0);
-    let gated = u["nonfinite_gated"].as_u64().unwrap_or(0);
+    let tested = u["nonfinite_event_tested"].as_u64().unwrap_or(0);
+    let measured = u["pathological_measured"].as_u64().unwrap_or(0);
+    w(
+        &mut f,
+        &format!("Taken by the finite set (green) & \\textbf{{{}}} \\\\", st("cover")),
+    );
     w(
         &mut f,
         &format!(
-            "Covered: taken by the minimal set, gated & \\textbf{{{}}} \\\\",
-            st("cover")
+            "Taken by the non-finite set (blue), with a test that replays it / without & {} / {} \\\\",
+            tested,
+            st("nonfinite") - tested
         ),
     );
     w(
         &mut f,
-        &format!("Taken only by finite cases outside the set & {} \\\\", st("finite")),
+        &if measured == 0 {
+            "Taken only in pathological cases (orange) & not measured \\\\".to_string()
+        } else {
+            format!(
+                "Taken only in pathological cases (orange) & {} \\\\",
+                st("pathological")
+            )
+        },
     );
     w(
         &mut f,
         &format!(
-            "Practically unreachable: non-finite runs only, gated as events / not gated & {} / {} \\\\",
-            gated,
-            st("nonfinite") - gated
-        ),
-    );
-    w(
-        &mut f,
-        &format!(
-            "Practically unreachable: numerical (coincidence or exhausted cap) & {} \\\\",
+            "Not reachable (grey): structural / mode / guard / compiler / numerical & {} / {} / {} / {} / {} \\\\",
+            cls("structural"),
+            cls("mode"),
+            cls("guard"),
+            cls("compiler"),
             cls("numerical")
         ),
     );
     w(
         &mut f,
         &format!(
-            "Logically unreachable: structural / mode / guard / compiler & {} / {} / {} / {} \\\\",
-            cls("structural"),
-            cls("mode"),
-            cls("guard"),
-            cls("compiler")
+            "Not reachable (grey): never-taken DO-line edges & {} \\\\",
+            st("loop_entry")
         ),
     );
-    w(&mut f, &format!("Open (never taken, reach note) & {} \\\\", st("open")));
-    w(&mut f, &format!("Never-taken DO-line edges (loop always left early or never reached) & {} \\\\ \\bottomrule\\end{{tabular}}\\end{{table}}", st("loop_entry")));
-    w(&mut f, "\\noindent Every count is gcov's on the pristine double-precision reference; yFoil is never instrumented, and a branch is \\emph{covered} when the reference took it on a run of the set that yFoil's gate matched. \\emph{Non-finite only}: taken only on runs whose reference output contains NaN --- the run is not gateable and not counted, the event is (replayed from XFOIL's state at that call, NaN where XFOIL has NaN). \\emph{Open}: never taken on any measured run and not annotated --- no case has been constructed for it, each carries a reach note. \\emph{Annotated unreachable}: a recorded, falsifiable code-reading claim that no execution of XFOIL's analysis path can take the edge (structural, mode, guard, compiler or numerical: a floating-point coincidence or an exhausted Newton cap). \\emph{DO-line edge}: the never-taken arm of the loop-control test on a DO line (the loop always left early by a GO TO/RETURN, a rotated loop's duplicate test, or a loop never reached); the iterate arm is an ordinary covered edge, and whether every loop's body ran on the set is tabulated from the body's execution count. The Markdown page carries the full definitions.");
-    w(&mut f, "\\begin{figure}[h]\\centering\\includegraphics{branch-map.pdf}\\caption{Every branch of the analysis path, one row per subroutine in XFOIL's file order: taken by the minimal set (dark), taken only by cases outside it (light), taken only in non-finite reference runs (orange), open (red), annotated unreachable (grey), never-taken DO-line edges --- the loop always left early or never reached (light grey).}\\end{figure}");
+    w(
+        &mut f,
+        &format!(
+            "Not taken (red) & {} \\\\ \\bottomrule\\end{{tabular}}\\end{{table}}",
+            st("open")
+        ),
+    );
+    w(&mut f, "\\noindent Every count is gcov's on the pristine double-precision reference; yFoil is never instrumented, and a branch taken by the finite set is one the reference took on a run of the set that yFoil matches as a whole run. \\emph{Taken by the non-finite set}: taken only on runs whose reference output contains NaN --- such a run cannot be compared whole, so each branch is tested as an event, replayed from XFOIL's state at that call, NaN where XFOIL has NaN. \\emph{Taken only in pathological cases}: taken only by the runs that hang or take hours, which cannot be tests. \\emph{Not reachable}: a recorded, falsifiable code-reading claim that no execution of XFOIL's analysis path can take the edge (structural, mode, guard, compiler or numerical: a floating-point coincidence or an exhausted Newton cap), or the never-taken arm of the loop-control test on a DO line. \\emph{Not taken}: no measured run took the edge and no argument says it cannot be taken; each carries a reach note. The Markdown page carries the full definitions.");
+    w(&mut f, "\\begin{figure}[h]\\centering\\includegraphics{branch-map.pdf}\\caption{Every branch of the analysis path, one row per subroutine in XFOIL's file order: taken by the finite set (green), taken by the non-finite set (blue), taken only in pathological cases (orange), not reachable (grey), not taken (red).}\\end{figure}");
     w(&mut f, "\\begin{figure}[h]\\centering\\includegraphics{case-matrix.pdf}\\caption{Fraction of each subroutine's branches taken by each case of the set; a dot marks a subroutine in which the case takes a branch no other finite candidate takes; the columns on the right count every branch of the subroutine, the reachable ones (not annotated unreachable, not a never-taken DO-line edge) and those taken on any measured run, the non-finite probes included.}\\end{figure}");
 }
 
 pub fn write_docs(docs: &Path, run_dir: &Path, s: &Value, universe: &Universe, candidates: &[Candidate], drawn: bool) {
     let _ = (universe, candidates);
     let meta: Value = serde_json::from_str(&fs::read_to_string(run_dir.join("metadata.json")).unwrap()).unwrap();
-    let mut m = String::from("# Branch-coverage study: the minimal case set\n\n");
+    let mut m = String::from("# Branch-coverage study: the minimal case sets\n\n");
     m += &format!(
         "Generated by `cargo run --release -p branch-coverage -- --docs` on {} (git {}{}, host {}). Do not edit; \
          regenerate. The run folder (`scripts/branch-coverage/runs/`, gitignored) holds `summary.json` with every \
@@ -1018,8 +1099,8 @@ pub fn write_docs(docs: &Path, run_dir: &Path, s: &Value, universe: &Universe, c
           exercised. [coverage.md](../coverage.md) measures the union over every tracked case; this page asks \
           for the *minimum* set of cases that takes every reachable branch of the analysis path, and compares every \
           case of that set, run as a whole, with its instrumented reference — so that the coverage claim and the \
-          equivalence claim are made over the same runs. This is a study: the tests gate each branch at a single \
-          step whose route yFoil is observed to follow ([branch-gating.md](../branch-gating.md), \
+          equivalence claim are made over the same runs. This is a study: the tests cover each branch with a \
+          single step whose route yFoil is observed to follow ([branch-tests.md](../branch-tests.md), \
           `docs/conventions/testing.md`), and this page adds no evidence they rely on.\n\n";
     m += &body_md(s, drawn, "");
     fs::write(docs.join("README.md"), m).unwrap();

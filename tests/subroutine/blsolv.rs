@@ -2,7 +2,7 @@
 //!
 //! BLSOLV is a pure function of its input file and contains no transcendentals, so with
 //! identical inputs and no FMA contraction (the reference is built with -ffp-contract=off)
-//! the result is **bit-identical** on any IEEE-754 host. That is the gate here — stronger
+//! the result is **bit-identical** on any IEEE-754 host. That is what is tested here — stronger
 //! than the tolerance floor — and it is what the reference fixture shows: 450/450 values
 //! identical on each of the three calls, both columns.
 //!
@@ -72,7 +72,7 @@ fn scales(xo: &fixtures::blsolv_fixtures::BlsolvOutput) -> [[f64; 2]; 3] {
     sc
 }
 
-/// The S1 gate: every VDEL value, both columns, all three calls, bit-identical to XFOIL.
+/// The S1 test: every VDEL value, both columns, all three calls, bit-identical to XFOIL.
 #[test]
 fn test_blsolv_bit_identical_to_xfoil_calls_1_to_3() {
     for call in 1..=3 {

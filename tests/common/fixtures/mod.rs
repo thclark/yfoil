@@ -104,7 +104,7 @@ pub fn state_before_mrchue() -> (SolverState, FlowParameters, [f64; 3]) {
 /// setup and, on call 1, after MRCHUE): the pointer layer (geometry, IPAN, WGAP), DIJ,
 /// UINV/UINV_A, the BL arrays exactly as SETBL had them, that iteration's SST/SST_GO/SST_GP and
 /// the SETBL control flags. On call 1 the COMMON state (COM1/COM2/XT) is what MRCHUE left
-/// behind, obtained by replaying MRCHUE from its own gated input.
+/// behind, obtained by replaying MRCHUE from its own tested input.
 #[allow(dead_code)]
 pub fn state_before_setbl_march(k: usize) -> (SolverState, FlowParameters, BlDump) {
     let fx = |name: &str| require_fixture(&format!("{}/{}", REF_CASE, name));

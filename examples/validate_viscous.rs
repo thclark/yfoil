@@ -1,5 +1,5 @@
 //! Smoke check of the viscous analysis against a few hand-transcribed XFOIL screen values
-//! (4–5 significant figures). The gates are the instrumented-dump tests under `tests/`; this
+//! (4–5 significant figures). The tests are the instrumented-dump tests under `tests/`; this
 //! only shows that the CLI-level path runs and lands in the right place.
 
 use yfoil::geometry::Thickness;

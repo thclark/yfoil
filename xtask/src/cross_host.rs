@@ -1,5 +1,5 @@
 //! `cargo xtask cross-host`: the reference's own spread between two hosts' maths libraries, per
-//! whole-run case and per compared value — the floor of a cross-host gate (CLAUDE.md Rule 1).
+//! whole-run case and per compared value — the floor of a cross-host tolerance (CLAUDE.md Rule 1).
 //!
 //! Both codes take `exp`, `log`, `pow`, `tanh`… from the host's libm, and Apple's and glibc's differ
 //! by one ULP on a fraction of inputs, so a fixture generated on one host cannot be met more closely
@@ -14,7 +14,7 @@
 //! both hosts and their libraries, per case the largest spread of each value, whether the
 //! reference's route (iteration counts, IST, ITRAN) differs between the hosts, and the length and
 //! FNV-1a hash of every tracked record it was measured against, so a test can tell a stale
-//! measurement from a current one. The tests gate a run cross-host at
+//! measurement from a current one. The tests hold a run cross-host to
 //! `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)` (`tests/common/utilities/`).
 
 use crate::{run_xfoil, Case, Cases, RunEnd};
@@ -280,7 +280,7 @@ pub(crate) fn run(flags: &[String]) {
     let doc = json!({
         "about": "The reference's own spread between the fixtures' host and another host's maths library, per tracked \
                   run case and per compared value, in the tests' metric |a - b| / max(|a|, |b|, scale). On a host whose \
-                  libm is `measured_host.libm`, the run tests gate each value at max(tolerance, TOL_CROSS_HOST, \
+                  libm is `measured_host.libm`, the run tests hold each value to max(tolerance, TOL_CROSS_HOST, \
                   CROSS_HOST_FACTOR x spread). Written by `cargo xtask cross-host` (scripts/cross-host.sh); never edited.",
         "fixture_host": { "host": fh, "libm": fl },
         "measured_host": { "host": here, "libm": libm },

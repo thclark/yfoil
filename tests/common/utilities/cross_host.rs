@@ -1,6 +1,6 @@
-//! The cross-host gate of a whole run: on a host other than the fixture's, a value cannot be met
+//! The cross-host tolerance of a whole run: on a host other than the fixture's, a value cannot be met
 //! more closely than the reference itself moves between the two hosts' maths libraries, so each
-//! run-test value is gated at `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, the
+//! run-test value is held to `max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR × spread)`, the
 //! spread measured per case and value by `cargo xtask cross-host` (`scripts/cross-host.sh`) into
 //! `tests/fixtures/cross-host/spread.json` (CLAUDE.md Rule 1).
 //!
@@ -36,16 +36,16 @@ fn fnv64(bytes: &[u8]) -> u64 {
     h
 }
 
-/// The gate for one value of a run test and, when the measured spread sets it, a note saying so
+/// The tolerance for one value of a run test and, when the measured spread sets it, a note saying so
 /// for the failure message.
-pub struct Gate {
+pub struct Allowance {
     pub tol: f64,
     pub note: String,
 }
 
-/// The gate of `value` (`level` = `iteration`, `point` or `node`) of case `case` in `dir`, whose
+/// The tolerance of `value` (`level` = `iteration`, `point` or `node`) of case `case` in `dir`, whose
 /// tolerance on the fixture's own host is `tol`.
-pub fn gate(case: &str, dir: &Path, level: &str, value: &str, tol: f64) -> Gate {
+pub fn allowance(case: &str, dir: &Path, level: &str, value: &str, tol: f64) -> Allowance {
     let doc = spread_file();
     let measured = doc["measured_host"]["host"].as_str().unwrap_or("");
     // on every host: the measurement exists for the case and was taken against its current records
@@ -63,7 +63,7 @@ pub fn gate(case: &str, dir: &Path, level: &str, value: &str, tol: f64) -> Gate 
         );
     }
     if Host::of_fixture(dir) == Host::running() {
-        return Gate {
+        return Allowance {
             tol,
             note: String::new(),
         };
@@ -85,15 +85,15 @@ pub fn gate(case: &str, dir: &Path, level: &str, value: &str, tol: f64) -> Gate 
     let floor = CROSS_HOST_FACTOR * spread;
     let tol_x = tol.max(TOL_CROSS_HOST);
     if floor > tol_x {
-        Gate {
+        Allowance {
             tol: floor,
             note: format!(
-                " [cross-host gate {CROSS_HOST_FACTOR} × the reference's own {} ↔ {measured} spread {spread:.2e}]",
+                " [cross-host tolerance {CROSS_HOST_FACTOR} × the reference's own {} ↔ {measured} spread {spread:.2e}]",
                 doc["fixture_host"]["host"].as_str().unwrap_or("")
             ),
         }
     } else {
-        Gate {
+        Allowance {
             tol: tol_x,
             note: String::new(),
         }

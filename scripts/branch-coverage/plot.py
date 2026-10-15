@@ -15,20 +15,19 @@ from matplotlib import colormaps  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 
 STATUS_COLOUR = {
-    "cover": "#1f5ad6",       # taken by the minimal set
-    "finite": "#a6c8ff",      # taken only by finite cases outside the set
-    "nonfinite": "#ff7f0e",   # taken only in non-finite reference runs
-    "open": "#d62728",        # never taken
-    "unreachable": "#9a9a9a", # annotated unreachable
-    "loop_entry": "#dddddd",  # DO-line loop-control edge never taken
+    "cover": "#2ca02c",         # taken by the finite set
+    "nonfinite": "#1f77b4",     # taken by the non-finite set
+    "pathological": "#ff7f0e",  # taken only in pathological cases
+    "unreachable": "#9a9a9a",   # annotated unreachable
+    "loop_entry": "#9a9a9a",    # never-taken DO-line edge: not reachable either
+    "open": "#d62728",          # not taken
 }
 STATUS_LABEL = {
-    "cover": "taken by the minimal set",
-    "finite": "taken only outside the set",
-    "nonfinite": "taken only in non-finite runs",
-    "open": "open",
-    "unreachable": "annotated unreachable",
-    "loop_entry": "DO-line edge never taken (loop left early or never reached)",
+    "cover": "taken by the finite set",
+    "nonfinite": "taken by the non-finite set",
+    "pathological": "taken only in pathological cases",
+    "unreachable": "not reachable",
+    "open": "not taken",
 }
 CELL_PT = 3.3
 ROW_PT = 5.4
@@ -69,13 +68,13 @@ def branch_map(run_dir: Path, s: dict) -> None:
         for i, st in enumerate(r["statuses"]):
             ax.add_patch(Rectangle((LABEL_PT + i * CELL_PT, y + 0.9), CELL_PT - 0.6, ROW_PT - 1.8,
                                    facecolor=STATUS_COLOUR[st], edgecolor="none"))
-    # legend, LEGEND_ROWS rows of three entries
+    # legend, LEGEND_ROWS rows; DO-line edges share the "not reachable" entry
     lax = style.axes(fig, MARGIN_PT, MARGIN_PT, style.TEXT_WIDTH_PT - 2 * MARGIN_PT, legend)
     lax.set_axis_off()
     lax.grid(False)
     lax.set_xlim(0, style.TEXT_WIDTH_PT - 2 * MARGIN_PT)
     lax.set_ylim(0, legend)
-    keys = ["cover", "finite", "nonfinite", "open", "unreachable", "loop_entry"]
+    keys = ["cover", "nonfinite", "pathological", "unreachable", "open"]
     per_row = -(-len(keys) // LEGEND_ROWS)
     col_w = (style.TEXT_WIDTH_PT - 2 * MARGIN_PT) / per_row
     for n, key in enumerate(keys):
@@ -97,14 +96,14 @@ def case_matrix(run_dir: Path, s: dict) -> None:
     unique = {c["name"]: set(c["unique_by_subroutine"].keys()) for c in s["cases"]}
     # three numeric columns to the right of the grid, per subroutine: every branch, the reachable
     # ones (not annotated unreachable, not a never-taken DO-line edge), and those taken on any
-    # measured run (the set, the other finite candidates and the non-finite probes)
+    # measured run (the finite set, the non-finite set and any measured pathological case)
     rows = {r["key"]: r for r in s["subroutines"]}
     counts = []
     for key in subs:
         r = rows[key]
         total = r["branches"]
         reachable = total - r["unreachable"] - r["loop_entry"]
-        taken_all = r["cover"] + r["finite"] + r["nonfinite"]
+        taken_all = r["cover"] + r["nonfinite"] + r["pathological"]
         counts.append((total, reachable, taken_all))
     col_names = ["branches", "reachable", "taken, all cases"]
     col_x = [16.0, 46.0, 76.0]

@@ -10,7 +10,7 @@ Usage:
     scripts/docs.sh build --clean
     scripts/docs-linkcheck.py [SITE_DIR]
 
-Exits non-zero if any link is broken, so it can be used as a gate later. Links
+Exits non-zero if any link is broken, so it can be used as a CI check later. Links
 to external hosts, anchors and mailto: are not checked. Root-absolute links are
 resolved against the site root, which is how they will behave once served.
 """

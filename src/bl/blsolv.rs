@@ -132,7 +132,7 @@ pub fn solve_newton_system_traced(input: NewtonSystem, mut trace: Option<&mut Bl
     // Compute acceleration thresholds
     // XFOIL: VACC1 = VACCEL, VACC2 = VACC3 = VACCEL * 2.0 / (S(N) - S(1))
     // Association must match the Fortran exactly — (VACCEL*2.0)/(S(N)-S(1)) — because these
-    // thresholds gate branches; a 1-ULP difference in VACC2 can flip a skip decision.
+    // thresholds decide branches; a 1-ULP difference in VACC2 can flip a skip decision.
     let vacc1 = input.elimination_threshold;
     let (vacc2, vacc3) = match input.s_total {
         Some(arc_len) if arc_len > 0.0 => (

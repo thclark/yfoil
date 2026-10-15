@@ -1,4 +1,4 @@
-//! (f) Reference integrity: BLSOLV's sparse-skip thresholds on the reference case are far from their operands, so the bit-identity gated in `subroutine/blsolv.rs` is not a coincidence of rounding.
+//! (f) Reference integrity: BLSOLV's sparse-skip thresholds on the reference case are far from their operands, so the bit-identity tested in `subroutine/blsolv.rs` is not a coincidence of rounding.
 //!
 //! Fixtures: `tests/fixtures/xfoil/naca0012_n60_a2_re1e6/` — `cargo xtask fixtures --case naca0012_n60_a2_re1e6`.
 

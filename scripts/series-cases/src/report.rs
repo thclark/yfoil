@@ -1,5 +1,5 @@
 //! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/validation/<study>/README.md`).
+//! documentation page (`docs/<section>/<study>/README.md`).
 
 use crate::polars::PolarRun;
 use crate::Study;
@@ -99,7 +99,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           *divergent* — `docs/conventions/terminology.md` — where the reference itself moves by more than \
           `DIVERGENCE_FLOOR`), an inviscid point on CL, CM, CDp and every node's γ, q and Cp at `TOL_SOLVER`. \
           Every member is run with its five seeded 1-ULP twins (`twins = true`), so the table also says at \
-          which points XFOIL was itself ill-conditioned. The tests gate the same behaviours minimally, one \
+          which points XFOIL was itself ill-conditioned. The tests check the same behaviours minimally, one \
           step at a time (`docs/conventions/testing.md`); this page demonstrates them.\n\n",
         study.group
     );
@@ -107,12 +107,14 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           reference goes non-finite. The reference may record fewer points than the script — its sequence \
           halted, or the fixture driver's watchdog ended a run that had gone non-finite and hung in XFOIL's \
           plot-label loop ([known issues §4](../../xfoil-known-issues.md)); yFoil's sweep continues to its own \
-          halt either way. *Followed to the end* counts the recorded points at which every iteration was within \
-          tolerance (a match, or a departure allowed only because one of the reference's own 1-ULP twins had \
-          already departed earlier in the sweep); *parts at* is the first recorded point (leg, α) yFoil did not \
-          follow to the end. A departure where the reference is unstable against its 1-ULP twins (the largest \
-          spread of the value over the five twins above `DIVERGENCE_FLOOR` there) is a *threshold*; a departure \
-          where it is stable is a \
+          halt either way. A point is *followed to the end* when every one of its iterations agrees with the \
+          reference's within tolerance (or parts from it only where one of the reference's own 1-ULP twins had \
+          already parted earlier in the sweep); *parts at* is the first recorded point (leg, α) at which yFoil's \
+          iterations part from the reference's. Whether XFOIL is ill-conditioned there is measured on XFOIL \
+          alone, by its twins — five reruns of the reference with every panel coordinate jogged by −1, 0 or +1 \
+          ULP (`docs/conventions/terminology.md`): where the largest spread of a value over the twins exceeds \
+          `DIVERGENCE_FLOOR`, a parting there is the expected consequence of an **ill-conditioned** solution; \
+          where the twins agree, a parting is a \
           *mismatch*, settled by the one-step replay of CLAUDE.md Rule 3 — seed yFoil with XFOIL's exact state \
           entering that SETBL call and require XFOIL's state after it at `TOL_SOLVER`. \
           `tests/execution/steps.rs` replays every iteration of the calls where these sweeps part that way \
@@ -130,27 +132,27 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           every case — the reference writes its final state \
           of every VISCAL call (the per-node Cp, q and γ and the per-station XSSI, x, \
           UEDG, THET, DSTR, CTAU, MASS and TAU, `viscal_state_<k>.dat`) a fifth row compares yFoil's final state \
-          of the point with the reference's array by array: the worst array's |Δ| as a ratio to its gate \
+          of the point with the reference's array by array: the worst array's |Δ| as a ratio to its tolerance \
           `max(TOL_SOLVER · scale, FLOOR_FACTOR · floor)` with the floor the reference's own 1-ULP twin's spread \
-          of that array at that call (left; the dotted line is the gate), and the |Δ| itself against that floor \
+          of that array at that call (left; the dotted line is the tolerance), and the |Δ| itself against that floor \
           (right). That row is the accumulation measurement: a state that stays at the floor from point to point \
-          and then leaves it within one point has not accumulated anything. **XFOIL is red** (dashed, crosses), **yFoil blue** (solid, circles — filled where yFoil \
-          followed the reference to the end of the point, hollow where it did not or the point was not gated), \
-          so any visible separation of the two colours is a difference between the codes. An orange outer square \
+          and then leaves it within one point has not accumulated anything. **XFOIL is red** (dashed, crosses), **yFoil blue** (solid line, circles), \
+          so any visible separation of the two colours is a difference between the codes. Each code is one \
+          trace; the fill of yFoil's circle says how its point compares: filled where every iteration of the \
+          point agrees with the reference's, hollow where yFoil's iterations part from the reference's within \
+          the point, or where the point comes after one that parted in the same leg — it then started from a \
+          state the reference did not compute, and its comparison is informational. An orange outer square \
           marks a point during which that code went through a non-finite value: a station Newton whose residual \
-          was NaN (the garbage extrapolation then carries the march over it — for the reference, any `NaN` it \
+          was NaN (the extrapolation fallback then carries the march past it — for the reference, any `NaN` it \
           printed during the call; for yFoil, its own count of such stations) or a non-finite RMSBL, CL, CD or CM \
           in any iteration; where the plotted value is itself NaN and cannot be placed, an orange tick at the top \
-          of the panel marks its α. A black outer diamond marks a point within which the run departs from the \
-          reference where the reference is **unstable against its 1-ULP twins** (one of its own runs with every \
-          panel coordinate moved by one ULP departs there too: a *threshold*, the outcome the tests call \
-          divergent, CLAUDE.md Rule 1; the one-step replay from XFOIL's state at that iteration is the \
-          evidence that the step is faithful). A filled grey diamond marks a point within which the run departs \
-          where the reference is **stable against its 1-ULP twins**: a *mismatch*, to be settled by the same \
-          replay. A point yFoil \
-          followed to the end carries no diamond even when an earlier departure left it ungated; a point after \
-          a departure within the same leg that yFoil did not follow carries none either (its comparison is \
-          informational: it started from a state the reference did not compute). Where the red line stops short of the blue one the reference's sequence halted or hung \
+          of the panel marks its α. A black outer diamond marks a point within which yFoil parts from the \
+          reference where XFOIL is **ill-conditioned** (one of XFOIL's own twins parts there too: a divergent \
+          comparison, `docs/conventions/terminology.md`; the one-step replay from XFOIL's state at that \
+          iteration is the evidence that the step is faithful). A filled grey diamond marks a point within \
+          which yFoil parts where XFOIL is **well-conditioned** (its twins agree): a *mismatch*, to be settled \
+          by the same replay. Only the point at which a leg first parts carries a diamond; the points after it \
+          in the same leg carry none, because their comparison is informational. Where the red line stops short of the blue one the reference's sequence halted or hung \
           there.\n\n";
     if figure {
         let mut last_family = String::new();
@@ -180,7 +182,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
               parts (the first not followed to the end in its leg) and the points of the leg before it, with the \
               worst array of yFoil's final state against the reference's — its worst entry (node number for a \
               node array, `BL(is, ibl)` row index for a station array, side 1 first), the |Δ| there, the twin's \
-              1-ULP floor of the array, and the ratio of |Δ| to the gate. A point followed to the end that ends \
+              1-ULP floor of the array, and the ratio of |Δ| to its tolerance. A point followed to the end that ends \
               at a ratio well below 1 handed the next point a state the reference's own twin could not tell from \
               the reference's. Where the run parts, `tests/execution/steps.rs` replays every iteration of the call \
               from the reference's exact state (Rule 3), with each value within the named tolerance or four times \
@@ -233,7 +235,7 @@ fn state_table_md(s: &Value) -> String {
         return String::new();
     }
     let mut t = String::from(
-        "| case | leg | α | iterations yFoil / XFOIL | followed | worst array (entry) | abs Δ | 1-ULP floor | Δ / gate |\n|---|---:|---:|---:|---|---|---:|---:|---:|\n",
+        "| case | leg | α | iterations yFoil / XFOIL | followed | worst array (entry) | abs Δ | 1-ULP floor | Δ / tolerance |\n|---|---:|---:|---:|---|---|---:|---:|---:|\n",
     );
     for r in &rows {
         t += &format!(
@@ -302,9 +304,9 @@ pub fn write_index_tex(study: &Study, run_dir: &Path, s: &Value) {
     );
     w(&mut f, &format!("\\section*{{{}}}", study.title));
     w(&mut f, &format!("\\noindent {}", tex_escape(study.purpose_tex)));
-    w(&mut f, "Polars are swept $0\\rightarrow+30^\\circ$ and after INIT $0\\rightarrow-30^\\circ$ by $1^\\circ$ with XFOIL's polar procedure (ASEQ, ITMAX+5 per point, the sequence halting after NSEQEX = 4 consecutive unconverged points); yFoil driven the same way and compared point by point with the equivalence gate. Provenance in \\texttt{metadata.json}, every number in \\texttt{summary.json}.");
+    w(&mut f, "Polars are swept $0\\rightarrow+30^\\circ$ and after INIT $0\\rightarrow-30^\\circ$ by $1^\\circ$ with XFOIL's polar procedure (ASEQ, ITMAX+5 per point, the sequence halting after NSEQEX = 4 consecutive unconverged points); yFoil driven the same way and compared point by point with the equivalence comparison. Provenance in \\texttt{metadata.json}, every number in \\texttt{summary.json}.");
     for r in s["polars"].as_array().unwrap() {
-        w(&mut f, &format!("\\begin{{figure}}[h]\\centering\\includegraphics{{polars-{}.pdf}}\\caption{{{} (\\texttt{{{}}}): $C_L$ and $C_D$ against $\\alpha$ (top), the last iteration's RMSBL and the iterations taken (second row), the transition location on each side (third row; an open triangle where the final IST or ITRAN differs between the codes), the position of transition within its station interval on each side (fourth row) and, where the fixture keeps the reference's per-call state, yFoil's final state against the reference's, worst array, as a ratio to its gate and as $|\\Delta|$ against the twin's 1-ULP floor (fifth row). XFOIL red (dashed, crosses), yFoil blue (solid, circles filled where yFoil followed the reference to the end of the point); an orange outer square marks a point in which that code went through a non-finite value, an orange tick a plotted value that is itself NaN; a black outer diamond a point within which the run departs where the reference is unstable against its 1-ULP twins (a threshold), a filled grey diamond one where it is stable (a mismatch). Where the red line stops short of the blue one the reference's sequence halted or hung there.}}\\end{{figure}}", r["name"].as_str().unwrap(), tex_escape(r["section"].as_str().unwrap()), tex_escape(r["name"].as_str().unwrap())));
+        w(&mut f, &format!("\\begin{{figure}}[h]\\centering\\includegraphics{{polars-{}.pdf}}\\caption{{{} (\\texttt{{{}}}): $C_L$ and $C_D$ against $\\alpha$ (top), the last iteration's RMSBL and the iterations taken (second row), the transition location on each side (third row; an open triangle where the final IST or ITRAN differs between the codes), the position of transition within its station interval on each side (fourth row) and, where the fixture keeps the reference's per-call state, yFoil's final state against the reference's, worst array, as a ratio to its tolerance and as $|\\Delta|$ against the twin's 1-ULP floor (fifth row). XFOIL red (dashed, crosses), yFoil blue (solid, circles filled where every iteration of the point agrees with the reference's); an orange outer square marks a point in which that code went through a non-finite value, an orange tick a plotted value that is itself NaN; a black outer diamond a point within which yFoil parts from the reference where XFOIL is ill-conditioned (its own 1-ULP twins part there too), a filled grey diamond one where XFOIL is well-conditioned (a mismatch). Where the red line stops short of the blue one the reference's sequence halted or hung there.}}\\end{{figure}}", r["name"].as_str().unwrap(), tex_escape(r["section"].as_str().unwrap()), tex_escape(r["name"].as_str().unwrap())));
     }
     w(&mut f, "\\begin{figure}[h]\\centering\\includegraphics{transition-position.pdf}\\caption{Where transition sits within its station interval (0 at station ITRAN$-$1, 1 at station ITRAN) at the end of every recorded point of every case, per side, from yFoil's state; diamonds where the run parts (black: the reference is unstable against its 1-ULP twins there; grey: it is stable).}\\end{figure}");
     w(&mut f, "\\begin{table}[h]\\centering\\small");
@@ -337,9 +339,9 @@ pub fn write_index_tex(study: &Study, run_dir: &Path, s: &Value) {
     let rows = state_rows(s);
     if !rows.is_empty() {
         w(&mut f, "\\begin{table}[h]\\centering\\small");
-        w(&mut f, "\\caption{The final state into each departure: the worst array of yFoil's final state against the reference's, its $|\\Delta|$, the twin's 1-ULP floor of the array and the ratio of $|\\Delta|$ to the gate, for every point at which yFoil parts and the points of its leg before it.}");
+        w(&mut f, "\\caption{The final state into each departure: the worst array of yFoil's final state against the reference's, its $|\\Delta|$, the twin's 1-ULP floor of the array and the ratio of $|\\Delta|$ to its tolerance, for every point at which yFoil parts and the points of its leg before it.}");
         w(&mut f, "\\begin{tabular}{@{}lrrrllrrr@{}}\\toprule");
-        w(&mut f, "Case & Leg & $\\alpha$ & Iterations & Followed & Array (entry) & $|\\Delta|$ & Floor & $|\\Delta|$/gate \\\\ \\midrule");
+        w(&mut f, "Case & Leg & $\\alpha$ & Iterations & Followed & Array (entry) & $|\\Delta|$ & Floor & $|\\Delta|$/tol. \\\\ \\midrule");
         for r in &rows {
             w(
                 &mut f,

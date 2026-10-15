@@ -1,5 +1,5 @@
 //! `cargo xtask route [--case NAME]... [--reuse]`: is yFoil's route through each candidate step
-//! XFOIL's? The strong meaning of "gated" (`docs/conventions/testing.md`, "What gated means").
+//! XFOIL's? The strong meaning of "tested" (`docs/conventions/testing.md`, 'What "tested" means for a branch').
 //!
 //! XFOIL's route through a step is its call count of every translated subroutine in the step,
 //! measured by `cargo xtask steps` from the gcov build (`target/coverage/steps.json`, `calls`).

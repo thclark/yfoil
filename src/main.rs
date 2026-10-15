@@ -690,7 +690,7 @@ fn main() {
             }
             println!();
 
-            // the same record a polar entry carries, and the same gate on its numbers
+            // the same record a polar entry carries, and the same rule on its numbers
             let record = yfoil::output::PointRecord::from_point(&point, !inviscid, allow_invalid);
             println!("Status:  {}", status_line(&record));
             println!();

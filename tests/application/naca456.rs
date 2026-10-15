@@ -1,10 +1,10 @@
 //! (c) yFoil functionality: the NACA series generators against the public-domain NASA/PDAS `naca456` reference
 //! (`tests/fixtures/naca456/`, written by `scripts/naca456-fixtures.sh` from naca456's own
 //! module procedures at 17 significant figures). Every case in `scripts/naca456-fixtures/cases.txt`
-//! is gated: the thickness form and its slope, the mean line and its slope, and the combined
+//! is tested: the thickness form and its slope, the mean line and its slope, and the combined
 //! upper and lower surfaces at naca456's 98 "very fine" stations. A missing fixture fails.
 //!
-//! Tolerances are in `tests/common/utilities/tolerances.rs`; the 6-series thickness gate is derived
+//! Tolerances are in `tests/common/utilities/tolerances.rs`; the 6-series thickness tolerance is derived
 //! from the reference's own 1e-6 root tolerance (see there).
 //!
 //! Fixtures: `tests/fixtures/naca456/` — `scripts/naca456-fixtures.sh` (PDAS reference, no XFOIL).
@@ -215,7 +215,7 @@ fn every_naca456_case_is_reproduced() {
 
 #[test]
 fn closed_form_families_agree_to_round_off() {
-    // the gate above already applies TOL_NACA456_CLOSED_FORM; this records that the achieved
+    // the test above already applies TOL_NACA456_CLOSED_FORM; this records that the achieved
     // agreement is round-off, an order of magnitude inside it
     for slug in [
         "naca0012",

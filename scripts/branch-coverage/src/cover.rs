@@ -3,7 +3,7 @@
 //! Exact minimum set cover is NP-hard in general; here the structure is small (tens of cases,
 //! ~1000 branches) and dominated by *essential* cases — a branch taken by exactly one candidate
 //! forces that candidate in. After the essentials, the remainder is covered greedily by marginal
-//! gain (ties broken towards the case with fewer VISCAL iterations, i.e. the cheaper gate), then
+//! gain (ties broken towards the case with fewer VISCAL iterations, i.e. the cheaper comparison), then
 //! pruned: any case whose branches are all covered by the others is dropped, largest first. The
 //! result is minimal (no case can be removed); the report says so rather than "minimum".
 
@@ -65,7 +65,7 @@ pub fn minimum_cover(candidates: &[&Candidate], target: &BTreeSet<String>) -> Ve
     names
 }
 
-/// Gate cost: the reference's VISCAL calls × iteration budget (an inviscid case is cheapest).
+/// Comparison cost: the reference's VISCAL calls × iteration budget (an inviscid case is cheapest).
 fn cost(c: &Candidate) -> usize {
     let points = c.case.alphas.len() + c.case.alphas_after_reinit.len() + c.case.cls.len();
     if c.case.inviscid {

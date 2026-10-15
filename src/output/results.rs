@@ -12,14 +12,17 @@ pub enum Reason {
     /// The Kármán–Tsien denominator `β + BFAC·Cp_inc` reached zero or below, so the
     /// compressibility correction has passed its pole and Cp has changed sign
     KarmanTsienOutOfDomain,
-    /// SPECAL's CL(M) Newton used all 20 iterations without reaching `|DCLM| ≤ 1e-6`
+    /// SPECAL's CL(M) Newton used all 20 of its iterations without reaching `|DCLM| ≤ 1e-6`.
+    /// The 20 is XFOIL's fixed loop count (`DO 100 ITCL=1, 20`, xoper.f:2767), not the `ITER`
+    /// setting, which limits only the viscous iteration
     MachClNewtonExhausted,
-    /// SPECCL's alpha Newton used all 20 iterations without reaching `|DALFA| ≤ 1e-6`
+    /// SPECCL's alpha Newton used all 20 of its iterations without reaching `|DALFA| ≤ 1e-6`.
+    /// As for SPECAL, the 20 is fixed in XFOIL (`DO 100 ITAL=1, 20`, xoper.f:2846), not `ITER`
     ClNewtonExhausted,
     /// VISCAL finished without LVCONV: the viscous-inviscid iteration did not converge
     ViscousNotConverged,
-    /// A station Newton failed with a non-finite residual and the march was carried over it by
-    /// the garbage extrapolation: the run went through a NaN
+    /// A station Newton failed with a non-finite residual, the march rejected its iterate and
+    /// carried on past it by the extrapolation fallback: the run went through a NaN
     NonFiniteStationFailure,
     /// The sweep halted before reaching this alpha, so it was never attempted
     SequenceHalted,
@@ -423,7 +426,7 @@ impl AnalysisOutput {
             None
         };
         let results = PointRecord::from_point(p, viscous, allow_invalid);
-        // the numeric payload is gated as one: values, surface distributions and BL alike
+        // the numeric payload is given or withheld as one: values, surface distributions and BL alike
         let disclose = results.is_valid() || allow_invalid;
         Self {
             foil: foil_name.to_string(),
