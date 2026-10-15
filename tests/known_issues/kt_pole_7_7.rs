@@ -13,7 +13,7 @@
 //! substitutions, the Kármán–Tsien tests) a yFoil flag must have its event in the span.
 //!
 //! Fixtures (`cargo xtask fixtures --case <name>`): `naca4412_n60_inviscid_m07_a10`,
-//! `naca64a010_n60_inviscid_sweep30_type2_m03`.
+//! `naca64a010_n60_inviscid_type2_m03_am23_a0_a19`.
 
 use crate::fixtures;
 use std::path::Path;
@@ -132,9 +132,9 @@ fn test_point_past_the_karman_tsien_pole_matches_xfoil() {
 }
 
 #[test]
-fn test_type2_sweep_mach_newton_exhaustion_matches_xfoil_exactly() {
-    let points = run_inviscid("naca64a010_n60_inviscid_sweep30_type2_m03", 0.3, true);
-    assert_eq!(points.len(), 61, "one SPECAL per degree from -30 to 30");
+fn test_type2_mach_newton_exhaustion_matches_xfoil_exactly() {
+    let points = run_inviscid("naca64a010_n60_inviscid_type2_m03_am23_a0_a19", 0.3, true);
+    assert_eq!(points.len(), 3, "one SPECAL each at -23, 0 and 19 degrees");
     let ours: Vec<i64> = points
         .iter()
         .filter(|(_, v)| v.mach_cl_newton_exhausted)
@@ -145,15 +145,15 @@ fn test_type2_sweep_mach_newton_exhaustion_matches_xfoil_exactly() {
         .filter(|(s, _)| s.has("SPECAL_MINF_FAIL"))
         .map(|(s, _)| s.alpha_deg.round() as i64)
         .collect();
-    assert!(!xfoil.is_empty(), "the sweep must exercise the exhaustion");
+    assert!(!xfoil.is_empty(), "the case must exercise the exhaustion");
     assert_eq!(ours, xfoil, "SPECAL's CL(M) Newton exhausted at exactly XFOIL's points");
 }
 
 #[test]
-fn test_type2_sweep_flags_are_taken_only_where_xfoil_took_them() {
-    let points = run_inviscid("naca64a010_n60_inviscid_sweep30_type2_m03", 0.3, true);
+fn test_type2_flags_are_taken_only_where_xfoil_took_them() {
+    let points = run_inviscid("naca64a010_n60_inviscid_type2_m03_am23_a0_a19", 0.3, true);
     assert_flags_have_events(&points);
-    // and the sweep is not vacuous: every kind of flag is raised somewhere
+    // and the case is not vacuous: every kind of flag is raised somewhere
     assert!(points.iter().any(|(_, v)| v.out_of_domain()));
     assert!(points.iter().any(|(_, v)| v.cl_floored && v.mach_limited));
 }

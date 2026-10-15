@@ -1,5 +1,5 @@
 {
-  "about": "The reference's own spread between the fixtures' host and another host's maths library, per tracked run case and per compared value, in the tests' metric |a - b| / max(|a|, |b|, scale). On a host whose libm is `measured_host.libm`, the run tests gate each value at max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR x spread). Written by `cargo xtask cross-host` (scripts/cross-host.sh); never edited.",
+  "about": "The reference's own spread between the fixtures' host and another host's maths library, per tracked run case and per compared value, in the tests' metric |a - b| / max(|a|, |b|, scale). On a host whose libm is `measured_host.libm`, the run tests hold each value to max(tolerance, TOL_CROSS_HOST, CROSS_HOST_FACTOR x spread). Written by `cargo xtask cross-host` (scripts/cross-host.sh); never edited.",
   "cases": {
     "kt_n60_inviscid_a4_cl05_cl8": {
       "records": {
@@ -765,6 +765,31 @@
           "CL": 4.089550529814967e-12,
           "CM": 4.150928568040384e-13,
           "MINF": 1.0547118733938987e-15
+        }
+      }
+    },
+    "naca64a010_n60_inviscid_type2_m03_am23_a0_a19": {
+      "records": {
+        "specal_points.dat": {
+          "bytes": 15909,
+          "fnv64": "7ec1382b8c3f7948"
+        }
+      },
+      "route_differs": null,
+      "run_through": 0,
+      "spread": {
+        "iteration": {},
+        "node": {
+          "CPI": 3.1737723560354425e-11,
+          "GAM": 3.842814955135054e-12,
+          "QINV": 3.842814955135054e-12
+        },
+        "point": {
+          "ALFA": 0.0,
+          "CDP": 2.365996287778671e-12,
+          "CL": 4.089550529814967e-12,
+          "CM": 3.1734584578224645e-12,
+          "MINF": 8.604228440844963e-15
         }
       }
     }
