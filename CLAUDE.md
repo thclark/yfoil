@@ -181,7 +181,7 @@ XFOIL-independent invariants are also required, because two codes can share a mi
   FFLAGS, host triple, libm/OS.
 - A missing fixture **fails** the test (`require_fixture`), never `eprintln!("Skipping")` + green.
 - `#[ignore]` is tagged with its unblocking stage and tracked in `tests/IGNORED.txt`; CI fails on drift.
-- A test with no assertion is not a test. Diagnostic scripts go in `examples/attic/`.
+- A test with no assertion is not a test. A diagnostic that only prints is not committed: write it under `.tmp/`.
 
 ## Project intent
 

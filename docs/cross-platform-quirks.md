@@ -28,7 +28,7 @@ reproduce itself under a 1-ULP perturbation, and there the ULPs get amplified.
 ## Evidence
 
 All from an Ubuntu 24.04 container (glibc 2.39), Dockerfile, pipeline script and libm probe in
-`.tmp/linux/` (untracked).
+`.tmp/linux/` (untracked, since removed; see *Reproducing*).
 
 | Measurement | Result |
 |---|---|
@@ -99,9 +99,7 @@ byte for byte on Linux. Whether glibc's own versions agree is no longer a questi
 
 ## Reproducing
 
-```bash
-# image: ubuntu:24.04 + build-essential gfortran libx11-dev libfontconfig1-dev pkg-config rustup
-docker build -t yfoil-ci:ubuntu24 .tmp/linux
-rsync -a --delete --exclude target --exclude .tmp --exclude site ./ .tmp/linux/yfoil/   # never bind-mount the live checkout: `cargo xtask fixtures` overwrites tracked fixture directories
-docker run --rm -v "$PWD/.tmp/linux:/host" yfoil-ci:ubuntu24 /host/pipeline.sh
-```
+The September investigation's container, pipeline and libm probe (`.tmp/linux/`) were scratch and are
+gone. The check that replaced them is tracked: `scripts/cross-host.sh` builds the Linux image
+(`scripts/cross-host/Dockerfile`), copies the tree into `target/cross-host-tree/` and requires the
+reference to reproduce every tracked run record byte for byte.
