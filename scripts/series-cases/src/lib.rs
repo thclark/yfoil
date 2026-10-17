@@ -15,15 +15,18 @@
 //!
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every point of every polar, both codes, with the outcome of each comparison),
-//! `README.md` / `README.tex`; the figure (`polars.svg`, `polars.pdf`) is drawn from
-//! `summary.json` by `plot.py` through `scripts/figures/render.sh`. With `--docs` the Markdown
-//! page and the SVG are also written to `docs/validation/series-cases/` (the known-issues cases'
-//! to `docs/testing/known-issues/`).
+//! `README.md` / `README.tex`, and the figures, drawn from `summary.json` in Rust ([`figures`]) as
+//! ironlab figure files (`polars-<case>.fig`, `transition-position.fig`, each with its `.pdf` for
+//! `README.tex`; `docs/conventions/figures.md`). With `--docs` the Markdown page and the `.fig`
+//! files are also written to `docs/validation/series-cases/` (the known-issues cases' to
+//! `docs/testing/known-issues/`). `--render <run_dir>` redraws an existing run folder's figures
+//! and rewrites its index (and with `--docs` the page) without rerunning the study.
 //!
 //! The library runs any [`Study`]: the series cases (`cargo run --release -p series-cases -- [--docs]`)
 //! and the known-issues cases (`cargo run --release -p known-issues -- [--docs]`) share every
 //! comparison, table and figure and differ only in their [`Study`] descriptor.
 
+pub mod figures;
 pub mod polars;
 pub mod report;
 pub mod utilities;
@@ -192,25 +195,51 @@ pub fn git(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// Draw the run folder's figures with `scripts/figures/render.sh <study> <run_dir>`.
-pub fn render(study: &Study, run_dir: &Path) -> bool {
-    let root = repo_root();
-    let status = std::process::Command::new(root.join("scripts/figures/render.sh"))
-        .arg(study.slug)
-        .arg(run_dir)
-        .status();
-    match status {
-        Ok(st) if st.success() => true,
-        other => {
-            eprintln!(
-                "figure not drawn ({}): run `scripts/figures/render.sh {} {}`",
-                other.map(|s| s.to_string()).unwrap_or_else(|e| e.to_string()),
-                study.slug,
-                run_dir.display()
-            );
+/// Draw the run folder's figures from its `summary.json` (`figures::render`); a figure that does
+/// not validate is reported and not written.
+pub fn render(study: &Study, cases: &[Case], run_dir: &Path, summary: &serde_json::Value) -> bool {
+    match figures::render(study, cases, run_dir, summary) {
+        Ok(written) => {
+            println!("{} figures written to {}", written.len(), run_dir.display());
+            true
+        }
+        Err(e) => {
+            eprintln!("figures not drawn: {e}");
             false
         }
     }
+}
+
+/// Every case of `xtask/fixtures-config/cases.toml`.
+pub fn load_cases(root: &Path) -> Vec<Case> {
+    let cases: Cases =
+        toml::from_str(&std::fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("cases.toml"))
+            .expect("parse cases.toml");
+    cases.cases
+}
+
+/// Redraw an existing run folder's figures from its `summary.json`, rewrite its `README.md` /
+/// `README.tex`, and with `docs` its documentation page, without rerunning the study.
+pub fn rerender(study: &Study, run_dir: &Path, docs: bool) {
+    let root = repo_root();
+    let summary: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(run_dir.join("summary.json")).expect("summary.json in the run folder"),
+    )
+    .expect("parse summary.json");
+    let cases = load_cases(&root);
+    report::write_index(study, run_dir, &summary);
+    report::write_index_tex(study, run_dir, &summary);
+    let drawn = render(study, &cases, run_dir, &summary);
+    if docs {
+        write_docs(study, &root, run_dir, &summary, drawn);
+    }
+}
+
+fn write_docs(study: &Study, root: &Path, run_dir: &Path, summary: &serde_json::Value, drawn: bool) {
+    let docs_dir = root.join("docs").join(study.section).join(study.slug);
+    std::fs::create_dir_all(&docs_dir).unwrap();
+    report::write_docs(study, &docs_dir, run_dir, summary, drawn);
+    println!("docs written to {}", docs_dir.display());
 }
 
 /// The trailing `# comment` of each case's `name = "…"` line in cases.toml, its description.
@@ -289,13 +318,16 @@ pub const KNOWN_ISSUES: Study = Study {
 pub fn run(study: &Study) {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let docs = args.iter().any(|a| a == "--docs");
+    if let Some(i) = args.iter().position(|a| a == "--render") {
+        let run_dir = args.get(i + 1).map(PathBuf::from).expect("--render <run_dir>");
+        rerender(study, &run_dir, docs);
+        return;
+    }
     let root = repo_root();
-    let cases: Cases =
-        toml::from_str(&std::fs::read_to_string(root.join("xtask/fixtures-config/cases.toml")).expect("cases.toml"))
-            .expect("parse cases.toml");
+    let cases = load_cases(&root);
     let desc = descriptions(&root);
     let mut runs: Vec<polars::PolarRun> = vec![];
-    for case in cases.cases.iter().filter(|c| c.group.as_deref() == Some(study.group)) {
+    for case in cases.iter().filter(|c| c.group.as_deref() == Some(study.group)) {
         let dir = root.join("target/fixtures").join(&case.name);
         if !dir.join("viscal_points.dat").exists() && !dir.join("specal_points.dat").exists() {
             eprintln!(
@@ -346,12 +378,9 @@ pub fn run(study: &Study) {
     .unwrap();
     report::write_index(study, &run_dir, &summary);
     report::write_index_tex(study, &run_dir, &summary);
-    let drawn = render(study, &run_dir);
+    let drawn = render(study, &cases, &run_dir, &summary);
     if docs {
-        let docs_dir = root.join("docs").join(study.section).join(study.slug);
-        std::fs::create_dir_all(&docs_dir).unwrap();
-        report::write_docs(study, &docs_dir, &run_dir, &summary, drawn);
-        println!("docs written to {}", docs_dir.display());
+        write_docs(study, &root, &run_dir, &summary, drawn);
     }
     println!("run folder: {}", run_dir.display());
 }

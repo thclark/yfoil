@@ -11,12 +11,12 @@ Every page here is generated from data the fixture pipeline produced, and can be
 from tracked inputs. Nothing here is a baseline: the reference is the instrumented double-precision XFOIL
 6.99 build (CLAUDE.md, *Reference implementation*), its dumps live under `tests/fixtures/xfoil/<case>/`
 (tracked) or `target/fixtures/<case>/` (`--big` cases), and the reports read those directories. Only
-Markdown and SVG are committed under `docs/`.
+Markdown, ironlab figures (`.fig`) and the branch-coverage SVGs are committed under `docs/`.
 
-Figures are drawn by matplotlib from each study's JSON outputs (`scripts/<study>/plot.py`, presentation only;
-`scripts/figures/style.py` holds the publication conventions, `scripts/figures/render.sh` pins the version and runs it
-through uv, so running any of the studies needs [`uv`](https://docs.astral.sh/uv/) installed). Every number in a figure, including axis extents, is computed by the Rust study and is in its run folder,
-so the plots can be redrawn by anyone from the JSON alone.
+Figures are [ironlab](https://github.com/thclark/ironlab) figures, built in Rust by each study from the numbers it
+computes (`docs/conventions/figures.md`). They are embedded live in these pages: pan, zoom and toggle lines from the
+legend. Each carries parameters (case, conditions, outputs) and labels, so every study's figures can be loaded
+together into the ironlab viewer and sorted, filtered and grouped. A study's run folder also holds a PDF of each.
 
 | Page | What it shows | Regenerate with |
 |---|---|---|

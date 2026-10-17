@@ -7,7 +7,11 @@ icon: lucide/book-open
 ## Start here
 
 [Install yFoil](install.md), then [run your first analysis](first-analysis.md).
-Ten minutes, and you will have a converged viscous solution and a plot of it.
+Ten minutes, and you will have a converged viscous solution and a plot of it, like
+this comparison of two polars drawn with [`yfoil plot`](plot.md) as an
+[ironlab](https://github.com/thclark/ironlab) figure (pan, zoom, or click the key to hide a curve):
+
+<ironlab-figure src="figures/intro.fig" format="fig" name="intro" alt="NACA 0012 and NACA 4412 polars at Re 1e6, alpha -15 to 15 degrees: CL against alpha, CL against CD, CM against alpha and CD against alpha">NACA 0012 and NACA 4412 polars at Re 1e6, alpha -15 to 15 degrees: CL against alpha, CL against CD, CM against alpha and CD against alpha</ironlab-figure>
 
 If you already know XFOIL, the mapping is direct — `yfoil analyse` is one OPER
 point, `yfoil polar` is a `PACC`/`ASEQ` sweep — and each command below gives the
@@ -30,7 +34,7 @@ graph LR
 | [`yfoil geometry`](geometry.md) | Generate, convert, repanel and inspect aerofoil geometry |
 | [`yfoil analyse`](analyse.md) | Solve a single operating point (fixed α or fixed \(C_L\)) |
 | [`yfoil polar`](polar.md) | Sweep α as a state machine, exactly as XFOIL's `ASEQ` does |
-| [`yfoil plot`](plot.md) | Draw polars, \(C_p\)/\(U_e\) distributions and the foil itself |
+| [`yfoil plot`](plot.md) | Draw polars, \(C_p\)/\(U_e\) distributions and the foil itself as ironlab figures |
 
 Every command that reads a foil takes **JSON geometry**. Use
 [`yfoil geometry convert`](geometry.md#convert) to bring in a `.dat` file.

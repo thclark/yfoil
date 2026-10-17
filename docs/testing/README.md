@@ -9,10 +9,12 @@ Every page here is generated from data the fixture pipeline produced (the refere
 tracked inputs. The tests themselves are the evidence (`docs/conventions/testing.md`); the study pages
 measure the reference and compare whole runs, and add nothing the tests rely on.
 
-Figures are drawn by matplotlib from each study's JSON outputs (`scripts/<study>/plot.py`, presentation only;
-`scripts/figures/style.py` holds the publication conventions, `scripts/figures/render.sh` pins the version and runs it
-through uv, so running any of the studies needs [`uv`](https://docs.astral.sh/uv/) installed). Every number in a figure, including axis extents, is computed by the Rust study and is in its run folder,
-so the plots can be redrawn by anyone from the JSON alone.
+Figures are [ironlab](https://github.com/thclark/ironlab) figures, built in Rust by each study from the numbers it
+computes (`docs/conventions/figures.md`). They are embedded live in these pages: pan, zoom and toggle lines from the
+legend. Each carries parameters (case, conditions, outputs) and labels, so every study's figures can be loaded
+together into the ironlab viewer and sorted, filtered and grouped. A study's run folder also holds a PDF of each. The branch-coverage study's branch map and case matrix are the exception: they are SVGs drawn by
+matplotlib (`scripts/branch-coverage/plot.py` through `scripts/figures/render.sh`, which needs
+[`uv`](https://docs.astral.sh/uv/) installed).
 
 | Page | What it shows | Regenerate with |
 |---|---|---|
@@ -23,8 +25,8 @@ so the plots can be redrawn by anyone from the JSON alone.
 | [noise-floor.md](noise-floor.md) | Rule 1: the reference's own 1-ULP sensitivity per stage and variable, from which `tests/common/utilities/tolerances.rs` is derived | `scripts/noise-floor.sh` |
 | [geometry/README.md](geometry/README.md) | Stage G: XFOIL-model NACA4/5 and PANGEN tested bitwise against `pangen_*` dumps; the bitwise LOAD handoff that every solver case asserts | `cargo xtask fixtures --case pangen_…`, `cargo test --test subroutine pangen` |
 | [subroutines/README.md](subroutines/README.md) | BL closure relations (HKIN, HSL, HST, CFL, CFT, DIL, DAMPL) against the instrumented reference's own calls, dumped at 17 significant digits, in `tests/fixtures/subroutines/` | `cargo run --bin generate_subroutine_validation` |
-| `scripts/input-sensitivity/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the SVG sheet, JSON summaries and a LaTeX index) | The reference's own input sensitivity: NACA 0012 swept 0°–25° with node coordinates (1 ULP … 1e-7), panel count and alpha step perturbed; seven per-alpha quantities per family, base case in front (`scripts/input-sensitivity/src/perturb.rs` for the node-perturbation method) | `cargo run --release -p input-sensitivity` |
-| `scripts/xfoil-instrumentation-check/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the 2×2 SVG, `summary.json` and a LaTeX index) | The instrumentation is inert on a polar through stall: pristine and instrumented DP builds run one identical OPER script (XFOIL's own `NACA 0012`, `PPAR N 160`, Re 1e6, 0°–25° by 0.5°, `ALFA` + `DUMP` per point) and are compared byte-for-byte on XFOIL's standard `PACC` polar and `DUMP` files only, at XFOIL's own output precision | `cargo run --release -p xfoil-instrumentation-check` |
+| `scripts/input-sensitivity/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the figures (`.fig` and PDF), JSON summaries and a LaTeX index) | The reference's own input sensitivity: NACA 0012 swept 0°–25° with node coordinates (1 ULP … 1e-7), panel count and alpha step perturbed; seven per-alpha quantities per family, base case in front (`scripts/input-sensitivity/src/perturb.rs` for the node-perturbation method) | `cargo run --release -p input-sensitivity` |
+| `scripts/xfoil-instrumentation-check/` (not a page: each run writes a dated folder under its `runs/`, gitignored, with the 2×2 figure (`.fig` and PDF), `summary.json` and a LaTeX index) | The instrumentation is inert on a polar through stall: pristine and instrumented DP builds run one identical OPER script (XFOIL's own `NACA 0012`, `PPAR N 160`, Re 1e6, 0°–25° by 0.5°, `ALFA` + `DUMP` per point) and are compared byte-for-byte on XFOIL's standard `PACC` polar and `DUMP` files only, at XFOIL's own output precision | `cargo run --release -p xfoil-instrumentation-check` |
 
 **Polar break points (divergent comparisons)** — two tracked cases drive a 0.5° `ASEQ` sweep at `ITER 100`
 past CL_max, where the Newton iteration stops converging and both codes wander for the full 105 iterations

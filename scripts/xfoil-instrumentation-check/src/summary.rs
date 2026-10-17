@@ -1,6 +1,6 @@
-//! `summary.json`: every value the plot and the index use, and the file-level comparison.
-//! The plot is drawn from this file alone, so the chain XFOIL files → summary → figure is
-//! reproducible from the run folder.
+//! `summary.json`: every value the figure and the index use, and the file-level comparison.
+//! The figure is built from this file alone, so the chain XFOIL files → summary → figure is
+//! reproducible from the run folder (`--render RUN_DIR`).
 
 use crate::run::{BuildResult, Ending, Point};
 use crate::{Build, ALPHA_STEP_DEG, ITER, MACH, NCRIT, PANELS, REYNOLDS};
@@ -253,10 +253,10 @@ pub fn write_index(run_dir: &Path, s: &Summary) {
     .unwrap();
     writeln!(
         f,
-        "Figure: [naca{0}_check.svg](naca{0}_check.svg), and `naca{0}_check.pdf` for LaTeX, drawn by `plot.py` \
-         (matplotlib, via `scripts/figures/render.sh`) from `summary.json` alone at the document's physical size in \
-         its font (`scripts/figures/style.py`); include it at natural size: `\\includegraphics{{naca{0}_check.pdf}}`, \
-         no `width=`, no `\\resizebox`.\n",
+        "Figure: `naca{0}_check.fig` (ironlab; open it in the ironlab viewer), built by `figure.rs` from \
+         `summary.json` alone, and `naca{0}_check.pdf`, its export for LaTeX: \
+         `\\includegraphics{{naca{0}_check.pdf}}` at natural size, no `width=`, no `\\resizebox`. Rebuild both \
+         from this folder with `cargo run --release -p xfoil-instrumentation-check -- --render <this folder>`.\n",
         s.foil,
     )
     .unwrap();
@@ -362,8 +362,8 @@ fn tex_alpha(a: Option<f64>) -> String {
     a.map(|a| format!("${a:.1}^\\circ$")).unwrap_or_else(|| "---".into())
 }
 
-/// `README.tex` of the run folder: the same index with LaTeX tables and the figure included
-/// through the `svg` package (needs Inkscape at build time; drop the figure otherwise)
+/// `README.tex` of the run folder: the same index with LaTeX tables and the figure's PDF export
+/// included at natural size
 pub fn write_index_tex(run_dir: &Path, s: &Summary) {
     let mut f = fs::File::create(run_dir.join("README.tex")).unwrap();
     let w = |f: &mut fs::File, t: &str| writeln!(f, "{t}").unwrap();
@@ -476,10 +476,9 @@ pub fn write_index_tex(run_dir: &Path, s: &Summary) {
     w(&mut f, "\\bottomrule\\end{tabular}\\end{table}");
     w(
         &mut f,
-        "\n\\section*{Figure}\n\\noindent The figure is drawn by \\texttt{plot.py} (matplotlib) from \
-         \\texttt{summary.json} at the document's physical size in its font (\\texttt{scripts/figures/style.py}), \
-         so it is included at natural size: no \\texttt{width=} and no \\texttt{\\resizebox}, or the text no \
-         longer matches the document.\n",
+        "\n\\section*{Figure}\n\\noindent The figure is an ironlab figure (\\texttt{figure.rs}) built from \
+         \\texttt{summary.json} alone, at its physical size in its own font; its PDF export is included at natural \
+         size: no \\texttt{width=} and no \\texttt{\\resizebox}, or the text no longer matches the document.\n",
     );
     w(&mut f, &format!(
         "\\begin{{figure}}[h]\\centering\\includegraphics{{naca{}_check.pdf}}\\caption{{XFOIL 6.99 DP, pristine (red, \

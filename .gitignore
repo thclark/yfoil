@@ -10,9 +10,10 @@
 target/
 .tmp/
 
-# Documentation site build output (Zensical)
+# Documentation site build output (Zensical), and the ironlab-web bundle scripts/docs.sh fetches
 site/
 .zensical/
+docs/javascripts/ironlab-*/
 
 # Editor / OS
 .idea/

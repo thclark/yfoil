@@ -328,7 +328,7 @@ impl PolarOutput {
         let cd0 = valid
             .iter()
             .min_by(|a, b| value(a).cl.abs().partial_cmp(&value(b).cl.abs()).unwrap())
-            .map(|r| value(r).cd_pressure);
+            .and_then(|r| value(r).cd);
 
         let summary = PolarSummary {
             cl_max,

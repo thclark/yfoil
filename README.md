@@ -47,6 +47,8 @@ This repo `yFoil` is licenced under `GPL v3 or later` (SPDX `GPL-3.0-or-later`),
 - we modify the original source for the purpose of instrumentation (machine-precision level cross validation fo all subroutines), and
 - we include the exact package of source code used for validation within the version-controlled repo.
 
+The optional `plotting` feature (`yfoil plot`, and the studies' figures) links [ironlab](https://github.com/thclark/ironlab), which is licensed `AGPL-3.0-or-later`. GPLv3 §13 permits that combination. A binary built with `plotting` is distributed under the GPLv3 for yFoil's part and the AGPLv3 for ironlab's part, whose network-use clause applies if you serve it to users over a network. The default build doesn't include ironlab.
+
 ## Development
 
 ### Contributions and the use of AI
@@ -86,7 +88,7 @@ ci/ignore-drift.sh                                            # every #[ignore] 
 ```
 
 **Run the CLI.** `cargo run -- <args>`, or `cargo install --path .` for a `yfoil` binary; add `--features plotting`
-for `yfoil plot`. See `yfoil --help` and the [user guide](docs/guide/index.md).
+for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-viewer`). See `yfoil --help` and the [user guide](docs/guide/index.md).
 
 **XFOIL reference and fixtures.** Only needed when changing the translation, instrumentation or fixture set:
 

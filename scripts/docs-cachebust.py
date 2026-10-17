@@ -8,7 +8,7 @@ to ten minutes after a deploy a browser can combine the new HTML with a styleshe
 it cached from the previous one.
 
 This rewrites every ``href``/``src`` in the built HTML that resolves to a
-stylesheet, script, image or font inside the site to ``...?v=<hash>``, the first
+stylesheet, script, image, font or ironlab figure inside the site to ``...?v=<hash>``, the first
 eight hex digits of the file's SHA-256. A changed file gets a new URL; an
 unchanged one keeps its URL and its cache entry.
 
@@ -31,7 +31,7 @@ from urllib.parse import unquote
 
 HREF = re.compile(r'((?:href|src)=")([^"]+)(")')
 SKIP_PREFIXES = ("http://", "https://", "//", "#", "mailto:", "data:", "javascript:")
-ASSET_SUFFIXES = (".css", ".js", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2")
+ASSET_SUFFIXES = (".css", ".js", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".fig")
 
 
 def resolve(site_dir: str, page: str, link: str) -> str:

@@ -8,113 +8,113 @@ Members are full polars or sets of points (`group = "known-issues"` in `xtask/fi
 
 The study follows each run past convergence: through stall, and into the region where the reference goes non-finite. The reference may record fewer points than the script — its sequence halted, or the fixture driver's watchdog ended a run that had gone non-finite and hung in XFOIL's plot-label loop ([known issues §4](../../xfoil-known-issues.md)); yFoil's sweep continues to its own halt either way. A point is *followed to the end* when every one of its iterations agrees with the reference's within tolerance (or parts from it only where one of the reference's own 1-ULP twins had already parted earlier in the sweep); *parts at* is the first recorded point (leg, α) at which yFoil's iterations part from the reference's. Whether XFOIL is ill-conditioned there is measured on XFOIL alone, by its twins — five reruns of the reference with every panel coordinate jogged by −1, 0 or +1 ULP (`docs/conventions/terminology.md`): where the largest spread of a value over the twins exceeds `DIVERGENCE_FLOOR`, a parting there is the expected consequence of an **ill-conditioned** solution; where the twins agree, a parting is a *mismatch*, settled by the one-step replay of CLAUDE.md Rule 3 — seed yFoil with XFOIL's exact state entering that SETBL call and require XFOIL's state after it at `TOL_SOLVER`. `tests/execution/steps.rs` replays every iteration of the calls where these sweeps part that way (`step_calls` in `cases.toml`), each value within the named tolerance or four times the step's own measured sensitivity, and `cargo xtask route` observes yFoil take XFOIL's route through each of those steps. Why a sweep parts where the reference is stable against its twins — MRCHDU's station Newton at a transition station amplifying its seed a thousandfold, which both codes follow iterate for iterate from the same state — is recorded with its measurements in [known issues §7.9](../../xfoil-known-issues.md).
 
-One figure per case: CL and CD against α (top), the last iteration's RMSBL and the iterations taken (second row), and the transition location x/c on the upper and lower side (third row, from XOCTR and yFoil's transition point; an open triangle marks a point whose final stagnation or transition station — IST, ITRAN — differs between the codes), and the position of transition within its station interval on each side (fourth row: 0 at station ITRAN − 1, 1 at station ITRAN; see the section on it below). For every case — the reference writes its final state of every VISCAL call (the per-node Cp, q and γ and the per-station XSSI, x, UEDG, THET, DSTR, CTAU, MASS and TAU, `viscal_state_<k>.dat`) a fifth row compares yFoil's final state of the point with the reference's array by array: the worst array's |Δ| as a ratio to its tolerance `max(TOL_SOLVER · scale, FLOOR_FACTOR · floor)` with the floor the reference's own 1-ULP twin's spread of that array at that call (left; the dotted line is the tolerance), and the |Δ| itself against that floor (right). That row is the accumulation measurement: a state that stays at the floor from point to point and then leaves it within one point has not accumulated anything. **XFOIL is red** (dashed, crosses), **yFoil blue** (solid line, circles), so any visible separation of the two colours is a difference between the codes. Each code is one trace; the fill of yFoil's circle says how its point compares: filled where every iteration of the point agrees with the reference's, hollow where yFoil's iterations part from the reference's within the point, or where the point comes after one that parted in the same leg — it then started from a state the reference did not compute, and its comparison is informational. An orange outer square marks a point during which that code went through a non-finite value: a station Newton whose residual was NaN (the iterate fallback then carries the march past it — for the reference, any `NaN` it printed during the call; for yFoil, its own count of such stations) or a non-finite RMSBL, CL, CD or CM in any iteration; where the plotted value is itself NaN and cannot be placed, an orange tick at the top of the panel marks its α. A black outer diamond marks a point within which yFoil parts from the reference where XFOIL is **ill-conditioned** (one of XFOIL's own twins parts there too: a divergent comparison, `docs/conventions/terminology.md`; the one-step replay from XFOIL's state at that iteration is the evidence that the step is faithful). A filled grey diamond marks a point within which yFoil parts where XFOIL is **well-conditioned** (its twins agree): a *mismatch*, to be settled by the same replay. Only the point at which a leg first parts carries a diamond; the points after it in the same leg carry none, because their comparison is informational. Where the red line stops short of the blue one the reference's sequence halted or hung there.
+One figure per case: CL and CD against α (top), the last iteration's RMSBL and the iterations taken (second row), and the transition location x/c on the upper and lower side (third row, from XOCTR and yFoil's transition point; an open triangle marks a point whose final stagnation or transition station — IST, ITRAN — differs between the codes), and the position of transition within its station interval on each side (fourth row: 0 at station ITRAN − 1, 1 at station ITRAN; see the section on it below). For every case — the reference writes its final state of every VISCAL call (the per-node Cp, q and γ and the per-station XSSI, x, UEDG, THET, DSTR, CTAU, MASS and TAU, `viscal_state_<k>.dat`) a fifth row compares yFoil's final state of the point with the reference's array by array: the worst array's |Δ| as a ratio to its tolerance `max(TOL_SOLVER · scale, FLOOR_FACTOR · floor)` with the floor the reference's own 1-ULP twin's spread of that array at that call (left; the dotted line is the tolerance), and the |Δ| itself against that floor (right). That row is the accumulation measurement: a state that stays at the floor from point to point and then leaves it within one point has not accumulated anything. **XFOIL is red** (dashed, crosses), **yFoil blue** (solid line, circles), so any visible separation of the two colours is a difference between the codes. Each code is one trace; the fill of yFoil's circle says how its point compares: filled where every iteration of the point agrees with the reference's, hollow where yFoil's iterations part from the reference's within the point, or where the point comes after one that parted in the same leg — it then started from a state the reference did not compute, and its comparison is informational. An orange outer square marks a point during which that code went through a non-finite value: a station Newton whose residual was NaN (the iterate fallback then carries the march past it — for the reference, any `NaN` it printed during the call; for yFoil, its own count of such stations) or a non-finite RMSBL, CL, CD or CM in any iteration; where the plotted value is itself NaN and cannot be placed, an orange plus at the top of the panel marks its α. A black outer diamond marks a point within which yFoil parts from the reference where XFOIL is **ill-conditioned** (one of XFOIL's own twins parts there too: a divergent comparison, `docs/conventions/terminology.md`; the one-step replay from XFOIL's state at that iteration is the evidence that the step is faithful). A filled grey diamond marks a point within which yFoil parts where XFOIL is **well-conditioned** (its twins agree): a *mismatch*, to be settled by the same replay. Only the point at which a leg first parts carries a diamond; the points after it in the same leg carry none, because their comparison is informational. Where the red line stops short of the blue one the reference's sequence halted or hung there.
 
 ### NACA 16-212
 
 **`naca16-212_n60_polar30_re1e6_m07`** — known issues 7.13 at N = 60: NACA 16-212, M 0.7 (first unconverged 13 deg)
 
-![naca16-212_n60_polar30_re1e6_m07](polars-naca16-212_n60_polar30_re1e6_m07.svg)
+<ironlab-figure src="polars-naca16-212_n60_polar30_re1e6_m07.fig" format="fig" name="polars-naca16-212_n60_polar30_re1e6_m07" alt="naca16-212_n60_polar30_re1e6_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca16-212_n60_polar30_re1e6_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca16-212_n160_polar30_re1e6_m07_iter100`** — known issues 7.13 at N = 160: NACA 16-212, M 0.7 (first unconverged 3 deg; non-finite at -18 deg and hangs, 4)
 
-![naca16-212_n160_polar30_re1e6_m07_iter100](polars-naca16-212_n160_polar30_re1e6_m07_iter100.svg)
+<ironlab-figure src="polars-naca16-212_n160_polar30_re1e6_m07_iter100.fig" format="fig" name="polars-naca16-212_n160_polar30_re1e6_m07_iter100" alt="naca16-212_n160_polar30_re1e6_m07_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca16-212_n160_polar30_re1e6_m07_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca16-212_n240_polar30_re1e6_m07_iter200`** — known issues 7.13 at N = 240: NACA 16-212, M 0.7 (first unconverged 23 deg)
 
-![naca16-212_n240_polar30_re1e6_m07_iter200](polars-naca16-212_n240_polar30_re1e6_m07_iter200.svg)
+<ironlab-figure src="polars-naca16-212_n240_polar30_re1e6_m07_iter200.fig" format="fig" name="polars-naca16-212_n240_polar30_re1e6_m07_iter200" alt="naca16-212_n240_polar30_re1e6_m07_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca16-212_n240_polar30_re1e6_m07_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 64A010
 
 **`naca64a010_n60_polar30_re1e6_type2`** — known issues 7.13 at N = 60: NACA 64A010, viscous TYPE 2, M 0 (MRCL 100xRe clamp at CL ~ 0; 5 of 14 points converge)
 
-![naca64a010_n60_polar30_re1e6_type2](polars-naca64a010_n60_polar30_re1e6_type2.svg)
+<ironlab-figure src="polars-naca64a010_n60_polar30_re1e6_type2.fig" format="fig" name="polars-naca64a010_n60_polar30_re1e6_type2" alt="naca64a010_n60_polar30_re1e6_type2: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n60_polar30_re1e6_type2: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca64a010_n160_polar30_re1e6_type2_iter100`** — known issues 7.13 at N = 160: NACA 64A010, viscous TYPE 2, M 0 (11 of 13 converge; non-finite at 12 deg and hangs, 4)
 
-![naca64a010_n160_polar30_re1e6_type2_iter100](polars-naca64a010_n160_polar30_re1e6_type2_iter100.svg)
+<ironlab-figure src="polars-naca64a010_n160_polar30_re1e6_type2_iter100.fig" format="fig" name="polars-naca64a010_n160_polar30_re1e6_type2_iter100" alt="naca64a010_n160_polar30_re1e6_type2_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n160_polar30_re1e6_type2_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca64a010_n240_polar30_re1e6_type2_iter200`** — known issues 7.13 at N = 240: NACA 64A010, viscous TYPE 2, M 0 (no point converges)
 
-![naca64a010_n240_polar30_re1e6_type2_iter200](polars-naca64a010_n240_polar30_re1e6_type2_iter200.svg)
+<ironlab-figure src="polars-naca64a010_n240_polar30_re1e6_type2_iter200.fig" format="fig" name="polars-naca64a010_n240_polar30_re1e6_type2_iter200" alt="naca64a010_n240_polar30_re1e6_type2_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n240_polar30_re1e6_type2_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 4412
 
 **`naca4412_n60_inviscid_polar30_m07`** — known issues 7.13 and 4 at N = 60: NACA 4412 inviscid at M 0.7, past the Karman-Tsien pole
 
-![naca4412_n60_inviscid_polar30_m07](polars-naca4412_n60_inviscid_polar30_m07.svg)
+<ironlab-figure src="polars-naca4412_n60_inviscid_polar30_m07.fig" format="fig" name="polars-naca4412_n60_inviscid_polar30_m07" alt="naca4412_n60_inviscid_polar30_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca4412_n60_inviscid_polar30_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca4412_n160_inviscid_polar30_m07`** — known issues 7.13 and 4 at N = 160: NACA 4412 inviscid at M 0.7, past the Karman-Tsien pole
 
-![naca4412_n160_inviscid_polar30_m07](polars-naca4412_n160_inviscid_polar30_m07.svg)
+<ironlab-figure src="polars-naca4412_n160_inviscid_polar30_m07.fig" format="fig" name="polars-naca4412_n160_inviscid_polar30_m07" alt="naca4412_n160_inviscid_polar30_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca4412_n160_inviscid_polar30_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca4412_n240_inviscid_polar30_m07`** — known issues 7.13 and 4 at N = 240: NACA 4412 inviscid at M 0.7, past the Karman-Tsien pole
 
-![naca4412_n240_inviscid_polar30_m07](polars-naca4412_n240_inviscid_polar30_m07.svg)
+<ironlab-figure src="polars-naca4412_n240_inviscid_polar30_m07.fig" format="fig" name="polars-naca4412_n240_inviscid_polar30_m07" alt="naca4412_n240_inviscid_polar30_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca4412_n240_inviscid_polar30_m07: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 64A010
 
 **`naca64a010_n60_inviscid_polar30_type2_m03`** — known issues 7.13 and 7.7 at N = 60: NACA 64A010 inviscid TYPE 2 at M 0.3, MRCL's clamps and the Karman-Tsien pole
 
-![naca64a010_n60_inviscid_polar30_type2_m03](polars-naca64a010_n60_inviscid_polar30_type2_m03.svg)
+<ironlab-figure src="polars-naca64a010_n60_inviscid_polar30_type2_m03.fig" format="fig" name="polars-naca64a010_n60_inviscid_polar30_type2_m03" alt="naca64a010_n60_inviscid_polar30_type2_m03: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n60_inviscid_polar30_type2_m03: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca64a010_n160_inviscid_polar30_type2_m03`** — known issues 7.13 and 7.7 at N = 160: NACA 64A010 inviscid TYPE 2 at M 0.3, MRCL's clamps and the Karman-Tsien pole
 
-![naca64a010_n160_inviscid_polar30_type2_m03](polars-naca64a010_n160_inviscid_polar30_type2_m03.svg)
+<ironlab-figure src="polars-naca64a010_n160_inviscid_polar30_type2_m03.fig" format="fig" name="polars-naca64a010_n160_inviscid_polar30_type2_m03" alt="naca64a010_n160_inviscid_polar30_type2_m03: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n160_inviscid_polar30_type2_m03: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca64a010_n240_inviscid_polar30_type2_m03`** — known issues 7.13 and 7.7 at N = 240: NACA 64A010 inviscid TYPE 2 at M 0.3, MRCL's clamps and the Karman-Tsien pole
 
-![naca64a010_n240_inviscid_polar30_type2_m03](polars-naca64a010_n240_inviscid_polar30_type2_m03.svg)
+<ironlab-figure src="polars-naca64a010_n240_inviscid_polar30_type2_m03.fig" format="fig" name="polars-naca64a010_n240_inviscid_polar30_type2_m03" alt="naca64a010_n240_inviscid_polar30_type2_m03: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n240_inviscid_polar30_type2_m03: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 0012
 
 **`naca0012_n240_polar30_re1e6_iter200`** — known issues 4: NACA 0012, Re 1e6; non-finite at 22 deg and the reference hangs in the plot label (N = 160 does not)
 
-![naca0012_n240_polar30_re1e6_iter200](polars-naca0012_n240_polar30_re1e6_iter200.svg)
+<ironlab-figure src="polars-naca0012_n240_polar30_re1e6_iter200.fig" format="fig" name="polars-naca0012_n240_polar30_re1e6_iter200" alt="naca0012_n240_polar30_re1e6_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca0012_n240_polar30_re1e6_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 4412
 
 **`naca4412_n240_polar30_re1e6_iter200`** — known issues 4: NACA 4412, Re 1e6; non-finite at 30 deg and the reference hangs in the plot label (N = 160 does not)
 
-![naca4412_n240_polar30_re1e6_iter200](polars-naca4412_n240_polar30_re1e6_iter200.svg)
+<ironlab-figure src="polars-naca4412_n240_polar30_re1e6_iter200.fig" format="fig" name="polars-naca4412_n240_polar30_re1e6_iter200" alt="naca4412_n240_polar30_re1e6_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca4412_n240_polar30_re1e6_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca4412_n240_polar30_re3e6_iter200`** — known issues 4: NACA 4412, Re 3e6; non-finite at -24 deg on the downward leg and the reference hangs in the plot label (N = 160 does not)
 
-![naca4412_n240_polar30_re3e6_iter200](polars-naca4412_n240_polar30_re3e6_iter200.svg)
+<ironlab-figure src="polars-naca4412_n240_polar30_re3e6_iter200.fig" format="fig" name="polars-naca4412_n240_polar30_re3e6_iter200" alt="naca4412_n240_polar30_re3e6_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca4412_n240_polar30_re3e6_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 **`naca4412_n240_polar30_re1e6_m06_iter200`** — known issues 4: NACA 4412, M 0.6; non-finite at 21 deg and the reference hangs in the plot label (N = 160 does not)
 
-![naca4412_n240_polar30_re1e6_m06_iter200](polars-naca4412_n240_polar30_re1e6_m06_iter200.svg)
+<ironlab-figure src="polars-naca4412_n240_polar30_re1e6_m06_iter200.fig" format="fig" name="polars-naca4412_n240_polar30_re1e6_m06_iter200" alt="naca4412_n240_polar30_re1e6_m06_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca4412_n240_polar30_re1e6_m06_iter200: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 63-415
 
 **`naca63-415_n160_polar30_re1e6_m05_iter100`** — known issues 4 (TRCHEK2): NACA 63-415 (closed TE), M 0.5: converges at no point, at N = 160 and 240 alike (non-finite probe: naca63-415_n60_a14_re1e6_m05)
 
-![naca63-415_n160_polar30_re1e6_m05_iter100](polars-naca63-415_n160_polar30_re1e6_m05_iter100.svg)
+<ironlab-figure src="polars-naca63-415_n160_polar30_re1e6_m05_iter100.fig" format="fig" name="polars-naca63-415_n160_polar30_re1e6_m05_iter100" alt="naca63-415_n160_polar30_re1e6_m05_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca63-415_n160_polar30_re1e6_m05_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 64A010
 
 **`naca64a010_n160_polar30_re1e6_m03_type2_iter100`** — known issues 4 and 7.7: NACA 64A010, viscous TYPE 2 at M 0.3: the Mach 0.99 clamp at CL ~ 0; converges at no point, at N = 160 and 240 alike (non-finite probe: naca64a010_n60_type2_m03_a0)
 
-![naca64a010_n160_polar30_re1e6_m03_type2_iter100](polars-naca64a010_n160_polar30_re1e6_m03_type2_iter100.svg)
+<ironlab-figure src="polars-naca64a010_n160_polar30_re1e6_m03_type2_iter100.fig" format="fig" name="polars-naca64a010_n160_polar30_re1e6_m03_type2_iter100" alt="naca64a010_n160_polar30_re1e6_m03_type2_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n160_polar30_re1e6_m03_type2_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 23012
 
 **`naca23012_n60_polar30_re1e6_xtr022_0001`** — known issues 4 and 9: NACA 23012, trips at 0.22 / 0.001: the lower trip lies upstream of the stagnation point at positive alpha; non-finite from 1 deg (cover: naca23012_n60_a4_re1e6_xtr022_0001)
 
-![naca23012_n60_polar30_re1e6_xtr022_0001](polars-naca23012_n60_polar30_re1e6_xtr022_0001.svg)
+<ironlab-figure src="polars-naca23012_n60_polar30_re1e6_xtr022_0001.fig" format="fig" name="polars-naca23012_n60_polar30_re1e6_xtr022_0001" alt="naca23012_n60_polar30_re1e6_xtr022_0001: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca23012_n60_polar30_re1e6_xtr022_0001: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 63-415
 
 **`naca63-415_n160_polar30_re1e6_iter100`** — known issues 8 (open): NACA 63-415, closed TE (gap 0), Re 1e6, M 0: converges at no point; MRCHUE fails at the TE station from the first iteration
 
-![naca63-415_n160_polar30_re1e6_iter100](polars-naca63-415_n160_polar30_re1e6_iter100.svg)
+<ironlab-figure src="polars-naca63-415_n160_polar30_re1e6_iter100.fig" format="fig" name="polars-naca63-415_n160_polar30_re1e6_iter100" alt="naca63-415_n160_polar30_re1e6_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca63-415_n160_polar30_re1e6_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 ### NACA 64A010
 
 **`naca64a010_n160_polar30_re1e6_iter100`** — known issues 8 (open): NACA 64A010, closed TE (gap 0), Re 1e6, M 0: converges at no point; MRCHUE fails at the TE station from the first iteration
 
-![naca64a010_n160_polar30_re1e6_iter100](polars-naca64a010_n160_polar30_re1e6_iter100.svg)
+<ironlab-figure src="polars-naca64a010_n160_polar30_re1e6_iter100.fig" format="fig" name="polars-naca64a010_n160_polar30_re1e6_iter100" alt="naca64a010_n160_polar30_re1e6_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n160_polar30_re1e6_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
 | case | section | OPER | XFOIL points | yFoil points | followed to the end | parts at | XFOIL ill-conditioned (its twins) | reference hung |
 |---|---|---|---:|---:|---:|---|---|---|
@@ -142,9 +142,9 @@ One figure per case: CL and CD against α (top), the last iteration's RMSBL and 
 
 ### Where transition sits between the stations
 
-XFOIL places transition at an arc length XSSITR inside the interval between two consecutive BL stations, ITRAN − 1 and ITRAN (the first turbulent station), and TRDIF treats the transition interval with the two states weighted by where XSSITR falls in it. The figure plots, for every recorded point of every case, the position of transition within that interval at the end of the point — 0 at the station before, 1 at the transition station — on each side, from yFoil's state (the reference agrees in ITRAN at every point followed to the end); the points at which the run parts are the diamonds. Departures clustered at 0, 1 or ½ would reveal a sensitivity to where the panelling puts the stations relative to transition; the per-case figures carry the same quantity against α in their fourth row. Points whose ITRAN is the trailing-edge station (no transition on the airfoil) are left out.
+XFOIL places transition at an arc length XSSITR inside the interval between two consecutive BL stations, ITRAN − 1 and ITRAN (the first turbulent station), and TRDIF treats the transition interval with the two states weighted by where XSSITR falls in it. The figure plots, for every recorded point of every case, the position of transition within that interval at the end of the point — 0 at the station before, 1 at the transition station — on each side, from yFoil's state (the reference agrees in ITRAN at every point followed to the end), one row per case, numbered from the bottom with the key naming each number's case; the points at which the run parts are the diamonds. Departures clustered at 0, 1 or ½ would reveal a sensitivity to where the panelling puts the stations relative to transition; the per-case figures carry the same quantity against α in their fourth row. Points whose ITRAN is the trailing-edge station (no transition on the airfoil) are left out.
 
-![transition position](transition-position.svg)
+<ironlab-figure src="transition-position.fig" format="fig" name="transition-position" alt="Position of transition within its station interval for every recorded point of every case, upper and lower side">Position of transition within its station interval for every recorded point of every case, upper and lower side</ironlab-figure>
 
 | case | leg | α | outcome | side | ITRAN | position in interval | distance to nearer station |
 |---|---:|---:|---|---|---:|---:|---:|

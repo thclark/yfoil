@@ -6,6 +6,7 @@
 //!
 //! ```text
 //! cargo run --release -p series-cases -- [--docs]
+//! cargo run --release -p series-cases -- --render scripts/series-cases/runs/<UTC> [--docs]
 //! ```
 
 fn main() {
