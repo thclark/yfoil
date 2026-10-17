@@ -24,6 +24,10 @@
 
 {% block extrahead %}
   {{ super() }}
+  {#- the <ironlab-figure> element (docs/conventions/figures.md, "Embedding"); the version is
+      pinned in scripts/docs.sh, which fetches the bundle -#}
+  <link rel="stylesheet" href="{{ 'javascripts/ironlab-0.12.0/ironlab.css' | url }}">
+  <script type="module" src="{{ 'javascripts/ironlab-0.12.0/ironlab.js' | url }}"></script>
   <meta name="robots" content="noindex, nofollow">
   {%- if page.meta and page.meta.title %}
     {%- set card_title = page.meta.title ~ " - " ~ config.site_name %}

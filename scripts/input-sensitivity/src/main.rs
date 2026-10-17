@@ -1,21 +1,21 @@
-//! XFOIL input-sensitivity study (`docs/validation/input-sensitivity/`).
+//! XFOIL input-sensitivity study (run folders only, no docs page; listed in `docs/testing/README.md`).
 //!
 //! Runs the instrumented double-precision XFOIL 6.99 reference on one aerofoil over an upward
 //! alpha sweep, once for the base case and once per perturbation level of three input families —
 //! node coordinates (1 ULP up to 1e-7 chord), panel count (160 down to 96) and alpha step
-//! (0.5° plus 1 ULP up to 1e-5°) — and records seven per-alpha quantities per level. `plot.py`
-//! (matplotlib, through `scripts/figures/render.sh`) draws them from `metrics.json` alone: base
-//! case in front, perturbations stacked behind it coloured by perturbation size (YlGnBu), the node
-//! and alpha-step families side by side as one sheet, every family as a figure of the same column
-//! width. Every number in a figure — including the axis extents — is written by this program;
-//! the script only presents them.
+//! (0.5° plus 1 ULP up to 1e-5°) — and records seven per-alpha quantities per level. The ironlab
+//! figures (`figures.rs`) are built from `metrics.json` and `metadata.json` alone: base case in
+//! front, perturbations stacked behind it coloured by perturbation size (YlGnBu), the node and
+//! alpha-step families side by side as one sheet, every family as a figure of its own. Every
+//! number in a figure, the axis extents included, is computed here.
 //!
 //! Every invocation creates a dated folder `runs/<UTC datetime>/` next to this crate holding
 //! `metadata.json` (git version tag or `untagged`, commit sha, dirty flag, the reference build's
 //! manifest and the study constants), one directory per XFOIL run under `<foil>/<family>/<level>/`
 //! with the panels (`panels.dat`, written at 17 significant digits and asserted bitwise against
 //! XFOIL's post-LOAD dump), the OPER script, XFOIL's stdout and the instrumented per-call records
-//! (`viscal_points.dat`, `viscal_state_<k>.dat`), and the post-processed products: the figures (SVG and PDF),
+//! (`viscal_points.dat`, `viscal_state_<k>.dat`), and the post-processed products: the figures
+//! (ironlab `.fig`, with a PDF of each for `README.tex`),
 //! `summary.json` (the per-level table), `metrics.json` (every per-alpha quantity) and the
 //! `README.md` / `README.tex` index. `runs/` is gitignored.
 //!
@@ -24,8 +24,13 @@
 //! ```text
 //! cargo run --release -p input-sensitivity -- [--foil 0012] [--family geometry|panels|alpha-step]
 //!                                            [--jobs N] [--resume RUN_DIR] [--plot-only RUN_DIR]
+//!                                            [--render RUN_DIR]
 //! ```
+//!
+//! `--plot-only` re-reads an existing run folder's XFOIL records and rewrites its products;
+//! `--render` only redraws its figures, from `metadata.json` and `metrics.json`.
 
+mod figures;
 mod perturb;
 mod run;
 
@@ -178,21 +183,26 @@ pub fn levels(family: Family) -> Vec<Level> {
     out
 }
 
-/// The families drawn side by side on the sheet (`plot.py`); the others get a figure each
+/// The families drawn side by side on the sheet (`figures.rs`); the others get a figure each
 pub const SHEET: [Family; 2] = [Family::Geometry, Family::AlphaStep];
 
-/// Draw the run folder's figures with `scripts/figures/render.sh input-sensitivity <run_dir>`
-/// (matplotlib through uv); on failure the data are complete and the command is printed.
-pub fn render(run_dir: &Path) {
-    let status = std::process::Command::new(repo_root().join("scripts/figures/render.sh"))
-        .arg("input-sensitivity")
-        .arg(run_dir)
-        .status();
-    if !matches!(status, Ok(st) if st.success()) {
-        eprintln!(
-            "figures not drawn: run `scripts/figures/render.sh input-sensitivity {}`",
-            run_dir.display()
-        );
+/// Draw the run folder's figures (`figures.rs`); on failure the data are complete and the
+/// command that redraws them is printed.
+pub fn render(run_dir: &Path) -> bool {
+    match figures::render(run_dir) {
+        Ok(written) => {
+            for f in written {
+                println!("figure: {}", run_dir.join(f).display());
+            }
+            true
+        }
+        Err(e) => {
+            eprintln!(
+                "figures not drawn ({e}): run `cargo run --release -p input-sensitivity -- --render {}`",
+                run_dir.display()
+            );
+            false
+        }
     }
 }
 
@@ -283,6 +293,8 @@ struct Args {
     resume: Option<PathBuf>,
     /// An existing run folder to post-process only
     plot_only: Option<PathBuf>,
+    /// An existing run folder whose figures to redraw from its `metrics.json`
+    render: Option<PathBuf>,
 }
 
 fn parse_args() -> Args {
@@ -292,6 +304,7 @@ fn parse_args() -> Args {
         jobs: 4,
         resume: None,
         plot_only: None,
+        render: None,
     };
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -318,6 +331,10 @@ fn parse_args() -> Args {
                 a.resume = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
             }
+            "--render" => {
+                a.render = Some(PathBuf::from(&argv[i + 1]));
+                i += 1;
+            }
             "--plot-only" => {
                 a.plot_only = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
@@ -331,6 +348,13 @@ fn parse_args() -> Args {
 
 fn main() {
     let args = parse_args();
+    if let Some(d) = &args.render {
+        assert!(d.join("metrics.json").exists(), "{} is not a run folder", d.display());
+        if !render(d) {
+            std::process::exit(1);
+        }
+        return;
+    }
     let root = repo_root();
     let xfoil = root.join("target/xfoil-ref/instrumented/bin/xfoil");
     assert!(

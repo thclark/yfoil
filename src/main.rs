@@ -15,8 +15,8 @@ use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions,
 
 #[cfg(feature = "plotting")]
 use yfoil::output::{
-    plot_analysis_png, plot_analysis_svg, plot_foil, plot_polars_png, plot_polars_svg, AnalysisPlotConfig, BlQuantity,
-    DesignPoint, FoilPlotConfig, ImageFormat, MarkerSet, OffsetScale, PanelStyle, PolarSeries, PolarsPlotConfig,
+    plot_analysis, plot_foil, plot_polars, AnalysisPlotConfig, BlQuantity, DesignPoint, FoilPlotConfig, MarkerSet,
+    OffsetScale, PanelStyle, PolarSeries, PolarsPlotConfig,
 };
 
 /// yFoil - Rust-based aerofoil analysis tool
@@ -144,7 +144,7 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
-    /// Plot results (analysis distributions or polars)
+    /// Plot results as ironlab figures (.fig): the foil, an analysis' distributions, or polars
     #[command(arg_required_else_help = true)]
     Plot {
         #[command(subcommand)]
@@ -161,13 +161,6 @@ enum PanelStyleArg {
     Notches,
     /// Black dot at every node
     Dots,
-}
-
-/// Output image format for `yfoil plot foil`
-#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-enum FormatArg {
-    Svg,
-    Png,
 }
 
 #[derive(Subcommand, Debug)]
@@ -199,7 +192,7 @@ enum PlotAction {
         wake: bool,
 
         /// Boundary-layer quantities to draw normal to the surface, comma-separated:
-        /// dstar theta delta h hk hs ue cf cdis ctau ctq uslp cp mass
+        /// dstar theta delta h hk hstar ue cf cdiss sqrtctau sqrtctaueq us cp mass_defect
         #[arg(short, long, value_delimiter = ',')]
         quantity: Vec<String>,
 
@@ -224,25 +217,13 @@ enum PlotAction {
         #[arg(long)]
         label: Vec<String>,
 
-        /// Output file (default: the first input's stem plus _foil.svg)
+        /// Output figure, .fig or .fig.json (default: the first input's stem plus _foil.fig)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Output format (default: from the output extension; svg if ambiguous)
-        #[arg(long, value_enum)]
-        format: Option<FormatArg>,
-
-        /// Plot title (default: the design-point label, or "Foil")
+        /// Figure title (default: the design-point label, or "Foil")
         #[arg(long)]
         title: Option<String>,
-
-        /// Image width in pixels
-        #[arg(long, default_value_t = 1200)]
-        width: u32,
-
-        /// Image height in pixels
-        #[arg(long, default_value_t = 500)]
-        height: u32,
     },
 
     /// Plot Cp and Ue distributions from a single-point analysis
@@ -251,21 +232,13 @@ enum PlotAction {
         /// Path to analysis results JSON file
         file: PathBuf,
 
-        /// Output file (SVG or PNG based on extension)
-        #[arg(short, long, default_value = "analysis.svg")]
-        output: PathBuf,
+        /// Output figure, .fig or .fig.json (default: the input's stem plus .fig)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
 
-        /// Plot title (auto-generated from file if not specified)
+        /// Figure title (default: "<foil> at α = …°")
         #[arg(long)]
         title: Option<String>,
-
-        /// Image width in pixels
-        #[arg(long, default_value_t = 1200)]
-        width: u32,
-
-        /// Image height in pixels
-        #[arg(long, default_value_t = 800)]
-        height: u32,
     },
 
     /// Plot one or more polars (CL–α, CL–CD, CM–α, CD–α); several files are overlaid for comparison
@@ -275,21 +248,13 @@ enum PlotAction {
         #[arg(required = true)]
         files: Vec<PathBuf>,
 
-        /// Output file (SVG or PNG based on extension); defaults to the polar's stem plus .svg, or polar_comparison.svg for several
+        /// Output figure, .fig or .fig.json (default: the polar's stem plus .fig, or polar_comparison.fig for several)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Plot title (defaults to the polar label, or "Polar comparison")
+        /// Figure title (defaults to the polar label, or "Polar comparison")
         #[arg(long)]
         title: Option<String>,
-
-        /// Image width in pixels
-        #[arg(long, default_value_t = 1400)]
-        width: u32,
-
-        /// Image height in pixels
-        #[arg(long, default_value_t = 1000)]
-        height: u32,
     },
 }
 
@@ -939,10 +904,7 @@ fn handle_plot(action: PlotAction) {
             no_markers,
             label,
             output,
-            format,
             title,
-            width,
-            height,
         } => {
             let inputs: Vec<FoilInput> = files.iter().map(read_foil_input).collect();
             let stem = |f: &PathBuf| f.file_stem().and_then(|s| s.to_str()).unwrap_or("foil").to_string();
@@ -1019,8 +981,6 @@ fn handle_plot(action: PlotAction) {
             };
             let title = title.or_else(|| if all_polar { Some(stem(&files[0])) } else { None });
             let config = FoilPlotConfig {
-                width,
-                height,
                 title,
                 panels,
                 notch_length,
@@ -1034,69 +994,30 @@ fn handle_plot(action: PlotAction) {
                 ..Default::default()
             };
 
-            let output = output.unwrap_or_else(|| PathBuf::from(format!("{}_foil.svg", stem(&files[0]))));
-            let format = match format {
-                Some(FormatArg::Svg) => ImageFormat::Svg,
-                Some(FormatArg::Png) => ImageFormat::Png,
-                None => ImageFormat::from_path(&output),
-            };
-            match plot_foil(&points, &output, format, &config) {
-                Ok(()) => println!("Wrote foil plot to {}", output.display()),
-                Err(e) => fail(&format!("Error creating plot: {e}")),
+            let output = output.unwrap_or_else(|| PathBuf::from(format!("{}_foil.fig", stem(&files[0]))));
+            match plot_foil(&points, &output, &config) {
+                Ok(()) => println!("Wrote foil figure to {}", output.display()),
+                Err(e) => fail(&format!("Error creating figure: {e}")),
             }
         }
-        PlotAction::Analysis {
-            file,
-            output,
-            title,
-            width,
-            height,
-        } => {
-            let json_str = match std::fs::read_to_string(&file) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("Error reading file: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            let analysis: AnalysisOutput = match serde_json::from_str(&json_str) {
-                Ok(a) => a,
-                Err(e) => {
-                    eprintln!("Error parsing JSON: {}", e);
-                    eprintln!("Make sure the file is an analysis output (from 'yfoil analyse -o')");
-                    std::process::exit(1);
-                }
-            };
-
+        PlotAction::Analysis { file, output, title } => {
+            let json_str = std::fs::read_to_string(&file).unwrap_or_else(|e| fail(&format!("Error reading file: {e}")));
+            let analysis: AnalysisOutput = serde_json::from_str(&json_str).unwrap_or_else(|e| {
+                fail(&format!(
+                    "Error parsing JSON: {e}\nMake sure the file is an analysis output (from 'yfoil analyse -o')"
+                ))
+            });
             let config = AnalysisPlotConfig {
-                width,
-                height,
                 title,
                 ..Default::default()
             };
-
-            let result = if is_png(&output) {
-                plot_analysis_png(&analysis, &output, &config)
-            } else {
-                plot_analysis_svg(&analysis, &output, &config)
-            };
-
-            match result {
-                Ok(()) => println!("Wrote analysis plot to {}", output.display()),
-                Err(e) => {
-                    eprintln!("Error creating plot: {}", e);
-                    std::process::exit(1);
-                }
+            let output = output.unwrap_or_else(|| file.with_extension("fig"));
+            match plot_analysis(&analysis, &output, &config) {
+                Ok(()) => println!("Wrote analysis figure to {}", output.display()),
+                Err(e) => fail(&format!("Error creating figure: {e}")),
             }
         }
-        PlotAction::Polar {
-            files,
-            output,
-            title,
-            width,
-            height,
-        } => {
+        PlotAction::Polar { files, output, title } => {
             let mut series = Vec::with_capacity(files.len());
             for file in &files {
                 let json_str = match std::fs::read_to_string(file) {
@@ -1123,30 +1044,18 @@ fn handle_plot(action: PlotAction) {
 
             let output = output.unwrap_or_else(|| {
                 if files.len() == 1 {
-                    files[0].with_extension("svg")
+                    files[0].with_extension("fig")
                 } else {
-                    PathBuf::from("polar_comparison.svg")
+                    PathBuf::from("polar_comparison.fig")
                 }
             });
             let config = PolarsPlotConfig {
-                width,
-                height,
                 title,
                 ..Default::default()
             };
-
-            let result = if is_png(&output) {
-                plot_polars_png(&series, &output, &config)
-            } else {
-                plot_polars_svg(&series, &output, &config)
-            };
-
-            match result {
-                Ok(()) => println!("Wrote polar plot to {}", output.display()),
-                Err(e) => {
-                    eprintln!("Error creating plot: {}", e);
-                    std::process::exit(1);
-                }
+            match plot_polars(&series, &output, &config) {
+                Ok(()) => println!("Wrote polar figure to {}", output.display()),
+                Err(e) => fail(&format!("Error creating figure: {e}")),
             }
         }
     }
@@ -1203,16 +1112,9 @@ fn fail(msg: &str) -> ! {
     std::process::exit(1);
 }
 
-#[cfg(feature = "plotting")]
-fn is_png(path: &std::path::Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("png"))
-}
-
 #[cfg(not(feature = "plotting"))]
 fn handle_plot(_action: PlotAction) {
-    eprintln!("Plotting feature not enabled. Rebuild with: cargo build --features plotting");
+    eprintln!("`yfoil plot` writes ironlab figures and needs the plotting feature: rebuild with --features plotting");
     std::process::exit(1);
 }
 

@@ -4,7 +4,7 @@
 //! 16-series, 6-series, 6A-series and the Kármán–Trefftz analytic section — as one figure per
 //! family with one panel per parameter: the family default (the validation set's member) in
 //! black on top, the members that vary the parameter behind it coloured by value (YlGnBu), all
-//! panels on the same axes (x −0.2…1.2, y −0.5…0.5, equal scale). It also compares the
+//! panels on the same linked axes (x −0.2…1.2, y −0.5…0.5, sized for equal scale). It also compares the
 //! generators with the public-domain NASA/PDAS `naca456` reference fixtures
 //! (`tests/fixtures/naca456/`) and tabulates the worst difference per case.
 //!
@@ -12,20 +12,24 @@
 //! `metadata.json` (git version tag or `untagged`, commit sha, dirty flag, the naca456 fixture
 //! manifest), one geometry JSON per drawn section under `<series>/<panel>/<slug>.json` (each with
 //! its `generator` provenance record), `summary.json` (every section, panel and comparison
-//! number) and the `README.md` / `README.tex` index; the figures (SVG and PDF) are then drawn from
-//! those files by `plot.py` through `scripts/figures/render.sh` (matplotlib; presentation only,
-//! every number comes from the JSON). `runs/` is gitignored. With `--docs` the figures and a
-//! generated Markdown page are also written to `docs/validation/aerofoil-series/`, the only
-//! place a run's products are tracked.
+//! number) and the `README.md` / `README.tex` index; the figures are then built from those files
+//! as ironlab figures (`sheet.rs`, `<series>.fig` and `<series>.pdf`, conventions in
+//! `docs/conventions/figures.md`). `runs/` is gitignored. With `--docs` the `.fig` files and a
+//! generated Markdown page embedding them are also written to `docs/validation/aerofoil-series/`,
+//! the only place a run's products are tracked. `--render <run_dir>` redraws an existing run
+//! folder's figures from its `summary.json` and geometry files without rerunning the study (with
+//! `--docs`, it also rewrites the page from that run).
 //!
 //! Usage (from the repository root):
 //!
 //! ```text
 //! cargo run --release -p aerofoil-series -- [--docs] [--series naca-6]
+//! cargo run --release -p aerofoil-series -- --render scripts/aerofoil-series/runs/<UTC> [--docs]
 //! ```
 
 mod naca456;
 mod report;
+mod sheet;
 mod study;
 
 use std::path::{Path, PathBuf};
@@ -33,27 +37,6 @@ use std::path::{Path, PathBuf};
 /// Axis extents of every panel, chord units
 pub const X_RANGE: (f64, f64) = (-0.2, 1.2);
 pub const Y_RANGE: (f64, f64) = (-0.5, 0.5);
-
-/// Draw a run folder's figures with `scripts/figures/render.sh <study> <run_dir>` (matplotlib
-/// through uv); on failure the data are complete and the command is printed for a later run.
-pub fn render(study: &str, run_dir: &Path) -> bool {
-    let root = repo_root();
-    let status = std::process::Command::new(root.join("scripts/figures/render.sh"))
-        .arg(study)
-        .arg(run_dir)
-        .status();
-    match status {
-        Ok(st) if st.success() => true,
-        other => {
-            eprintln!(
-                "figures not drawn ({}): run `scripts/figures/render.sh {study} {}`",
-                other.map(|s| s.to_string()).unwrap_or_else(|e| e.to_string()),
-                run_dir.display()
-            );
-            false
-        }
-    }
-}
 
 /// Repository root: this crate lives at scripts/aerofoil-series
 pub fn repo_root() -> PathBuf {
@@ -133,18 +116,24 @@ pub fn write_metadata(run_dir: &Path, series: &[&str]) {
 struct Args {
     docs: bool,
     only: Option<String>,
+    render: Option<PathBuf>,
 }
 
 fn parse_args() -> Args {
     let mut a = Args {
         docs: false,
         only: None,
+        render: None,
     };
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
     while i < argv.len() {
         match argv[i].as_str() {
             "--docs" => a.docs = true,
+            "--render" => {
+                a.render = Some(PathBuf::from(&argv[i + 1]));
+                i += 1;
+            }
             "--series" => {
                 a.only = Some(argv[i + 1].clone());
                 i += 1;
@@ -156,8 +145,26 @@ fn parse_args() -> Args {
     a
 }
 
+/// The tracked page from a run folder whose figures are drawn
+fn write_docs(run_dir: &Path, all: &[study::SeriesStudy], comparison: &[naca456::CaseComparison]) {
+    let docs = repo_root().join("docs/validation/aerofoil-series");
+    report::write_docs(&docs, run_dir, all, comparison);
+    println!("wrote {}", docs.display());
+}
+
 fn main() {
     let args = parse_args();
+    if let Some(run_dir) = &args.render {
+        // redraw an existing run folder; the page's prose and the naca456 table come from the
+        // study definition and the tracked fixtures, as in a full run
+        for stem in sheet::render(run_dir) {
+            println!("drew {}", stem.with_extension("fig").display());
+        }
+        if args.docs {
+            write_docs(run_dir, &study::series(), &naca456::compare(&repo_root()));
+        }
+        return;
+    }
     let run_dir = runs_root().join(utc_stamp());
     std::fs::create_dir_all(&run_dir).unwrap();
 
@@ -190,12 +197,9 @@ fn main() {
     report::write_summary_json(&run_dir, &selected, &comparison);
     report::write_index(&run_dir, &selected, &comparison);
     report::write_index_tex(&run_dir, &selected, &comparison);
-    let drawn = render("aerofoil-series", &run_dir);
+    sheet::render(&run_dir);
     if args.docs {
-        assert!(drawn, "--docs needs the figures");
-        let docs = repo_root().join("docs/validation/aerofoil-series");
-        report::write_docs(&docs, &run_dir, &all, &comparison);
-        println!("wrote {}", docs.display());
+        write_docs(&run_dir, &all, &comparison);
     }
     println!("run folder: {}", run_dir.display());
 }

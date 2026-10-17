@@ -455,26 +455,26 @@ pub fn write_index(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunResul
     .unwrap();
     writeln!(
         f,
-        "Figures are drawn by `plot.py` (matplotlib, via `scripts/figures/render.sh`) from `metrics.json` and \
-         `metadata.json` alone, at the document's physical size in its font (`scripts/figures/style.py`), and come \
-         as SVG and PDF; include the PDF at natural size (`\\includegraphics{{...pdf}}`, no `width=`, no \
-         `\\resizebox`).\n"
+        "Figures are ironlab figure files (`.fig`, open them in the ironlab viewer), built by this crate \
+         (`src/figures.rs`) from `metrics.json` and `metadata.json` alone; `--render <run folder>` redraws them. \
+         Each comes with a PDF for `README.tex`; include it at natural size (`\\includegraphics{{...pdf}}`, no \
+         `width=`, no `\\resizebox`).\n"
     )
     .unwrap();
     writeln!(f, "| Figure | Columns |\n|---|---|").unwrap();
     writeln!(
         f,
-        "| [naca{foil}_sheet.svg](naca{foil}_sheet.svg) | {} |",
+        "| [naca{foil}_sheet.fig](naca{foil}_sheet.fig) | {} |",
         crate::SHEET
             .iter()
-            .map(|fm| format!("[{}](naca{foil}_{}.svg)", fm.title(), fm.slug()))
+            .map(|fm| format!("[{}](naca{foil}_{}.fig)", fm.title(), fm.slug()))
             .collect::<Vec<_>>()
             .join(", ")
     )
     .unwrap();
     writeln!(
         f,
-        "| [naca{foil}_panels.svg](naca{foil}_panels.svg) | {} (same column width as the sheet) |",
+        "| [naca{foil}_panels.fig](naca{foil}_panels.fig) | {} |",
         Family::Panels.title()
     )
     .unwrap();
@@ -549,8 +549,7 @@ fn label_tex(level: &Level, actual_nodes: Option<usize>) -> String {
     }
 }
 
-/// `README.tex` of the run folder: the same index with LaTeX tables and the figures included
-/// through the `svg` package (needs Inkscape at build time; drop the figures otherwise)
+/// `README.tex` of the run folder: the same index with LaTeX tables and the figures' PDFs included
 pub fn write_index_tex(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunResult>)]) {
     let mut f = fs::File::create(run_dir.join("README.tex")).unwrap();
     let w = |f: &mut fs::File, s: &str| writeln!(f, "{s}").unwrap();
@@ -573,10 +572,9 @@ pub fn write_index_tex(run_dir: &Path, foil: &str, families: &[(Family, Vec<RunR
     ));
     w(
         &mut f,
-        "\n\\section*{Figures}\n\\noindent Figures are drawn by \\texttt{plot.py} (matplotlib) from \\texttt{metrics.json} \
-         at the document's physical size in its font (\\texttt{scripts/figures/style.py}), so they are included at \
-         natural size: no \\texttt{width=} and no \\texttt{\\resizebox}, or the text no longer matches the \
-         document.\n\\begin{table}[h]\\centering\\begin{tabular}{@{}ll@{}}\\toprule\nFigure & Content \\\\ \\midrule",
+        "\n\\section*{Figures}\n\\noindent Figures are ironlab figures built by \\texttt{src/figures.rs} from \
+         \\texttt{metrics.json} and \\texttt{metadata.json}, exported to PDF at their physical size, so they are \
+         included at natural size: no \\texttt{width=} and no \\texttt{\\resizebox}.\n\\begin{table}[h]\\centering\\begin{tabular}{@{}ll@{}}\\toprule\nFigure & Content \\\\ \\midrule",
     );
     w(
         &mut f,

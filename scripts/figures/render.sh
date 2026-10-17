@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
-# Draw a validation study's figures from its run folder with matplotlib.
+# Draw the branch-coverage study's occupancy figures (branch map, case matrix) from its run folder
+# with matplotlib: the only figures ironlab cannot yet express (docs/conventions/figures.md; every
+# other figure is an ironlab figure built in Rust).
 #
-#   scripts/figures/render.sh <study> <run_dir>      e.g. aerofoil-series runs/2026-09-11T12-44-59Z
+#   scripts/figures/render.sh <study> <run_dir>      e.g. branch-coverage runs/2026-10-15T14-17-40Z
 #
 # The study's Rust program writes every number into the run folder; scripts/<study>/plot.py only
 # presents them (scripts/figures/style.py holds the shared conventions). matplotlib is pinned here

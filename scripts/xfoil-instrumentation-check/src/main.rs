@@ -13,18 +13,22 @@
 //! `metadata.json` (git tag or `untagged`, commit sha, dirty flag, the reference build manifest,
 //! the sha256 of both binaries and the study constants), one directory per build
 //! (`pristine/`, `instrumented/`) with the OPER script, XFOIL's stdout, the polar file and the
-//! per-angle dumps, then the post-processed products: `summary.json` (every value the plot
-//! uses, plus the file-level comparison), `naca<foil>_check.svg` and `.pdf` (the 2×2 figure, drawn
-//! from `summary.json` and nothing else at the document's physical size and font — see
-//! `figure.rs`) and the `README.md` / `README.tex` index. `runs/` is gitignored.
+//! per-angle dumps, then the post-processed products: `summary.json` (every value the figure
+//! uses, plus the file-level comparison), `naca<foil>_check.fig` and `.pdf` (the 2×2 ironlab
+//! figure, built from `summary.json` and nothing else — see `figure.rs`; the PDF is what the
+//! LaTeX index includes) and the `README.md` / `README.tex` index. `runs/` is gitignored.
 //!
 //! Usage (from the repository root, reference built with `cargo xtask xfoil-build`):
 //!
 //! ```text
 //! cargo run --release -p xfoil-instrumentation-check -- [--foil 0012] [--npoints N]
-//!                                                       [--resume RUN_DIR] [--plot-only RUN_DIR]
+//!                                                       [--resume RUN_DIR] [--render RUN_DIR]
 //! ```
+//!
+//! `--render RUN_DIR` rebuilds the figure and the index of an existing run folder from its
+//! `summary.json`, without running XFOIL.
 
+mod figure;
 mod run;
 mod summary;
 
@@ -197,7 +201,7 @@ struct Args {
     /// An existing run folder to continue (builds already marked done are kept)
     resume: Option<PathBuf>,
     /// An existing run folder to post-process only (from its `summary.json`)
-    plot_only: Option<PathBuf>,
+    render: Option<PathBuf>,
 }
 
 fn parse_args() -> Args {
@@ -205,7 +209,7 @@ fn parse_args() -> Args {
         foil: FOIL.to_string(),
         npoints: NPOINTS,
         resume: None,
-        plot_only: None,
+        render: None,
     };
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -223,8 +227,8 @@ fn parse_args() -> Args {
                 a.resume = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
             }
-            "--plot-only" => {
-                a.plot_only = Some(PathBuf::from(&argv[i + 1]));
+            "--render" => {
+                a.render = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
             }
             other => panic!("unknown argument {other}"),
@@ -237,7 +241,7 @@ fn parse_args() -> Args {
 fn main() {
     let args = parse_args();
     let root = repo_root();
-    let run_dir = match (&args.plot_only, &args.resume) {
+    let run_dir = match (&args.render, &args.resume) {
         (Some(d), _) => {
             assert!(d.join("summary.json").exists(), "{} has no summary.json", d.display());
             d.clone()
@@ -253,7 +257,7 @@ fn main() {
         }
     };
 
-    if args.plot_only.is_none() {
+    if args.render.is_none() {
         for b in Build::ALL {
             let x = b.binary(&root);
             assert!(
@@ -281,21 +285,22 @@ fn main() {
         std::fs::write(run_dir.join("summary.json"), serde_json::to_string_pretty(&s).unwrap()).unwrap();
     }
 
-    // summary.json → plot and index (the only inputs of this stage)
+    // summary.json → figure and index (the only inputs of this stage)
     let s: summary::Summary =
         serde_json::from_str(&std::fs::read_to_string(run_dir.join("summary.json")).unwrap()).unwrap();
     summary::write_index(&run_dir, &s);
     summary::write_index_tex(&run_dir, &s);
-    // summary.json → figure, by plot.py (matplotlib through scripts/figures/render.sh)
-    let status = std::process::Command::new(repo_root().join("scripts/figures/render.sh"))
-        .arg("xfoil-instrumentation-check")
-        .arg(&run_dir)
-        .status();
-    if !matches!(status, Ok(st) if st.success()) {
-        eprintln!(
-            "figure not drawn: run `scripts/figures/render.sh xfoil-instrumentation-check {}`",
-            run_dir.display()
-        );
+    // the matplotlib SVG that earlier runs drew is superseded by the figure file
+    let stale = figure::stem(&run_dir, &s).with_extension("svg");
+    if stale.exists() {
+        std::fs::remove_file(&stale).unwrap();
+    }
+    match figure::render(&run_dir, &s) {
+        Ok(path) => println!("figure: {}", path.display()),
+        Err(e) => {
+            eprintln!("figure not written: {e}");
+            std::process::exit(1);
+        }
     }
     println!(
         "polar file identical: {}; BL dumps identical: {} of {}; stdout identical: {}",

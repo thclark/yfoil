@@ -16,12 +16,28 @@ set -euo pipefail
 
 zensical_version="0.0.60"
 
+# The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/conventions/figures.md).
+# Pinned by version and checksum, fetched from the ironlab release into a versioned directory
+# (gitignored), so an upgrade changes every URL and no browser pairs a page with a stale engine.
+ironlab_version="0.12.0"
+ironlab_sha256="7f5d2a1225cbe4e699697347e2657ca4249784b0d4cc71514641f72d0dd0821b"
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "error: uv is not installed. Install it from https://docs.astral.sh/uv/ and re-run." >&2
     exit 1
+fi
+
+ironlab_dir="docs/javascripts/ironlab-$ironlab_version"
+if [[ ! -f "$ironlab_dir/ironlab.js" ]]; then
+    archive="ironlab-web-$ironlab_version.tar.gz"
+    mkdir -p .tmp "$ironlab_dir"
+    curl -fsSL -o ".tmp/$archive" \
+        "https://github.com/thclark/ironlab/releases/download/$ironlab_version/$archive"
+    echo "$ironlab_sha256  .tmp/$archive" | shasum -a 256 -c --quiet -
+    tar xzf ".tmp/$archive" -C "$ironlab_dir"
 fi
 
 uv run --no-project --quiet \

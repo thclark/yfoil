@@ -26,10 +26,11 @@ cargo install --path .
 ```
 
 Plotting is behind a cargo feature; build with it enabled if you want
-`yfoil plot`:
+`yfoil plot`, and install the ironlab viewer to open the figures it writes:
 
 ``` sh
 cargo install --path . --features plotting
+cargo install ironlab-viewer --version 0.12.0
 ```
 
 ## Check it works

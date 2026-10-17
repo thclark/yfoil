@@ -1,27 +1,35 @@
-//! The foil plot: the airfoil (and wake) with its panel nodes, boundary-layer quantities drawn
+//! The foil figure: the aerofoil (and wake) with its panel nodes, boundary-layer quantities drawn
 //! normal to the surface at a common scale, and the significant locations (stagnation,
 //! transition, separation). Any number of design points (files, or alphas of a polar) can be
 //! overlaid with any number of quantities: hue is fixed per quantity, tone and dash pattern per
 //! design point.
 //!
-//! What XFOIL does, and is followed here: PANPLT ticks every airfoil node outward along the
+//! What XFOIL does, and is followed here: PANPLT ticks every aerofoil node outward along the
 //! spline normals `NX, NY` by `0.01*CHORD` (`xplots.f:75, 172-174`); CPDISP draws the displacement
 //! surface at `X + NX*DSTR` on both sides and splits the wake δ* into upper/lower fractions
 //! `DSF1/DSF2` from the TE values, drawing the upper wake edge at `X - N*DSTR*DSF1` and the lower
 //! at `X + N*DSTR*DSF2` because the wake normal points to the lower side (`xplots.f:699-754`).
-//! XFOIL has no scale factor on δ* and marks no transition or separation on the airfoil plot; the
+//! XFOIL has no scale factor on δ* and marks no transition or separation on the aerofoil plot; the
 //! scaling and the markers are yFoil's.
+//!
+//! The figure is an ironlab figure (`docs/conventions/figures.md`). ironlab has no equal-aspect
+//! axes, so the limits are widened in Rust to the aspect of the plot area the layout gives
+//! ([`PLOT_AREA_MM`]), which keeps the aerofoil undistorted at the figure's own size.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
+use ironlab::prelude::*;
+
 use crate::geometry::PanelledFoil;
-use crate::output::plot::PlotError;
-use crate::output::svg::{
-    write_png, write_svg, Canvas, LegendAnchor, LegendEntry, LegendKey, LineStyle, Margins, MarkerShape,
+use crate::output::plot::{
+    condition_parameters, describe, point_parameters, regime_labels, rgb, save_figure, shared_labels,
+    shared_parameters, PlotError, STUDY,
 };
 use crate::output::{
-    AnalysisOutput, BlQuantity, BoundaryLayerOutput, FoilNodes, PolarOutput, SeparationKind, SideStations,
+    AnalysisOutput, BlQuantity, BoundaryLayerOutput, FoilNodes, PointRecord, PolarOutput, SeparationKind, SideStations,
 };
+use crate::solver::analysis::FlowConditions;
 
 /// How panel nodes are shown
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -82,44 +90,13 @@ impl Default for MarkerSet {
     }
 }
 
-/// Dash patterns, cycled over design points
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DashPattern {
-    Solid,
-    Dot,
-    Dash,
-    DotDash,
-    DotDotDash,
-}
+/// The dash patterns cycled over design points: ironlab's four stroked patterns
+pub const DASH_CYCLE: [Dash; 4] = [Dash::Solid, Dash::Dotted, Dash::Dashed, Dash::DashDot];
 
-impl DashPattern {
-    pub const CYCLE: [DashPattern; 5] = [
-        DashPattern::Solid,
-        DashPattern::Dot,
-        DashPattern::Dash,
-        DashPattern::DotDash,
-        DashPattern::DotDotDash,
-    ];
-
-    /// SVG `stroke-dasharray`, `None` for solid
-    pub fn dasharray(self) -> Option<&'static str> {
-        match self {
-            DashPattern::Solid => None,
-            DashPattern::Dot => Some("2,3"),
-            DashPattern::Dash => Some("8,4"),
-            DashPattern::DotDash => Some("8,4,2,4"),
-            DashPattern::DotDotDash => Some("8,4,2,4,2,4"),
-        }
-    }
-}
-
-/// Configuration of the foil plot
+/// Configuration of the foil figure
 #[derive(Debug, Clone)]
 pub struct FoilPlotConfig {
-    pub width: u32,
-    pub height: u32,
     pub title: Option<String>,
-    pub background: (u8, u8, u8),
     pub panels: PanelStyle,
     /// Notch length as a fraction of chord (PANPLT: 0.01)
     pub notch_length: f64,
@@ -133,16 +110,13 @@ pub struct FoilPlotConfig {
     /// Lightness multipliers from the first to the last design point
     pub tone_range: (f64, f64),
     /// Dash pattern per design point, cycled
-    pub patterns: Vec<DashPattern>,
+    pub patterns: Vec<Dash>,
 }
 
 impl Default for FoilPlotConfig {
     fn default() -> Self {
         Self {
-            width: 1200,
-            height: 500,
             title: None,
-            background: (255, 255, 255),
             panels: PanelStyle::None,
             notch_length: 0.01,
             show_wake: false,
@@ -159,7 +133,7 @@ impl Default for FoilPlotConfig {
                 (190, 0, 140),  // magenta
             ],
             tone_range: (1.0, 0.55),
-            patterns: DashPattern::CYCLE.to_vec(),
+            patterns: DASH_CYCLE.to_vec(),
         }
     }
 }
@@ -171,6 +145,12 @@ pub struct DesignPoint {
     pub geometry: FoilNodes,
     pub boundary_layer: Option<BoundaryLayerOutput>,
     pub converged: bool,
+    /// The aerofoil name, for an analysis
+    pub foil: Option<String>,
+    /// The flow conditions, for an analysis
+    pub conditions: Option<FlowConditions>,
+    /// The operating point's record, for an analysis
+    pub record: Option<PointRecord>,
 }
 
 impl DesignPoint {
@@ -181,21 +161,27 @@ impl DesignPoint {
             geometry: FoilNodes::from_panelled(airfoil),
             boundary_layer: None,
             converged: true,
+            foil: None,
+            conditions: None,
+            record: None,
         }
     }
 
-    /// One `yfoil analyze -o` record
+    /// One `yfoil analyse -o` record
     pub fn from_analysis(label: impl Into<String>, output: AnalysisOutput) -> Self {
         Self {
             label: label.into(),
             converged: output.results.is_valid(),
             geometry: output.geometry,
             boundary_layer: output.boundary_layer,
+            foil: Some(output.foil),
+            conditions: Some(output.conditions),
+            record: Some(output.results),
         }
     }
 
     /// The embedded distributions of a `yfoil polar --distributions` record, all of them or the
-    /// requested alphas (degrees), labelled `"{stem} α=…°"`
+    /// requested alphas (degrees), labelled `"α=…°"`
     pub fn from_polar(stem: &str, polar: &PolarOutput, alphas: Option<&[f64]>) -> Result<Vec<Self>, PlotError> {
         if polar.distributions.is_empty() {
             return Err(PlotError::Config(format!(
@@ -263,6 +249,26 @@ fn fmt_scale(k: f64) -> String {
     }
 }
 
+/// A quantity's symbol for the key, typeset as LaTeX
+pub fn quantity_symbol(q: BlQuantity) -> &'static str {
+    match q {
+        BlQuantity::Dstar => "$\\delta^*$",
+        BlQuantity::Theta => "$\\theta$",
+        BlQuantity::Delta => "$\\delta$",
+        BlQuantity::H => "$H$",
+        BlQuantity::Hk => "$H_k$",
+        BlQuantity::Hstar => "$H^*$",
+        BlQuantity::Ue => "$U_e/V_\\infty$",
+        BlQuantity::Cf => "$C_f$",
+        BlQuantity::Cdiss => "$C_D$",
+        BlQuantity::Sqrtctau => "$\\sqrt{C_\\tau}$ / $N$",
+        BlQuantity::Sqrtctaueq => "$\\sqrt{C_{\\tau,\\mathrm{eq}}}$",
+        BlQuantity::Us => "$1.6/(1+U_s)$",
+        BlQuantity::Cp => "$C_p$",
+        BlQuantity::MassDefect => "$m$",
+    }
+}
+
 /// Design points drawn together must share the panels (BL stations coincide only then)
 pub fn check_same_geometry(points: &[DesignPoint]) -> Result<(), PlotError> {
     if let Some(first) = points.first() {
@@ -278,33 +284,14 @@ pub fn check_same_geometry(points: &[DesignPoint]) -> Result<(), PlotError> {
     Ok(())
 }
 
-/// Output image format
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImageFormat {
-    Svg,
-    Png,
-}
-
-impl ImageFormat {
-    /// From a file extension (`svg` unless the extension is `png`)
-    pub fn from_path(path: &Path) -> Self {
-        match path.extension().and_then(|e| e.to_str()) {
-            Some(e) if e.eq_ignore_ascii_case("png") => ImageFormat::Png,
-            _ => ImageFormat::Svg,
-        }
-    }
-}
-
 /// A point in data coordinates
 pub type Pt = (f64, f64);
-/// A segment in data coordinates
-type Seg = (Pt, Pt);
 
 /// Stroke of one (quantity, design point) curve
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurveStyle {
     pub rgb: (u8, u8, u8),
-    pub dasharray: Option<String>,
+    pub dash: Dash,
 }
 
 fn tone(rgb: (u8, u8, u8), f: f64) -> (u8, u8, u8) {
@@ -324,10 +311,9 @@ fn tone_factor(j: usize, n: usize, range: (f64, f64)) -> f64 {
 /// Hue by quantity index, tone and dash by design point index
 pub fn point_style(q_index: usize, point_index: usize, n_points: usize, config: &FoilPlotConfig) -> CurveStyle {
     let base = config.palette[q_index % config.palette.len()];
-    let pattern = config.patterns[point_index % config.patterns.len()];
     CurveStyle {
         rgb: tone(base, tone_factor(point_index, n_points, config.tone_range)),
-        dasharray: pattern.dasharray().map(str::to_string),
+        dash: config.patterns[point_index % config.patterns.len()],
     }
 }
 
@@ -408,13 +394,11 @@ const WAKE_LINE: (u8, u8, u8) = (0, 0, 0);
 const MARK_UPPER: (u8, u8, u8) = (235, 175, 0);
 const MARK_LOWER: (u8, u8, u8) = (0, 165, 0);
 const MARK_STAGNATION: (u8, u8, u8) = (40, 40, 40);
-/// Neutral stroke for the shape keys of the marker legend
-const MARK_KEY: (u8, u8, u8) = (90, 90, 90);
-/// Marker half-size in pixels
-const MARK_R: f64 = 4.5;
+/// Marker size (pt)
+const MARK_SIZE_PT: f64 = 5.0;
 
 /// The kinds of significant location, each with its own open shape
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum MarkKind {
     Stagnation,
     Transition,
@@ -424,21 +408,13 @@ enum MarkKind {
 }
 
 impl MarkKind {
-    const ALL: [MarkKind; 5] = [
-        MarkKind::Stagnation,
-        MarkKind::Transition,
-        MarkKind::Forced,
-        MarkKind::Separation,
-        MarkKind::Reattachment,
-    ];
-
-    fn shape(self) -> MarkerShape {
+    fn shape(self) -> Marker {
         match self {
-            MarkKind::Stagnation => MarkerShape::Circle,
-            MarkKind::Transition => MarkerShape::Square,
-            MarkKind::Forced => MarkerShape::Diamond,
-            MarkKind::Separation => MarkerShape::Triangle,
-            MarkKind::Reattachment => MarkerShape::TriangleDown,
+            MarkKind::Stagnation => Marker::Circle,
+            MarkKind::Transition => Marker::Square,
+            MarkKind::Forced => Marker::Diamond,
+            MarkKind::Separation => Marker::TriangleUp,
+            MarkKind::Reattachment => Marker::TriangleDown,
         }
     }
 
@@ -453,45 +429,73 @@ impl MarkKind {
     }
 }
 
-/// A polyline plus its style, in data coordinates
+/// A polyline, its stroke and its key entry, in data coordinates
 #[derive(Debug)]
 struct Curve {
     pts: Vec<Pt>,
-    style: LineStyle,
+    rgb: (u8, u8, u8),
+    dash: Dash,
+    name: Option<String>,
 }
 
-/// A drawn airfoil outline
-#[derive(Debug)]
-struct Surface {
-    outline: Vec<Pt>,
-    style: LineStyle,
-}
-
-/// A marker at a significant location
+/// A marker at a significant location; `side` is 1 (upper), 2 (lower) or 0 (stagnation)
 #[derive(Debug)]
 struct Mark {
     at: Pt,
     kind: MarkKind,
+    side: usize,
     rgb: (u8, u8, u8),
 }
 
-/// Everything laid out in data coordinates before the canvas exists
+impl Mark {
+    /// The key entry of a (kind, side): its shape in its side's colour
+    fn key(&self) -> String {
+        match self.side {
+            1 => format!("{} (upper surface)", self.kind.label()),
+            2 => format!("{} (lower surface)", self.kind.label()),
+            _ => self.kind.label().to_string(),
+        }
+    }
+}
+
+/// Everything laid out in data coordinates before the figure exists
 #[derive(Debug)]
 struct Layout {
-    surfaces: Vec<Surface>,
+    surfaces: Vec<Curve>,
     /// One wake line per design point, black with the point's dash pattern
     wakes: Vec<Curve>,
-    notches: Vec<Vec<Seg>>,
+    /// Node ticks: one polyline of two-point segments per surface (or wake)
+    notches: Vec<Vec<(Pt, Pt)>>,
     dots: Vec<Vec<Pt>>,
     curves: Vec<Curve>,
     markers: Vec<Mark>,
-    legend: Vec<LegendEntry>,
-    /// The second key, bottom right: marker shapes and side colours
-    marker_legend: Vec<LegendEntry>,
 }
 
-fn surface_style(points: &[DesignPoint], j: usize, geometry_only: bool, config: &FoilPlotConfig) -> LineStyle {
-    let rgb = if geometry_only && points.len() > 1 {
+impl Layout {
+    /// The curve key in drawing order
+    fn curve_key(&self) -> Vec<&str> {
+        self.surfaces
+            .iter()
+            .chain(&self.wakes)
+            .chain(&self.curves)
+            .filter_map(|c| c.name.as_deref())
+            .collect()
+    }
+
+    /// Every point drawn, for the bounds
+    fn points(&self) -> impl Iterator<Item = Pt> + '_ {
+        self.surfaces
+            .iter()
+            .chain(&self.wakes)
+            .chain(&self.curves)
+            .flat_map(|c| c.pts.iter().copied())
+            .chain(self.notches.iter().flatten().flat_map(|&(a, b)| [a, b]))
+            .chain(self.markers.iter().map(|m| m.at))
+    }
+}
+
+fn surface_rgb(j: usize, n_points: usize, geometry_only: bool, config: &FoilPlotConfig) -> (u8, u8, u8) {
+    if geometry_only && n_points > 1 {
         config.palette[j % config.palette.len()]
     } else {
         match config.panels {
@@ -499,11 +503,6 @@ fn surface_style(points: &[DesignPoint], j: usize, geometry_only: bool, config: 
             PanelStyle::Dots => SURFACE_DOTTED,
             PanelStyle::None => SURFACE_PLAIN,
         }
-    };
-    LineStyle {
-        rgb,
-        width: 1.5,
-        dasharray: None,
     }
 }
 
@@ -539,11 +538,9 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
         dots: Vec::new(),
         curves: Vec::new(),
         markers: Vec::new(),
-        legend: Vec::new(),
-        marker_legend: Vec::new(),
     };
 
-    // Airfoil outlines: one per geometry-only point; identical panels otherwise, so once
+    // Aerofoil outlines: one per geometry-only point; identical panels otherwise, so once
     let notch = config.notch_length * chord;
     let surface_points: Vec<usize> = if geometry_only {
         (0..n_points).collect()
@@ -552,48 +549,41 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
     };
     for &j in &surface_points {
         let g = &points[j].geometry;
-        let style = surface_style(points, j, geometry_only, config);
         let outline: Vec<Pt> = g.x.iter().copied().zip(g.y.iter().copied()).collect();
         match config.panels {
-            PanelStyle::Notches => {
-                let segs: Vec<Seg> = (0..g.n())
+            PanelStyle::Notches => lay.notches.push(
+                (0..g.n())
                     .map(|i| {
                         (
                             (g.x[i], g.y[i]),
                             (g.x[i] + notch * g.normal_x[i], g.y[i] + notch * g.normal_y[i]),
                         )
                     })
-                    .collect();
-                lay.notches.push(segs);
-            }
+                    .collect(),
+            ),
             PanelStyle::Dots => lay.dots.push(outline.clone()),
             PanelStyle::None => {}
         }
-        if geometry_only && n_points > 1 {
-            lay.legend.push(LegendEntry {
-                text: points[j].display_label(),
-                key: LegendKey::Line(style.clone()),
-            });
-        }
-        lay.surfaces.push(Surface { outline, style });
+        lay.surfaces.push(Curve {
+            pts: outline,
+            rgb: surface_rgb(j, n_points, geometry_only, config),
+            dash: Dash::Solid,
+            name: (geometry_only && n_points > 1).then(|| points[j].display_label()),
+        });
     }
 
     // Wakes: XYWAKE rebuilds the wake for every alpha, so each design point carries its own;
     // black, with the point's dash pattern. Wake panels are shown only for a single point.
+    // Several points with no quantities are told apart by their wakes' dash patterns.
     if config.show_wake {
+        let key_wakes = config.quantities.is_empty() && n_points > 1;
         for (j, p) in points.iter().enumerate() {
             let Some(w) = &p.geometry.wake else { continue };
             let line: Vec<Pt> = w.x.iter().copied().zip(w.y.iter().copied()).collect();
-            let pattern = config.patterns[j % config.patterns.len()];
-            let style = LineStyle {
-                rgb: WAKE_LINE,
-                width: 1.5,
-                dasharray: pattern.dasharray().map(str::to_string),
-            };
             if n_points == 1 {
                 match config.panels {
-                    PanelStyle::Notches => {
-                        let segs: Vec<Seg> = (0..w.x.len())
+                    PanelStyle::Notches => lay.notches.push(
+                        (0..w.x.len())
                             .map(|i| {
                                 (
                                     (
@@ -606,14 +596,18 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
                                     ),
                                 )
                             })
-                            .collect();
-                        lay.notches.push(segs);
-                    }
+                            .collect(),
+                    ),
                     PanelStyle::Dots => lay.dots.push(line.clone()),
                     PanelStyle::None => {}
                 }
             }
-            lay.wakes.push(Curve { pts: line, style });
+            lay.wakes.push(Curve {
+                pts: line,
+                rgb: WAKE_LINE,
+                dash: config.patterns[j % config.patterns.len()],
+                name: key_wakes.then(|| p.display_label()),
+            });
         }
     }
 
@@ -628,62 +622,40 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
             let bl = p.boundary_layer.as_ref().expect("checked above");
             let g = &p.geometry;
             let st = point_style(qi, j, n_points, config);
-            let style = LineStyle {
+            let curve = |pts: Vec<Pt>, name: Option<String>| Curve {
+                pts,
                 rgb: st.rgb,
-                width: 1.5,
-                dasharray: st.dasharray.clone(),
+                dash: st.dash,
+                name,
             };
             let upper = surface_offset(g, &bl.upper, bl.upper.column(q), k);
             let lower = surface_offset(g, &bl.lower, bl.lower.column(q), k);
+            let (te_u, te_l) = (
+                *upper.last().unwrap_or(&(g.x_te, g.y_te)),
+                *lower.last().unwrap_or(&(g.x_te, g.y_te)),
+            );
+            let name = if n_points > 1 {
+                format!(
+                    "{} at {}, scaled ×{}",
+                    quantity_symbol(q),
+                    p.display_label(),
+                    fmt_scale(k)
+                )
+            } else {
+                format!("{}, scaled ×{}", quantity_symbol(q), fmt_scale(k))
+            };
+            lay.curves.push(curve(upper, Some(name)));
+            lay.curves.push(curve(lower, None));
             if config.show_wake && g.wake.is_some() && !bl.wake.is_empty() {
                 let split = if q == BlQuantity::Dstar {
                     bl.wake_split
                 } else {
                     [0.5, 0.5]
                 };
-                let te_u = *upper.last().unwrap_or(&(g.x_te, g.y_te));
-                let te_l = *lower.last().unwrap_or(&(g.x_te, g.y_te));
                 let (wu, wl) = wake_band(g, &bl.wake, bl.wake.column(q), k, split, te_u, te_l);
-                lay.curves.push(Curve {
-                    pts: wu,
-                    style: style.clone(),
-                });
-                lay.curves.push(Curve {
-                    pts: wl,
-                    style: style.clone(),
-                });
+                lay.curves.push(curve(wu, None));
+                lay.curves.push(curve(wl, None));
             }
-            lay.curves.push(Curve {
-                pts: upper,
-                style: style.clone(),
-            });
-            lay.curves.push(Curve {
-                pts: lower,
-                style: style.clone(),
-            });
-            let text = if n_points > 1 {
-                format!("{} at {}, scaled ×{}", q.label(), p.display_label(), fmt_scale(k))
-            } else {
-                format!("{}, scaled ×{}", q.label(), fmt_scale(k))
-            };
-            lay.legend.push(LegendEntry {
-                text,
-                key: LegendKey::Line(style),
-            });
-        }
-    }
-    if config.quantities.is_empty() && !geometry_only && n_points > 1 {
-        // several design points with no quantities: the wake dash patterns tell them apart
-        for (j, p) in points.iter().enumerate() {
-            let pattern = config.patterns[j % config.patterns.len()];
-            lay.legend.push(LegendEntry {
-                text: p.display_label(),
-                key: LegendKey::Line(LineStyle {
-                    rgb: WAKE_LINE,
-                    width: 1.5,
-                    dasharray: pattern.dasharray().map(str::to_string),
-                }),
-            });
         }
     }
 
@@ -693,16 +665,17 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
         for (j, p) in points.iter().enumerate() {
             let Some(bl) = &p.boundary_layer else { continue };
             let f = tone_factor(j, n_points, config.tone_range);
-            let mut mark = |x: f64, y: f64, kind: MarkKind, rgb: (u8, u8, u8)| {
+            let mut mark = |x: f64, y: f64, kind: MarkKind, side: usize, rgb: (u8, u8, u8)| {
                 lay.markers.push(Mark {
                     at: (x, y),
                     kind,
+                    side,
                     rgb: tone(rgb, f),
                 });
             };
             if config.markers.stagnation {
                 let m = &bl.stagnation;
-                mark(m.x, m.y, MarkKind::Stagnation, MARK_STAGNATION);
+                mark(m.x, m.y, MarkKind::Stagnation, 0, MARK_STAGNATION);
             }
             if config.markers.transition {
                 for (is, m) in [1, 2].into_iter().zip(&bl.transition) {
@@ -711,7 +684,7 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
                     } else {
                         MarkKind::Transition
                     };
-                    mark(m.x_transition, m.y_transition, kind, side_colour(is));
+                    mark(m.x_transition, m.y_transition, kind, is, side_colour(is));
                 }
             }
             if config.markers.separation {
@@ -720,28 +693,8 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
                         SeparationKind::Separation => MarkKind::Separation,
                         SeparationKind::Reattachment => MarkKind::Reattachment,
                     };
-                    mark(m.x, m.y, kind, side_colour(m.side));
+                    mark(m.x, m.y, kind, m.side, side_colour(m.side));
                 }
-            }
-        }
-        for kind in MarkKind::ALL {
-            if lay.markers.iter().any(|m| m.kind == kind) {
-                lay.marker_legend.push(LegendEntry {
-                    text: kind.label().to_string(),
-                    key: LegendKey::Marker(kind.shape(), MARK_KEY),
-                });
-            }
-        }
-        if lay.markers.iter().any(|m| m.kind != MarkKind::Stagnation) {
-            for (text, rgb) in [("upper surface", MARK_UPPER), ("lower surface", MARK_LOWER)] {
-                lay.marker_legend.push(LegendEntry {
-                    text: text.to_string(),
-                    key: LegendKey::Line(LineStyle {
-                        rgb,
-                        width: 2.0,
-                        dasharray: None,
-                    }),
-                });
             }
         }
     }
@@ -749,49 +702,79 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
     Ok(lay)
 }
 
-/// Render the plot to an SVG document
-pub fn render_foil_svg(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<String, PlotError> {
+/// The plot area (width, height in mm) the foil figure's layout gives its axes, without and with
+/// the key row: the default 160 × 100 mm figure less the title, the tick and axis labels and the
+/// legend row below. ironlab has no equal-aspect axes, so the limits are widened to this aspect
+/// instead. The areas were measured on ironlab 0.12.0 renders; the tick labels' widths move them
+/// by a millimetre or so, so the aspect is equal to within about one per cent.
+pub const PLOT_AREA_MM: [(f64, f64); 2] = [(142.0, 80.5), (142.0, 57.5)];
+
+/// The limits that show `bounds` (x_min, x_max, y_min, y_max) at one scale on both axes in a plot
+/// area of `area` (width, height): the short side is widened about its centre
+pub fn equal_aspect_limits(bounds: (f64, f64, f64, f64), area: (f64, f64)) -> ((f64, f64), (f64, f64)) {
+    let (x0, x1, y0, y1) = bounds;
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let aspect = area.1 / area.0;
+    if dy / dx < aspect {
+        let half = 0.5 * dx * aspect;
+        let c = 0.5 * (y0 + y1);
+        ((x0, x1), (c - half, c + half))
+    } else {
+        let half = 0.5 * dy / aspect;
+        let c = 0.5 * (x0 + x1);
+        ((c - half, c + half), (y0, y1))
+    }
+}
+
+/// The parameters of the foil figure: provenance, and for one design point its inputs and
+/// outputs; for several, the conditions they share
+fn foil_parameters(points: &[DesignPoint]) -> (BTreeMap<String, Parameter>, Vec<&'static str>) {
+    let mut parameters = BTreeMap::from([
+        ("study".to_string(), Parameter::from(STUDY)),
+        ("figure".to_string(), Parameter::from("foil")),
+        ("points".to_string(), Parameter::from(points.len() as i64)),
+    ]);
+    let per_point: Vec<BTreeMap<String, Parameter>> = points
+        .iter()
+        .map(|p| {
+            let mut m = BTreeMap::from([("n_nodes".to_string(), Parameter::from(p.geometry.n() as i64))]);
+            if let Some(foil) = &p.foil {
+                m.insert("foil".to_string(), Parameter::from(foil.as_str()));
+            }
+            if let Some(c) = &p.conditions {
+                m.extend(condition_parameters(c));
+            }
+            m
+        })
+        .collect();
+    parameters.extend(shared_parameters(&per_point));
+    if let [p] = points {
+        if let Some(record) = &p.record {
+            parameters.extend(point_parameters(record, p.boundary_layer.as_ref()));
+        }
+    }
+    let labels: Vec<Vec<&'static str>> = points
+        .iter()
+        .map(|p| p.conditions.as_ref().map(regime_labels).unwrap_or_default())
+        .collect();
+    (parameters, shared_labels(&labels))
+}
+
+/// Build the foil figure
+pub fn foil_figure(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Figure, PlotError> {
     let lay = layout(points, config)?;
     let chord = points[0].geometry.chord;
 
-    // Bounds: everything drawn, padded by 5% chord
-    let mut bx = (f64::INFINITY, f64::NEG_INFINITY);
-    let mut by = (f64::INFINITY, f64::NEG_INFINITY);
-    let mut take = |x: f64, y: f64| {
-        if x.is_finite() && y.is_finite() {
-            bx = (bx.0.min(x), bx.1.max(x));
-            by = (by.0.min(y), by.1.max(y));
-        }
-    };
-    for sf in &lay.surfaces {
-        sf.outline.iter().for_each(|&(x, y)| take(x, y));
-    }
-    for w in &lay.wakes {
-        w.pts.iter().for_each(|&(x, y)| take(x, y));
-    }
-    for segs in &lay.notches {
-        segs.iter().for_each(|&(a, b)| {
-            take(a.0, a.1);
-            take(b.0, b.1);
-        });
-    }
-    for c in &lay.curves {
-        c.pts.iter().for_each(|&(x, y)| take(x, y));
-    }
-    for m in &lay.markers {
-        take(m.at.0, m.at.1);
+    // bounds: everything drawn, padded by 5% chord, then widened to the plot area's aspect
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (x, y) in lay.points().filter(|(x, y)| x.is_finite() && y.is_finite()) {
+        (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
     }
     let pad = 0.05 * chord;
-    let bounds = (bx.0 - pad, bx.1 + pad, by.0 - pad, by.1 + pad);
+    let named = !lay.curve_key().is_empty() || !lay.markers.is_empty();
+    let area = PLOT_AREA_MM[usize::from(named)];
+    let (xlim, ylim) = equal_aspect_limits((x0 - pad, x1 + pad, y0 - pad, y1 + pad), area);
 
-    let margins = Margins {
-        left: 60.0,
-        right: 20.0,
-        top: 40.0,
-        bottom: 40.0,
-    };
-    let mut c = Canvas::equal_aspect(config.width, config.height, margins, bounds);
-    c.header(config.background);
     let title = config.title.clone().unwrap_or_else(|| {
         if points.len() == 1 {
             points[0].display_label()
@@ -799,72 +782,78 @@ pub fn render_foil_svg(points: &[DesignPoint], config: &FoilPlotConfig) -> Resul
             "Foil".to_string()
         }
     });
-    c.title(&title);
-    c.grid("x/c", "y/c");
+    let mut fig = Figure::new().title(Text::plain(title));
+    if named {
+        fig = fig.tiles(2, 1).row_weights([3.0, 1.0]);
+    }
+    let (parameters, labels) = foil_parameters(points);
+    fig = describe(fig, parameters, &labels);
+    let key = named.then(|| fig.panel_legend(1, 0).id());
 
-    for sf in &lay.surfaces {
-        c.polyline(&sf.outline, &sf.style);
-    }
-    for w in &lay.wakes {
-        c.polyline(&w.pts, &w.style);
-    }
-    for segs in &lay.notches {
-        c.group_start(&LineStyle {
-            rgb: SURFACE_NOTCHED,
-            width: 1.0,
-            dasharray: None,
-        });
-        for &(a, b) in segs {
-            c.group_line(a, b);
+    let mut ax = fig.axes(0, 0);
+    let draw = |ax: &mut AxesMut, c: &Curve, width: f64| {
+        let (x, y): (Vec<f64>, Vec<f64>) = c.pts.iter().copied().unzip();
+        let mut line = ax.plot(x, y);
+        line.color(rgb(c.rgb)).dash(c.dash).line_width(width);
+        if let Some(name) = &c.name {
+            line.display_name(name.as_str());
         }
-        c.group_end();
+    };
+    for c in &lay.surfaces {
+        draw(&mut ax, c, 1.0);
+    }
+    for c in &lay.wakes {
+        draw(&mut ax, c, 1.0);
+    }
+    // node ticks: one line per surface, its segments separated by NaN
+    for segs in &lay.notches {
+        let mut x = Vec::with_capacity(3 * segs.len());
+        let mut y = Vec::with_capacity(3 * segs.len());
+        for &(a, b) in segs {
+            x.extend([a.0, b.0, f64::NAN]);
+            y.extend([a.1, b.1, f64::NAN]);
+        }
+        ax.plot(x, y).color(rgb(SURFACE_NOTCHED)).line_width(0.5);
     }
     for d in &lay.dots {
-        for &p in d {
-            c.circle(p, 2.0, (0, 0, 0));
+        let (x, y): (Vec<f64>, Vec<f64>) = d.iter().copied().unzip();
+        ax.plot(x, y)
+            .color(Color::BLACK)
+            .dash(Dash::None)
+            .marker(Marker::Point)
+            .marker_size(1.5);
+    }
+    for c in &lay.curves {
+        draw(&mut ax, c, 1.0);
+    }
+    // markers: one artist each; the first of each (kind, side) carries its key entry
+    let mut keyed = Vec::new();
+    for m in &lay.markers {
+        let mut line = ax.plot([m.at.0], [m.at.1]);
+        line.color(rgb(m.rgb))
+            .dash(Dash::None)
+            .marker(m.kind.shape())
+            .marker_size(MARK_SIZE_PT)
+            .line_width(1.0);
+        if !keyed.contains(&(m.kind, m.side)) {
+            keyed.push((m.kind, m.side));
+            line.display_name(m.key());
         }
     }
-    for curve in &lay.curves {
-        c.polyline(&curve.pts, &curve.style);
+    ax.xlabel("$x/c$")
+        .ylabel("$y/c$")
+        .xlim(xlim.0, xlim.1)
+        .ylim(ylim.0, ylim.1)
+        .grid(true);
+    if let Some(key) = key {
+        ax.legend_in(key);
     }
-    for m in &lay.markers {
-        c.marker(m.at, m.kind.shape(), MARK_R, m.rgb, 1.5);
-    }
-    c.legend(&lay.legend, LegendAnchor::BottomLeft);
-    c.legend(&lay.marker_legend, LegendAnchor::BottomRight);
-    Ok(c.finish())
+    Ok(fig)
 }
 
-/// Render and write the plot
-pub fn plot_foil<P: AsRef<Path>>(
-    points: &[DesignPoint],
-    path: P,
-    format: ImageFormat,
-    config: &FoilPlotConfig,
-) -> Result<(), PlotError> {
-    let svg = render_foil_svg(points, config)?;
-    match format {
-        ImageFormat::Svg => write_svg(path.as_ref(), &svg),
-        ImageFormat::Png => write_png(path.as_ref(), &svg),
-    }
-}
-
-/// [`plot_foil`] as SVG
-pub fn plot_foil_svg<P: AsRef<Path>>(
-    points: &[DesignPoint],
-    path: P,
-    config: &FoilPlotConfig,
-) -> Result<(), PlotError> {
-    plot_foil(points, path, ImageFormat::Svg, config)
-}
-
-/// [`plot_foil`] as PNG
-pub fn plot_foil_png<P: AsRef<Path>>(
-    points: &[DesignPoint],
-    path: P,
-    config: &FoilPlotConfig,
-) -> Result<(), PlotError> {
-    plot_foil(points, path, ImageFormat::Png, config)
+/// Build and write the foil figure where `path` names it (`.fig` or `.fig.json`)
+pub fn plot_foil<P: AsRef<Path>>(points: &[DesignPoint], path: P, config: &FoilPlotConfig) -> Result<(), PlotError> {
+    save_figure(&foil_figure(points, config)?, path.as_ref())
 }
 
 #[cfg(test)]
@@ -872,6 +861,7 @@ mod tests {
     use super::*;
     use crate::geometry::{naca_4digit, panel_foil, Thickness};
     use crate::output::{SideStations, WakeNodes};
+    use ironlab::ir::Artist;
 
     fn geometry(n: usize) -> FoilNodes {
         let geom = naca_4digit("0012", n, Thickness::Perpendicular).unwrap();
@@ -980,6 +970,9 @@ mod tests {
             geometry: g,
             boundary_layer: Some(bl),
             converged,
+            foil: None,
+            conditions: None,
+            record: None,
         }
     }
 
@@ -997,14 +990,14 @@ mod tests {
         let a = point_style(0, 0, 3, &c);
         let b = point_style(1, 0, 3, &c);
         assert_ne!(a.rgb, b.rgb, "different quantities: different hue");
-        assert_eq!(a.dasharray, b.dasharray, "same design point: same pattern");
+        assert_eq!(a.dash, b.dash, "same design point: same pattern");
         let a2 = point_style(0, 2, 3, &c);
-        assert_eq!(a2.dasharray, Some("8,4".to_string()));
+        assert_eq!(a2.dash, Dash::Dashed);
         assert_eq!(a2.rgb, tone(c.palette[0], 0.55), "last point gets the dark tone");
         let s0 = point_style(0, 0, 1, &c);
         assert_eq!(s0.rgb, c.palette[0], "single point: base hue");
-        assert_eq!(s0.dasharray, None);
-        assert_eq!(point_style(0, 5, 6, &c).dasharray, None, "cycle wraps after five");
+        assert_eq!(s0.dash, Dash::Solid);
+        assert_eq!(point_style(0, 4, 6, &c).dash, Dash::Solid, "cycle wraps after four");
         assert_eq!(point_style(7, 0, 1, &c).rgb, c.palette[1], "palette cycles");
     }
 
@@ -1077,29 +1070,34 @@ mod tests {
             ..Default::default()
         };
         let lay = layout(&pts, &config).unwrap();
-        let texts: Vec<&str> = lay.legend.iter().map(|e| e.text.as_str()).collect();
+        let texts = lay.curve_key();
         assert_eq!(texts.len(), 4);
-        assert!(texts[0].starts_with("δ* at a, scaled ×"));
-        assert!(texts[1].starts_with("δ* at b (not converged), scaled ×"));
-        assert!(texts[2].starts_with("θ at a, scaled ×"));
-        // four distinct (colour, dash) combinations
-        let mut styles: Vec<String> = lay.legend.iter().map(|e| format!("{:?}", e.key)).collect();
+        assert!(texts[0].starts_with("$\\delta^*$ at a, scaled ×"));
+        assert!(texts[1].starts_with("$\\delta^*$ at b (not converged), scaled ×"));
+        assert!(texts[2].starts_with("$\\theta$ at a, scaled ×"));
+        // four distinct (colour, dash) combinations among the named curves
+        let mut styles: Vec<String> = lay
+            .curves
+            .iter()
+            .filter(|c| c.name.is_some())
+            .map(|c| format!("{:?}{:?}", c.rgb, c.dash))
+            .collect();
         styles.sort();
         styles.dedup();
         assert_eq!(styles.len(), 4);
         // 2 points × 2 quantities × (upper, lower, wake upper, wake lower)
         assert_eq!(lay.curves.len(), 16);
-        // airfoil notches once; wake panels only for a single point; one wake line per point,
+        // aerofoil notches once; wake panels only for a single point; one wake line per point,
         // black, dash-coded like its curves
         assert_eq!(lay.notches.len(), 1);
         assert_eq!(lay.notches[0].len(), 60);
         assert_eq!(lay.wakes.len(), 2);
-        assert!(lay.wakes.iter().all(|w| w.style.rgb == WAKE_LINE));
-        assert_eq!(lay.wakes[0].style.dasharray, None);
-        assert_eq!(lay.wakes[1].style.dasharray, Some("2,3".to_string()));
+        assert!(lay.wakes.iter().all(|w| w.rgb == WAKE_LINE));
+        assert_eq!(lay.wakes[0].dash, Dash::Solid);
+        assert_eq!(lay.wakes[1].dash, Dash::Dotted);
         // single point: no label prefix, and the wake gets its panels
         let one = layout(&pts[..1], &config).unwrap();
-        assert!(one.legend[0].text.starts_with("δ*, scaled ×"));
+        assert!(one.curve_key()[0].starts_with("$\\delta^*$, scaled ×"));
         assert_eq!(fmt_scale(3.0071), "3.0");
         assert_eq!(fmt_scale(0.4567), "4.6e-1");
         assert_eq!(fmt_scale(17.1), "1.7e1");
@@ -1138,9 +1136,8 @@ mod tests {
         );
         let lay = layout(&[g.clone(), g2], &FoilPlotConfig::default()).unwrap();
         assert_eq!(lay.surfaces.len(), 2);
-        assert_ne!(lay.surfaces[0].style.rgb, lay.surfaces[1].style.rgb);
-        assert!(matches!(&lay.legend[0].key, LegendKey::Line(s) if s.rgb == lay.surfaces[0].style.rgb));
-        assert_eq!(lay.legend.len(), 2);
+        assert_ne!(lay.surfaces[0].rgb, lay.surfaces[1].rgb);
+        assert_eq!(lay.curve_key(), vec!["g", "g2"]);
         // mismatched panels with quantities
         let mut b = point("b", 0.01, true);
         b.geometry.x[3] = f64::from_bits(b.geometry.x[3].to_bits() + 1);
@@ -1149,44 +1146,59 @@ mod tests {
     }
 
     #[test]
-    fn renders_svg_with_markers() {
+    fn equal_aspect_widens_the_short_side_about_its_centre() {
+        let ((x0, x1), (y0, y1)) = equal_aspect_limits((0.0, 2.0, -0.1, 0.1), (100.0, 50.0));
+        assert_eq!((x0, x1), (0.0, 2.0));
+        assert!((y0 + 0.5).abs() < 1e-15 && (y1 - 0.5).abs() < 1e-15);
+        let ((x0, x1), (y0, y1)) = equal_aspect_limits((0.0, 1.0, 0.0, 2.0), (100.0, 50.0));
+        assert_eq!((y0, y1), (0.0, 2.0));
+        assert!((x0 + 1.5).abs() < 1e-15 && (x1 - 2.5).abs() < 1e-15);
+    }
+
+    #[test]
+    fn figure_has_markers_dots_and_one_keyed_entry_per_kind_and_side() {
         let pts = [point("a", 0.01, true)];
         let config = FoilPlotConfig {
             quantities: vec![BlQuantity::Dstar],
             panels: PanelStyle::Dots,
             ..Default::default()
         };
-        let svg = render_foil_svg(&pts, &config).unwrap();
-        assert!(svg.starts_with("<svg"));
-        assert!(svg.trim_end().ends_with("</svg>"));
-        // stagnation circle (dark), upper transition square (yellow), forced lower transition
-        // diamond (green); the marker legend names the three kinds and the two sides
-        assert_eq!(svg.matches("fill=\"none\" stroke=\"rgb(40,40,40)\"").count(), 1);
+        let fig = foil_figure(&pts, &config).unwrap();
+        assert!(fig.validate().errors.is_empty());
+        let ir = fig.ir();
+        assert_eq!(ir.axes.len(), 1);
+        assert_eq!(ir.panel_legends.len(), 1);
+        let lines: Vec<_> = ir.axes[0]
+            .artists
+            .iter()
+            .filter_map(|a| match a {
+                Artist::Line(l) => Some(l),
+                _ => None,
+            })
+            .collect();
+        // surface + dots + (upper, lower) + stagnation, transition, forced transition
+        assert_eq!(lines.len(), 1 + 1 + 2 + 3);
+        let names: Vec<&str> = lines
+            .iter()
+            .filter_map(|l| l.display_name.as_ref().map(|t| t.content.as_str()))
+            .collect();
+        assert_eq!(names.len(), 4);
+        assert!(names[0].starts_with("$\\delta^*$, scaled ×"));
         assert_eq!(
-            svg.matches("<rect x=").count(),
-            5,
-            "square marker + its legend key + border + 2 legend boxes"
+            &names[1..],
+            [
+                "stagnation",
+                "transition (upper surface)",
+                "forced transition (lower surface)"
+            ]
         );
-        assert!(svg.contains("<polygon points="));
-        assert_eq!(svg.matches("stroke=\"rgb(235,175,0)\"").count(), 2, "square + side key");
-        assert_eq!(svg.matches("stroke=\"rgb(0,165,0)\"").count(), 2, "diamond + side key");
-        for text in [
-            "stagnation",
-            "transition",
-            "forced transition",
-            "upper surface",
-            "lower surface",
-        ] {
-            assert!(svg.contains(&format!(">{text}<")), "{text} in the marker legend");
-        }
-        assert!(!svg.contains(">separation<"));
-        // 60 node dots + stagnation circle + the stagnation legend key
-        assert_eq!(svg.matches("<circle").count(), 62);
-        assert_eq!(ImageFormat::from_path(Path::new("x.PNG")), ImageFormat::Png);
+        let shapes: Vec<Marker> = lines.iter().map(|l| l.marker.shape).collect();
+        assert_eq!(shapes[1], Marker::Point);
+        assert_eq!(&shapes[4..], [Marker::Circle, Marker::Square, Marker::Diamond]);
+        assert_eq!(fig.parameters().get("figure"), Some(&Parameter::from("foil")));
         assert_eq!(fmt_alpha(3.0000000000000004), "3");
         assert_eq!(fmt_alpha(-2.5), "-2.5");
         assert_eq!(fmt_alpha(-0.0), "0");
         assert_eq!(fmt_alpha(12.000000000000002), "12");
-        assert_eq!(ImageFormat::from_path(Path::new("x")), ImageFormat::Svg);
     }
 }

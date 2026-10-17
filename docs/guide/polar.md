@@ -15,6 +15,11 @@ yfoil polar naca4412.json \
     --label "NACA 4412" --distributions -o naca4412_polar.json
 ```
 
+Drawn with [`yfoil plot polar`](plot.md#polar) and [ironlab](https://github.com/thclark/ironlab),
+this sweep produces the polar below.
+
+<ironlab-figure src="figures/naca4412_polar.fig" format="fig" name="naca4412_polar" alt="NACA 4412 polar at Re 1e6, alpha -5 to 15 degrees">NACA 4412 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>
+
 ## How the sweep runs
 
 A polar is a **state machine**, not N independent solves: the boundary layer
