@@ -38,7 +38,7 @@ several operating points or polars carries only the conditions they share. Figur
 directory of figures from many runs can be opened together and narrowed with, for example,
 `re>=1000000 label:compressible`.
 
-## polar
+## The `plot polar` command { #polar }
 
 ``` sh
 yfoil plot polar naca0012_polar.json                    # writes naca0012_polar.fig
@@ -57,7 +57,7 @@ three α panels and \(C_L\) between the two \(C_L\) panels, so zooming one in th
 moves the others with it. Only valid points are drawn. Several files default to
 `polar_comparison.fig`.
 
-## analysis
+## The `plot analysis` command { #analysis }
 
 ``` sh
 yfoil plot analysis a5.json                              # writes a5.fig
@@ -73,7 +73,7 @@ blue and lower red, above a strip with the aerofoil outline; the three share a l
 axis. A point whose numbers were withheld (an invalid point analysed without
 `--allow-invalid`) has no distributions to draw, and is refused.
 
-## foil
+## The `plot foil` command { #foil }
 
 ``` sh
 yfoil plot foil naca4412.json --panels notches          # writes naca4412_foil.fig

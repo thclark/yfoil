@@ -24,7 +24,7 @@ form.
   designation and parameters it was made from, and how it was panelled (see
   [the data model](data.md#geometry)).
 
-## naca
+## The `naca` command { #naca }
 
 Generate a NACA section from its designation. Every family with a public,
 reproducible definition is covered; the formulas, what each family is for and
@@ -84,7 +84,7 @@ low-drag-range subscript (`64(1)-212`).
     generates each section as defined; `--sharp` and `--te-gap` are the
     adjustments, applied after panelling as under [`repanel`](#repanel).
 
-## karman-trefftz
+## The `karman-trefftz` command { #karman-trefftz }
 
 Generate a Kármán–Trefftz section: the conformal map of a circle through
 \(\zeta = 1\), an analytic section with an exact potential-flow solution and a
@@ -103,7 +103,7 @@ yfoil geometry karman-trefftz --x-centre -0.1 --y-centre 0.05 --te-angle 10 -o k
 | `-n`/`--nodes`, `--method`, PPAR flags, `--sharp`, `--te-gap`, `--te-blend`, `--panelling` | as [`repanel`](#repanel) | The panelling, `pangen` by default |
 | `-o`, `--output` | `karman-trefftz.<format>` | Output file |
 
-## convert
+## The `convert` command { #convert }
 
 ``` sh
 yfoil geometry convert naca0012.json --to dat -o naca0012.dat
@@ -116,7 +116,7 @@ yfoil geometry convert e387.dat --to json -o e387.json
 | `--name` | `Aerofoil` | Name written into the `.dat` header |
 | `-o`, `--output` | stdout | Output file |
 
-## repanel
+## The `repanel` command { #repanel }
 
 Redistribute the nodes of an existing geometry, the operation XFOIL's `PANE` and
 `PPAR` commands perform on a loaded aerofoil. The input is a `.json` or `.dat`
@@ -223,7 +223,7 @@ Flags of the other method (`--cosine-te-bias` with `pangen`, any PPAR flag with
 that is not two increasing values, and `--panelling` with any other panelling
 flag are all errors, from flags and from a file alike.
 
-## info
+## The `info` command { #info }
 
 ``` sh
 yfoil geometry info naca4412.json
