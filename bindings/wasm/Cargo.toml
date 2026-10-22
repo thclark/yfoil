@@ -1,0 +1,22 @@
+[package]
+name = "yfoil-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "yFoil's WebAssembly binding: the analysis records of the CLI, computed in a browser or any JavaScript runtime"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+yfoil = { path = "../.." }
+cr-libm = { path = "../../cr-libm" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
+# The wasm-bindgen CLI that post-processes the module must be this exact version
+# (scripts/wasm.sh installs that one into target/wasm-tools/)
+wasm-bindgen = "=0.2.129"
+
+[lints]
+workspace = true
