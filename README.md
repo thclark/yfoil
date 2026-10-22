@@ -88,7 +88,7 @@ ci/ignore-drift.sh                                            # every #[ignore] 
 ```
 
 **Run the CLI.** `cargo run -- <args>`, or `cargo install --path .` for a `yfoil` binary; add `--features plotting`
-for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-viewer`). See `yfoil --help` and the [user guide](docs/guide/index.md).
+for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-viewer`). See `yfoil --help` and the [user guide](docs/user-guide/index.md).
 
 **XFOIL reference and fixtures.** Only needed when changing the translation, instrumentation or fixture set:
 

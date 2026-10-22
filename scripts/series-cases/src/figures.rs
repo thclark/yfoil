@@ -82,7 +82,7 @@ fn describe(fig: Figure, study: &Study, figure: &str, case: &Case, run: &Value) 
     if let Some([leg, alpha]) = run["parted"].as_array().map(Vec::as_slice) {
         fig = fig.parameter("parted", format!("leg {leg} α {alpha}°"));
     }
-    fig = fig.label(study.section).label("xfoil-comparison");
+    fig = fig.label(study.section()).label("xfoil-comparison");
     for tag in regime_labels(case) {
         fig = fig.label(tag);
     }
@@ -475,7 +475,7 @@ pub fn transition_strip(study: &Study, cases: &[&Case], runs: &[Value]) -> Figur
             "matched",
             runs.iter().map(|r| r["matched"].as_i64().unwrap_or(0)).sum::<i64>(),
         )
-        .label(study.section)
+        .label(study.section())
         .label("xfoil-comparison");
     let mut tags: Vec<&str> = cases.iter().flat_map(|c| regime_labels(c)).collect();
     tags.sort_unstable();

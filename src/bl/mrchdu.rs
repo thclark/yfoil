@@ -372,7 +372,7 @@ pub fn march_prescribed_dstar(
                 // `IF(DMAX .LE. 0.1) GO TO 109`, negated with its own operator rather than written
                 // as the complement `dmax > 0.1`: the two agree for a finite residual, but every
                 // comparison with NaN is false, so only this form rejects a NaN residual (a station
-                // whose closures went non-finite) as XFOIL does (docs/xfoil-known-issues.md §7.10)
+                // whose closures went non-finite) as XFOIL does (docs/user-guide/reference/known-xfoil-issues.md §7.10)
                 if !(dmax <= 0.1) {
                     if let Some(t) = trace.as_mut() {
                         t.iterate_fallbacks.push((i_station, side, dmax));

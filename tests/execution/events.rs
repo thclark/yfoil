@@ -30,7 +30,7 @@
 //! they were first written (2026-09-13) two of them failed on translation defects the finite
 //! cases could not see: the fallback test had been written as `if dmax > 0.1`, the complement of
 //! XFOIL's `IF(DMAX .LE. 0.1) GO TO 109`, which is the opposite for a NaN residual
-//! (docs/xfoil-known-issues.md §7.10); and MRCHUE's failure path made a single closure call at a
+//! (docs/user-guide/reference/known-xfoil-issues.md §7.10); and MRCHUE's failure path made a single closure call at a
 //! wake station where XFOIL makes two, `BLVAR(2)` then `BLVAR(3)` (§7.11). Both are fixed; keep
 //! these tests in CI for exactly that reason.
 

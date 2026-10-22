@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// XFOIL's `PPAR` parameters of PANGEN (menu keys `P`, `T`, `R`, `XT`, `XB`). The JSON keys of the
 /// provenance record and of a `--panelling` file are these field names; the XFOIL variable of
-/// each is in its doc comment and in `docs/xfoil-reference.md`.
+/// each is in its doc comment and in `docs/user-guide/reference/xfoil-reference.md`.
 #[doc(alias = "PPAR")]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

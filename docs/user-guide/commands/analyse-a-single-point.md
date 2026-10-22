@@ -44,7 +44,7 @@ yfoil analyse naca0012.json --alpha 5 --inviscid
 
 Without `-o`, a summary is printed: \(C_L\), \(C_D\) (split into friction and
 pressure), \(C_M\), transition locations and the iteration count. With `-o`, the
-[full record](data.md) is written.
+[full record](../reference/the-data-model.md) is written.
 
 ## The XFOIL equivalent
 

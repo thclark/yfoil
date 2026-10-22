@@ -841,7 +841,7 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
           `NaN` tokens in the reference's own output for the run.\n\n";
     m += &nonfinite_table_md(s);
     m += "\n## Full polars\n\nFull ±30° polars of the aerofoil series and regimes of interest are the \
-          [series-cases](../../validation/series-cases/README.md) validation study, and the runs that show \
+          [series-cases](../../validation/series-cases.md) validation study, and the runs that show \
           XFOIL's known issues the [known-issues](../known-issues/README.md) study. Those sweeps are not \
           candidates for the finite set, which is a minimal set of single operating points.\n";
     m += "\n## Branches taken only by the non-finite set\n\n";

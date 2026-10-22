@@ -1,4 +1,4 @@
-//! Series cases (`docs/validation/series-cases/`).
+//! Series cases (`docs/validation/series-cases.md`).
 //!
 //! Runs of the aerofoil series and flow conditions of interest, shown to an external reader:
 //! full polars (XFOIL's polar procedure, 0 → +30°, `INIT`, 0 → −30° by 1°), inviscid alpha sweeps
@@ -11,15 +11,15 @@
 //! The cases are `group = "series"` in `xtask/fixtures-config/cases.toml`; their
 //! fixtures come from `cargo xtask fixtures --group series`, whose watchdog ends a
 //! reference run that has gone non-finite and hung in XFOIL's plot-label loop
-//! (docs/xfoil-known-issues.md §4) and keeps what it wrote.
+//! (docs/user-guide/reference/known-xfoil-issues.md §4) and keeps what it wrote.
 //!
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every point of every polar, both codes, with the outcome of each comparison),
 //! `README.md` / `README.tex`, and the figures, drawn from `summary.json` in Rust ([`figures`]) as
 //! ironlab figure files (`polars-<case>.fig`, `transition-position.fig`, each with its `.pdf` for
 //! `README.tex`; `docs/conventions/figures.md`). With `--docs` the Markdown page and the `.fig`
-//! files are also written to `docs/validation/series-cases/` (the known-issues cases' to
-//! `docs/testing/known-issues/`). `--render <run_dir>` redraws an existing run folder's figures
+//! files are also written to `docs/validation/series-cases.md` and `docs/validation/series-cases/`
+//! (the known-issues cases' to `docs/testing/known-issues/`). `--render <run_dir>` redraws an existing run folder's figures
 //! and rewrites its index (and with `--docs` the page) without rerunning the study.
 //!
 //! The library runs any [`Study`]: the series cases (`cargo run --release -p series-cases -- [--docs]`)
@@ -236,10 +236,10 @@ pub fn rerender(study: &Study, run_dir: &Path, docs: bool) {
 }
 
 fn write_docs(study: &Study, root: &Path, run_dir: &Path, summary: &serde_json::Value, drawn: bool) {
-    let docs_dir = root.join("docs").join(study.section).join(study.slug);
-    std::fs::create_dir_all(&docs_dir).unwrap();
-    report::write_docs(study, &docs_dir, run_dir, summary, drawn);
-    println!("docs written to {}", docs_dir.display());
+    let docs = root.join("docs");
+    std::fs::create_dir_all(docs.join(study.figures)).unwrap();
+    report::write_docs(study, &docs, run_dir, summary, drawn);
+    println!("docs written to {}", docs.join(study.page).display());
 }
 
 /// The trailing `# comment` of each case's `name = "…"` line in cases.toml, its description.
@@ -264,11 +264,16 @@ pub fn descriptions(root: &Path) -> std::collections::BTreeMap<String, String> {
 /// its pages introduce themselves. The series cases and the known-issues cases share every
 /// comparison, table and figure.
 pub struct Study {
-    /// the crate and the docs directory (`scripts/<slug>/`, `docs/<section>/<slug>/`)
+    /// the crate (`scripts/<slug>/`)
     pub slug: &'static str,
-    /// the docs section it belongs to: `validation` (the engineering assessment) or `testing`
-    /// (consistency with XFOIL, for developers; `docs/conventions/testing.md`)
-    pub section: &'static str,
+    /// the page, relative to `docs/`, in the section it belongs to: `validation` (the engineering
+    /// assessment) or `testing` (consistency with XFOIL, for developers; `docs/conventions/testing.md`).
+    /// The file tree mirrors the site navigation (`zensical.toml`), so a page in the navigation is
+    /// the kebab-case of its title
+    pub page: &'static str,
+    /// the directory the page's figures are copied into, relative to `docs/`: the page's own
+    /// directory, or one beside the page named after it
+    pub figures: &'static str,
     /// the `group` of `xtask/fixtures-config/cases.toml` it runs
     pub group: &'static str,
     /// the page title
@@ -283,12 +288,32 @@ impl Study {
     pub fn runs_root(&self) -> PathBuf {
         repo_root().join("scripts").join(self.slug).join("runs")
     }
+
+    /// The docs section the page is in (`validation` or `testing`), also a figure label
+    pub fn section(&self) -> &'static str {
+        self.page.split('/').next().unwrap()
+    }
+
+    /// The relative path from the page up to `docs/` (`../` per directory the page is in)
+    pub fn up(&self) -> String {
+        "../".repeat(self.page.matches('/').count())
+    }
+
+    /// A figure's path relative to the page
+    pub fn figure_src(&self, file_name: &str) -> String {
+        let page_dir = Path::new(self.page).parent().unwrap();
+        let rel = Path::new(self.figures)
+            .strip_prefix(page_dir)
+            .expect("the figures directory is the page's or one below it");
+        rel.join(file_name).to_str().unwrap().to_string()
+    }
 }
 
-/// The series cases (`docs/validation/series-cases/`).
+/// The series cases (`docs/validation/series-cases.md`).
 pub const SERIES: Study = Study {
     slug: "series-cases",
-    section: "validation",
+    page: "validation/series-cases.md",
+    figures: "validation/series-cases",
     group: "series",
     title: "Series cases",
     purpose: "Runs of the aerofoil series and flow regimes of interest under normal conditions, shown to an \
@@ -299,13 +324,14 @@ pub const SERIES: Study = Study {
     purpose_tex: "Runs of the aerofoil series and flow regimes of interest under normal conditions: that yFoil follows the reference through each of them.",
 };
 
-/// The known-issues cases (`docs/testing/known-issues/`).
+/// The known-issues cases (`docs/testing/known-issues/README.md`).
 pub const KNOWN_ISSUES: Study = Study {
     slug: "known-issues",
-    section: "testing",
+    page: "testing/known-issues/README.md",
+    figures: "testing/known-issues",
     group: "known-issues",
     title: "Known-issues cases",
-    purpose: "Runs that show one of XFOIL's known issues (`docs/xfoil-known-issues.md`) arising, and whether \
+    purpose: "Runs that show one of XFOIL's known issues (`docs/user-guide/reference/known-xfoil-issues.md`) arising, and whether \
               yFoil does the same: the reference hanging in its plot-label loop, the Kármán–Tsien pole, and the \
               solution's and convergence's sensitivity to the panelling (a case run at N = 60, 160 and 240 \
               panels, each with the iteration limit it was studied with). Each case's description names the \

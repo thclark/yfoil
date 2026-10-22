@@ -1,5 +1,5 @@
 //! The run's index (`README.md`, `README.tex`, `summary.json`) and the generated documentation
-//! page (`docs/validation/aerofoil-series/README.md` with the figures).
+//! page (`docs/validation/aerofoil-series.md`, the figures in `docs/validation/aerofoil-series/`).
 
 use crate::naca456::CaseComparison;
 use crate::study::{validation_set, SeriesStudy, N_NODES};
@@ -238,9 +238,9 @@ pub fn write_index_tex(run_dir: &Path, series: &[&SeriesStudy], comparison: &[Ca
 /// The tracked documentation page: the `.fig` files copied in (any figure file already there,
 /// including the SVGs of the matplotlib figures, removed first), prose from the study definition,
 /// the validation set, and the naca456 comparison table
-pub fn write_docs(docs: &Path, run_dir: &Path, series: &[SeriesStudy], comparison: &[CaseComparison]) {
-    fs::create_dir_all(docs).unwrap();
-    for entry in fs::read_dir(docs).unwrap().flatten() {
+pub fn write_docs(page: &Path, figures: &Path, run_dir: &Path, series: &[SeriesStudy], comparison: &[CaseComparison]) {
+    fs::create_dir_all(figures).unwrap();
+    for entry in fs::read_dir(figures).unwrap().flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "svg" || e == "fig") {
             fs::remove_file(&path).unwrap();
@@ -248,10 +248,10 @@ pub fn write_docs(docs: &Path, run_dir: &Path, series: &[SeriesStudy], compariso
     }
     for s in series {
         let file = format!("{}.fig", s.slug);
-        fs::copy(run_dir.join(&file), docs.join(&file))
+        fs::copy(run_dir.join(&file), figures.join(&file))
             .unwrap_or_else(|e| panic!("{}: {e}", run_dir.join(&file).display()));
     }
-    let mut f = fs::File::create(docs.join("README.md")).unwrap();
+    let mut f = fs::File::create(page).unwrap();
     writeln!(f, "# Aerofoil series\n").unwrap();
     writeln!(
         f,
@@ -262,8 +262,8 @@ pub fn write_docs(docs: &Path, run_dir: &Path, series: &[SeriesStudy], compariso
          generator family: one panel per parameter, the family default (the validation set's member) in black on top, \
          the members that vary the parameter behind it coloured by value (YlGnBu, lightest = smallest), {N_NODES} nodes \
          each, every panel on the same linked axes (x from −0.2 to 1.2, y from −0.5 to 0.5, sized for equal scale). The formulas and \
-         the history of each family are in the [aerofoil series guide](../../guide/aerofoil-series.md); the \
-         references in the [bibliography](../../references.md).\n"
+         the history of each family are in the [aerofoil series guide](../user-guide/reference/aerofoil-series.md); the \
+         references in the [bibliography](../user-guide/reference/bibliography.md).\n"
     )
     .unwrap();
 
@@ -280,7 +280,7 @@ pub fn write_docs(docs: &Path, run_dir: &Path, series: &[SeriesStudy], compariso
         let refs: Vec<String> = v
             .references
             .iter()
-            .map(|r| format!("[{r}](../../references.md#{r})"))
+            .map(|r| format!("[{r}](../user-guide/reference/bibliography.md#{r})"))
             .collect();
         writeln!(
             f,
@@ -301,12 +301,12 @@ pub fn write_docs(docs: &Path, run_dir: &Path, series: &[SeriesStudy], compariso
         let refs: Vec<String> = s
             .references
             .iter()
-            .map(|r| format!("[{r}](../../references.md#{r})"))
+            .map(|r| format!("[{r}](../user-guide/reference/bibliography.md#{r})"))
             .collect();
         writeln!(f, "References: {}.\n", refs.join(", ")).unwrap();
         let panels = s.panels.iter().map(|p| p.title.as_str()).collect::<Vec<_>>().join("; ");
         let alt = format!("{}: default {} in black; {}", s.title, s.default.designation, panels);
-        let embed = yfoil::output::figures::embed_html(&format!("{}.fig", s.slug), &alt);
+        let embed = yfoil::output::figures::embed_html(&format!("aerofoil-series/{}.fig", s.slug), &alt);
         writeln!(f, "{embed}\n\n*{alt}.*\n").unwrap();
     }
     if !comparison.is_empty() {

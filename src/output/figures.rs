@@ -168,10 +168,12 @@ pub fn save_with_pdf(fig: &Figure, stem: &Path) -> Result<(), FigureError> {
     save(fig, &fig_path)
 }
 
-/// The documentation markup that embeds a figure file sitting beside the page
-/// (`docs/conventions/figures.md`, "Embedding").
+/// The documentation markup that embeds a figure file, `file_name` relative to the page: beside
+/// it, or in the directory beside it named after the page (`docs/conventions/figures.md`,
+/// "Embedding"). The figure's name is the file's stem.
 pub fn embed_html(file_name: &str, alt: &str) -> String {
-    let name = file_name.trim_end_matches(".json").trim_end_matches(".fig");
+    let stem = file_name.rsplit('/').next().unwrap();
+    let name = stem.trim_end_matches(".json").trim_end_matches(".fig");
     let alt = alt.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
     // `format` is explicit: the site's cache-busting appends `?v=<hash>` to `src`
     let format = if file_name.ends_with(".json") { "json" } else { "fig" };
@@ -204,5 +206,7 @@ mod tests {
         let s = embed_html("polars-a.fig", "CL \"and\" CD");
         assert!(s.contains("name=\"polars-a\""));
         assert!(s.contains("&quot;and&quot;"));
+        let s = embed_html("series-cases/polars-a.fig", "CL");
+        assert!(s.contains("src=\"series-cases/polars-a.fig\"") && s.contains("name=\"polars-a\""));
     }
 }

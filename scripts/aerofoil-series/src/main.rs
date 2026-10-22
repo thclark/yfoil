@@ -1,4 +1,4 @@
-//! Aerofoil series study (`docs/validation/aerofoil-series/`).
+//! Aerofoil series study (`docs/validation/aerofoil-series.md`).
 //!
 //! Draws every generator family yFoil offers — NACA 4-digit, 4-digit modified, 5-digit,
 //! 16-series, 6-series, 6A-series and the Kármán–Trefftz analytic section — as one figure per
@@ -15,7 +15,7 @@
 //! number) and the `README.md` / `README.tex` index; the figures are then built from those files
 //! as ironlab figures (`sheet.rs`, `<series>.fig` and `<series>.pdf`, conventions in
 //! `docs/conventions/figures.md`). `runs/` is gitignored. With `--docs` the `.fig` files and a
-//! generated Markdown page embedding them are also written to `docs/validation/aerofoil-series/`,
+//! generated Markdown page embedding them are also written to `docs/validation/aerofoil-series/` and `docs/validation/aerofoil-series.md`,
 //! the only place a run's products are tracked. `--render <run_dir>` redraws an existing run
 //! folder's figures from its `summary.json` and geometry files without rerunning the study (with
 //! `--docs`, it also rewrites the page from that run).
@@ -147,9 +147,10 @@ fn parse_args() -> Args {
 
 /// The tracked page from a run folder whose figures are drawn
 fn write_docs(run_dir: &Path, all: &[study::SeriesStudy], comparison: &[naca456::CaseComparison]) {
-    let docs = repo_root().join("docs/validation/aerofoil-series");
-    report::write_docs(&docs, run_dir, all, comparison);
-    println!("wrote {}", docs.display());
+    let page = repo_root().join("docs/validation/aerofoil-series.md");
+    let figures = repo_root().join("docs/validation/aerofoil-series");
+    report::write_docs(&page, &figures, run_dir, all, comparison);
+    println!("wrote {}", page.display());
 }
 
 fn main() {

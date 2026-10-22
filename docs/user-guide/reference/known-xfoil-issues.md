@@ -53,7 +53,7 @@ Verified in the source, not inferred:
 computed *live* by running XFOIL's own BLPRV → BLKIN → BLVAR on the converged primaries, and the lagged
 arrays are emitted verbatim under `stored` (with `hs_dump`, `cf_dump` as DUMP prints them). A
 side-by-side of live `hs` against DUMP's `H*` will differ at the ~RMSBL level by construction;
-`tests/application/output.rs` bounds it. Column table: `docs/xfoil-reference.md`,
+`tests/application/output.rs` bounds it. Column table: `docs/user-guide/reference/xfoil-reference.md`,
 "Output" section.
 
 ### 1.2 DUMP's `Ue/Vinf` is signed by GAM — Overcome (output only)
@@ -437,7 +437,7 @@ cases, where BL state really is carried forward.
 **yFoil.** Replicated: `set_mach_re_from_cl` (`src/solver/setbl.rs:40-82`) carries both MRCL guards and
 `clcalc.rs:57-69` the unguarded denominator, so yFoil converges onto the same spurious roots — and
 then flags them, rather than reporting the numbers as if they were sound. This case is the worked
-example behind [Solution validity](guide/validity.md), which catalogues every reason yFoil withholds
+example behind [Solution validity](solution-validity.md), which catalogues every reason yFoil withholds
 a result and what each one means. **Test:** `tests/known_issues/kt_pole_7_7.rs` runs the same section at N = 60 at
 −23°, 0° and 19° (`naca64a010_n60_inviscid_type2_m03_am23_a0_a19`: the three angles take every branch, and raise
 every event, of the −30…30° sweep, the points being independent) and checks yFoil's validity record against

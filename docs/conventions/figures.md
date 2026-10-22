@@ -68,16 +68,18 @@ A legend that belongs to one panel stays in that panel.
   follows the extension.
 - `figures::save_with_pdf(fig, stem)` also writes the PDF, for the run folders' LaTeX reports.
 - Study run folders hold `.fig` and `.pdf`. The documentation holds `.fig` only.
-- The user guide's figures (`docs/guide/figures/`) are the output of the very commands the guide prints, run by
+- The user guide's figures (`docs/user-guide/figures/`) are the output of the very commands the guide prints, run by
   `scripts/guide-figures.sh`; a guide page never embeds a figure no command on it produces.
 - `yfoil plot` writes what `-o` names (`.fig` or `.fig.json`), `.fig` by default.
 
 ## Embedding
 
-A generated page embeds each figure that sits beside it with `figures::embed_html(file_name, alt)`:
+A generated page embeds each of its figures with `figures::embed_html(path, alt)`, `path` relative to the page.
+The figures sit in the directory beside the page named after it (`validation/series-cases.md` →
+`validation/series-cases/`), or beside a page that is its directory's `README.md`:
 
 ```html
-<ironlab-figure src="polars-naca0012_n160_polar30_re1e6_iter100.fig" name="polars-naca0012_n160_polar30_re1e6_iter100"
+<ironlab-figure src="series-cases/polars-naca0012_n160_polar30_re1e6_iter100.fig" name="polars-naca0012_n160_polar30_re1e6_iter100"
   alt="CL, CD, RMSBL, iterations and transition against alpha, XFOIL and yFoil">…alt text…</ironlab-figure>
 ```
 

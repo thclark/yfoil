@@ -31,35 +31,39 @@ extra_javascript = [
 ]
 
 # The navigation is written out explicitly so that the ordering is a deliberate
-# reading order, not the alphabetical accident of the filesystem.
+# reading order, not the alphabetical accident of the filesystem. The file tree mirrors
+# it: each tab and section is a directory (kebab-case of its label) and each page is the
+# kebab-case of its title, so the side menu predicts the path ("User guide > Commands >
+# Analyse a single point" is docs/user-guide/commands/analyse-a-single-point.md). Moving a
+# page means moving its file, and adding a redirect from its old URL below.
 nav = [
   { "Home" = "index.md" },
   { "User guide" = [
-    "guide/index.md",
+    "user-guide/index.md",
     { "Get started" = [
-      "guide/install.md",
-      "guide/first-analysis.md",
+      "user-guide/get-started/install.md",
+      "user-guide/get-started/your-first-analysis.md",
     ] },
     { "Commands" = [
-      "guide/geometry.md",
-      "guide/analyse.md",
-      "guide/polar.md",
-      "guide/plot.md",
-      "bindings.md",
+      "user-guide/commands/geometry.md",
+      "user-guide/commands/analyse-a-single-point.md",
+      "user-guide/commands/polars.md",
+      "user-guide/commands/plotting.md",
+      "user-guide/commands/bindings.md",
     ] },
     { "Reference" = [
-      "guide/data.md",
-      "guide/validity.md",
-      "guide/aerofoil-series.md",
-      "references.md",
-      "xfoil-known-issues.md",
-      "xfoil-reference.md",
+      "user-guide/reference/the-data-model.md",
+      "user-guide/reference/solution-validity.md",
+      "user-guide/reference/aerofoil-series.md",
+      "user-guide/reference/known-xfoil-issues.md",
+      "user-guide/reference/xfoil-reference.md",
+      "user-guide/reference/bibliography.md",
     ] },
   ] },
   { "Validation" = [
-    "validation/README.md",
-    { "Series cases" = "validation/series-cases/README.md" },
-    { "Aerofoil series" = "validation/aerofoil-series/README.md" },
+    "validation/index.md",
+    { "Series cases" = "validation/series-cases.md" },
+    { "Aerofoil series" = "validation/aerofoil-series.md" },
   ] },
   # The Testing tab is hidden until its pages are presentable. The pages are still built and
   # reachable by URL, just not listed in the navigation. Uncomment to restore.
@@ -78,6 +82,25 @@ nav = [
   #   ] },
   # ] },
 ]
+
+# Redirects from the URLs pages had before the file tree was made to mirror the navigation
+# (2026-10-22), so links into the published site keep working. The Validation pages moved
+# from <name>/README.md to <name>.md, which keeps their URLs, so they need none.
+[project.plugins.redirects.redirect_maps]
+"guide/index.md" = "user-guide/index.md"
+"guide/install.md" = "user-guide/get-started/install.md"
+"guide/first-analysis.md" = "user-guide/get-started/your-first-analysis.md"
+"guide/geometry.md" = "user-guide/commands/geometry.md"
+"guide/analyse.md" = "user-guide/commands/analyse-a-single-point.md"
+"guide/polar.md" = "user-guide/commands/polars.md"
+"guide/plot.md" = "user-guide/commands/plotting.md"
+"bindings.md" = "user-guide/commands/bindings.md"
+"guide/data.md" = "user-guide/reference/the-data-model.md"
+"guide/validity.md" = "user-guide/reference/solution-validity.md"
+"guide/aerofoil-series.md" = "user-guide/reference/aerofoil-series.md"
+"references.md" = "user-guide/reference/bibliography.md"
+"xfoil-known-issues.md" = "user-guide/reference/known-xfoil-issues.md"
+"xfoil-reference.md" = "user-guide/reference/xfoil-reference.md"
 
 [project.theme]
 custom_dir = "overrides"
