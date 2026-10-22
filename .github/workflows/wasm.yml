@@ -8,8 +8,8 @@ name: WebAssembly
 #
 # Every run uploads the packages it checked as the artifact `yfoil-wasm` (the release assets:
 # yfoil-wasm-<version>-{web,nodejs}.tar.gz and SHA256SUMS) and smoke-tests that artifact as
-# downloaded. A published release, or a pushed v* tag, runs the same check from the tagged commit
-# and attaches that run's assets to the release; nothing is published to npm.
+# downloaded. The release workflow (release.yml) calls this one with the release's tag, and makes
+# the release only from the artifact a passing run produced; nothing is published to npm.
 on:
   pull_request:
     branches: [ "main" ]
@@ -25,8 +25,6 @@ on:
       - ".github/workflows/wasm.yml"
   push:
     branches: [ "main" ]
-    # path filters are not applied to tag pushes
-    tags: [ "v*" ]
     paths:
       - "src/**"
       - "bindings/wasm/**"
@@ -37,18 +35,18 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/wasm.yml"
-  release:
-    types: [ published ]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build for and attach to (empty: a -dev build)"
+        description: "Release tag to name the assets after (empty: a -dev build)"
         required: false
         default: ""
-      dry_run:
-        description: "Build, check and package, but do not upload to the release"
-        type: boolean
-        default: true
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to name the assets after; must match the crate version"
+        type: string
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -60,16 +58,9 @@ env:
 permissions:
   contents: read
 
-# a release and the push of its tag run one after the other, not side by side
-concurrency:
-  group: wasm-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   wasm:
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -97,29 +88,14 @@ jobs:
           curl -sSfL -o "/tmp/$archive" "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/$archive"
           echo "$BINARYEN_SHA256  /tmp/$archive" | sha256sum -c -
           tar -xzf "/tmp/$archive" -C ~/wasm-tools --strip-components=1 "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
-      # the release tag this run builds for, if any: the published release's, the pushed tag, or
-      # the dispatch input
-      - id: tag
-        env:
-          EVENT: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          PUSHED_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          case "$EVENT" in
-            release) tag="$RELEASE_TAG" ;;
-            push) tag="$PUSHED_TAG" ;;
-            workflow_dispatch) tag="$INPUT_TAG" ;;
-            *) tag="" ;;
-          esac
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - run: scripts/wasm.sh check
         env:
           WASM_BINDGEN: /home/runner/wasm-tools/bin/wasm-bindgen
           WASM_OPT: /home/runner/wasm-tools/bin/wasm-opt
+      # the release tag, from release.yml or the dispatch input (empty on pull requests and pushes);
       # fails if the tag's version is not the crates' version
       - env:
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: scripts/wasm.sh package ${TAG:+--tag "$TAG"}
       # the record the smoke test expects, from the native CLI that was checked against
       - run: |
@@ -137,7 +113,7 @@ jobs:
           path: target/wasm-expected/reference.json
           if-no-files-found: error
 
-  # the artifact as a reviewer or the release job downloads it: checksums, contents, and both
+  # the artifact as a reviewer or the release workflow downloads it: checksums, contents, and both
   # packages loading and reproducing the native record
   smoke:
     needs: wasm
@@ -156,30 +132,3 @@ jobs:
           name: yfoil-wasm-expected
           path: expected
       - run: node bindings/wasm/tests/smoke.mjs dist --expect expected/reference.json
-
-  release:
-    needs: [ wasm, smoke ]
-    if: needs.wasm.outputs.tag != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: yfoil-wasm
-          path: dist
-      - run: cd dist && sha256sum -c SHA256SUMS
-      - env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.wasm.outputs.tag }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: |
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "dry run: would attach to $TAG:" && ls -l dist
-          elif gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/yfoil-wasm-*.tar.gz dist/SHA256SUMS --clobber
-          else
-            # a tag pushed before its release is published: the release's own run attaches them
-            echo "no release for $TAG yet; its published event will attach the assets"
-          fi

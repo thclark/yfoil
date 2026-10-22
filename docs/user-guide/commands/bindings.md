@@ -53,10 +53,11 @@ commit it was built from. There are three ways to get one:
 - **A release.** Each GitHub release of yFoil (there are none yet) carries
   `yfoil-wasm-<version>-web.tar.gz` (an ES module for pages: `import init from
   "./yfoil_wasm.js"`), `yfoil-wasm-<version>-nodejs.tar.gz` (a CommonJS module:
-  `require("./yfoil_wasm.js")`) and `SHA256SUMS`. The `WebAssembly` workflow builds
-  and checks them from the tagged commit when the release is published, and
-  refuses a tag whose version is not the crates'. They are not on npm yet; that
-  waits for the JavaScript API to settle.
+  `require("./yfoil_wasm.js")`) and `SHA256SUMS`. Releases are made by the
+  `Release` workflow when main's version has none yet: it builds, checks and
+  smoke-tests the assets from that commit first, then creates the release
+  `v<version>` with them attached, so no release exists without them. They are
+  not on npm yet; that waits for the JavaScript API to settle.
 - **A CI artifact.** Every run of the `WebAssembly` workflow uploads the packages
   it checked as the artifact `yfoil-wasm`, the same three files, named
   `<version>-dev.<commit>` so they are never mistaken for a release (for a pull
