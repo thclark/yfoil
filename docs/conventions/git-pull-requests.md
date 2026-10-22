@@ -1,17 +1,17 @@
 # Pull requests
 
-This explains how PRs are opened, titled, versioned, and — critically — who merges them. Branch creation and upkeep is covered in [[git-branching]]; commit message form in [[git-commits-and-versioning]].
+This explains how PRs are opened, titled, versioned, and — critically — who merges them. Branch creation and upkeep is covered in [Branching](git-branching.md); commit message form in [Commits & versioning](git-commits-and-versioning.md).
 
 ## Open the PR
 
-- Base = the trunk you branched from ([[git-branching]]). Set it explicitly:
+- Base = the trunk you branched from ([Branching](git-branching.md)). Set it explicitly:
   `gh pr create --base <trunk>`.
 - If the change touches a documented pattern/convention/architecture, update the relevant  `docs/` page in the same PR; non-trivial decisions get an ADR.
 
 ## PR title
 
 The title follows conventional-commit form (`CODE: Capitalised summary`) using the
-"greatest" commit code in the PR (top-most in the [[git-commits-and-versioning]] type-code table). It matters because it is used as the squash-merge commit: it becomes the GitHub release title via `release.yml`, and `update-pull-request.yml` groups commits by code in the auto-generated PR changelog.
+"greatest" commit code in the PR (top-most in the [Commits & versioning](git-commits-and-versioning.md) type-code table). It matters because it is used as the squash-merge commit: it becomes the GitHub release title via `release.yml`, and `update-pull-request.yml` groups commits by code in the auto-generated PR changelog.
 
 ## Never merge a pull request
 
@@ -19,9 +19,10 @@ Opening a PR is the assistant's job; merging it is the human's — in every repo
 
 ## Version bumps
 
-Bump `version` in `pyproject.toml` **only on PRs whose base is `main`** — never on sub-branch PRs into a trunk like `geo` (the `semantic` check only runs on `main`-bound PRs, and trunk-PR bumps just create `pyproject.toml` conflicts). How to calculate and apply the bump is in [[git-commits-and-versioning]].
+Bump `version` in `pyproject.toml` **only on PRs whose base is `main`** — never on sub-branch PRs into a trunk like `geo` (the `semantic` check only runs on `main`-bound PRs, and trunk-PR bumps just create `pyproject.toml` conflicts). How to calculate and apply the bump is in [Commits & versioning](git-commits-and-versioning.md).
 
 ## Related notes
 
-- [[git-branching]] — bases, naming, protected branches, updating
-- [[git-commits-and-versioning]] — type codes, breaking changes, semver calculation
+- [Branching](git-branching.md) — bases, naming, protected branches, updating
+- [Commits & versioning](git-commits-and-versioning.md) — type codes, breaking changes, semver calculation
+- [GitHub issues](github-issues.md) — the issue label set and how labels are applied
