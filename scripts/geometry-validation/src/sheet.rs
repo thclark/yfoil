@@ -89,7 +89,7 @@ pub fn family_sheet(run_dir: &Path, series: &Value, n_nodes: i64, legend_columns
         .tiles((2 * rows) as u32, COLUMNS as u32)
         .row_weights(weights)
         .title(Text::plain(str_of(series, "title")))
-        .label("validation")
+        .label("engineering-validation")
         .parameter("study", "geometry-validation")
         .parameter("figure", "family-sheet")
         .parameter("series", slug)
@@ -208,30 +208,24 @@ mod tests {
     use ironlab::ir::Parameter;
     use ironlab::prelude::*;
 
-    /// Every family has its page in the documentation, named the kebab-case of its title and
-    /// linked from the section's index, and the page embeds its sheet from the directory beside
-    /// it named after it; the sheet loads and names its series
+    /// Every family's sheet is in the Aerofoil families page that shows it, in the directory beside
+    /// that page named after it, embedded by that page with the alt text the study gives it; the
+    /// sheet loads and names its series; and the naca456 page has the family's section
     #[test]
     fn documentation_holds_every_family_sheet() {
-        let docs = crate::repo_root().join(crate::DOCS_DIR);
-        let index = std::fs::read_to_string(docs.join("index.md")).unwrap();
+        let docs = crate::repo_root().join("docs");
+        let naca456 = std::fs::read_to_string(docs.join(crate::report::NACA456_PAGE)).unwrap();
         for s in crate::study::series() {
-            let kebab: String = s
-                .title
-                .to_lowercase()
-                .replace('á', "a")
-                .chars()
-                .map(|c| if c.is_alphanumeric() { c } else { '-' })
-                .collect();
-            assert_eq!(s.slug, kebab, "{}: the slug names the page", s.title);
             assert!(
-                index.contains(&format!("]({}.md)", s.slug)),
-                "{} not linked from the index",
-                s.slug
+                naca456.contains(&format!("### {} against naca456", s.title)),
+                "{}: no section on the naca456 page",
+                s.title
             );
-            let page = std::fs::read_to_string(docs.join(format!("{}.md", s.slug))).unwrap();
-            let file = format!("{0}/{0}.fig", s.slug);
-            let fig = Figure::load(docs.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
+            let page_name = crate::report::family_page(s.slug);
+            let families = docs.join(crate::report::FAMILIES_DIR);
+            let page = std::fs::read_to_string(families.join(format!("{page_name}.md"))).unwrap();
+            let file = format!("{page_name}/{}.fig", s.slug);
+            let fig = Figure::load(families.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
             let p = fig.parameters();
             assert_eq!(p.get("series"), Some(&Parameter::String(s.slug.into())), "{file}");
             assert_eq!(
@@ -249,12 +243,16 @@ mod tests {
                 Some(&Parameter::String(s.default.designation.clone())),
                 "{file}"
             );
-            assert!(fig.labels().iter().any(|l| l == "validation"), "{file}");
+            assert!(fig.labels().iter().any(|l| l == "engineering-validation"), "{file}");
             assert!(fig.validate().errors.is_empty(), "{file}");
             assert_eq!(fig.ir().axes.len(), s.panels.len(), "{file}: one panel per parameter");
             assert!(
                 page.contains(&format!("<ironlab-figure src=\"{file}\"")),
                 "{file} not embedded"
+            );
+            assert!(
+                page.contains(&crate::report::sheet_alt(&s)),
+                "{file}: the page's alt text is not the study's"
             );
         }
     }

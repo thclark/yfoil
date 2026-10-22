@@ -1,4 +1,6 @@
-//! Geometry validation study (`docs/validation/geometry-validation/`).
+//! Geometry validation study: yFoil's section generators against naca456, and every generator
+//! family drawn across its parameters (`docs/engineering-validation/generated-sections-against-naca456.md`,
+//! `docs/using-yfoil/aerofoil-families/`).
 //!
 //! Draws every generator family yFoil offers — NACA 4-digit, 4-digit modified, 5-digit,
 //! 16-series, 6-series, 6A-series and the Kármán–Trefftz analytic section — as one figure per
@@ -14,13 +16,14 @@
 //! its `generator` provenance record), `summary.json` (every section, panel and comparison
 //! number) and the `README.md` / `README.tex` index; the figures are then built from those files
 //! as ironlab figures (`sheet.rs`, `<series>.fig` and `<series>.pdf`, conventions in
-//! `docs/conventions/figures.md`). `runs/` is gitignored. With `--docs` the documentation section
-//! `docs/validation/geometry-validation/` is also written, the only place a run's products are
-//! tracked: its `index.md` (purpose, the naca456 background, the series, the selection of
-//! aerofoils, the naca456 comparison) and one page per series, `<series>.md`, with its `.fig` in
-//! `<series>/` beside it. `--render <run_dir>` redraws an existing run folder's figures from its
-//! `summary.json` and geometry files without rerunning the study (with `--docs`, it also rewrites
-//! the pages from that run).
+//! `docs/contributing/conventions/figures.md`). `runs/` is gitignored. With `--docs` the study's
+//! documentation products are also written, the only place a run's products are tracked: the
+//! page `docs/engineering-validation/generated-sections-against-naca456.md` (the naca456
+//! comparison, by family, and how the naca456 tables were produced), and each family's sheet,
+//! copied beside the hand-written page of `docs/using-yfoil/aerofoil-families/` that defines the
+//! family and embeds it (`report::family_page`). `--render <run_dir>` redraws an existing run
+//! folder's figures from its `summary.json` and geometry files without rerunning the study (with
+//! `--docs`, it also rewrites those products from that run).
 //!
 //! Usage (from the repository root):
 //!
@@ -39,9 +42,6 @@ use std::path::{Path, PathBuf};
 /// Axis extents of every panel, chord units
 pub const X_RANGE: (f64, f64) = (-0.2, 1.2);
 pub const Y_RANGE: (f64, f64) = (-0.5, 0.5);
-
-/// The documentation section `--docs` writes, from the repository root
-pub const DOCS_DIR: &str = "docs/validation/geometry-validation";
 
 /// Repository root: this crate lives at scripts/geometry-validation
 pub fn repo_root() -> PathBuf {
@@ -150,11 +150,15 @@ fn parse_args() -> Args {
     a
 }
 
-/// The tracked documentation section from a run folder whose figures are drawn
+/// The tracked documentation products from a run folder whose figures are drawn
 fn write_docs(run_dir: &Path, all: &[study::SeriesStudy], comparison: &[naca456::CaseComparison]) {
-    let dir = repo_root().join(DOCS_DIR);
-    report::write_docs(&dir, run_dir, all, comparison);
-    println!("wrote {}", dir.display());
+    let docs = repo_root().join("docs");
+    report::write_docs(&docs, run_dir, all, comparison);
+    println!(
+        "wrote {} and the family sheets under {}",
+        docs.join(report::NACA456_PAGE).display(),
+        docs.join(report::FAMILIES_DIR).display()
+    );
 }
 
 fn main() {

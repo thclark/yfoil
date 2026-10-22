@@ -1,5 +1,6 @@
 //! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/<Study::page>`, its figures in `docs/<Study::figures>`).
+//! documentation page (`docs/<Study::page>`, its figures in `docs/<Study::figures>`). Every heading
+//! the page writes is unique across the site: the shared ones name their study ([`Study`]).
 
 use crate::polars::PolarRun;
 use crate::Study;
@@ -97,23 +98,24 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           point with the studies' whole-run floor comparison (`scripts/study-support/records.rs`: iteration \
           count, LVCONV, IST and ITRAN exact, every transient and the converged point within \
           `max(tol · scale, FLOOR_FACTOR · floor)` with *floor* the reference's own 1-ULP spread of the value, \
-          *divergent* — `docs/conventions/terminology.md` — where the reference itself moves by more than \
+          *divergent* — [terminology]({up}contributing/conventions/terminology.md) — where the reference itself moves by more than \
           `DIVERGENCE_FLOOR`), an inviscid point on CL, CM, CDp and every node's γ, q and Cp at `TOL_SOLVER`. \
           Every member is run with its five seeded 1-ULP twins (`twins = true`), so the table also says at \
           which points XFOIL was itself ill-conditioned. The tests check the same behaviours minimally, one \
-          step at a time (`docs/conventions/testing.md`); this page demonstrates them.\n\n",
-        study.group
+          step at a time ([the test suite]({up}contributing/the-test-suite.md)); this page demonstrates them.\n\n",
+        study.group,
+        up = study.up()
     );
     m += &"The study follows each run past convergence: through stall, and into the region where the \
           reference goes non-finite. The reference may record fewer points than the script — its sequence \
           halted, or the fixture driver's watchdog ended a run that had gone non-finite and hung in XFOIL's \
-          plot-label loop ([known issues §4]({up}user-guide/reference/known-xfoil-issues.md)); yFoil's sweep continues to its own \
+          plot-label loop ([known issues §4]({up}fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md)); yFoil's sweep continues to its own \
           halt either way. A point is *followed to the end* when every one of its iterations agrees with the \
           reference's within tolerance (or parts from it only where one of the reference's own 1-ULP twins had \
           already parted earlier in the sweep); *parts at* is the first recorded point (leg, α) at which yFoil's \
           iterations part from the reference's. Whether XFOIL is ill-conditioned there is measured on XFOIL \
           alone, by its twins — five reruns of the reference with every panel coordinate jogged by −1, 0 or +1 \
-          ULP (`docs/conventions/terminology.md`): where the largest spread of a value over the twins exceeds \
+          ULP ([terminology]({up}contributing/conventions/terminology.md)): where the largest spread of a value over the twins exceeds \
           `DIVERGENCE_FLOOR`, a parting there is the expected consequence of an **ill-conditioned** solution; \
           where the twins agree, a parting is a \
           *mismatch*, settled by the one-step replay of CLAUDE.md Rule 3 — seed yFoil with XFOIL's exact state \
@@ -124,9 +126,9 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           steps. Why a sweep parts where the reference is stable against its twins — MRCHDU's station Newton at \
           a transition station amplifying its seed a thousandfold, which both codes follow iterate for iterate \
           from the same state — is recorded with its measurements in \
-          [known issues §7.9]({up}user-guide/reference/known-xfoil-issues.md).\n\n"
+          [known issues §7.9]({up}fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md).\n\n"
         .replace("{up}", &study.up());
-    m += "One figure per case: CL and CD against α (top), the last iteration's RMSBL and the iterations taken \
+    m += &"One figure per case: CL and CD against α (top), the last iteration's RMSBL and the iterations taken \
           (second row), and the transition location x/c on the upper and lower side (third row, from XOCTR and \
           yFoil's transition point; an open triangle marks a point whose final stagnation or transition station — \
           IST, ITRAN — differs between the codes), and the position of transition within its station interval on \
@@ -150,21 +152,25 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           in any iteration; where the plotted value is itself NaN and cannot be placed, an orange plus at the top \
           of the panel marks its α. A black outer diamond marks a point within which yFoil parts from the \
           reference where XFOIL is **ill-conditioned** (one of XFOIL's own twins parts there too: a divergent \
-          comparison, `docs/conventions/terminology.md`; the one-step replay from XFOIL's state at that \
+          comparison, [terminology]({up}contributing/conventions/terminology.md); the one-step replay from XFOIL's state at that \
           iteration is the evidence that the step is faithful). A filled grey diamond marks a point within \
           which yFoil parts where XFOIL is **well-conditioned** (its twins agree): a *mismatch*, to be settled \
           by the same replay. Only the point at which a leg first parts carries a diamond; the points after it \
           in the same leg carry none, because their comparison is informational. Where the red line stops short of the blue one the reference's sequence halted or hung \
-          there.\n\n";
+          there.\n\n"
+        .replace("{up}", &study.up());
     if figure {
-        let mut last_family = String::new();
+        m += &format!("## {}\n\n", study.polars_heading);
+        let mut headings: Vec<String> = vec![];
         for r in s["polars"].as_array().unwrap() {
-            let family = r["section"].as_str().unwrap().replace(" (sharp TE)", "");
-            if family != last_family {
-                m += &format!("### {family}\n\n");
-                last_family = family;
-            }
             let name = r["name"].as_str().unwrap();
+            let heading = (study.case_heading)(name, r["description"].as_str().unwrap_or(""));
+            assert!(
+                !headings.contains(&heading),
+                "{name}: heading {heading:?} is not unique on the page"
+            );
+            m += &format!("### {heading}\n\n");
+            headings.push(heading);
             m += &format!(
                 "**`{name}`** — {}\n\n{}\n\n",
                 r["description"].as_str().unwrap_or(""),
@@ -178,13 +184,14 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
             );
         }
     }
+    m += &format!("## {}\n\n", study.summary_heading);
     m += &table_md(s);
     if figure {
         m += &transition_md(study, s);
     }
     let st = state_table_md(s);
     if !st.is_empty() {
-        m += "\n### The final state, point by point, into each departure\n\n";
+        m += &format!("\n## {}\n\n", study.state_heading);
         m += "For the cases that keep the reference's per-call state records: every recorded point at which yFoil \
               parts (the first not followed to the end in its leg) and the points of the leg before it, with the \
               worst array of yFoil's final state against the reference's — its worst entry (node number for a \
@@ -448,7 +455,7 @@ fn parted_transition_rows(s: &Value) -> Vec<Value> {
 }
 
 fn transition_md(study: &Study, s: &Value) -> String {
-    let mut m = String::from("\n### Where transition sits between the stations\n\n");
+    let mut m = format!("\n## {}\n\n", study.transition_heading);
     m += "XFOIL places transition at an arc length XSSITR inside the interval between two consecutive BL \
           stations, ITRAN − 1 and ITRAN (the first turbulent station), and TRDIF treats the transition interval \
           with the two states weighted by where XSSITR falls in it. The figure plots, for every recorded point of \

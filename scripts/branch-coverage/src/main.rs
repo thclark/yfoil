@@ -37,13 +37,17 @@
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`; the
 //! figures are drawn from `summary.json` by `plot.py` through `scripts/figures/render.sh`
-//! (matplotlib, presentation only). With `--docs` the Markdown page and the SVG figures are also
-//! written to `docs/testing/branch-coverage/`, the only tracked products.
+//! (matplotlib, presentation only). With `--docs` the two Markdown pages and the SVG figures are
+//! also written to `docs/fidelity-to-xfoil/branch-coverage/` (`the-minimal-case-set.md`, its
+//! figures in `the-minimal-case-set/`, and `non-finite-probes.md`), the only tracked products.
+//! `--render <run_dir> --docs` rewrites those pages from an existing run folder's `summary.json`
+//! and figures, without measuring or comparing anything.
 //!
 //! Usage (from the repository root):
 //!
 //! ```text
 //! cargo run --release -p branch-coverage -- [--docs] [--no-measure]
+//! cargo run --release -p branch-coverage -- --render scripts/branch-coverage/runs/<UTC> --docs
 //! ```
 
 mod cover;
@@ -293,6 +297,22 @@ fn main() {
     let docs = args.iter().any(|a| a == "--docs");
     let measure = !args.iter().any(|a| a == "--no-measure");
     let root = repo_root();
+    let docs_dir = root.join("docs/fidelity-to-xfoil/branch-coverage");
+
+    if let Some(i) = args.iter().position(|a| a == "--render") {
+        let run_dir = args.get(i + 1).map(PathBuf::from).expect("--render <run_dir>");
+        let summary: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("summary.json")).expect("summary.json in the run folder"),
+        )
+        .expect("parse summary.json");
+        report::write_index(&run_dir, &summary);
+        if docs {
+            let drawn = run_dir.join("branch-map.svg").exists();
+            report::write_docs(&docs_dir, &run_dir, &summary, drawn);
+            println!("docs written to {}", docs_dir.display());
+        }
+        return;
+    }
 
     // 1. the per-case measurement
     if measure {
@@ -472,13 +492,12 @@ fn main() {
         serde_json::to_string_pretty(&summary).unwrap(),
     )
     .unwrap();
-    report::write_index(&run_dir, &summary, &universe, &candidates);
+    report::write_index(&run_dir, &summary);
     report::write_index_tex(&run_dir, &summary);
     let drawn = render(&run_dir);
     if docs {
-        let docs_dir = root.join("docs/testing/branch-coverage");
         std::fs::create_dir_all(&docs_dir).unwrap();
-        report::write_docs(&docs_dir, &run_dir, &summary, &universe, &candidates, drawn);
+        report::write_docs(&docs_dir, &run_dir, &summary, drawn);
         println!("docs written to {}", docs_dir.display());
     }
     println!("run folder: {}", run_dir.display());

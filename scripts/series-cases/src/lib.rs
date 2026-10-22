@@ -1,4 +1,4 @@
-//! Series cases (`docs/validation/series-cases.md`).
+//! Series cases (`docs/engineering-validation/agreement-with-xfoil-under-normal-conditions.md`).
 //!
 //! Runs of the aerofoil series and flow conditions of interest, shown to an external reader:
 //! full polars (XFOIL's polar procedure, 0 → +30°, `INIT`, 0 → −30° by 1°), inviscid alpha sweeps
@@ -11,15 +11,17 @@
 //! The cases are `group = "series"` in `xtask/fixtures-config/cases.toml`; their
 //! fixtures come from `cargo xtask fixtures --group series`, whose watchdog ends a
 //! reference run that has gone non-finite and hung in XFOIL's plot-label loop
-//! (docs/user-guide/reference/known-xfoil-issues.md §4) and keeps what it wrote.
+//! (docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md §4) and keeps what it wrote.
 //!
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every point of every polar, both codes, with the outcome of each comparison),
 //! `README.md` / `README.tex`, and the figures, drawn from `summary.json` in Rust ([`figures`]) as
 //! ironlab figure files (`polars-<case>.fig`, `transition-position.fig`, each with its `.pdf` for
-//! `README.tex`; `docs/conventions/figures.md`). With `--docs` the Markdown page and the `.fig`
-//! files are also written to `docs/validation/series-cases.md` and `docs/validation/series-cases/`
-//! (the known-issues cases' to `docs/testing/known-issues/`). `--render <run_dir>` redraws an existing run folder's figures
+//! `README.tex`; `docs/contributing/conventions/figures.md`). With `--docs` the Markdown page and the
+//! `.fig` files are also written to the [`Study`]'s page and the directory beside it
+//! (`docs/engineering-validation/agreement-with-xfoil-under-normal-conditions.md` for the series
+//! cases, `docs/fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md` for the
+//! known-issues cases). `--render <run_dir>` redraws an existing run folder's figures
 //! and rewrites its index (and with `--docs` the page) without rerunning the study.
 //!
 //! The library runs any [`Study`]: the series cases (`cargo run --release -p series-cases -- [--docs]`)
@@ -266,10 +268,10 @@ pub fn descriptions(root: &Path) -> std::collections::BTreeMap<String, String> {
 pub struct Study {
     /// the crate (`scripts/<slug>/`)
     pub slug: &'static str,
-    /// the page, relative to `docs/`, in the section it belongs to: `validation` (the engineering
-    /// assessment) or `testing` (consistency with XFOIL, for developers; `docs/conventions/testing.md`).
-    /// The file tree mirrors the site navigation (`zensical.toml`), so a page in the navigation is
-    /// the kebab-case of its title
+    /// the page, relative to `docs/`, in the tab it belongs to: `engineering-validation` (for
+    /// aerodynamicists: agreement under normal conditions) or `fidelity-to-xfoil` (for developers:
+    /// the known issues). The file tree mirrors the site navigation (`zensical.toml`), so a page in
+    /// the navigation is the kebab-case of its title
     pub page: &'static str,
     /// the directory the page's figures are copied into, relative to `docs/`: the page's own
     /// directory, or one beside the page named after it
@@ -278,6 +280,17 @@ pub struct Study {
     pub group: &'static str,
     /// the page title
     pub title: &'static str,
+    /// the heading over the per-case figures. Every heading is unique across the site, so the
+    /// headings below name their study
+    pub polars_heading: &'static str,
+    /// the heading over the table of every run
+    pub summary_heading: &'static str,
+    /// the heading over the transition-position figure
+    pub transition_heading: &'static str,
+    /// the heading over the final-state table
+    pub state_heading: &'static str,
+    /// a case's heading, from its name and its `cases.toml` description; unique on the page
+    pub case_heading: fn(&str, &str) -> String,
     /// the first paragraph of the page: what the study is for (Markdown)
     pub purpose: &'static str,
     /// the same for `README.tex`
@@ -289,7 +302,7 @@ impl Study {
         repo_root().join("scripts").join(self.slug).join("runs")
     }
 
-    /// The docs section the page is in (`validation` or `testing`), also a figure label
+    /// The docs tab the page is in (`engineering-validation` or `fidelity-to-xfoil`), also a figure label
     pub fn section(&self) -> &'static str {
         self.page.split('/').next().unwrap()
     }
@@ -309,29 +322,63 @@ impl Study {
     }
 }
 
-/// The series cases (`docs/validation/series-cases.md`).
+/// A series case's heading: its description up to the first colon, which names the section and
+/// the regime ("NACA 4412, Re 3e6"), without a parenthesised note of the branch-coverage case it
+/// corresponds to
+fn heading_from_description(name: &str, description: &str) -> String {
+    let d = description.split(':').next().unwrap_or("");
+    let d = d.split(" (cover").next().unwrap_or("");
+    let d = d.split(" (non-finite probe").next().unwrap_or("").trim();
+    if d.is_empty() {
+        format!("`{name}`")
+    } else {
+        d.to_string()
+    }
+}
+
+/// A known-issues case's heading: its name, since its description leads with the issue it shows
+fn heading_from_name(name: &str, _description: &str) -> String {
+    format!("`{name}`")
+}
+
+/// The series cases (`docs/engineering-validation/agreement-with-xfoil-under-normal-conditions.md`).
 pub const SERIES: Study = Study {
     slug: "series-cases",
-    page: "validation/series-cases.md",
-    figures: "validation/series-cases",
+    page: "engineering-validation/agreement-with-xfoil-under-normal-conditions.md",
+    figures: "engineering-validation/agreement-with-xfoil-under-normal-conditions",
     group: "series",
-    title: "Series cases",
+    title: "Agreement with XFOIL under normal conditions",
+    polars_heading: "Polars by aerofoil and regime",
+    summary_heading: "Every series case at a glance",
+    transition_heading: "Transition locations",
+    state_heading: "The final state, point by point, into each departure under normal conditions",
+    case_heading: heading_from_description,
     purpose: "Runs of the aerofoil series and flow regimes of interest under normal conditions, shown to an \
               external reader: that yFoil follows the reference through each of them. A member is here \
               because it corresponds, more loosely, to a member of the branch-coverage cases, or because it \
               shows a generator family or a physical regime that yFoil can be used for; a run whose purpose is \
-              to show one of XFOIL's known issues belongs to the known-issues cases instead.",
+              to show one of XFOIL's known issues belongs to the \
+              [runs that show the issues](../fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md) \
+              instead. This page compares whole sweeps as an engineer would read them; how yFoil is held to \
+              XFOIL step by step, which is what the tests check, is \
+              [execution equivalence](../fidelity-to-xfoil/execution-equivalence/index.md).",
     purpose_tex: "Runs of the aerofoil series and flow regimes of interest under normal conditions: that yFoil follows the reference through each of them.",
 };
 
-/// The known-issues cases (`docs/testing/known-issues/README.md`).
+/// The known-issues cases (`docs/fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md`).
 pub const KNOWN_ISSUES: Study = Study {
     slug: "known-issues",
-    page: "testing/known-issues/README.md",
-    figures: "testing/known-issues",
+    page: "fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md",
+    figures: "fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues",
     group: "known-issues",
-    title: "Known-issues cases",
-    purpose: "Runs that show one of XFOIL's known issues (`docs/user-guide/reference/known-xfoil-issues.md`) arising, and whether \
+    title: "Runs that show the issues",
+    polars_heading: "The runs, issue by issue",
+    summary_heading: "Every known-issues run at a glance",
+    transition_heading: "Transition locations in the known-issues runs",
+    state_heading: "The final state, point by point, into each departure of a known-issues run",
+    case_heading: heading_from_name,
+    purpose:
+        "Runs that show one of XFOIL's known issues ([the issue register](the-issue-register.md)) arising, and whether \
               yFoil does the same: the reference hanging in its plot-label loop, the Kármán–Tsien pole, and the \
               solution's and convergence's sensitivity to the panelling (a case run at N = 60, 160 and 240 \
               panels, each with the iteration limit it was studied with). Each case's description names the \
@@ -340,7 +387,7 @@ pub const KNOWN_ISSUES: Study = Study {
     purpose_tex: "Runs that show one of XFOIL's known issues arising, and whether yFoil does the same.",
 };
 
-/// Run a study over its cases' fixtures; `--docs` also writes its page under `docs/<section>/`.
+/// Run a study over its cases' fixtures; `--docs` also writes its page, `docs/<Study::page>`.
 pub fn run(study: &Study) {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let docs = args.iter().any(|a| a == "--docs");

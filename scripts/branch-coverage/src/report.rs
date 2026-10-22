@@ -1,5 +1,6 @@
 //! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/testing/branch-coverage/README.md`).
+//! documentation pages (`docs/fidelity-to-xfoil/branch-coverage/the-minimal-case-set.md` and
+//! `non-finite-probes.md` beside it).
 
 use crate::drive::CaseComparison;
 use crate::utilities::records::Outcome;
@@ -489,7 +490,7 @@ is stated explicitly, from the execution count of the first line of its body, in
 analysis path* below. A `DO` line that is an iteration budget (a Newton loop that could be exhausted: \
 SPECCL's twenty attempts, SPECAL's CL(M) loop) is different: its second arm is the exhausted budget, a real \
 outcome, so it carries a reach note and both arms are counted like any other conditional.\n\n\
-The same classes, with every annotated edge and its reason, are listed in [coverage.md](../coverage.md); \
+The same classes, with every annotated edge and its reason, are listed in [unreachable and open branches](unreachable-and-open-branches.md); \
 that page is the union over every tracked case, this one the minimal set.\n";
 
 fn verdict_word(v: &str) -> &str {
@@ -768,7 +769,14 @@ fn excluded_md(s: &Value) -> String {
     t
 }
 
+/// The run folder's `README.md`: both pages' bodies, one after the other
 fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
+    finite_md(s, figures, figure_prefix) + &nonfinite_md(s)
+}
+
+/// The minimal finite set: which branches are counted, the set, its figures and its whole-run
+/// comparison, and the branches no set takes
+fn finite_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
     let u = &s["universe"];
     let mut m = String::new();
     m += "## Which branches are counted\n\n";
@@ -776,12 +784,12 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
           defines them, and every count on the page is out of this total.\n\n";
     m += &format!(
         "The translated set is the {} subroutines of `xtask/fixtures-config/coverage.toml`, measured by \
-         gcov on the pristine double-precision reference ([coverage.md](../coverage.md)). ",
+         gcov on the pristine double-precision reference ([branches the reference takes](branches-the-reference-takes.md)). ",
         s["universe"]["subroutines_translated_set"]
     );
     m += "The *analysis path* is the translated set without the panelling generators and their helpers \
           (`naca.f`, `xgeom.f`, `spline.f`, and `NACA`/`PANGEN` in `xfoil.f`), which the `pangen_*` cases test \
-          bitwise ([geometry](../geometry/README.md)). A branch is one outgoing edge of a conditional as \
+          bitwise ([XFOIL's own geometry routines](../subroutine-equivalence/xfoils-own-geometry-routines.md)). A branch is one outgoing edge of a conditional as \
           gfortran emitted it; the counts below are edges.\n\n";
     m += &status_table_md(s);
     m += "\n";
@@ -791,7 +799,7 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
          candidates for the finite set. A case whose reference prints `NaN` is not a candidate: a non-finite \
          trajectory cannot be compared as a whole run (NaN comparisons and `MIN`/`MAX` are where two \
          correct codes legitimately differ), so the branches only such a run reaches are tested as events \
-         instead.\n\n",
+         instead ([non-finite probes](non-finite-probes.md)).\n\n",
         u["candidates"], u["finite_candidates"]
     );
     m += "## The minimal finite set\n\n";
@@ -832,30 +840,11 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
           only as sharp as the reference itself. † inviscid case: the per-node |ΔGAM| maximum (RMSBL does not \
           exist).\n\n";
     m += &comparison_table_md(s);
-    m += "\n## Whole-run comparison of the non-finite set\n\n";
-    m += "This is a measurement, not a claim — the reference cannot reproduce itself on these runs — of how \
-          far yFoil follows each one. The comparison above is applied call by call: *parts at* is the first \
-          iteration at which the runs were allowed to part (the reference's own 1-ULP spread exceeds \
-          `DIVERGENCE_FLOOR` there and the values differ) or, for a mismatch, the iteration after the last one \
-          compared; *compared* counts the iterations matched before that. The NaN count is the number of \
-          `NaN` tokens in the reference's own output for the run.\n\n";
-    m += &nonfinite_table_md(s);
     m += "\n## Full polars\n\nFull ±30° polars of the aerofoil series and regimes of interest are the \
-          [series-cases](../../validation/series-cases.md) validation study, and the runs that show \
-          XFOIL's known issues the [known-issues](../known-issues/README.md) study. Those sweeps are not \
+          [agreement with XFOIL under normal conditions](../../engineering-validation/agreement-with-xfoil-under-normal-conditions.md), \
+          and the runs that show XFOIL's known issues are \
+          [runs that show the issues](../xfoils-known-issues/runs-that-show-the-issues.md). Those sweeps are not \
           candidates for the finite set, which is a minimal set of single operating points.\n";
-    m += "\n## Branches taken only by the non-finite set\n\n";
-    let nonfinite = branch_list_md(s, "nonfinite");
-    if nonfinite.is_empty() {
-        m += "None.\n";
-    } else {
-        m += "The non-finite set takes these branches and the finite set does not. The last column names the \
-              test that replays each one: as an event, seeding yFoil with XFOIL's state dumped entering the \
-              SETBL call at which `events.dat` records the event and requiring the same event and XFOIL's \
-              state after it, or, for TRCHEK2's `AX ≤ 0` exit, each TRCHEK2 call the reference recorded \
-              taking it.\n\n";
-        m += &nonfinite;
-    }
     m += "\n## Branches taken only in pathological cases\n\n";
     let pathological = branch_list_md(s, "pathological");
     m += &if u["pathological_measured"].as_u64().unwrap_or(0) == 0 {
@@ -876,14 +865,40 @@ fn body_md(s: &Value, figures: bool, figure_prefix: &str) -> String {
               is the input the code reading says would reach each one.\n\n";
         m += &open;
     }
+    m
+}
+
+/// The non-finite probes: the set, how far yFoil follows each run, and the branches only they take
+fn nonfinite_md(s: &Value) -> String {
+    let mut m = String::new();
     m += "\n## The non-finite set\n\n";
     m += "The tracked candidates whose reference run printed a non-finite value, and so are not candidates for \
           the finite set.\n\n";
     m += &excluded_md(s);
+    m += "\n## Whole-run comparison of the non-finite set\n\n";
+    m += "This is a measurement, not a claim — the reference cannot reproduce itself on these runs — of how \
+          far yFoil follows each one. The comparison above is applied call by call: *parts at* is the first \
+          iteration at which the runs were allowed to part (the reference's own 1-ULP spread exceeds \
+          `DIVERGENCE_FLOOR` there and the values differ) or, for a mismatch, the iteration after the last one \
+          compared; *compared* counts the iterations matched before that. The NaN count is the number of \
+          `NaN` tokens in the reference's own output for the run.\n\n";
+    m += &nonfinite_table_md(s);
+    m += "\n## Branches taken only by the non-finite set\n\n";
+    let nonfinite = branch_list_md(s, "nonfinite");
+    if nonfinite.is_empty() {
+        m += "None.\n";
+    } else {
+        m += "The non-finite set takes these branches and the finite set does not. The last column names the \
+              test that replays each one: as an event, seeding yFoil with XFOIL's state dumped entering the \
+              SETBL call at which `events.dat` records the event and requiring the same event and XFOIL's \
+              state after it, or, for TRCHEK2's `AX ≤ 0` exit, each TRCHEK2 call the reference recorded \
+              taking it.\n\n";
+        m += &nonfinite;
+    }
     m
 }
 
-pub fn write_index(run_dir: &Path, s: &Value, _universe: &Universe, _candidates: &[Candidate]) {
+pub fn write_index(run_dir: &Path, s: &Value) {
     let meta: Value = serde_json::from_str(&fs::read_to_string(run_dir.join("metadata.json")).unwrap()).unwrap();
     let mut m = String::from("# Branch-coverage study\n\n");
     m += &format!(
@@ -1077,11 +1092,9 @@ pub fn write_index_tex(run_dir: &Path, s: &Value) {
     w(&mut f, "\\begin{figure}[h]\\centering\\includegraphics{case-matrix.pdf}\\caption{Fraction of each subroutine's branches taken by each case of the set; a dot marks a subroutine in which the case takes a branch no other finite candidate takes; the columns on the right count every branch of the subroutine, the reachable ones (not annotated unreachable, not a never-taken DO-line edge) and those taken on any measured run, the non-finite probes included.}\\end{figure}");
 }
 
-pub fn write_docs(docs: &Path, run_dir: &Path, s: &Value, universe: &Universe, candidates: &[Candidate], drawn: bool) {
-    let _ = (universe, candidates);
+pub fn write_docs(docs: &Path, run_dir: &Path, s: &Value, drawn: bool) {
     let meta: Value = serde_json::from_str(&fs::read_to_string(run_dir.join("metadata.json")).unwrap()).unwrap();
-    let mut m = String::from("# Branch-coverage study: the minimal case sets\n\n");
-    m += &format!(
+    let generated = format!(
         "Generated by `cargo run --release -p branch-coverage -- --docs` on {} (git {}{}, host {}). Do not edit; \
          regenerate. The run folder (`scripts/branch-coverage/runs/`, gitignored) holds `summary.json` with every \
          number on this page and `README.tex` with the same tables for the paper.\n\n",
@@ -1094,18 +1107,36 @@ pub fn write_docs(docs: &Path, run_dir: &Path, s: &Value, universe: &Universe, c
         },
         meta["host"].as_str().unwrap_or("")
     );
+    let mut m = String::from("# The minimal case set\n\n");
+    m += &generated;
     m += "**Question.** CLAUDE.md Rule 6: \"numerically exact\" is claimable only over branches that have been \
-          exercised. [coverage.md](../coverage.md) measures the union over every tracked case; this page asks \
-          for the *minimum* set of cases that takes every reachable branch of the analysis path, and compares every \
-          case of that set, run as a whole, with its instrumented reference — so that the coverage claim and the \
-          equivalence claim are made over the same runs. This is a study: the tests cover each branch with a \
-          single step whose route yFoil is observed to follow ([branch-tests.md](../branch-tests.md), \
-          `docs/conventions/testing.md`), and this page adds no evidence they rely on.\n\n";
-    m += &body_md(s, drawn, "");
-    fs::write(docs.join("README.md"), m).unwrap();
+          exercised. [Branches the reference takes](branches-the-reference-takes.md) measures the union over every \
+          tracked case; this page asks for the *minimum* set of cases that takes every reachable branch of the \
+          analysis path, and compares every case of that set, run as a whole, with its instrumented reference — so \
+          that the coverage claim and the equivalence claim are made over the same runs. The cases whose reference \
+          goes non-finite cannot be compared as whole runs, and are on their own page, \
+          [non-finite probes](non-finite-probes.md). This is a study: the tests cover each branch with a single \
+          step whose route yFoil is observed to follow ([which test covers each branch](which-test-covers-each-branch.md)), \
+          and this page adds no evidence they rely on.\n\n";
+    m += &finite_md(s, drawn, "the-minimal-case-set/");
+    fs::write(docs.join("the-minimal-case-set.md"), m).unwrap();
+    let figures = docs.join("the-minimal-case-set");
+    fs::create_dir_all(&figures).unwrap();
     for name in ["branch-map.svg", "case-matrix.svg"] {
         if run_dir.join(name).exists() {
-            fs::copy(run_dir.join(name), docs.join(name)).unwrap();
+            fs::copy(run_dir.join(name), figures.join(name)).unwrap();
         }
     }
+
+    let mut m = String::from("# Non-finite probes\n\n");
+    m += &generated;
+    m += "Some branches of the analysis path are reached only on runs whose reference prints a non-finite value: \
+          a station Newton with a NaN residual, a fallback taken because a test on NaN is false. Such a run cannot \
+          be compared as a whole — the reference cannot reproduce itself on it, and NaN comparisons and `MIN`/`MAX` \
+          are where two correct codes legitimately differ — so it is not a candidate for \
+          [the minimal case set](the-minimal-case-set.md). Each branch only these runs take is tested instead as an \
+          event, replayed from XFOIL's state at that call (`tests/execution/events.rs`). This page lists the \
+          probes, measures how far yFoil follows each run anyway, and names the test that replays each branch.\n";
+    m += &nonfinite_md(s);
+    fs::write(docs.join("non-finite-probes.md"), m).unwrap();
 }
