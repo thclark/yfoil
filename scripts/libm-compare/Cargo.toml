@@ -1,0 +1,30 @@
+[package]
+name = "libm-compare"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "Bit-for-bit comparison of pure-Rust maths crates against cr-libm's CORE-MATH, the gate for replacing the C"
+
+# Outside the yFoil workspace (root Cargo.toml `exclude`), so the candidate crates stay out of
+# yFoil's lock file and the harness builds for targets without a C compiler (--no-default-features)
+[workspace]
+
+[features]
+default = ["c-reference"]
+# Compare against cr-libm (the C). Without it the harness checks digests recorded by a run with it.
+c-reference = ["dep:cr-libm"]
+# metallic's path for an x86 CPU without FMA (it otherwise dispatches to hardware FMA at run time),
+# to see on any host whether its results depend on the target
+metallic-no-fma = ["metallic/_no_fma"]
+
+[dependencies]
+cr-libm = { path = "../../cr-libm", optional = true }
+pxfm = "=0.1.30"
+metallic = "=0.3.1"
+libm = "=0.2.16"
+# compiler-builtins' unreleased libm, which has CORE-MATH's hypot (0.2.16 has only cbrt)
+libm-main = { package = "libm", git = "https://github.com/rust-lang/compiler-builtins", rev = "aeab328368d6ed8dc6acba47b7db6ad08be953d2" }
+
+[profile.release]
+debug = "line-tables-only"
