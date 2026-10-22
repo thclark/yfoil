@@ -478,7 +478,7 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
 - The docs site's file tree mirrors its navigation (`zensical.toml`): each tab and section is a directory
   with an `index.md`, and each page is the kebab-case of its title
   (`docs/user-guide/commands/analyse-a-single-point.md`). A page's own assets go in a directory beside it
-  named after it (`docs/validation/series-cases.md` + `docs/validation/series-cases/*.fig`). Moving or retitling a page moves its file and adds a redirect from the old URL in `zensical.toml`.
+  named after it (`docs/validation/series-cases.md` + `docs/validation/series-cases/*.fig`). Moving or retitling a page moves its file.
 - Naming: `docs/conventions/naming.md` (the rules) and `docs/user-guide/reference/xfoil-reference.md` (the
   XFOIL → yFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
 
