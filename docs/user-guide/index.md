@@ -6,9 +6,9 @@ icon: lucide/book-open
 
 ## Start here
 
-[Install yFoil](install.md), then [run your first analysis](first-analysis.md).
+[Install yFoil](get-started/install.md), then [run your first analysis](get-started/your-first-analysis.md).
 Ten minutes, and you will have a converged viscous solution and a plot of it, like
-this comparison of two polars drawn with [`yfoil plot`](plot.md) as an
+this comparison of two polars drawn with [`yfoil plot`](commands/plotting.md) as an
 [ironlab](https://github.com/thclark/ironlab) figure (pan, zoom, or click the key to hide a curve):
 
 <ironlab-figure src="figures/intro.fig" format="fig" name="intro" alt="NACA 0012 and NACA 4412 polars at Re 1e6, alpha -15 to 15 degrees: CL against alpha, CL against CD, CM against alpha and CD against alpha">NACA 0012 and NACA 4412 polars at Re 1e6, alpha -15 to 15 degrees: CL against alpha, CL against CD, CM against alpha and CD against alpha</ironlab-figure>
@@ -31,17 +31,17 @@ graph LR
 
 | Command | What it does |
 | --- | --- |
-| [`yfoil geometry`](geometry.md) | Generate, convert, repanel and inspect aerofoil geometry |
-| [`yfoil analyse`](analyse.md) | Solve a single operating point (fixed α or fixed \(C_L\)) |
-| [`yfoil polar`](polar.md) | Sweep α as a state machine, exactly as XFOIL's `ASEQ` does |
-| [`yfoil plot`](plot.md) | Draw polars, \(C_p\)/\(U_e\) distributions and the foil itself as ironlab figures |
+| [`yfoil geometry`](commands/geometry.md) | Generate, convert, repanel and inspect aerofoil geometry |
+| [`yfoil analyse`](commands/analyse-a-single-point.md) | Solve a single operating point (fixed α or fixed \(C_L\)) |
+| [`yfoil polar`](commands/polars.md) | Sweep α as a state machine, exactly as XFOIL's `ASEQ` does |
+| [`yfoil plot`](commands/plotting.md) | Draw polars, \(C_p\)/\(U_e\) distributions and the foil itself as ironlab figures |
 
 Every command that reads a foil takes **JSON geometry**. Use
-[`yfoil geometry convert`](geometry.md#convert) to bring in a `.dat` file.
+[`yfoil geometry convert`](commands/geometry.md#convert) to bring in a `.dat` file.
 
-[Bindings](../bindings.md) covers calling yFoil from other languages, and
-the [data model](data.md) documents the JSON that comes out.
-[Solution validity](validity.md) explains why a point may come back with a status and no numbers,
+[Bindings](commands/bindings.md) covers calling yFoil from other languages, and
+the [data model](reference/the-data-model.md) documents the JSON that comes out.
+[Solution validity](reference/solution-validity.md) explains why a point may come back with a status and no numbers,
 and what each reason code means.
 
 ## Scope
@@ -52,7 +52,7 @@ design, interactive mode, multi-element sections and flap hinge moments are out
 of scope.
 
 Everything about how closely it reproduces XFOIL, and how that is measured, is
-in [validation](../validation/README.md).
+in [validation](../validation/index.md).
 
 ## Open source
 

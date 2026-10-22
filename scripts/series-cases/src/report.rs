@@ -1,5 +1,5 @@
 //! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/<section>/<study>/README.md`).
+//! documentation page (`docs/<Study::page>`, its figures in `docs/<Study::figures>`).
 
 use crate::polars::PolarRun;
 use crate::Study;
@@ -104,10 +104,10 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           step at a time (`docs/conventions/testing.md`); this page demonstrates them.\n\n",
         study.group
     );
-    m += "The study follows each run past convergence: through stall, and into the region where the \
+    m += &"The study follows each run past convergence: through stall, and into the region where the \
           reference goes non-finite. The reference may record fewer points than the script — its sequence \
           halted, or the fixture driver's watchdog ended a run that had gone non-finite and hung in XFOIL's \
-          plot-label loop ([known issues §4](../../xfoil-known-issues.md)); yFoil's sweep continues to its own \
+          plot-label loop ([known issues §4]({up}user-guide/reference/known-xfoil-issues.md)); yFoil's sweep continues to its own \
           halt either way. A point is *followed to the end* when every one of its iterations agrees with the \
           reference's within tolerance (or parts from it only where one of the reference's own 1-ULP twins had \
           already parted earlier in the sweep); *parts at* is the first recorded point (leg, α) at which yFoil's \
@@ -124,7 +124,8 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           steps. Why a sweep parts where the reference is stable against its twins — MRCHDU's station Newton at \
           a transition station amplifying its seed a thousandfold, which both codes follow iterate for iterate \
           from the same state — is recorded with its measurements in \
-          [known issues §7.9](../../xfoil-known-issues.md).\n\n";
+          [known issues §7.9]({up}user-guide/reference/known-xfoil-issues.md).\n\n"
+        .replace("{up}", &study.up());
     m += "One figure per case: CL and CD against α (top), the last iteration's RMSBL and the iterations taken \
           (second row), and the transition location x/c on the upper and lower side (third row, from XOCTR and \
           yFoil's transition point; an open triangle marks a point whose final stagnation or transition station — \
@@ -168,7 +169,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
                 "**`{name}`** — {}\n\n{}\n\n",
                 r["description"].as_str().unwrap_or(""),
                 figures::embed_html(
-                    &format!("polars-{name}.fig"),
+                    &study.figure_src(&format!("polars-{name}.fig")),
                     &format!(
                         "{name}: CL, CD, the last RMSBL, iterations, transition location and position in its \
                          station interval against alpha, XFOIL and yFoil"
@@ -179,7 +180,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
     }
     m += &table_md(s);
     if figure {
-        m += &transition_md(s);
+        m += &transition_md(study, s);
     }
     let st = state_table_md(s);
     if !st.is_empty() {
@@ -395,10 +396,11 @@ pub fn write_docs(study: &Study, docs: &Path, run_dir: &Path, s: &Value, drawn: 
         study.slug
     );
     m += &body_md(study, s, drawn);
-    fs::write(docs.join("README.md"), m).unwrap();
+    fs::write(docs.join(study.page), m).unwrap();
+    let figures_dir = docs.join(study.figures);
     // the docs hold `.fig` only: remove every figure of an earlier page (the matplotlib SVGs
     // among them) before copying this run's
-    for old in fs::read_dir(docs).unwrap().flatten() {
+    for old in fs::read_dir(&figures_dir).unwrap().flatten() {
         let name = old.file_name().to_string_lossy().into_owned();
         if name.ends_with(".svg") || name.ends_with(".fig") || name.ends_with(".pdf") {
             fs::remove_file(old.path()).unwrap();
@@ -413,7 +415,7 @@ pub fn write_docs(study: &Study, docs: &Path, run_dir: &Path, s: &Value, drawn: 
     names.push("transition-position.fig".into());
     for name in names {
         if run_dir.join(&name).exists() {
-            fs::copy(run_dir.join(&name), docs.join(&name)).unwrap();
+            fs::copy(run_dir.join(&name), figures_dir.join(&name)).unwrap();
         }
     }
 }
@@ -445,7 +447,7 @@ fn parted_transition_rows(s: &Value) -> Vec<Value> {
     rows
 }
 
-fn transition_md(s: &Value) -> String {
+fn transition_md(study: &Study, s: &Value) -> String {
     let mut m = String::from("\n### Where transition sits between the stations\n\n");
     m += "XFOIL places transition at an arc length XSSITR inside the interval between two consecutive BL \
           stations, ITRAN − 1 and ITRAN (the first turbulent station), and TRDIF treats the transition interval \
@@ -458,7 +460,7 @@ fn transition_md(s: &Value) -> String {
           transition; the per-case figures carry the same quantity against α in their fourth row. Points whose \
           ITRAN is the trailing-edge station (no transition on the airfoil) are left out.\n\n";
     m += &figures::embed_html(
-        "transition-position.fig",
+        &study.figure_src("transition-position.fig"),
         "Position of transition within its station interval for every recorded point of every case, upper and lower side",
     );
     m += "\n\n";

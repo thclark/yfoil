@@ -46,9 +46,9 @@ yfoil plot polar naca0012_polar.json naca4412_polar.json \
     --title "NACA 0012 vs 4412" -o compare.fig
 ```
 
-The comparison, from the polars of [your first analysis](first-analysis.md) and [Polars](polar.md):
+The comparison, from the polars of [your first analysis](../get-started/your-first-analysis.md) and [Polars](polars.md):
 
-<ironlab-figure src="figures/compare.fig" format="fig" name="compare" alt="NACA 0012 and NACA 4412 polars at Re 1e6: CL against alpha, CL against CD, CM against alpha and CD against alpha">NACA 0012 and NACA 4412 polars at Re 1e6: CL against alpha, CL against CD, CM against alpha and CD against alpha</ironlab-figure>
+<ironlab-figure src="../figures/compare.fig" format="fig" name="compare" alt="NACA 0012 and NACA 4412 polars at Re 1e6: CL against alpha, CL against CD, CM against alpha and CD against alpha">NACA 0012 and NACA 4412 polars at Re 1e6: CL against alpha, CL against CD, CM against alpha and CD against alpha</ironlab-figure>
 
 Draws \(C_L\)–α, \(C_L\)–\(C_D\), \(C_M\)–α and \(C_D\)–α, with one key below the
 four panels. Several files are overlaid for comparison, each labelled by its `--label`
@@ -65,7 +65,7 @@ yfoil plot analysis a5.json                              # writes a5.fig
 
 For the NACA 4412 at α = 5°, Re = 10⁶:
 
-<ironlab-figure src="figures/a5.fig" format="fig" name="a5" alt="NACA 4412 at alpha 5 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 4412 at alpha 5 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
+<ironlab-figure src="../figures/a5.fig" format="fig" name="a5" alt="NACA 4412 at alpha 5 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 4412 at alpha 5 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
 
 \(-C_p\) and \(U_e/U_\infty\) over \(x/c\) from a single-point analysis, upper surface
 blue and lower red, above a strip with the aerofoil outline; the three share a linked
@@ -82,11 +82,11 @@ yfoil plot foil naca4412_polar.json --alpha 0,5,10 \
     --quantity dstar,theta --wake -o foil.fig
 ```
 
-The two commands above, on the NACA 4412 of [Polars](polar.md):
+The two commands above, on the NACA 4412 of [Polars](polars.md):
 
-<ironlab-figure src="figures/naca4412_foil.fig" format="fig" name="naca4412_foil" alt="NACA 4412 panels, drawn as notches">NACA 4412 panels, drawn as notches</ironlab-figure>
+<ironlab-figure src="../figures/naca4412_foil.fig" format="fig" name="naca4412_foil" alt="NACA 4412 panels, drawn as notches">NACA 4412 panels, drawn as notches</ironlab-figure>
 
-<ironlab-figure src="figures/foil.fig" format="fig" name="foil" alt="NACA 4412 at alpha 0, 5 and 10 degrees: displacement and momentum thickness normal to the surface, with the wake, and the stagnation, transition and separation markers">NACA 4412 at alpha 0, 5 and 10 degrees: displacement and momentum thickness normal to the surface, with the wake, and the stagnation, transition and separation markers</ironlab-figure>
+<ironlab-figure src="../figures/foil.fig" format="fig" name="foil" alt="NACA 4412 at alpha 0, 5 and 10 degrees: displacement and momentum thickness normal to the surface, with the wake, and the stagnation, transition and separation markers">NACA 4412 at alpha 0, 5 and 10 degrees: displacement and momentum thickness normal to the surface, with the wake, and the stagnation, transition and separation markers</ironlab-figure>
 
 Draws the section itself: panels, wake, boundary-layer quantities plotted normal
 to the surface, and the stagnation, transition and separation markers. Input can

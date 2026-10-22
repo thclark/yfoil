@@ -86,7 +86,7 @@ Adding a row to that table requires the same evidence standard as a bug report a
 
 Every XFOIL quirk, dated fix, silent self-correction, uninitialised variable and dead branch found during
 the translation, with how yFoil handles it (replicated / overcome / out of scope), is registered in
-`docs/xfoil-known-issues.md`. Add to it whenever you find another.
+`docs/user-guide/reference/known-xfoil-issues.md`. Add to it whenever you find another.
 
 ### Rule 3: Debug by forward-stepping through XFOIL's execution
 
@@ -206,7 +206,7 @@ appended to side 2 (`NBL(2) = IBLTE(2) + NW`), explicit station→node and stati
 slot 0, so a translated statement corresponds one-for-one to its Fortran line. There is no third "wake surface".
 **Names are not XFOIL's**: they follow `docs/conventions/naming.md` (symbols from the equations, the four index
 systems, `_d_<token>` sensitivities), and the XFOIL name of every variable and routine is recorded in
-`docs/xfoil-reference.md` and in `#[doc(alias = "SETBL")]` on the translating function.
+`docs/user-guide/reference/xfoil-reference.md` and in `#[doc(alias = "SETBL")]` on the translating function.
 Inside a translated body, short locals bound at the top from the named fields (`let hk1 = station1.hk;`) keep the
 formula lines diffable against the Fortran. Elsewhere in the crate, idiomatic Rust.
 
@@ -226,7 +226,7 @@ Transcendentals are `cr_libm::{exp, ln, log10, pow, tanh, sin, cos, sin_cos, ata
 (the workspace crate `cr-libm/`), never `std`'s `f64` methods, which call the host libm: `clippy.toml`
 disallows them. A function not there yet is added to `cr-libm` and to the reference's shim together.
 
-The variable mapping in `docs/xfoil-reference.md` must be kept current whenever a struct
+The variable mapping in `docs/user-guide/reference/xfoil-reference.md` must be kept current whenever a struct
 field or state variable is added, renamed or re-represented.
 
 ## CLI
@@ -297,12 +297,12 @@ design: an event fires on *any* call in the span, while yFoil's fields describe 
 not carries the event and not the flag. `tests/known_issues/kt_pole_7_7.rs` checks the record against these events
 on `naca4412_n60_inviscid_m07_a10` and `naca64a010_n60_inviscid_type2_m03_am23_a0_a19`.
 
-Failures are classified by *what it would take to know*, not by severity (`docs/guide/validity.md`,
+Failures are classified by *what it would take to know*, not by severity (`docs/user-guide/reference/solution-validity.md`,
 "How failures are classified"): **Class A** a domain violation, **Class B** an iteration exhaustion —
 both exact from a single run, both recorded, both withholding the numbers — and **Class C**
 conditioning, which needs two runs to see, stays `Valid`: such a result is *ill-conditioned*
 (`docs/conventions/terminology.md`), measured by the twins every validation run carries. A result is therefore invalid on exact, single-run facts only
-(A or B), **never** on the size or smoothness of a number: `docs/xfoil-known-issues.md` §7.7 is the
+(A or B), **never** on the size or smoothness of a number: `docs/user-guide/reference/known-xfoil-issues.md` §7.7 is the
 worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
 records the evidence, write-only, enforced by `ci/validity-write-only.sh`. Ill-conditioned but converged
 points are not covered by this and stay valid.
@@ -430,7 +430,7 @@ tests/
 ├── subroutine/         - (a) one XFOIL subroutine at a time, from its dumped inputs
 ├── execution/          - (b) one step from XFOIL's dumped state, or a well-conditioned whole run
 ├── application/        - (c) yFoil-only functionality: CLI, I/O, generators, output records, ids
-├── known_issues/       - (d) one module per section of docs/xfoil-known-issues.md
+├── known_issues/       - (d) one module per section of docs/user-guide/reference/known-xfoil-issues.md
 ├── invariants/         - (e) XFOIL-independent physics
 ├── apparatus/          - (f) the reference and its fixtures
 ├── common/             - shared helpers and fixture loaders; utilities/tolerances.rs holds the only
@@ -453,11 +453,11 @@ for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
 Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-tests.md), `scripts/noise-floor.sh` (noise-floor.md),
-`cargo run -p branch-coverage -- --docs` (testing/branch-coverage/), `cargo run -p series-cases -- --docs` (validation/series-cases/),
+`cargo run -p branch-coverage -- --docs` (testing/branch-coverage/), `cargo run -p series-cases -- --docs` (validation/series-cases.md),
 `cargo run -p known-issues -- --docs` (testing/known-issues/), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
 (`scripts/study-support/records.rs`) — study evidence beside the tests, never read by them;
 `generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
-(aerofoil-series/: the validation selection, one figure per generator family, the naca456 comparison). The user guide's figures (`docs/guide/figures/`) are the output of the commands the guide prints, regenerated by
+(aerofoil-series.md: the validation selection, one figure per generator family, the naca456 comparison). The user guide's figures (`docs/user-guide/figures/`) are the output of the commands the guide prints, regenerated by
 `scripts/guide-figures.sh`.
 Figures are ironlab figures (`docs/conventions/figures.md`), built in Rust by each study from the numbers it
 computes, through `src/output/figures.rs` (colours, ordered-family colours, parameters and labels the ironlab viewer
@@ -475,7 +475,11 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
 - Integer powers written as explicit multiplications where bit-exactness matters (`x*x*x`, not `powi(3)`) to match
   gfortran's inline expansion.
 - Temporary files go in `.tmp/`, never `/tmp`.
-- Naming: `docs/conventions/naming.md` (the rules) and `docs/xfoil-reference.md` (the
+- The docs site's file tree mirrors its navigation (`zensical.toml`): each tab and section is a directory
+  with an `index.md`, and each page is the kebab-case of its title
+  (`docs/user-guide/commands/analyse-a-single-point.md`). A page's own assets go in a directory beside it
+  named after it (`docs/validation/series-cases.md` + `docs/validation/series-cases/*.fig`). Moving or retitling a page moves its file and adds a redirect from the old URL in `zensical.toml`.
+- Naming: `docs/conventions/naming.md` (the rules) and `docs/user-guide/reference/xfoil-reference.md` (the
   XFOIL → yFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
 
 ## Polar sweep procedure
@@ -523,22 +527,22 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
 - NACA 0012, α=0 — symmetry, base viscous case, XFOIL-independent invariants
 - NACA 0012, 0°→+1° and 0°→−1° — initialisation from a previous solution, sign checks
 - NACA 4412, full ±15° polar — beyond the limits of convergence
-- One section per further generator family (docs/validation/aerofoil-series/): NACA 0012-34
+- One section per further generator family (docs/validation/aerofoil-series.md): NACA 0012-34
   (4-digit modified), 23018 (5-digit), 16-212 (16-series, compressible), 63-415 (6-series,
   closed TE, wind turbine), 64A010 (6A-series) and a Kármán–Trefftz section (analytic, sharp TE)
 - Plus the branch-coverage cases of Rule 6: sharpened TE, M=0.3, high-α separated, low-Re laminar separation,
   `XSTRIP`, `MATYP≠1` — and the study's minimal set (`group = "branch-coverage"`): inviscid-only (Kármán–Trefftz;
   the 64A010 TYPE 2 M 0.3 at −23°, 0° and 19°), fixed CL far from alpha, a trip upstream of the stagnation point,
   a stalled first march at Re 3e6, deep stall at ITER 50, Re 1e4 with DAMP
-- The series cases (`scripts/series-cases`, `docs/validation/series-cases/`, `group = "series"`): the
+- The series cases (`scripts/series-cases`, `docs/validation/series-cases.md`, `group = "series"`): the
   aerofoil series and flow regimes of interest under normal conditions (Re 1e4–1e8, Ncrit 4–11, M 0–0.6,
   forced transition, fixed CL, inviscid), swept 0 → ±30° by XFOIL's polar procedure at N = 160, ITER 100
-  (N = 160 represents N = 240 where the flow is attached, `docs/xfoil-known-issues.md` §7.13), yFoil
+  (N = 160 represents N = 240 where the flow is attached, `docs/user-guide/reference/known-xfoil-issues.md` §7.13), yFoil
   driven the same way and compared point by point (a study; the tests replay the chased calls step by step)
 - The known-issues cases (`scripts/known-issues`, `docs/testing/known-issues/`, `group = "known-issues"`):
   runs that show XFOIL's known issues arising — the dependence on the panel count (§7.13, each case at
   N = 60, 160 and 240), the plot-label hang (§4), and the sweeps whose purpose is one issue — to be
-  brought one for one with `docs/xfoil-known-issues.md`
+  brought one for one with `docs/user-guide/reference/known-xfoil-issues.md`
 
 BL distributions are extracted at 0°, ±5°, ±10°, ±15°, but every intermediate angle is computed so initialisation
 matches XFOIL.

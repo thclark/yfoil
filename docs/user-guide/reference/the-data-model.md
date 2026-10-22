@@ -26,7 +26,7 @@ A geometry yFoil generated also carries `generator`, the record of how: the
 series, the designation, the thickness form and mean line with their parameter
 values, how the thickness was applied, whether the trailing edge is sharp, any
 trailing-edge adjustment, the yFoil version and the keys of the
-[references](../references.md) that define the family — and, under
+[references](bibliography.md) that define the family — and, under
 `panelling`, how the nodes were distributed. `yfoil geometry repanel` keeps the
 section record and replaces `panelling`; a repanelled `.dat` carries only
 `yfoil` and `panelling`, since a `.dat` says nothing about its section.
@@ -58,7 +58,7 @@ parameters as the following keys) or `cosine` (yFoil's own, with `te_bias`,
 after the distribution; `n_buffer_nodes` appears when a generator sampled its
 section before PANGEN (default 246; a `--panelling` file may set it). The same JSON is what `--panelling FILE` accepts, so a
 record can be lifted from one geometry and applied to another (see
-[repanel](geometry.md#repanel)). `sharp_te` at the top level is the section
+[repanel](../commands/geometry.md#repanel)). `sharp_te` at the top level is the section
 *definition's* property (the 6-series closes); `panelling.sharp_te` says what was
 done to the nodes.
 
@@ -130,7 +130,7 @@ cannot represent a result to better than about 1e-5, which makes them useless as
 a validation reference and awkward as an automation interface. JSON with full
 round-tripping precision is both.
 
-The names follow [the naming conventions](../conventions/naming.md): symbols
+The names follow [the naming conventions](../../conventions/naming.md): symbols
 from the equations, not XFOIL's six-character Fortran abbreviations. The XFOIL
 name of every variable is recorded in the [mapping
-table](../xfoil-reference.md#xfoil-yfoil-mapping).
+table](xfoil-reference.md#xfoil-yfoil-mapping).

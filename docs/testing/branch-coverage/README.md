@@ -310,7 +310,7 @@ This is a measurement, not a claim — the reference cannot reproduce itself on 
 
 ## Full polars
 
-Full ±30° polars of the aerofoil series and regimes of interest are the [series-cases](../../validation/series-cases/README.md) validation study, and the runs that show XFOIL's known issues the [known-issues](../known-issues/README.md) study. Those sweeps are not candidates for the finite set, which is a minimal set of single operating points.
+Full ±30° polars of the aerofoil series and regimes of interest are the [series-cases](../../validation/series-cases.md) validation study, and the runs that show XFOIL's known issues the [known-issues](../known-issues/README.md) study. Those sweeps are not candidates for the finite set, which is a minimal set of single operating points.
 
 ## Branches taken only by the non-finite set
 

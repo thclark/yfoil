@@ -1,7 +1,7 @@
 //! (d) Known XFOIL weaknesses.
 //!
 //! yFoil's defined behaviour where XFOIL is known to be incorrect or ill-conditioned; one module
-//! per section of `docs/xfoil-known-issues.md`.
+//! per section of `docs/user-guide/reference/known-xfoil-issues.md`.
 //!
 //! Categories and rules: `docs/conventions/testing.md`.
 

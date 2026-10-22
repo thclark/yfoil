@@ -41,7 +41,7 @@ the stagnation-point fallbacks — exist precisely to cope with them, so the tes
 to cover those branches.
 
 A result can be ill-conditioned and still valid: conditioning is Class C in
-[solution validity](../guide/validity.md), which a single run cannot detect.
+[solution validity](../user-guide/reference/solution-validity.md), which a single run cannot detect.
 
 ## Divergent comparison
 

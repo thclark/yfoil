@@ -1,5 +1,5 @@
 //! Velocity layer: QISET, UICALC, QVFUE, GAMQV, UESET (xpanel.f). UECALC and DSSET are not
-//! translated: XFOIL 6.99 never calls them (docs/xfoil-known-issues.md §5.1).
+//! translated: XFOIL 6.99 never calls them (docs/user-guide/reference/known-xfoil-issues.md §5.1).
 //! Line-for-line translations on the 1-based `SolverState`.
 
 use crate::solver::blstate::SolverState;
