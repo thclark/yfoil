@@ -25,3 +25,4 @@ Bump `version` in `pyproject.toml` **only on PRs whose base is `main`** — neve
 
 - [[git-branching]] — bases, naming, protected branches, updating
 - [[git-commits-and-versioning]] — type codes, breaking changes, semver calculation
+- [github-issues](github-issues.md) — the issue label set and how labels are applied
