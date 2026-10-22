@@ -1,8 +1,9 @@
-// The native-versus-WebAssembly bit-identity check (run by scripts/wasm-identity.sh).
+// The native-versus-WebAssembly bit-identity check (run by scripts/wasm.sh check).
 //
 // Every comparison is of bytes: the JSON records the native `yfoil` CLI writes against the ones
 // the wasm module returns for the same inputs (serde_json writes each f64 as its shortest
-// round-trip text, so equal text is equal bits), and the raw f64 bits of the maths library.
+// round-trip text, so equal text is equal bits, and a NaN is written null), and the raw f64 bits
+// of the maths library (NaNs as a class, see below).
 //
 //   node identity.mjs --pkg DIR --yfoil BIN --native BIN --work DIR [--quick] [--samples N]
 //
@@ -131,6 +132,7 @@ const domain = {
   },
 };
 const arity = { pow: 2, atan2: 2, hypot: 2, fma: 3 };
+let nanBitsTotal = 0;
 for (const [name, gen] of Object.entries(domain)) {
   const n = samples + edges.length ** ((arity[name] ?? 1) > 1 ? 2 : 1);
   const xyz = [new Float64Array(n), new Float64Array(n), new Float64Array(n)];
@@ -147,23 +149,34 @@ for (const [name, gen] of Object.entries(domain)) {
   execFileSync(path.resolve(args.native), ["evaluate", name, input, output], { stdio: "inherit" });
   const nativeBits = new BigUint64Array(new Uint8Array(fs.readFileSync(output)).buffer);
   const wasmBits = new BigUint64Array(yfoil.evaluate(name, xyz[0], xyz[1], xyz[2]).buffer);
-  let differ = 0, nanOnly = 0;
+  // NaNs compare as a class: any NaN equals any NaN, a NaN against a non-NaN is a difference, and
+  // every other value is compared bit for bit (signed zeros and infinities included). IEEE 754
+  // and the WebAssembly spec leave a NaN's sign and payload unspecified, x86-64 and ARM natives
+  // already differ in them (0xfff8... against 0x7ff8... for an invalid operation), and yFoil only
+  // ever tests is_nan and serialises a NaN as null. The NaN bit differences are counted, as
+  // information.
+  let differ = 0, nanBits = 0;
   const examples = [];
   const hex = (b) => b.toString(16).padStart(16, "0");
   const inputBits = xyz.map((a) => new BigUint64Array(a.buffer));
   for (let j = 0; j < n; j++) {
-    if (nativeBits[j] !== wasmBits[j]) {
-      differ++;
-      if (Number.isNaN(fromBits(nativeBits[j])) && Number.isNaN(fromBits(wasmBits[j]))) nanOnly++;
-      if (examples.length < 3) {
-        const args = inputBits.slice(0, arity[name] ?? 1).map((a) => hex(a[j])).join(",");
-        examples.push(`(${args}) native ${hex(nativeBits[j])} wasm ${hex(wasmBits[j])}`);
-      }
+    if (nativeBits[j] === wasmBits[j]) continue;
+    if (Number.isNaN(fromBits(nativeBits[j])) && Number.isNaN(fromBits(wasmBits[j]))) {
+      nanBits++;
+      continue;
+    }
+    differ++;
+    if (examples.length < 3) {
+      const args = inputBits.slice(0, arity[name] ?? 1).map((a) => hex(a[j])).join(",");
+      examples.push(`(${args}) native ${hex(nativeBits[j])} wasm ${hex(wasmBits[j])}`);
     }
   }
+  nanBitsTotal += nanBits;
   report(`${name} on ${n} arguments`, differ === 0,
-    differ ? `${differ} differ (${nanOnly} of them NaN against NaN), e.g. ${examples.join("; ")}` : "");
+    [differ ? `${differ} differ, e.g. ${examples.join("; ")}` : "",
+      nanBits ? `(${nanBits} NaN against NaN with other bits)` : ""].filter(Boolean).join("  "));
 }
+console.log(`\nNaN against NaN with other bits, over every function: ${nanBitsTotal}`);
 
 // 4. speed: the CI reference case's analysis, repeated (native timed by the example binary)
 const options = path.join(work, "bench_options.json");

@@ -4,11 +4,7 @@ name: WebAssembly
 # (docs/bindings.md, "Numerical identity"): the native CLI's records against the module's on every
 # tracked panel set, and the maths library's raw bits. Run whenever the solver, the maths library,
 # the binding or its build changes, and on demand.
-#
-# Open decision: on x86-64 the records are identical but the maths probe is not, by the bits of
-# NaNs produced by invalid operations (x86 writes 0xfff8..., ARM and the module 0x7ff8...;
-# docs/bindings.md). Until it is decided whether the probe compares NaNs as a class or the check
-# stays arm64-only, the job runs on the arm64 runner, where the comparison passes exact.
+# NaNs compare as a class (any NaN equals any NaN); every other value is compared bit for bit.
 on:
   pull_request:
     branches: [ "main", "wasm" ]
@@ -42,7 +38,7 @@ env:
 
 jobs:
   wasm:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

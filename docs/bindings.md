@@ -76,10 +76,18 @@ called.
 
 ### Numerical identity
 
-`scripts/wasm.sh check` compares bytes, never values within a tolerance (serde_json
-writes each f64 as its shortest round-trip text, so equal text is equal bits).
-Measured 2026-10-22 on aarch64 macOS (V8 in Node 22), 227 comparisons, every one
-identical:
+`scripts/wasm.sh check` compares bytes, never values within a tolerance. The
+records are compared as text: serde_json writes each f64 as its shortest
+round-trip text, so equal text is equal bits, and it writes a NaN as `null`. The
+maths library is compared as raw bits, with one rule for NaNs: any NaN equals any
+NaN, a NaN against a number is a difference, and every other value, signed zeros
+and infinities included, must match bit for bit. IEEE 754 and the WebAssembly
+specification leave a NaN's sign and payload unspecified, x86-64 and ARM native
+builds already differ in them, and yFoil only ever tests whether a value is a NaN
+and serialises it as `null`. The check counts the NaNs whose bits differ, as
+information.
+
+Measured 2026-10-22, 227 comparisons, every one identical:
 
 - the geometry of eight sections, one per generator family (`0012`, `4412`,
   `23012`, `23112`, `0012-34`, `16-212`, `63-415`, `64A010`);
@@ -91,25 +99,19 @@ identical:
   142 more not attempted after a sweep halted);
 - each `cr_libm` function and `fma` on 262 144 arguments (random bit patterns and
   their domains) plus 26 edge values (every pair of them for `pow`, `atan2`,
-  `hypot` and `fma`), compared as raw bits.
+  `hypot` and `fma`).
 
-The quick check also passes on aarch64 Linux (Ubuntu 24.04, clang 18), and the
-CLI itself, built for `wasm32-wasip1` and run by wasmtime, writes the reference
-case's record byte for byte as the native CLI does.
+| Host | Records | NaNs with other bits |
+|---|---|---|
+| aarch64 macOS (Node 22) | identical | 0 |
+| aarch64 Linux (CI runner, gcc native) | identical | 0 |
+| x86-64 Linux (CI runner; also Ubuntu 24.04 emulated) | identical | 97 990 of 3.7 million results |
 
-On x86-64 the records are identical too, and the maths library's results differ
-in one way only: the bits of a NaN. The macOS-built module, run by Node on
-x86-64 (emulated), reproduces all 205 analysis records of the full check byte for
-byte. Its maths results differ from the arm64 native ones in 20 of 3.7 million,
-and in the quick check on x86-64 Linux the native build's differ from the
-module's in 6098 of 232 000 — every one of them a NaN against a NaN: the
-result of an invalid operation (`ln` of a negative number, `asin(2)`, `cos(∞)`,
-`fma(0, ∞, 0)`), which x86 writes as `0xfff8…` and ARM and the module mostly as
-`0x7ff8…`. IEEE 754 does not fix a NaN's sign or payload, and WebAssembly leaves it
-to the engine; native builds on the two architectures differ in the same way. No
-record can show it, since JSON writes a NaN as `null`, but it means the check's
-maths probe passes bit for bit only on aarch64: on x86-64 it reports those NaNs
-as different.
+On x86-64 the NaNs come from invalid operations (`ln` and `log10` of a negative
+number, `asin(2)`, `cos(∞)`): the native build writes them as `0xfff8…`, the
+module as `0x7ff8…`. The CLI itself, built for `wasm32-wasip1` and run by
+wasmtime, also writes the reference case's record byte for byte as the native CLI
+does.
 
 Speed: the CI reference case's analysis (NACA 0012, N = 60, α = 2°) takes 11 ms in
 wasm against 2.8 ms native; an N = 160 NACA 4412 at α = 4° 49 ms against 20 ms, and

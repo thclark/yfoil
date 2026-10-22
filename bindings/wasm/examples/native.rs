@@ -1,4 +1,4 @@
-//! The native side of the bit-identity check (`scripts/wasm-identity.sh`).
+//! The native side of the bit-identity check (`scripts/wasm.sh check`).
 //!
 //! - `native evaluate <function> <in.bin> <out.bin>`: `yfoil_wasm::evaluate_native` on the
 //!   inputs in `in.bin` (little-endian u32 count, then the x, y and z arrays of f64), writing the
