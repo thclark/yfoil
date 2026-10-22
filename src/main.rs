@@ -499,7 +499,7 @@ enum GeomAction {
 
         /// How the thickness form is laid on the mean line. perpendicular: the NACA definition,
         /// the default with either panelling method. vertical: XFOIL's NACA4/NACA5 model (XFOIL
-        /// adds the thickness vertically, docs/xfoil-known-issues.md §6.1) on XFOIL's own
+        /// adds the thickness vertically, docs/user-guide/reference/known-xfoil-issues.md §6.1) on XFOIL's own
         /// 245-point buffer, always PANGEN-panelled; 4- and 5-digit only, and only for replicating
         /// XFOIL's NACA command output
         #[arg(long, value_enum, default_value_t = Thickness::Perpendicular)]

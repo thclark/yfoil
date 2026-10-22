@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Why a point is not valid. Each variant is an exact, single-run fact — a formula evaluated
 /// outside its analytic domain, or an iteration that ran out before meeting its tolerance.
 /// Nothing here is inferred from the size or the smoothness of a returned number
-/// (`docs/xfoil-known-issues.md` §7.10).
+/// (`docs/user-guide/reference/known-xfoil-issues.md` §7.10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reason {
     /// The Kármán–Tsien denominator `β + BFAC·Cp_inc` reached zero or below, so the

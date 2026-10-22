@@ -22,13 +22,13 @@ form.
   round trip is bit-exact.
 - A generated or repanelled geometry carries a `generator` record: the series,
   designation and parameters it was made from, and how it was panelled (see
-  [the data model](data.md#geometry)).
+  [the data model](../reference/the-data-model.md#geometry)).
 
 ## The `naca` command { #naca }
 
 Generate a NACA section from its designation. Every family with a public,
 reproducible definition is covered; the formulas, what each family is for and
-the references are in [aerofoil series](aerofoil-series.md).
+the references are in [aerofoil series](../reference/aerofoil-series.md).
 
 ``` sh
 yfoil geometry naca 0012 -n 160 -o naca0012.json
@@ -67,7 +67,7 @@ low-drag-range subscript (`64(1)-212`).
     yFoil applies the thickness distribution **perpendicular to the camber
     line**, which is the NACA definition, and does so whatever the panelling
     method. XFOIL's `NACA4`/`NACA5` apply it vertically
-    ([known issues §6.1](../xfoil-known-issues.md)); that model is available as
+    ([known issues §6.1](../reference/known-xfoil-issues.md)); that model is available as
     `--thickness vertical` for 4- and 5-digit sections, on XFOIL's own 245-point
     buffer and always PANGEN-panelled, only for replicating XFOIL's `NACA`
     command output.
@@ -136,7 +136,7 @@ yfoil geometry repanel e387.dat --panelling panelling.json   # every option from
 ### Methods
 
 **`pangen` (default)** is XFOIL's `PANGEN`, translated line for line and tested
-against XFOIL's own output ([validation](../testing/geometry/README.md)).
+against XFOIL's own output ([validation](../../testing/geometry/README.md)).
 It splines the input, forms the curvature along the arc length, smooths it, adds
 a *fictitious* curvature at the trailing edge and inside optional refinement
 windows, and then places the nodes so that
@@ -170,7 +170,7 @@ profile is evaluated exactly at every output node rather than splined through a
 coarse input; XFOIL applies `TGAP` to the buffer aerofoil and `PANE` follows,
 and the two orders differ by that interpolation. On a closed edge `TGAP`
 delivers \(\cos(\tau/2)\) times the requested gap
-([known issues §6.5](../xfoil-known-issues.md)).
+([known issues §6.5](../reference/known-xfoil-issues.md)).
 
 ### One file instead of flags
 

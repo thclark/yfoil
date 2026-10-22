@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn documentation_holds_every_family_sheet() {
         let docs = crate::repo_root().join("docs/validation/aerofoil-series");
-        let page = std::fs::read_to_string(docs.join("README.md")).unwrap();
+        let page = std::fs::read_to_string(crate::repo_root().join("docs/validation/aerofoil-series.md")).unwrap();
         for s in crate::study::series() {
             let file = format!("{}.fig", s.slug);
             let fig = Figure::load(docs.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
@@ -237,7 +237,7 @@ mod tests {
             assert!(fig.validate().errors.is_empty(), "{file}");
             assert_eq!(fig.ir().axes.len(), s.panels.len(), "{file}: one panel per parameter");
             assert!(
-                page.contains(&format!("<ironlab-figure src=\"{file}\"")),
+                page.contains(&format!("<ironlab-figure src=\"aerofoil-series/{file}\"")),
                 "{file} not embedded"
             );
         }

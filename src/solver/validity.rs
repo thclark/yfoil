@@ -7,12 +7,12 @@
 //! silently turning an observation into a control decision.
 //!
 //! Nothing is inferred from the size or the smoothness of a returned number. On the worked case
-//! (`docs/xfoil-known-issues.md` §7.7) α = −1° reports CL = −52.09 and α = −5° reports +0.128,
+//! (`docs/user-guide/reference/known-xfoil-issues.md` §7.7) α = −1° reports CL = −52.09 and α = −5° reports +0.128,
 //! and the two are equally broken — the tame-looking one is tame precisely because it is *more*
 //! deeply out of domain.
 //!
 //! Three kinds of thing can be wrong with a solved point, and they are classified by *what it
-//! would take to know* rather than by severity (`docs/guide/validity.md`, "How failures are
+//! would take to know* rather than by severity (`docs/user-guide/reference/solution-validity.md`, "How failures are
 //! classified"). Only the first two are recorded here, both exact from a single run and both
 //! derived from tests XFOIL itself performs and then discards:
 //!

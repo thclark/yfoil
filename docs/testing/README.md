@@ -2,7 +2,7 @@
 
 How the test suite tracks yFoil against XFOIL, for software developers and for aerodynamicists deep into
 XFOIL's edge cases. The engineering assessment of yFoil against XFOIL on normal cases is
-[Validation](../validation/README.md); what each test is for is `docs/conventions/testing.md`.
+[Validation](../validation/index.md); what each test is for is `docs/conventions/testing.md`.
 
 Every page here is generated from data the fixture pipeline produced (the reference's dumps under
 `tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/`), and can be regenerated at any time from
@@ -21,7 +21,7 @@ matplotlib (`scripts/branch-coverage/plot.py` through `scripts/figures/render.sh
 | [coverage.md](coverage.md) | Rule 6: gcov branch completeness of the reference over every tracked case, with the open/unreachable/loop-entry classification | `cargo xtask coverage` |
 | [branch-tests.md](branch-tests.md) | Which test covers each branch: every candidate case and how it is tested (run or single steps), which step takes which branch, the fewest steps that take them all (each replayed by a test), and the branches no test covers | `cargo xtask steps`, `cargo xtask route`, then `cargo xtask steps --from-json` |
 | [branch-coverage/README.md](branch-coverage/README.md) | Rule 6, sharpened: the minimal finite set of cases that takes every finite-reachable branch of the analysis path (panelling excluded), each compared with its instrumented reference by the studies' whole-run floor comparison with difference metrics; the branch map and the case × subroutine matrix; the minimal non-finite set, whose branches are each tested as an event (`tests/execution/events.rs`). A study: the tests cover branches by single steps instead ([branch-tests.md](branch-tests.md)). `README.tex` in the run folder carries the same tables for the paper | `cargo xtask fixtures --group branch-coverage` and `--group non-finite` (each runs its twins), then `cargo run --release -p branch-coverage -- --docs` |
-| [known-issues/README.md](known-issues/README.md) | Runs that show XFOIL's known issues arising (`docs/xfoil-known-issues.md`): the dependence on the panel count (each case at N = 60, 160 and 240), the plot-label hang, and the sweeps whose purpose is one issue; yFoil compared point by point as for the series cases | `cargo xtask fixtures --group known-issues`, then `cargo run --release -p known-issues -- --docs` |
+| [known-issues/README.md](known-issues/README.md) | Runs that show XFOIL's known issues arising (`docs/user-guide/reference/known-xfoil-issues.md`): the dependence on the panel count (each case at N = 60, 160 and 240), the plot-label hang, and the sweeps whose purpose is one issue; yFoil compared point by point as for the series cases | `cargo xtask fixtures --group known-issues`, then `cargo run --release -p known-issues -- --docs` |
 | [noise-floor.md](noise-floor.md) | Rule 1: the reference's own 1-ULP sensitivity per stage and variable, from which `tests/common/utilities/tolerances.rs` is derived | `scripts/noise-floor.sh` |
 | [geometry/README.md](geometry/README.md) | Stage G: XFOIL-model NACA4/5 and PANGEN tested bitwise against `pangen_*` dumps; the bitwise LOAD handoff that every solver case asserts | `cargo xtask fixtures --case pangen_…`, `cargo test --test subroutine pangen` |
 | [subroutines/README.md](subroutines/README.md) | BL closure relations (HKIN, HSL, HST, CFL, CFT, DIL, DAMPL) against the instrumented reference's own calls, dumped at 17 significant digits, in `tests/fixtures/subroutines/` | `cargo run --bin generate_subroutine_validation` |
@@ -56,6 +56,6 @@ the break was host-dependent: on glibc the fourth attempt's chance convergence d
 failed 22° and −16° as well (`docs/cross-platform-quirks.md`).
 The same cases wake the MRCHUE inverse wake march, the MRCHDU iterate fallback, BLVAR's Us and Hk
 clamps and TRCHEK2's iteration cap that every other case left open ([coverage.md](coverage.md)). Two
-XFOIL quirks surfaced here are registered in `docs/xfoil-known-issues.md` (§2.8, §4): MASS is never
+XFOIL quirks surfaced here are registered in `docs/user-guide/reference/known-xfoil-issues.md` (§2.8, §4): MASS is never
 written on side 1's wake slots, and ASEQ's sequence-plot label loops forever on a non-finite CL/CM even
 with graphics off, so a reference sweep that blows up past the break hangs instead of halting.

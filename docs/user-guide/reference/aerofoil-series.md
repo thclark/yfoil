@@ -6,7 +6,7 @@ icon: lucide/layers
 
 yFoil generates every NACA family that has a public, reproducible definition, and one analytic
 section. A NACA section is a **basic thickness form** \(y_t(x)\) laid **perpendicular** to a
-**mean line** \(y_c(x)\) ([abbott1959](../references.md#abbott1959), §6.2):
+**mean line** \(y_c(x)\) ([abbott1959](bibliography.md#abbott1959), §6.2):
 
 \[
 x_u = x - y_t \sin\theta,\quad y_u = y_c + y_t \cos\theta,\qquad
@@ -15,9 +15,9 @@ x_l = x + y_t \sin\theta,\quad y_l = y_c - y_t \cos\theta,\qquad
 \]
 
 The formulas below are those of the NASA ordinate program
-([ladson1996](../references.md#ladson1996)) and its public-domain revision `naca456`
-([carmichael2001](../references.md#carmichael2001)), against which yFoil's generators are tested
-(see [validation](../validation/aerofoil-series/README.md)). Every generated file carries a
+([ladson1996](bibliography.md#ladson1996)) and its public-domain revision `naca456`
+([carmichael2001](bibliography.md#carmichael2001)), against which yFoil's generators are tested
+(see [validation](../../validation/aerofoil-series.md)). Every generated file carries a
 [provenance record](#provenance) naming the family, the parameters and these references.
 
 | Series | Designation | Thickness form | Mean line | Command |
@@ -36,7 +36,7 @@ compared on the same node distribution.
 
 ## NACA 4-digit
 
-*Report 460* ([jacobs1933](../references.md#jacobs1933)) fitted a four-term polynomial to the
+*Report 460* ([jacobs1933](bibliography.md#jacobs1933)) fitted a four-term polynomial to the
 best sections of the day. Designation `mptt`: maximum camber \(m\) in percent, its position
 \(p\) in tenths, maximum thickness \(t\) in percent of chord.
 
@@ -58,7 +58,7 @@ the 0012 and 4412.
 
 ## NACA 4-digit modified
 
-*Report 492* ([stack1934](../references.md#stack1934)) varied the leading-edge radius and the
+*Report 492* ([stack1934](bibliography.md#stack1934)) varied the leading-edge radius and the
 position of maximum thickness independently, at speeds up to and beyond the compressibility
 burble. Designation `mptt-IM`: the 4-digit digits, then the **leading-edge radius index**
 \(I\) (6 is the plain 4-digit radius, 0 a sharp nose, 9 three times the radius) and the
@@ -76,13 +76,13 @@ r_{le} = 1.1019\left(\frac{tI}{6}\right)^2
 with \(d_0 = 0.002\) on the \(t = 0.2\) basis (the trailing-edge half-thickness, \(0.01\,t\)),
 \(d_1\) the trailing-edge slope tabulated against \(M\), and the remaining coefficients fixed by
 the leading-edge radius, the maximum thickness \(t\) at \(x = M\) and continuity of \(y_t\) and
-its slope there ([ladson1975](../references.md#ladson1975), TM-4741 p. 6). The mean line is the
+its slope there ([ladson1975](bibliography.md#ladson1975), TM-4741 p. 6). The mean line is the
 2-digit line. The `0012-63` is the 4-digit 0012 to a few \(10^{-4}\); the family separates the
 leading-edge radius from the thickness, which is what it is for.
 
 ## NACA 5-digit
 
-*Report 537* ([jacobs1935](../references.md#jacobs1935)) put the maximum camber unusually far
+*Report 537* ([jacobs1935](bibliography.md#jacobs1935)) put the maximum camber unusually far
 forward to raise the maximum lift with little pitching moment. Designation `LPRtt`: the design
 lift coefficient \(c_l = 0.15\,L\), the position of maximum camber \(p = P/20\), \(R = 0\) for the
 standard line or 1 for the reflexed one, and \(t\) in percent. The thickness form is the 4-digit
@@ -103,7 +103,7 @@ r^3(1 - x) & x \ge r
 \(k_1\) scales linearly with \(c_l/0.3\). The **reflexed line** adds a second cubic aft, with
 \(k_2/k_1 = \left(3(r - p)^2 - r^3\right)/(1 - r)^3\) chosen for zero pitching moment
 (Report 537's expression; both NASA memoranda misprint it, as
-[carmichael2001](../references.md#carmichael2001) notes):
+[carmichael2001](bibliography.md#carmichael2001) notes):
 
 \[
 y_c = \frac{k_1}{6}\begin{cases}
@@ -118,32 +118,32 @@ y_c = \frac{k_1}{6}\begin{cases}
 | \(k_1\) (for \(c_l = 0.3\)) | 51.99 | 15.793 | 6.520 | 3.191 |
 
 The 230 line (23012, 23015, 23018) is on a great many aircraft, from the Cessna singles to the
-Beech King Air ([lednicer](../references.md#lednicer)).
+Beech King Air ([lednicer](bibliography.md#lednicer)).
 
 ## NACA 16-series
 
-*Report 763* ([stack1943](../references.md#stack1943)): sections designed to delay the
+*Report 763* ([stack1943](bibliography.md#stack1943)): sections designed to delay the
 compressibility burble, developed for propellers. Designation `16-Ltt`: the design lift
 coefficient \(c_l = L/10\) of a uniform-load (\(a = 1\)) mean line and \(t\) in percent. The
 thickness form is the 4-digit modified form with \(I = 4\) and \(M = 0.5\), so a `16-012` is a
 `0012-45`. Twenty-four of them were measured at Mach 0.3 to 0.8
-([lindsey1948](../references.md#lindsey1948)), which makes the family the natural check of a
+([lindsey1948](bibliography.md#lindsey1948)), which makes the family the natural check of a
 subcritical compressibility correction such as XFOIL's Kármán–Tsien.
 
 ## NACA 6-series
 
-*Report 824* ([abbott1945](../references.md#abbott1945)) and *Theory of Wing Sections*
-([abbott1959](../references.md#abbott1959)): the laminar-flow sections. Designation `6F-Ltt`
+*Report 824* ([abbott1945](bibliography.md#abbott1945)) and *Theory of Wing Sections*
+([abbott1959](bibliography.md#abbott1959)): the laminar-flow sections. Designation `6F-Ltt`
 (`63-415`): the family digit \(F\) is the position of minimum pressure in tenths of chord, \(L\)
 the design lift coefficient in tenths, \(t\) in percent. A subscript or bracketed digit after the
 family (`64(1)-212`) states the low-drag range and does not change the geometry; yFoil ignores it.
 
 **The thickness forms have no closed form.** They were derived by conformal mapping
-([theodorsen1931](../references.md#theodorsen1931),
-[theodorsen1933](../references.md#theodorsen1933)) for a prescribed pressure distribution, and
+([theodorsen1931](bibliography.md#theodorsen1931),
+[theodorsen1933](bibliography.md#theodorsen1933)) for a prescribed pressure distribution, and
 survive as 201-point tables of the mapping functions \(\varepsilon(\phi)\) and \(\psi(\phi)\)
 for each of 63, 64, 65, 66, 67, 63A, 64A and 65A
-([ladson1974](../references.md#ladson1974), [ladson1996](../references.md#ladson1996)). With
+([ladson1974](bibliography.md#ladson1974), [ladson1996](bibliography.md#ladson1996)). With
 \(s(t)\) the scale factor that gives thickness ratio \(t\) (a quartic fit per family),
 
 \[
@@ -160,7 +160,7 @@ lost and that the program reproduces the published ordinates to within \(5 \time
 chord; the tables are the definition.
 
 The **a mean line** carries uniform load from the leading edge to \(x = a\), falling linearly to
-zero at the trailing edge ([abbott1959](../references.md#abbott1959), eq. 4.26):
+zero at the trailing edge ([abbott1959](bibliography.md#abbott1959), eq. 4.26):
 
 \[
 y_c = \frac{c_l}{2\pi(a + 1)}\left\{
@@ -178,12 +178,12 @@ and for \(a = 1\), the default and the line the designations imply,
 `yfoil geometry naca 63-415 --a 0.5`.
 
 The 63-415 was the standard wind-turbine section before dedicated families appeared, and the
-Risø catalogue ([bertagnolio2001](../references.md#bertagnolio2001)) compares measurements with
+Risø catalogue ([bertagnolio2001](bibliography.md#bertagnolio2001)) compares measurements with
 XFOIL and Navier–Stokes results for it.
 
 ## NACA 6A-series
 
-*Report 903* ([loftin1948](../references.md#loftin1948)) removed the 6-series' cusped trailing
+*Report 903* ([loftin1948](bibliography.md#loftin1948)) removed the 6-series' cusped trailing
 edge: the 6A thickness forms are straight-sided from 0.8 chord, and the **6A mean line** is the
 \(a = 0.8\) line scaled by 0.97948 and replaced by a straight line aft of 0.86 chord, so that the
 cambered sections are straight-sided too:
@@ -200,8 +200,8 @@ unsteady-aerodynamics test section.
 
 ## Kármán–Trefftz { #karman-trefftz }
 
-Not a NACA family: the conformal map of a circle ([karman1918](../references.md#karman1918)),
-generalising Joukowski's transformation ([joukowski1910](../references.md#joukowski1910)) to a
+Not a NACA family: the conformal map of a circle ([karman1918](bibliography.md#karman1918)),
+generalising Joukowski's transformation ([joukowski1910](bibliography.md#joukowski1910)) to a
 finite trailing-edge angle \(\tau\). A circle through \(\zeta = 1\) with centre
 \((x_c, y_c)\) is mapped by
 
@@ -235,7 +235,7 @@ as defined. Two adjustments are available, both recorded in the provenance recor
   existing gap's direction (or, for a closed edge, the mean end tangent) by
   \(\tfrac{1}{2}\Delta\,(x/c)\,e^{-(1 - x/c)(1/F - 1)}\) each, blended over the fraction \(F\)
   of the chord from the trailing edge. On a closed edge XFOIL delivers \(\cos(\tau/2)\) times the
-  requested gap ([known issues §6.5](../xfoil-known-issues.md)); yFoil reproduces that.
+  requested gap ([known issues §6.5](known-xfoil-issues.md)); yFoil reproduces that.
 
 ## Provenance
 

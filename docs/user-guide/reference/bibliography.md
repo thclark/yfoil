@@ -2,10 +2,10 @@
 icon: lucide/book-marked
 ---
 
-# References
+# Bibliography
 
-The sources the documentation cites, keyed as in [`references.bib`](references.bib) (the file the
-papers use). Each key is an anchor: `references.md#ladson1996`. The provenance record of a
+The sources the documentation cites, keyed as in [`references.bib`](../../references.bib) (the file the
+papers use). Each key is an anchor: `bibliography.md#ladson1996`. The provenance record of a
 generated section (`generator.references`) carries the same keys.
 
 <a id="abbott1945"></a>

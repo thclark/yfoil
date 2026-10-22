@@ -29,8 +29,8 @@ XFOIL (created by Mark Drela at MIT, 1980s) performs viscous-inviscid analysis o
 ### Directory Structure
 
 ```
+xfoil-reference.md            # This page: every reference document, in one place
 xfoil-reference/
-├── index.md                  # This page: every reference document, in one place
 ├── architecture.mmd          # Mermaid diagram source
 └── architecture.pdf          # Generated PDF (see below)
 ```
@@ -108,7 +108,7 @@ Input Geometry (X, Y coordinates)
 ### yFoil equivalents
 
 The full XFOIL → yFoil name mapping is [the mapping section below](#xfoil-yfoil-mapping);
-the naming rules are [`docs/conventions/naming.md`](conventions/naming.md). Where the
+the naming rules are [`docs/conventions/naming.md`](../../conventions/naming.md). Where the
 translated routines live:
 
 | XFOIL             | yFoil                                                  |
@@ -140,7 +140,7 @@ To generate the architecture diagram PDF from the Mermaid source:
 npm install -g @mermaid-js/mermaid-cli
 
 # Generate PDF
-cd docs/xfoil-reference
+cd docs/user-guide/reference/xfoil-reference
 mmdc -i architecture.mmd -o architecture.pdf -b white
 ```
 
@@ -407,7 +407,7 @@ This document describes how to instrument XFOIL to capture intermediate values f
 `xfoil/instrumentation/instrument/19-validity-events.patch` records, as `EVLOG` branch events in
 `events.dat`, every occasion on which XFOIL goes on to deliver numbers for a point it has not
 properly solved. It exists so that yFoil's flagging can be checked against the reference **without
-comparing any numbers** (see [Solution validity](guide/validity.md)).
+comparing any numbers** (see [Solution validity](solution-validity.md)).
 
 The reason the events are needed at all is that XFOIL mostly does not record these occasions
 anywhere a fixture can see. What it does about each, on its own:
@@ -938,7 +938,7 @@ Every XFOIL name (COMMON variable, subroutine, local of note) and the yFoil name
 what the quantity is. The *rules* behind these names — symbols as names, the underscore
 meanings, the four index systems, the derivative tokens, and the interpretation notes on `AC`,
 `CTAU`, `US`, `RMSBL` and `GAMMA` — are in
-[`docs/conventions/naming.md`](conventions/naming.md); this file is their application and is
+[`docs/conventions/naming.md`](../../conventions/naming.md); this file is their application and is
 kept current whenever a field, variable or function is added or renamed (CLAUDE.md, Architecture).
 
 Indexing is unchanged from XFOIL: 1-based, side 1 = upper and 2 = lower, the wake appended to
@@ -1052,7 +1052,7 @@ The physical reading is also the statement of where TYPE 2 stops being meaningfu
 aerofoil is holding up a fixed weight.** At `CL ≤ 0` the speed required to do so is imaginary, and the
 `√CL` in both expressions has no real value. XFOIL does not treat this as an error — MRCL floors the lift
 coefficient at `CLA = MAX(CLS, 1e-6)` and limits the resulting Mach number to 0.99 — with consequences that
-are the subject of xfoil-known-issues §7.10. A symmetric section swept to negative α therefore spends half
+are the subject of known-xfoil-issues §7.10. A symmetric section swept to negative α therefore spends half
 its sweep outside the type's domain of definition.
 
 **TYPE 3 — fixed lift and velocity, varying chord.** The lift and the velocity are held fixed and the
@@ -1065,10 +1065,10 @@ Two consequences of the mapping are worth stating explicitly, because the type n
 values do not correspond one-to-one:
 
 - `MATYP = 3` is **unreachable**. TYPE 3 sets `MATYP = 1, RETYP = 3`, so nothing ever assigns `MATYP = 3`
-  and MRCL's third Mach branch is dead code (xfoil-known-issues §5.4).
+  and MRCL's third Mach branch is dead code (known-xfoil-issues §5.4).
 - MRCL has a second clamp that mirrors the Mach one: if `REINF/REINF1` exceeds 100 the Reynolds number is
   limited to `100·REINF1`. TYPE 3, whose Reynolds number goes as `1/CL` rather than `1/√CL`, reaches it
-  soonest (xfoil-known-issues §4).
+  soonest (known-xfoil-issues §4).
 
 Both dependences are re-evaluated by MRCL at every CL update, not once per point, so the Mach and Reynolds
 numbers of a TYPE 2 or TYPE 3 case are themselves solution variables, converged along with everything else.
@@ -1082,7 +1082,7 @@ numbers of a TYPE 2 or TYPE 3 case are themselves solution variables, converged 
 | MINF | `mach` | Mach at the current CL |
 | REINF | `re` | Reynolds at the current CL |
 | MATYP | `mach_cl_dependence` | enum `Fixed`, `InverseSqrtCl` (was 1/2) |
-| — | `validity` | `ValidityRecord` (`src/solver/validity.rs`): no XFOIL equivalent. The evidence for whether the values currently stored are valid — the smallest Kármán–Tsien denominator of the CLCALC integration and of the stored Cp arrays, whether SPECAL's CL(M) Newton was exhausted, and which of MRCL's three substitutions produced the stored Mach/Re. Written by the routines it describes and never read by the solver (`ci/validity-write-only.sh`); each field describes the stored state, not the history of the point. XFOIL computes most of these tests itself (CPCALC's `DENNEG`, the iteration counters) and discards them — xfoil-known-issues §7.10 |
+| — | `validity` | `ValidityRecord` (`src/solver/validity.rs`): no XFOIL equivalent. The evidence for whether the values currently stored are valid — the smallest Kármán–Tsien denominator of the CLCALC integration and of the stored Cp arrays, whether SPECAL's CL(M) Newton was exhausted, and which of MRCL's three substitutions produced the stored Mach/Re. Written by the routines it describes and never read by the solver (`ci/validity-write-only.sh`); each field describes the stored state, not the history of the point. XFOIL computes most of these tests itself (CPCALC's `DENNEG`, the iteration counters) and discards them — known-xfoil-issues §7.10 |
 | — | `nonfinite_station_failures` | no XFOIL equivalent: station Newton failures with a non-finite residual in the current VISCAL call's marches |
 | RETYP | `re_cl_dependence` | enum `Fixed`, `InverseSqrtCl`, `InverseCl` (was 1/2/3) |
 | IDAMP | `amplification_model` | enum `Envelope` (DAMPL), `ModifiedEnvelope` (DAMPL2) |
@@ -3074,7 +3074,7 @@ This is the primary COMMON block include file containing global state for XFOIL.
 ### yFoil mapping
 
 See [the mapping section](#xfoil-yfoil-mapping) (tables 1–4 cover this
-block) and the rules in [`docs/conventions/naming.md`](conventions/naming.md).
+block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).
 
 ## XBL.INC - Boundary Layer Local Variables
 
@@ -3337,7 +3337,7 @@ This allows copying all station variables with a single array operation.
 ### yFoil mapping
 
 See [the mapping section](#xfoil-yfoil-mapping) (tables 1–4 cover this
-block) and the rules in [`docs/conventions/naming.md`](conventions/naming.md).
+block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).
 
 ## BLPAR.INC - Boundary Layer Closure Parameters
 

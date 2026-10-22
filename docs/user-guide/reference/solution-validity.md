@@ -9,7 +9,7 @@ something on the console first; sometimes it says nothing at all. Either way the
 looking exactly like good ones, and a polar plotted through them looks like a polar.
 
 yFoil reproduces XFOIL's arithmetic exactly, including the cases above — that is the point of the
-project ([Rule 2](../xfoil-known-issues.md)) — so it computes the same wrong numbers. What it does
+project ([Rule 2](known-xfoil-issues.md)) — so it computes the same wrong numbers. What it does
 differently is **say so**, and withhold them unless you ask for them anyway.
 
 ## The contract
@@ -69,7 +69,7 @@ either over-claiming or quietly ignoring a real problem.
 performed, so they can be recorded as it runs, and both are grounds for withholding the numbers.
 They are detected by observation only: the solver records the evidence and never reads it back, so
 no numeric result can depend on a validity classification
-([Rule 2](../xfoil-known-issues.md); `ci/validity-write-only.sh` enforces it).
+([Rule 2](known-xfoil-issues.md); `ci/validity-write-only.sh` enforces it).
 
 **C cannot be folded in, and that is not an oversight.** Conditioning is a property of the problem
 near that point, not of the arithmetic that was performed — there is nothing in a single run that
@@ -78,7 +78,7 @@ the input and running again: rerunning the reference with its panels jogged by o
 *twins*, `docs/conventions/terminology.md`). So a Class C point is reported `Valid`, because nothing about the
 computation was invalid, and its uncertainty is carried by that study rather than by this flag.
 Such a point is *ill-conditioned* in the sense of
-[the project terminology](../conventions/terminology.md).
+[the project terminology](../../conventions/terminology.md).
 
 Where each is embodied:
 
@@ -107,7 +107,7 @@ inferred from the size or the smoothness of a returned number; see
 | `MachClNewtonExhausted` | B | `SPECAL`'s CL(M) Newton used all 20 iterations without reaching `\|DCLM\| ≤ 1e-6`. | What is reported is iterate 20, not a solution. Only reachable under `TYPE 2`/`TYPE 3`, where the Mach number follows the lift. |
 | `ClNewtonExhausted` | B | `SPECCL`'s alpha Newton used all 20 iterations without reaching `\|DALFA\| ≤ 1e-6`. | The alpha reported does not deliver the CL you asked for. Typically a CL beyond what the section can reach. |
 | `ViscousNotConverged` | B | `VISCAL` finished without `LVCONV`: the viscous–inviscid iteration did not converge in `--max-iterations`. | The BL and the outer flow are not consistent with each other. Common past stall; raising `--max-iterations` sometimes helps and sometimes does not. |
-| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's iterate fallback: beyond the third station the station is set from the one upstream, at the first three the non-finite iterate is kept. | The run passed through a NaN and kept going. See [known issues §4](../xfoil-known-issues.md), the TRCHEK2 row. |
+| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's iterate fallback: beyond the third station the station is set from the one upstream, at the first three the non-finite iterate is kept. | The run passed through a NaN and kept going. See [known issues §4](known-xfoil-issues.md), the TRCHEK2 row. |
 | `SequenceHalted` | — | Only on `NotAttempted` points: the sweep stopped before this alpha. | Nothing was computed. |
 
 ## Diagnostics
@@ -156,7 +156,7 @@ their own noise. Treat validity as a *necessary* condition, not a sufficient one
 
 The NACA 64A010 swept −30° to +30° inviscid at `TYPE 2`, M₁ = 0.3, is the case the whole scheme was
 built against, and it is written up in full at
-[known issues §7.7](../xfoil-known-issues.md). `TYPE 2` makes the Mach number follow the lift, so
+[known issues §7.7](known-xfoil-issues.md). `TYPE 2` makes the Mach number follow the lift, so
 on a symmetric section the entire negative half of the sweep is outside the type's domain of
 definition; `MRCL` substitutes a floored CL and a Mach limited to 0.99, where the pole sits at
 `q/Q∞ = 1.153` — which this section's suction peak passes by α = ±1°.
@@ -171,4 +171,4 @@ are caught only by the exhaustion test.
 The instrumented reference build records the same occasions as branch events, so yFoil's flags can
 be cross-checked against XFOIL directly — without comparing any numbers. The event names, and what
 XFOIL does about each occasion on its own, are tabulated in
-[the instrumentation guide](../xfoil-reference.md#validity-events).
+[the instrumentation guide](xfoil-reference.md#validity-events).
