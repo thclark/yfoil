@@ -12,7 +12,7 @@ name: WebAssembly
 # and attaches that run's assets to the release; nothing is published to npm.
 on:
   pull_request:
-    branches: [ "main", "wasm" ]
+    branches: [ "main" ]
     paths:
       - "src/**"
       - "bindings/wasm/**"
@@ -24,7 +24,7 @@ on:
       - "Cargo.lock"
       - ".github/workflows/wasm.yml"
   push:
-    branches: [ "main", "wasm" ]
+    branches: [ "main" ]
     # path filters are not applied to tag pushes
     tags: [ "v*" ]
     paths:
