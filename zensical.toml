@@ -110,9 +110,6 @@ nav = [
 "references.md" = "user-guide/reference/bibliography.md"
 "xfoil-known-issues.md" = "user-guide/reference/known-xfoil-issues.md"
 "xfoil-reference.md" = "user-guide/reference/xfoil-reference.md"
-# The Aerofoil series validation page, renamed Geometry validation and split into one page per
-# series (2026-10-22)
-"validation/aerofoil-series.md" = "validation/geometry-validation/index.md"
 
 [project.theme]
 custom_dir = "overrides"
