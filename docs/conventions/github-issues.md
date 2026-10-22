@@ -94,7 +94,7 @@ outputs. Tailwind fuchsia.
 | `crate: branch-coverage` | `#c026d3` | Mostly related to the branch-coverage minimal branch-covering case study crate |
 | `crate: series-cases` | `#a21caf` | Mostly related to the series-cases ±30° polar study crate |
 | `crate: known-issues` | `#86198f` | Mostly related to the known-issues XFOIL known-issues study crate |
-| `crate: aerofoil-series` | `#701a75` | Mostly related to the aerofoil-series generator-family validation study crate |
+| `crate: geometry-validation` | `#701a75` | Mostly related to the geometry-validation generator-family validation study crate |
 
 ## Applying labels
 

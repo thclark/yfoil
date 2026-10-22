@@ -63,7 +63,16 @@ nav = [
   { "Validation" = [
     "validation/index.md",
     { "Series cases" = "validation/series-cases.md" },
-    { "Aerofoil series" = "validation/aerofoil-series.md" },
+    { "Geometry validation" = [
+      "validation/geometry-validation/index.md",
+      "validation/geometry-validation/naca-4-digit.md",
+      "validation/geometry-validation/naca-4-digit-modified.md",
+      "validation/geometry-validation/naca-5-digit.md",
+      "validation/geometry-validation/naca-16-series.md",
+      "validation/geometry-validation/naca-6-series.md",
+      "validation/geometry-validation/naca-6a-series.md",
+      "validation/geometry-validation/karman-trefftz.md",
+    ] },
   ] },
   # The Testing tab is hidden until its pages are presentable. The pages are still built and
   # reachable by URL, just not listed in the navigation. Uncomment to restore.
@@ -101,6 +110,9 @@ nav = [
 "references.md" = "user-guide/reference/bibliography.md"
 "xfoil-known-issues.md" = "user-guide/reference/known-xfoil-issues.md"
 "xfoil-reference.md" = "user-guide/reference/xfoil-reference.md"
+# The Aerofoil series validation page, renamed Geometry validation and split into one page per
+# series (2026-10-22)
+"validation/aerofoil-series.md" = "validation/geometry-validation/index.md"
 
 [project.theme]
 custom_dir = "overrides"

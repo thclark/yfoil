@@ -10,6 +10,8 @@ pub struct CaseComparison {
     pub slug: String,
     pub designation: String,
     pub family: &'static str,
+    /// The generator family's title (`Series::title`), which names its series page
+    pub series: &'static str,
     pub stations: usize,
     /// Worst |Δ| / max(|a|, |b|, 1) over the stations, per column
     pub y_t: f64,
@@ -62,6 +64,7 @@ pub fn compare(root: &Path) -> Vec<CaseComparison> {
             slug: slug.to_string(),
             designation: s.designation.clone(),
             family,
+            series: s.series.title(),
             stations: rows.len(),
             y_t: 0.0,
             y_t_slope: 0.0,

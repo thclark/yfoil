@@ -223,7 +223,7 @@ pub fn series() -> Vec<SeriesStudy> {
             ],
         },
         SeriesStudy {
-            slug: "naca-16",
+            slug: "naca-16-series",
             title: "NACA 16-series",
             default: naca("16-212", 0.0, "16-212".into()),
             parameters: "cl (design lift coefficient of the a = 1 mean line), t",
@@ -253,7 +253,7 @@ pub fn series() -> Vec<SeriesStudy> {
             ],
         },
         SeriesStudy {
-            slug: "naca-6",
+            slug: "naca-6-series",
             title: "NACA 6-series",
             default: naca("63-415", 0.0, "63-415".into()),
             parameters: "family (63…67: position of minimum pressure), cl (design lift coefficient), a (extent of uniform loading), t",
@@ -302,7 +302,7 @@ pub fn series() -> Vec<SeriesStudy> {
             ],
         },
         SeriesStudy {
-            slug: "naca-6a",
+            slug: "naca-6a-series",
             title: "NACA 6A-series",
             default: naca("64A010", 0.0, "64A010".into()),
             parameters: "family (63A, 64A, 65A), cl (design lift coefficient of the 6A mean line), t",

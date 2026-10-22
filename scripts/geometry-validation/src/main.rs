@@ -1,4 +1,4 @@
-//! Aerofoil series study (`docs/validation/aerofoil-series.md`).
+//! Geometry validation study (`docs/validation/geometry-validation/`).
 //!
 //! Draws every generator family yFoil offers — NACA 4-digit, 4-digit modified, 5-digit,
 //! 16-series, 6-series, 6A-series and the Kármán–Trefftz analytic section — as one figure per
@@ -14,17 +14,19 @@
 //! its `generator` provenance record), `summary.json` (every section, panel and comparison
 //! number) and the `README.md` / `README.tex` index; the figures are then built from those files
 //! as ironlab figures (`sheet.rs`, `<series>.fig` and `<series>.pdf`, conventions in
-//! `docs/conventions/figures.md`). `runs/` is gitignored. With `--docs` the `.fig` files and a
-//! generated Markdown page embedding them are also written to `docs/validation/aerofoil-series/` and `docs/validation/aerofoil-series.md`,
-//! the only place a run's products are tracked. `--render <run_dir>` redraws an existing run
-//! folder's figures from its `summary.json` and geometry files without rerunning the study (with
-//! `--docs`, it also rewrites the page from that run).
+//! `docs/conventions/figures.md`). `runs/` is gitignored. With `--docs` the documentation section
+//! `docs/validation/geometry-validation/` is also written, the only place a run's products are
+//! tracked: its `index.md` (purpose, the naca456 background, the series, the selection of
+//! aerofoils, the naca456 comparison) and one page per series, `<series>.md`, with its `.fig` in
+//! `<series>/` beside it. `--render <run_dir>` redraws an existing run folder's figures from its
+//! `summary.json` and geometry files without rerunning the study (with `--docs`, it also rewrites
+//! the pages from that run).
 //!
 //! Usage (from the repository root):
 //!
 //! ```text
-//! cargo run --release -p aerofoil-series -- [--docs] [--series naca-6]
-//! cargo run --release -p aerofoil-series -- --render scripts/aerofoil-series/runs/<UTC> [--docs]
+//! cargo run --release -p geometry-validation -- [--docs] [--series naca-6-series]
+//! cargo run --release -p geometry-validation -- --render scripts/geometry-validation/runs/<UTC> [--docs]
 //! ```
 
 mod naca456;
@@ -38,7 +40,10 @@ use std::path::{Path, PathBuf};
 pub const X_RANGE: (f64, f64) = (-0.2, 1.2);
 pub const Y_RANGE: (f64, f64) = (-0.5, 0.5);
 
-/// Repository root: this crate lives at scripts/aerofoil-series
+/// The documentation section `--docs` writes, from the repository root
+pub const DOCS_DIR: &str = "docs/validation/geometry-validation";
+
+/// Repository root: this crate lives at scripts/geometry-validation
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -99,7 +104,7 @@ pub fn write_metadata(run_dir: &Path, series: &[&str]) {
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or(serde_json::Value::Null);
     let j = serde_json::json!({
-        "study": "aerofoil-series",
+        "study": "geometry-validation",
         "created_utc": run_dir.file_name().unwrap().to_string_lossy(),
         "version": version,
         "commit": sha,
@@ -145,12 +150,11 @@ fn parse_args() -> Args {
     a
 }
 
-/// The tracked page from a run folder whose figures are drawn
+/// The tracked documentation section from a run folder whose figures are drawn
 fn write_docs(run_dir: &Path, all: &[study::SeriesStudy], comparison: &[naca456::CaseComparison]) {
-    let page = repo_root().join("docs/validation/aerofoil-series.md");
-    let figures = repo_root().join("docs/validation/aerofoil-series");
-    report::write_docs(&page, &figures, run_dir, all, comparison);
-    println!("wrote {}", page.display());
+    let dir = repo_root().join(DOCS_DIR);
+    report::write_docs(&dir, run_dir, all, comparison);
+    println!("wrote {}", dir.display());
 }
 
 fn main() {
