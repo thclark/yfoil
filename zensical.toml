@@ -56,13 +56,13 @@ nav = [
       "xfoil-reference.md",
     ] },
   ] },
-  # The Validation and Testing tabs are hidden until their pages are presentable. The pages are still
-  # built and reachable by URL, just not listed in the navigation. Uncomment to restore.
-  # { "Validation" = [
-  #   "validation/README.md",
-  #   { "Series cases" = "validation/series-cases/README.md" },
-  #   { "Aerofoil series" = "validation/aerofoil-series/README.md" },
-  # ] },
+  { "Validation" = [
+    "validation/README.md",
+    { "Series cases" = "validation/series-cases/README.md" },
+    { "Aerofoil series" = "validation/aerofoil-series/README.md" },
+  ] },
+  # The Testing tab is hidden until its pages are presentable. The pages are still built and
+  # reachable by URL, just not listed in the navigation. Uncomment to restore.
   # { "Testing" = [
   #   "testing/README.md",
   #   "testing/coverage.md",
