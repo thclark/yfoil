@@ -38,6 +38,8 @@ toml = "0.8"
 [features]
 default = []
 plotting = ["ironlab"]
+# Trial: cr-libm's functions from metallic (pure Rust) instead of the vendored C
+libm-metallic = ["cr-libm/metallic"]
 
 [workspace]
 members = [
@@ -51,6 +53,8 @@ members = [
     "scripts/series-cases",
     "scripts/known-issues",
 ]
+# its own workspace: the candidate maths crates stay out of yFoil's lock file
+exclude = ["scripts/libm-compare"]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a
 # deliberate policy, not laziness; anything not listed here must be fixed, not allowed inline.

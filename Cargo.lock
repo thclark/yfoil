@@ -840,6 +840,7 @@ name = "cr-libm"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "metallic",
 ]
 
 [[package]]
@@ -1200,6 +1201,15 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
+]
+
+[[package]]
+name = "fast_polynomial"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0a0db42615e971ab610b46ff2865e6edee7eb447ce867dbfb3f79f292c4cd54"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -2241,6 +2251,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "metallic"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f15812e5b02f52e3b91acca78082e71a14f0d0bc4a4f65cd970ff81043cd6d7"
+dependencies = [
+ "fast_polynomial",
 ]
 
 [[package]]

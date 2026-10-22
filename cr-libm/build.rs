@@ -8,6 +8,10 @@ const CORE_MATH_OPT_LEVEL: u32 = 2;
 const CORE_MATH_CFLAGS: &[&str] = &["-ffp-contract=off"];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // the `metallic` trial takes the functions from Rust: no C to compile
+    if std::env::var_os("CARGO_FEATURE_METALLIC").is_some() {
+        return Ok(());
+    }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../third-party/core-math/src/binary64");
     let mut files = Vec::new();
     for entry in std::fs::read_dir(&root)? {

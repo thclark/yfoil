@@ -7,6 +7,14 @@ license = "MIT"
 build = "build.rs"
 links = "core_math"
 
+[features]
+# Trial: take the functions from metallic (pure Rust, correctly rounded) instead of compiling the
+# C; build.rs then compiles nothing. scripts/libm-compare is the bit-for-bit gate against the C.
+metallic = ["dep:metallic"]
+
+[dependencies]
+metallic = { version = "=0.3.1", optional = true }
+
 [build-dependencies]
 cc = "1.2"
 

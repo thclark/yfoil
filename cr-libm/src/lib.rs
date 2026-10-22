@@ -11,6 +11,7 @@
 //! The `std` methods are disallowed in the workspace (`clippy.toml`); call these instead. `sqrt` is
 //! not here: IEEE 754 requires it correctly rounded, so `f64::sqrt` already is.
 
+#[cfg(not(feature = "metallic"))]
 mod ffi {
     extern "C" {
         pub fn cr_exp(x: f64) -> f64;
@@ -28,90 +29,156 @@ mod ffi {
     }
 }
 
+/// The C: CORE-MATH compiled by build.rs
+#[cfg(not(feature = "metallic"))]
+mod imp {
+    use super::ffi;
+
+    // SAFETY (every call): a pure function of its arguments, no pointers
+    #[inline]
+    pub fn exp(x: f64) -> f64 {
+        unsafe { ffi::cr_exp(x) }
+    }
+    #[inline]
+    pub fn ln(x: f64) -> f64 {
+        unsafe { ffi::cr_log(x) }
+    }
+    #[inline]
+    pub fn log10(x: f64) -> f64 {
+        unsafe { ffi::cr_log10(x) }
+    }
+    #[inline]
+    pub fn pow(x: f64, y: f64) -> f64 {
+        unsafe { ffi::cr_pow(x, y) }
+    }
+    #[inline]
+    pub fn tanh(x: f64) -> f64 {
+        unsafe { ffi::cr_tanh(x) }
+    }
+    #[inline]
+    pub fn sin(x: f64) -> f64 {
+        unsafe { ffi::cr_sin(x) }
+    }
+    #[inline]
+    pub fn cos(x: f64) -> f64 {
+        unsafe { ffi::cr_cos(x) }
+    }
+    #[inline]
+    pub fn sin_cos(x: f64) -> (f64, f64) {
+        let (mut s, mut c) = (0.0, 0.0);
+        // SAFETY: both pointers are to live, exclusively borrowed locals
+        unsafe { ffi::cr_sincos(x, &mut s, &mut c) };
+        (s, c)
+    }
+    #[inline]
+    pub fn atan(x: f64) -> f64 {
+        unsafe { ffi::cr_atan(x) }
+    }
+    #[inline]
+    pub fn atan2(y: f64, x: f64) -> f64 {
+        unsafe { ffi::cr_atan2(y, x) }
+    }
+    #[inline]
+    pub fn asin(x: f64) -> f64 {
+        unsafe { ffi::cr_asin(x) }
+    }
+    #[inline]
+    pub fn hypot(x: f64, y: f64) -> f64 {
+        unsafe { ffi::cr_hypot(x, y) }
+    }
+}
+
+/// Trial: metallic, a pure-Rust correctly rounded libm, in place of the C. scripts/libm-compare
+/// finds it bit-identical to the C on every function and target, except signalling-NaN arguments
+/// and metallic 0.3.1's `atan2` with both arguments subnormal, which `atan2` here works around.
+#[cfg(feature = "metallic")]
+mod imp {
+    pub use metallic::{asin, atan, cos, exp, hypot, log as ln, log10, pow, sin, sincos as sin_cos, tanh};
+
+    /// metallic 0.3.1 misrounds `atan2` (by up to 6 % relative) when both arguments are subnormal.
+    /// The result depends on y/x alone and scaling two subnormals by 2^54 is exact, so the case is
+    /// moved into the normal range, where metallic is correctly rounded.
+    #[inline]
+    pub fn atan2(y: f64, x: f64) -> f64 {
+        const TWO_54: f64 = 18014398509481984.0;
+        if y.abs() < f64::MIN_POSITIVE && x.abs() < f64::MIN_POSITIVE {
+            metallic::atan2(y * TWO_54, x * TWO_54)
+        } else {
+            metallic::atan2(y, x)
+        }
+    }
+}
+
 /// e^x (Fortran `EXP`).
 #[inline]
 pub fn exp(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_exp(x) }
+    imp::exp(x)
 }
 
 /// Natural logarithm (Fortran `LOG`).
 #[inline]
 pub fn ln(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_log(x) }
+    imp::ln(x)
 }
 
 /// Base-10 logarithm (Fortran `LOG10`).
 #[inline]
 pub fn log10(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_log10(x) }
+    imp::log10(x)
 }
 
 /// x^y for a real exponent (Fortran `X**Y` with `Y` real).
 #[inline]
 pub fn pow(x: f64, y: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_pow(x, y) }
+    imp::pow(x, y)
 }
 
 /// Hyperbolic tangent (Fortran `TANH`).
 #[inline]
 pub fn tanh(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_tanh(x) }
+    imp::tanh(x)
 }
 
 /// Sine (Fortran `SIN`).
 #[inline]
 pub fn sin(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_sin(x) }
+    imp::sin(x)
 }
 
 /// Cosine (Fortran `COS`).
 #[inline]
 pub fn cos(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_cos(x) }
+    imp::cos(x)
 }
 
 /// `(sin(x), cos(x))`, each correctly rounded, so equal to [`sin`] and [`cos`].
 #[inline]
 pub fn sin_cos(x: f64) -> (f64, f64) {
-    let (mut s, mut c) = (0.0, 0.0);
-    // SAFETY: both pointers are to live, exclusively borrowed locals
-    unsafe { ffi::cr_sincos(x, &mut s, &mut c) };
-    (s, c)
+    imp::sin_cos(x)
 }
 
 /// Arctangent (Fortran `ATAN`).
 #[inline]
 pub fn atan(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_atan(x) }
+    imp::atan(x)
 }
 
 /// Four-quadrant arctangent of `y/x` (Fortran `ATAN2(Y, X)`).
 #[inline]
 pub fn atan2(y: f64, x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_atan2(y, x) }
+    imp::atan2(y, x)
 }
 
 /// Arcsine (Fortran `ASIN`).
 #[inline]
 pub fn asin(x: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_asin(x) }
+    imp::asin(x)
 }
 
 /// `sqrt(x² + y²)` without intermediate overflow.
 #[inline]
 pub fn hypot(x: f64, y: f64) -> f64 {
-    // SAFETY: a pure function of its arguments, no pointers
-    unsafe { ffi::cr_hypot(x, y) }
+    imp::hypot(x, y)
 }
 
 #[cfg(test)]
