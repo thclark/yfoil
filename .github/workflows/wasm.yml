@@ -1,0 +1,70 @@
+name: WebAssembly
+
+# Build the WebAssembly binding (bindings/wasm) and check it bit for bit against the native build
+# (docs/bindings.md, "Numerical identity"): the native CLI's records against the module's on every
+# tracked panel set, and the maths library's raw bits. Run whenever the solver, the maths library,
+# the binding or its build changes, and on demand.
+#
+# Open decision: on x86-64 the records are identical but the maths probe is not, by the bits of
+# NaNs produced by invalid operations (x86 writes 0xfff8..., ARM and the module 0x7ff8...;
+# docs/bindings.md). Until it is decided whether the probe compares NaNs as a class or the check
+# stays arm64-only, the job runs on the arm64 runner, where the comparison passes exact.
+on:
+  pull_request:
+    branches: [ "main", "wasm" ]
+    paths:
+      - "src/**"
+      - "bindings/wasm/**"
+      - "cr-libm/**"
+      - "third-party/core-math/**"
+      - "third-party/core-math.*"
+      - "scripts/wasm.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/wasm.yml"
+  push:
+    branches: [ "main", "wasm" ]
+    paths:
+      - "src/**"
+      - "bindings/wasm/**"
+      - "cr-libm/**"
+      - "third-party/core-math/**"
+      - "third-party/core-math.*"
+      - "scripts/wasm.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/wasm.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  wasm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # scripts/wasm.sh needs a clang with the wasm32 backend and its llvm-ar (Ubuntu's have both)
+      - run: sudo apt-get update && sudo apt-get install -y clang llvm
+      - uses: Swatinem/rust-cache@v2
+      # wasm-bindgen-cli at the version bindings/wasm/Cargo.toml pins, kept outside target/ so the
+      # cargo cache's pruning cannot drop it
+      - id: bindgen
+        run: echo "version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' bindings/wasm/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - id: bindgen-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/wasm-tools
+          key: wasm-bindgen-cli-${{ steps.bindgen.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+      - if: steps.bindgen-cache.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version "${{ steps.bindgen.outputs.version }}" --locked --root ~/wasm-tools
+      - run: scripts/wasm.sh check
+        env:
+          WASM_BINDGEN: /home/runner/wasm-tools/bin/wasm-bindgen
