@@ -127,8 +127,9 @@ CLAUDE.md Rule 2, which needs the same evidence as a bug report against XFOIL.
 
 ### Closed issues
 
-A closed issue carries only its `kind`, `area` and `crate` labels: priority and flow stage mean nothing once an
-issue is closed, so they are removed.
+A closed issue keeps its `kind`, `area` and `crate` labels and loses its `priority` and `flow` labels: priority and
+flow stage mean nothing once an issue is closed. The labels describe what the issue is about, not what was done
+about it, so an issue about the CLI that is decided against still carries `area: cli` and `crate: yfoil`.
 
-The exception is an issue closed as out of scope. It carries `flow: wont-fix`, no `crate` labels (it changed
-nothing), and is closed with GitHub's "not planned" reason.
+An issue closed as out of scope also carries `flow: wont-fix`, the one `flow` label that outlives the issue, and is
+closed with GitHub's "not planned" reason.

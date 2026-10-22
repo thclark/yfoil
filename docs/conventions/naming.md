@@ -204,4 +204,4 @@ turbulent Cf correlation (`CF_TURBULENT_FACTOR`).
 
 - [`docs/xfoil-reference/xfoil-to-yfoil-mapping.md`](../xfoil-reference.md#xfoil-yfoil-mapping)
   — the remap table: every XFOIL name, the yFoil name, and what it is
-- [[git-commits-and-versioning]] — commit message form for the rename commits (`REF:`)
+- [Commits & versioning](git-commits-and-versioning.md) — commit message form for the rename commits (`REF:`)
