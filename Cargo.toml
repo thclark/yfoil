@@ -46,7 +46,7 @@ members = [
     "xtask",
     "scripts/input-sensitivity",
     "scripts/xfoil-instrumentation-check",
-    "scripts/aerofoil-series",
+    "scripts/geometry-validation",
     "scripts/branch-coverage",
     "scripts/series-cases",
     "scripts/known-issues",

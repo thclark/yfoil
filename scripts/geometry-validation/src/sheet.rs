@@ -90,7 +90,7 @@ pub fn family_sheet(run_dir: &Path, series: &Value, n_nodes: i64, legend_columns
         .row_weights(weights)
         .title(Text::plain(str_of(series, "title")))
         .label("validation")
-        .parameter("study", "aerofoil-series")
+        .parameter("study", "geometry-validation")
         .parameter("figure", "family-sheet")
         .parameter("series", slug)
         .parameter("n_nodes", n_nodes)
@@ -208,13 +208,29 @@ mod tests {
     use ironlab::ir::Parameter;
     use ironlab::prelude::*;
 
-    /// Every family's sheet is in the documentation, loads, names its series, and is embedded
+    /// Every family has its page in the documentation, named the kebab-case of its title and
+    /// linked from the section's index, and the page embeds its sheet from the directory beside
+    /// it named after it; the sheet loads and names its series
     #[test]
     fn documentation_holds_every_family_sheet() {
-        let docs = crate::repo_root().join("docs/validation/aerofoil-series");
-        let page = std::fs::read_to_string(crate::repo_root().join("docs/validation/aerofoil-series.md")).unwrap();
+        let docs = crate::repo_root().join(crate::DOCS_DIR);
+        let index = std::fs::read_to_string(docs.join("index.md")).unwrap();
         for s in crate::study::series() {
-            let file = format!("{}.fig", s.slug);
+            let kebab: String = s
+                .title
+                .to_lowercase()
+                .replace('á', "a")
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                .collect();
+            assert_eq!(s.slug, kebab, "{}: the slug names the page", s.title);
+            assert!(
+                index.contains(&format!("]({}.md)", s.slug)),
+                "{} not linked from the index",
+                s.slug
+            );
+            let page = std::fs::read_to_string(docs.join(format!("{}.md", s.slug))).unwrap();
+            let file = format!("{0}/{0}.fig", s.slug);
             let fig = Figure::load(docs.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
             let p = fig.parameters();
             assert_eq!(p.get("series"), Some(&Parameter::String(s.slug.into())), "{file}");
@@ -225,7 +241,7 @@ mod tests {
             );
             assert_eq!(
                 p.get("study"),
-                Some(&Parameter::String("aerofoil-series".into())),
+                Some(&Parameter::String("geometry-validation".into())),
                 "{file}"
             );
             assert_eq!(
@@ -237,7 +253,7 @@ mod tests {
             assert!(fig.validate().errors.is_empty(), "{file}");
             assert_eq!(fig.ir().axes.len(), s.panels.len(), "{file}: one panel per parameter");
             assert!(
-                page.contains(&format!("<ironlab-figure src=\"aerofoil-series/{file}\"")),
+                page.contains(&format!("<ironlab-figure src=\"{file}\"")),
                 "{file} not embedded"
             );
         }
