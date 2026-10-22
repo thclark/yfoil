@@ -2,7 +2,9 @@
 icon: lucide/trending-up
 ---
 
-# Polars
+# Sweeping a polar
+
+A range of angles of attack, solved one after another the way XFOIL's `ASEQ` solves them.
 
 ``` sh
 yfoil polar <GEOMETRY.json> [OPTIONS]
@@ -15,10 +17,10 @@ yfoil polar naca4412.json \
     --label "NACA 4412" --distributions -o naca4412_polar.json
 ```
 
-Drawn with [`yfoil plot polar`](plotting.md#polar) and [ironlab](https://github.com/thclark/ironlab),
+Drawn with [`yfoil plot polar`](plotting-results.md#polar) and [ironlab](https://github.com/thclark/ironlab),
 this sweep produces the polar below.
 
-<ironlab-figure src="../figures/naca4412_polar.fig" format="fig" name="naca4412_polar" alt="NACA 4412 polar at Re 1e6, alpha -5 to 15 degrees">NACA 4412 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>
+<ironlab-figure src="sweeping-a-polar/naca4412_polar.fig" format="fig" name="naca4412_polar" alt="NACA 4412 polar at Re 1e6, alpha -5 to 15 degrees">NACA 4412 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>
 
 ## How the sweep runs
 
@@ -32,9 +34,10 @@ XFOIL's procedure exactly:
 4. Stitch the two legs into one ascending polar.
 
 The re-solved 0° seeds the downward leg and is not itself a polar point. There is
-no configurable start angle — both legs start from 0°, as XFOIL does.
+no configurable start angle — both legs start from 0°, as XFOIL does. How each point records
+which solution seeded it is in [output data](../output-data.md#point-identifiers-and-the-initialisation-chain).
 
-## Options
+## Options of `polar`
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -54,7 +57,7 @@ no configurable start angle — both legs start from 0°, as XFOIL does.
 `--distributions` makes the polar file self-contained: it can then be fed to
 `yfoil plot foil` to draw boundary-layer distributions at selected angles.
 
-## The XFOIL equivalent
+## The XFOIL equivalent of `polar`
 
 ``` text
 OPER

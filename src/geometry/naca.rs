@@ -137,7 +137,7 @@ fn xfoil_naca_assemble(xx: &[f64], yt: &[f64], yc: &[f64]) -> Geometry {
 }
 
 /// The provenance record of XFOIL's own NACA model: the divergence from the NACA definition
-/// (thickness applied vertically, `docs/user-guide/reference/known-xfoil-issues.md` §6.1) is stated in the file
+/// (thickness applied vertically, `docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md` §6.1) is stated in the file
 fn xfoil_naca_record(series: &str, designation: &str, buffer: &str) -> serde_json::Value {
     serde_json::json!({
         "yfoil": env!("CARGO_PKG_VERSION"),

@@ -32,13 +32,13 @@ use super::tolerances::{TOL_SOLVER, TOL_TRANSIENT};
 /// `cargo xtask twins` from the case's five seeded 1-ULP twins, the largest spread over them): a
 /// value is accepted when it is within the base tolerance *or* within `FLOOR_FACTOR` × the
 /// reference's own spread of that value. A study threshold: the tests do not read the floor
-/// (`docs/conventions/testing.md`).
+/// (`docs/contributing/the-test-suite.md`).
 pub const FLOOR_FACTOR: f64 = 4.0;
 /// Hypersensitivity threshold for the studies' third outcome. When one of the reference's own
 /// 1-ULP twins moves a per-iteration value by more than this (absolute), the reference cannot
 /// reproduce itself there; a yFoil run that matched every earlier iteration within
 /// `FLOOR_FACTOR` × floor and departs at such an iteration is classified *divergent*
-/// (`docs/conventions/terminology.md`), reported, not passed or failed.
+/// (`docs/contributing/conventions/terminology.md`), reported, not passed or failed.
 pub const DIVERGENCE_FLOOR: f64 = 1e-6;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -83,7 +83,7 @@ pub struct Records {
 /// Whether the reference itself was ill-conditioned at VISCAL call `k`, from its own five twins
 /// (`noise_floor.json`): a twin changed the call's branch trace (iteration count, convergence,
 /// IST, ITRAN — `flips`), or moved its converged point or any of its iterations' RMSBL by more than
-/// `DIVERGENCE_FLOOR` (`docs/conventions/terminology.md`, *ill-conditioned solution*). `None` when
+/// `DIVERGENCE_FLOOR` (`docs/contributing/conventions/terminology.md`, *ill-conditioned solution*). `None` when
 /// the case has no twins.
 pub fn reference_ill_conditioned(rec: &Records, k: usize) -> Option<bool> {
     let floor = rec.floor.as_ref()?;

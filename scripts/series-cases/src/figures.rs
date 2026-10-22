@@ -1,5 +1,5 @@
 //! The study's figures, drawn from a run folder's `summary.json` as ironlab figure files
-//! (`docs/conventions/figures.md`): one polar sheet per case (`polars-<case>.fig`) and the
+//! (`docs/contributing/conventions/figures.md`): one polar sheet per case (`polars-<case>.fig`) and the
 //! transition-position strip (`transition-position.fig`), each with its PDF for `README.tex`.
 //!
 //! Every number on a figure, axis limits included, is computed here from `summary.json`.
@@ -67,7 +67,7 @@ fn grey_diamond() -> Color {
     figures::with_alpha(Color::BLACK, 0.35)
 }
 
-/// The figure parameters and labels of one case (`docs/conventions/figures.md`).
+/// The figure parameters and labels of one case (`docs/contributing/conventions/figures.md`).
 fn describe(fig: Figure, study: &Study, figure: &str, case: &Case, run: &Value) -> Figure {
     let mut fig = fig
         .parameter("study", study.slug)

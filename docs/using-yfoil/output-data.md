@@ -2,14 +2,15 @@
 icon: lucide/braces
 ---
 
-# The data model
+# Output data
 
 Everything yFoil reads and writes is JSON, and the keys **are** the variable
 names — no abbreviations, no serialisation aliases. There is one analysis shape,
 whether it comes from `yfoil analyse -o` or is embedded in a polar written with
-`--distributions`.
+`--distributions`. This page lists the fields of each file; what a point's `status` means, and
+when its numbers are withheld, is [whether to trust a result](whether-to-trust-a-result.md).
 
-## Geometry
+## Geometry files
 
 ``` json
 {
@@ -20,57 +21,11 @@ whether it comes from `yfoil analyse -o` or is embedded in a polar written with
 ```
 
 `x` and `y` are the panel nodes, trailing edge → upper → leading edge → lower →
-trailing edge. `cm_ref` is the moment reference point.
+trailing edge. `cm_ref` is the moment reference point. A geometry yFoil generated or repanelled
+also carries `generator`, the record of the section and its panelling, described field by field
+in [provenance of a generated section](aerofoil-families/provenance-of-a-generated-section.md).
 
-A geometry yFoil generated also carries `generator`, the record of how: the
-series, the designation, the thickness form and mean line with their parameter
-values, how the thickness was applied, whether the trailing edge is sharp, any
-trailing-edge adjustment, the yFoil version and the keys of the
-[references](bibliography.md) that define the family — and, under
-`panelling`, how the nodes were distributed. `yfoil geometry repanel` keeps the
-section record and replaces `panelling`; a repanelled `.dat` carries only
-`yfoil` and `panelling`, since a `.dat` says nothing about its section.
-
-``` json
-"generator": {
-  "yfoil": "0.1.0",
-  "series": "naca_6",
-  "designation": "NACA 63-415",
-  "thickness_form": { "family": "63", "t": 0.15 },
-  "mean_line": { "family": "6", "cl": 0.4, "a": 1.0 },
-  "thickness_applied": "perpendicular",
-  "sharp_te": true,
-  "references": ["abbott1945", "abbott1959", "ladson1974", "ladson1996", "carmichael2001"],
-  "panelling": {
-    "method": "pangen", "n_nodes": 160, "n_buffer_nodes": 246,
-    "sharp_te": false, "te_gap": null,
-    "curvature_bunching": 1.0, "te_curvature_ratio": 0.15, "refined_curvature_ratio": 0.2,
-    "refine_upper": null, "refine_lower": null
-  }
-}
-```
-
-`panelling` is the complete recipe from the section (or the loaded nodes) to
-the output nodes: `method` is `pangen` (XFOIL's PANGEN, with its `PPAR`
-parameters as the following keys) or `cosine` (yFoil's own, with `te_bias`,
-`null` when a generator's analytic sampling was used); `n_nodes` (panel nodes, trailing edge round to trailing edge); `sharp_te` and
-`te_gap` (`{"gap", "blend"}` or `null`) are the trailing-edge treatment applied
-after the distribution; `n_buffer_nodes` appears when a generator sampled its
-section before PANGEN (default 246; a `--panelling` file may set it). The same JSON is what `--panelling FILE` accepts, so a
-record can be lifted from one geometry and applied to another (see
-[repanel](../commands/geometry.md#repanel)). `sharp_te` at the top level is the section
-*definition's* property (the 6-series closes); `panelling.sharp_te` says what was
-done to the nodes.
-
-`series` is one of `naca_4_digit`, `naca_4_digit_modified`, `naca_5_digit`,
-`naca_16`, `naca_6`, `naca_6a` or `karman_trefftz` (which carries `x_centre`,
-`y_centre`, `te_angle_deg` and `exponent` instead of the NACA entries); the
-thickness-form families are `4`, `4M` (with `le_radius_index`,
-`x_max_thickness`) and `63`…`67`, `63A`…`65A`; the mean-line families `2`
-(`m`, `p`), `3` and `3R` (`cl`, `p`), `6` (`cl`, `a`) and `6A` (`cl`), or
-`null` for a symmetric section. See [aerofoil series](aerofoil-series.md).
-
-## Analysis record
+## Analysis records
 
 ``` text
 foil                 name of the section
@@ -109,7 +64,7 @@ machsqd_edge
     pass `--include-lagged-closures` to emit them under each side's
     `lagged_closures`.
 
-## Polar record
+## Polar records
 
 ``` text
 foil          name of the section
@@ -121,7 +76,30 @@ completed     whether the sweep ran to both limits
 ```
 
 With `--distributions`, every entry also carries the full analysis record for
-that angle.
+that angle. Every angle that was asked for has an entry, including the ones a sweep that halted
+never reached; results are ordered ascending in alpha.
+
+## Point identifiers and the initialisation chain
+
+Every point record carries `id` and `initialised_from`: the `id` of the point whose converged
+boundary layer seeded it, absent for a fresh march. A polar is a state machine whose results are
+presented ascending in alpha, so this chain is the only record of the order the points were
+solved in: two legs, both rooted at the 0° solve ([sweeping a polar](commands/sweeping-a-polar.md#how-the-sweep-runs)).
+
+`id` is **content-addressed**: a 12-character base-36 hash (FNV-1a, 128-bit) of everything the
+solve depended on — the yFoil version, the panel geometry, the flow conditions, the operating
+point, the iteration limit, and the predecessor's id. So:
+
+- it is deterministic, and a result file is byte-reproducible;
+- equal ids mean the same computation, so results from different runs can be merged, or a sweep
+  restarted from a point of an earlier one, without colliding references;
+- the chain is a Merkle chain: the same operating point reached along different paths has
+  different ids.
+
+The re-solved 0° that seeds a polar's downward leg has the same inputs as the first 0° solve and
+no predecessor, so it has the same id, and the downward leg cites the recorded point rather than a
+phantom one. That is sound because the two solves are identical, which a test asserts
+([polars and reinitialisation](../fidelity-to-xfoil/execution-equivalence/polars-and-reinitialisation.md)).
 
 ## Why JSON, and why these names
 
@@ -130,7 +108,7 @@ cannot represent a result to better than about 1e-5, which makes them useless as
 a validation reference and awkward as an automation interface. JSON with full
 round-tripping precision is both.
 
-The names follow [the naming conventions](../../conventions/naming.md): symbols
+The names follow [the naming conventions](../contributing/conventions/naming.md): symbols
 from the equations, not XFOIL's six-character Fortran abbreviations. The XFOIL
-name of every variable is recorded in the [mapping
-table](xfoil-reference.md#xfoil-yfoil-mapping).
+name of every variable is recorded in the [translation
+map](../fidelity-to-xfoil/translation-map/variable-and-routine-names.md).

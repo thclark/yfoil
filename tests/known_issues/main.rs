@@ -1,9 +1,9 @@
 //! (d) Known XFOIL weaknesses.
 //!
 //! yFoil's defined behaviour where XFOIL is known to be incorrect or ill-conditioned; one module
-//! per section of `docs/user-guide/reference/known-xfoil-issues.md`.
+//! per section of `docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md`.
 //!
-//! Categories and rules: `docs/conventions/testing.md`.
+//! Categories and rules: `docs/contributing/the-test-suite.md`.
 
 #[path = "../common/fixtures/mod.rs"]
 mod fixtures;

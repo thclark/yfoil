@@ -4,6 +4,9 @@ icon: lucide/play
 
 # Your first analysis
 
+One session from start to finish: make a section, solve one point, sweep a polar and plot it.
+Each step links to the page that covers its command in full; you need none of them to finish.
+
 ## 1. Make a geometry
 
 Every analysis command takes a JSON geometry file. Generate one:
@@ -44,15 +47,19 @@ yfoil plot analysis naca0012_a5.json -o naca0012_a5.fig
 ironlab-viewer naca0012_polar.fig naca0012_a5.fig
 ```
 
-The figures open in the [ironlab viewer](../commands/plotting.md#viewing-and-exporting), which exports
-each as a vector PDF. Using [`yfoil plot`](../commands/plotting.md) and [ironlab](https://github.com/thclark/ironlab)
+The figures open in the [ironlab viewer](commands/plotting-results.md#viewing-and-exporting), which exports
+each as a vector PDF. Using [`yfoil plot`](commands/plotting-results.md) and [ironlab](https://github.com/thclark/ironlab)
 to visualise them, this analysis should produce the polar and distributions below.
 
-<ironlab-figure src="../figures/naca0012_polar.fig" format="fig" name="naca0012_polar" alt="NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees">NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>
+<ironlab-figure src="your-first-analysis/naca0012_polar.fig" format="fig" name="naca0012_polar" alt="NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees">NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>
 
-<ironlab-figure src="../figures/naca0012_a5.fig" format="fig" name="naca0012_a5" alt="NACA 0012 at alpha 5 degrees, Re 1e9: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 0012 at alpha 5 degrees, Re 1e9: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
+<ironlab-figure src="your-first-analysis/naca0012_a5.fig" format="fig" name="naca0012_a5" alt="NACA 0012 at alpha 5 degrees, Re 1e9: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 0012 at alpha 5 degrees, Re 1e9: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
 
 ## Next
 
-The [user guide](../index.md) covers each command in full, and the [data
-model](../reference/the-data-model.md) documents what is in the JSON.
+- [Commands](commands/index.md) covers every option of the four commands used above.
+- [Aerofoil families](aerofoil-families/index.md) says exactly which section `naca 0012` made, and how
+  its 160 nodes were placed.
+- [Output data](output-data.md) documents what is in the JSON files.
+- [Whether to trust a result](whether-to-trust-a-result.md) explains what a point's `status` says
+  before you rely on its numbers.

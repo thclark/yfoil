@@ -2,7 +2,7 @@
 
 Every tracked file under `tests/fixtures/` is read by a test (`cargo xtask fixtures --audit` fails
 otherwise), and every family has one producer. The tests that read each family name it, with its
-producer, in their module header (`docs/conventions/testing.md`).
+producer, in their module header (`docs/contributing/the-test-suite.md`).
 
 | Family | What it holds | Producer | Needs | Read by |
 |---|---|---|---|---|

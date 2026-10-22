@@ -2,7 +2,7 @@
 //!
 //! Properties that hold independently of XFOIL: symmetry, mirror images, Blasius.
 //!
-//! Categories and rules: `docs/conventions/testing.md`.
+//! Categories and rules: `docs/contributing/the-test-suite.md`.
 
 #[path = "../common/fixtures/mod.rs"]
 mod fixtures;

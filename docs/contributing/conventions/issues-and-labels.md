@@ -1,8 +1,8 @@
-# GitHub issues
+# Issues and labels
 
 How issues on [thclark/yfoil](https://github.com/thclark/yfoil/issues) are labelled, and why. This document
 holds the label set and the rules for applying it. Branches and pull requests are covered in
-[git-branching.md](git-branching.md) and [git-pull-requests.md](git-pull-requests.md).
+[git-branching.md](branches-commits-and-versions.md#branches) and [git-pull-requests.md](pull-requests.md).
 
 ## How the label scheme is shaped
 
@@ -46,7 +46,7 @@ How soon it should be done. Tailwind lime, darkest for the highest priority.
 | `priority: medium` | `#84cc16` | Do in the normal course of work |
 | `priority: high` | `#4d7c0f` | Do next |
 
-### Flow
+### Flow labels
 
 Where the issue stands on its way to being worked on. Tailwind cyan.
 
@@ -74,10 +74,10 @@ What the work is for. Tailwind violet.
 | `area: automation` | `#5b21b6` | Scripts, workflows and agent automation |
 | `area: marketing` | `#4c1d95` | Website, examples, showcases and outreach |
 
-`area: validation` and `area: testing` follow the repository's split between the engineering assessment and the
-consistency tracking ([testing.md](testing.md), "Validation and consistency"): `validation` is the assessment of
-yFoil's results for aerodynamicists (`docs/validation/`), `testing` is the tests, the fixtures and consistency with
-XFOIL (`docs/testing/`).
+`area: validation` and `area: testing` follow the documentation's split between the engineering assessment and the
+translation's fidelity ([where the evidence is shown](../the-test-suite.md#where-the-evidence-is-shown)): `validation` is the
+assessment of yFoil's results for aerodynamicists ([Engineering validation](../../engineering-validation/index.md)),
+`testing` is the tests, the fixtures and consistency with XFOIL ([Fidelity to XFOIL](../../fidelity-to-xfoil/index.md)).
 
 ### Crate
 
@@ -109,7 +109,7 @@ changes no crate, such as CI work or an ideas inbox, carries no `crate` label.
 
 `kind: epic` marks an issue that groups related issues.
 
-### Flow
+### Moving an issue through the flow
 
 An issue enters the flow at one of two stages, then advances:
 

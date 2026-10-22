@@ -2,7 +2,7 @@
 icon: lucide/triangle-alert
 ---
 
-# Known XFOIL issues
+# The issue register
 
 XFOIL is the reference (CLAUDE.md Rule 1) and its algorithm is reproduced including its own bugs and
 quirks (Rule 2). This page is the register of everything found while translating it that a reader
@@ -11,14 +11,16 @@ does, cites both sources, and states yFoil's handling:
 
 - **Replicated** — yFoil does the same thing, and the behaviour is fixture-tested where a test exists.
 - **Overcome** — yFoil deliberately differs. Only one such divergence affects results (the NACA
-  generator); the others are output-side or instrumentation-side and leave the solver untouched.
+  generator, the only [deliberate divergence](deliberate-divergences.md)); the others are output-side
+  or instrumentation-side and leave the solver untouched.
 - **Out of scope** — code XFOIL itself never executes on the analysis path, or design/plotting
   features yFoil does not translate. Listed so nobody looks for them.
 
 Line numbers refer to `xfoil/third-party/xfoil-6.99/src/` and to yFoil at the commit that last
 touched this page. Every "unreachable" claim below is also carried, with its reason, in
 `xtask/fixtures-config/coverage.toml` and measured by `cargo xtask coverage`
-(`docs/testing/coverage.md`).
+([unreachable and open branches](../branch-coverage/unreachable-and-open-branches.md)). Runs in which
+the issues arise are shown on [runs that show the issues](runs-that-show-the-issues.md).
 
 ---
 
@@ -53,7 +55,7 @@ Verified in the source, not inferred:
 computed *live* by running XFOIL's own BLPRV → BLKIN → BLVAR on the converged primaries, and the lagged
 arrays are emitted verbatim under `stored` (with `hs_dump`, `cf_dump` as DUMP prints them). A
 side-by-side of live `hs` against DUMP's `H*` will differ at the ~RMSBL level by construction;
-`tests/application/output.rs` bounds it. Column table: `docs/user-guide/reference/xfoil-reference.md`,
+`tests/application/output.rs` bounds it. Column table: `docs/fidelity-to-xfoil/translation-map/variable-and-routine-names.md`,
 "Output" section.
 
 ### 1.2 DUMP's `Ue/Vinf` is signed by GAM — Overcome (output only)
@@ -86,7 +88,7 @@ and 4 significant figures. The instrumented reference build writes `ES24.16` (17
 that round-trips an f64); the instrumentation is proven inert (byte-identical pristine vs instrumented
 outputs, `scripts/xfoil-build.sh --verify`). No test compares against XFOIL's formatted files (CLAUDE.md
 Rule 4). An old validation table that showed 4.9e-4 to 1.6e-3 RMS "paneling error" was measuring
-7-digit PSAVE output plus the two NACA definitions of §6.1 (`docs/testing/geometry/README.md`).
+7-digit PSAVE output plus the two NACA definitions of §6.1 (`docs/fidelity-to-xfoil/subroutine-equivalence/xfoils-own-geometry-routines.md`).
 
 ---
 
@@ -202,10 +204,10 @@ replicates each (with the message as a code comment) so that its results and bra
 | `xblsys.f` (BLDIF) | similarity-station amplification row is a dummy `VS2(1,1) = 1` pivot | `system.rs:1744-1746` |
 | `xblsys.f` (BLDIF) | forms `UQ_RTA`, `UQ_T1..UQ_RE` and never uses them | omitted where they feed nothing, `system.rs:1830` |
 | `xpanel.f:1737` (UESET) | `tweak Ue so it's not zero, in case stag. point is right on node` (UEPS = 1e-7) | `pointers.rs:325` |
-| `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; a divergent comparison wherever it is reached (`docs/conventions/terminology.md`) |
+| `xpanel.f:1385` (STFIND) | `tweak stagnation point if it falls right on a node (very unlikely)` — needs `GAM(I) == 0` bitwise | `pointers.rs:47`; a divergent comparison wherever it is reached (`docs/contributing/conventions/terminology.md`) |
 | `xbl.f` (SETBL) | `SETBL: Xtr???  n1 n2:` diagnostic when the transition interval and ITRAN disagree | `setbl.rs:272` |
 | `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `input-sensitivity` driver and the fixture runner detect the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
-| `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the iterate fallback above sets the station from the one upstream with finite values (beyond station 3) and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/testing/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are tested one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
+| `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the iterate fallback above sets the station from the one upstream with finite values (beyond station 3) and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/fidelity-to-xfoil/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are tested one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
 
 ---
 
@@ -339,7 +341,7 @@ code: the reference is linked against CORE-MATH's correctly rounded functions an
 ones (`cr-libm`), so their bits do not depend on the host. Before 2026-10-15 they were the host libm's:
 Apple libSystem and glibc differ by 1 ULP on 0.1 % (`exp`, `ln`, `pow`) to 18 % (`tanh`) of inputs
 (measured 2026-09-11), and XFOIL's own post-CL_max wanderings differed by O(1) between the two while its
-converged points moved by ≤ 1.4e-11 (`docs/cross-platform-quirks.md`).
+converged points moved by ≤ 1.4e-11 (`docs/fidelity-to-xfoil/the-reference-xfoil-build/correctly-rounded-maths-in-both-codes.md`).
 
 ### 7.5 EQUIVALENCE aliasing of UNEW/QNEW onto VA/VB — Overcome (structure only)
 
@@ -362,7 +364,7 @@ smoke case clean; the only raised (untrapped) flag is `IEEE_DIVIDE_BY_ZERO` from
 **What TYPE 2 asks XFOIL to do.** TYPE 2 (`MATYP = 2`) is the fixed-lift type: it models an aircraft in
 steady level flight, holding weight and chord fixed and letting the speed vary, so that the Mach number
 follows the lift as `M∞ = M₁/√CL` (the three types are defined in
-[the XFOIL reference](xfoil-reference.md#the-oper-type-command-and-the-meaning-of-matyp-and-retyp)). It therefore does
+[variable and routine names](../translation-map/variable-and-routine-names.md#the-oper-type-command-and-the-meaning-of-matyp-and-retyp)). It therefore does
 not fix the Mach number. It asks for a state in which two conditions hold at once: the Mach number follows
 the lift, `M∞ = M₁/√CL`, and the lift is whatever the aerofoil produces at that Mach, `CL = CL(α, M∞)`. SPECAL (`xoper.f`) solves this by Newton
 iteration on a variable `CLM`, starting from `CLM = 1.0` on every call. That is the whole mechanism, so
@@ -426,7 +428,7 @@ denominator is −0.030 rather than solidly negative, and the second is tamer fo
 Both are equally broken. A polar plotted from this case therefore looks locally plausible exactly where it is
 not, and a departure metric built on the size of the anomaly will rank these points in the wrong order.
 
-**These points are ill-conditioned pointwise, not by accumulation** (`docs/conventions/terminology.md`). They reproduce bitwise,
+**These points are ill-conditioned pointwise, not by accumulation** (`docs/contributing/conventions/terminology.md`). They reproduce bitwise,
 and forward (−30→+30) and reverse (+30→−30) sweeps agree at all 61 points, because SPECAL resets `CLM = 1.0`
 at every call and GAMU is α-independent: nothing carries between points on the inviscid path. Their wide
 1-ULP twin envelope is pointwise ill-conditioning — each sits next to a pole, so a 1-ULP perturbation
@@ -437,7 +439,7 @@ cases, where BL state really is carried forward.
 **yFoil.** Replicated: `set_mach_re_from_cl` (`src/solver/setbl.rs:40-82`) carries both MRCL guards and
 `clcalc.rs:57-69` the unguarded denominator, so yFoil converges onto the same spurious roots — and
 then flags them, rather than reporting the numbers as if they were sound. This case is the worked
-example behind [Solution validity](solution-validity.md), which catalogues every reason yFoil withholds
+example behind [whether to trust a result](../../using-yfoil/whether-to-trust-a-result.md), which catalogues every reason yFoil withholds
 a result and what each one means. **Test:** `tests/known_issues/kt_pole_7_7.rs` runs the same section at N = 60 at
 −23°, 0° and 19° (`naca64a010_n60_inviscid_type2_m03_am23_a0_a19`: the three angles take every branch, and raise
 every event, of the −30…30° sweep, the points being independent) and checks yFoil's validity record against
@@ -486,7 +488,7 @@ from XFOIL's exact state at `TOL_PURE`), `tests/subroutine/transition.rs` (TRCHE
 reference's dumped inputs, `trchek2_<k>.dat`), and `tests/execution/steps.rs` (every iteration of the 7° call
 replayed from XFOIL's state, each within four times the step's own measured sensitivity). Each code's own
 march through the call — the amplification acting on each code's own last-bit seed — is a divergent
-comparison in the sense of `docs/conventions/terminology.md` and belongs to the series-cases study. The
+comparison in the sense of `docs/contributing/conventions/terminology.md` and belongs to the series-cases study. The
 instrumented reference dumps `trchek2_<k>.dat` and `mrchdu_trace_<k>.dat` for every `dump_calls` SETBL call.
 
 ### 7.10 The fallback tests are written so that a NaN residual takes the fallback — Replicated
@@ -556,7 +558,7 @@ CL and CD and on CL_max and its angle (NACA 0012 and 4412 at Re 1e6, the 4412 at
 the Kármán–Trefftz section, the fixed-CL sweep); past stall the branch a sweep follows can differ
 between them, which is expected. That is why the series cases run at N = 160, ITER 100, and these
 four runs are known-issues cases at all three panel counts (`group = "known-issues"`,
-`docs/testing/known-issues/`). yFoil, given the same panels, is to follow XFOIL at each.
+`docs/fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md`). yFoil, given the same panels, is to follow XFOIL at each.
 
 ## 8. Open items in yFoil's own tooling
 
@@ -570,14 +572,14 @@ four runs are known-issues cases at all three panel counts (`group = "known-issu
   `bl/params.rs`) compare closures with hard-coded values of unknown provenance, three of them
   `#[ignore]`d (`tests/IGNORED.txt`). The same closures are held to `TOL_PURE` against the reference's
   own log, incompressible and at M = 0.3, by `tests/subroutine/closures.rs`; the unit tests are to be
-  moved onto those fixtures (`docs/conventions/testing.md`, Layout).
+  moved onto those fixtures (`docs/contributing/the-test-suite.md`, Layout).
 - `tests/subroutine/pane_legacy.rs` compares the curvature repanelling with panels XFOIL generated
   itself (`tests/fixtures/naca0012/panels*.json`, contrary to CLAUDE.md Rule 4); PANGEN is tested against
   yFoil-generated panels by `tests/subroutine/pangen.rs`.
 - One step of the branch candidates is a divergent comparison
   (`xtask/fixtures-config/route.toml`: NACA 63-415 M 0.5, SETBL 2, MRCHDU's rejected stations differ);
   its branches are tested by other steps. The step tests compare a step's outputs, not the route
-  through it; observing the route is the next stage (`docs/conventions/testing.md`, 'What "tested" means for a branch').
+  through it; observing the route is the next stage (`docs/fidelity-to-xfoil/branch-coverage/index.md`, 'What "tested" means for a branch').
 - The fixture runner's watchdog used to end a reference run after five minutes of wall-clock, so
   where it cut a run still going depended on the machine's load: regenerated from scratch on
   2026-10-07, the twins study reproduced 7 of its 11 N = 240 cases exactly, and the 4 the cap cut
@@ -616,9 +618,9 @@ four runs are known-issues cases at all three panel counts (`group = "known-issu
   that replicates every known issue with its yFoil equivalent (open).
 - `scripts/noise-floor.sh` (one all-coordinates +1-ULP twin of the reference case, the origin of the
   tolerance constants in `tests/common/utilities/tolerances.rs`) predates the seeded twins and moves
-  every coordinate the same way, which `docs/conventions/terminology.md` notes measures little. The
+  every coordinate the same way, which `docs/contributing/conventions/terminology.md` notes measures little. The
   reference case's own five twins, which `cargo xtask fixtures` can now run (`twins = true`), are to
-  derive `docs/testing/noise-floor.md` instead, after which the script can be retired (open).
+  derive `docs/fidelity-to-xfoil/tolerances/the-reference-noise-floor.md` instead, after which the script can be retired (open).
 
 ## 9. Pathological cases
 

@@ -3,7 +3,7 @@
 //! Each test runs an execution of yFoil — one step seeded from XFOIL's dumped state, or a
 //! well-conditioned whole run — and requires XFOIL's branch decisions and values.
 //!
-//! Categories and rules: `docs/conventions/testing.md`.
+//! Categories and rules: `docs/contributing/the-test-suite.md`.
 
 #[path = "../common/fixtures/mod.rs"]
 mod fixtures;

@@ -1,6 +1,6 @@
 """Presentation rules of the branch-coverage study's occupancy figures (branch map, case matrix),
 the only figures still drawn by matplotlib; every other figure is an ironlab figure built in Rust
-(docs/conventions/figures.md).
+(docs/contributing/conventions/figures.md).
 
 The Rust study writes every number (data, derived quantities, extents, selections) into its run
 folder; the plot script only presents them:

@@ -2,36 +2,45 @@
 icon: lucide/plug
 ---
 
-# Bindings
+# Calling yFoil from code
 
-!!! warning "Planned, not yet available"
+The commands are a thin layer over a Rust library, and the library is the only other way
+to call yFoil today. **There are no Python, Julia or WebAssembly bindings yet**; they are
+planned, and this page will describe them when they exist.
 
-    yFoil is currently a CLI and a Rust library. This page describes where the
-    other language bindings are going; nothing here works yet.
+## Calling the Rust library
 
-The solver core is a plain Rust library with no interactive state and no global
-mutable data, which makes it straightforward to expose elsewhere.
+[Install](../installing-yfoil.md#as-a-rust-library) the crate, then generate a section, panel it
+and solve a point. This is the repository's `examples/validate_viscous.rs`, shortened:
 
-## WebAssembly
+``` rust
+use yfoil::geometry::Thickness;
+use yfoil::geometry::{naca_4digit, panel_foil};
+use yfoil::solver::analysis::{analyse, FlowConditions};
 
-A WASM target makes yFoil callable from any JavaScript runtime, and — more
-interestingly — lets it run entirely in the browser, with no server. That is the
-route to interactive documentation: a live polar on this site, computed on the
-reader's machine.
+fn main() {
+    let geometry = naca_4digit("0012", 160, Thickness::Perpendicular).expect("NACA 0012");
+    let airfoil = panel_foil(&geometry);
+    let spec = FlowConditions {
+        re: Some(1.0e6),
+        mach: 0.0,
+        ncrit: 9.0,
+        max_iterations: 20,
+        ..FlowConditions::default()
+    };
+    let p = analyse(&airfoil, 4.0_f64.to_radians(), &spec);
+    println!("CL {:.6}  CD {:.6}  converged {}", p.cl, p.cd, p.converged);
+}
+```
 
-## Python
+`analyse` is one operating point from scratch, the library's [`yfoil analyse`](analysing-one-operating-point.md).
+A sequence of points that each start from the last, as XFOIL's OPER does, is a
+`yfoil::solver::analysis::Session`: `Session::new(&airfoil, spec)`, then `alpha`, `cl` and
+`init` in the order XFOIL's commands would come; `compute_polar` is the whole
+[polar sweep](sweeping-a-polar.md). Angles are in radians in the library and in degrees on the
+command line.
 
-The obvious host for aerofoil work. The intent is a thin, typed wrapper around
-the same JSON data model, so that a result is a normal Python object and arrays
-arrive as NumPy arrays.
-
-## Julia
-
-Same story, for the same reasons.
-
-## Rust
-
-Already available — add the crate as a dependency and call the solver directly.
-The library API mirrors XFOIL's data model exactly inside `solver/` and `bl/`,
-which is a deliberate choice: it keeps every translated statement diffable
-against its Fortran original.
+Inside `solver/` and `bl/` the library mirrors XFOIL's data model exactly, which is a
+deliberate choice: it keeps every translated statement diffable against its Fortran original.
+Where each XFOIL variable and routine went is the
+[translation map](../../fidelity-to-xfoil/translation-map/index.md).

@@ -1,11 +1,11 @@
-//! Branch-coverage study (`docs/testing/branch-coverage/`).
+//! Branch-coverage study (`docs/fidelity-to-xfoil/branch-coverage/`).
 //!
 //! CLAUDE.md Rule 6: "numerically exact" is claimable only over branches that have been
 //! exercised. `cargo xtask coverage` measures which branches of the translated XFOIL subroutines
 //! the reference takes over *all* tracked cases; this study asks the sharper question — what is
 //! the **minimum set of cases** that takes every branch of the *analysis path* (the panelling
 //! generators and their spline/geometry helpers are excluded: they are tested by the `pangen_*`
-//! cases, `docs/testing/geometry/`) — and then compares every case of that set with its
+//! cases, `docs/fidelity-to-xfoil/subroutine-equivalence/xfoils-own-geometry-routines.md`) — and then compares every case of that set with its
 //! instrumented reference, so that the coverage claim and the equivalence claim are made over
 //! the same runs.
 //!
@@ -26,7 +26,7 @@
 //!    set of `xtask/fixtures-config/cases.toml`, which is how the group is kept honest.
 //! 4. Every case of the cover — and, as a measurement rather than a claim, every non-finite
 //!    probe — is run through yFoil's `Session` and compared with its fixture
-//!    (`scripts/study-support/records.rs`, the studies' floor comparison; the tests compare single steps instead, `docs/conventions/testing.md`): iteration counts and
+//!    (`scripts/study-support/records.rs`, the studies' floor comparison; the tests compare single steps instead, `docs/contributing/the-test-suite.md`): iteration counts and
 //!    branch trace exact, values within tolerance or the reference's own 1-ULP spread ×
 //!    `FLOOR_FACTOR`, the third outcome divergent.
 //!

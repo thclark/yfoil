@@ -1,7 +1,7 @@
 //! The only tolerance constants used by XFOIL-equivalence tests (CLAUDE.md Rule 1).
 //!
 //! Derived from the measured noise floor (`scripts/noise-floor.sh`, recorded in
-//! `docs/testing/noise-floor.md`, 2026-09-03). Perturbing every panel coordinate by +1 ULP on
+//! `docs/fidelity-to-xfoil/tolerances/the-reference-noise-floor.md`, 2026-09-03). Perturbing every panel coordinate by +1 ULP on
 //! the tracked reference case, with identical branch trace and iteration count, moves
 //! geometry-derived quantities by at most 5e-14 relative, inviscid GAM/QINV by 6e-11 (median
 //! 5e-14), BL state after MRCHUE/MRCHDU by 2e-11, and per-iteration CL/CD/RMSBL by 2.2e-10

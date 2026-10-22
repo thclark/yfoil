@@ -88,7 +88,7 @@ ci/ignore-drift.sh                                            # every #[ignore] 
 ```
 
 **Run the CLI.** `cargo run -- <args>`, or `cargo install --path .` for a `yfoil` binary; add `--features plotting`
-for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-viewer`). See `yfoil --help` and the [user guide](docs/user-guide/index.md).
+for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-viewer`). See `yfoil --help` and [Using yFoil](docs/using-yfoil/index.md).
 
 **XFOIL reference and fixtures.** Only needed when changing the translation, instrumentation or fixture set:
 
@@ -96,7 +96,7 @@ for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-vie
 cargo xtask xfoil-build [--verify] [--snan]        # build the DP reference into target/xfoil-ref/ (and prove
                                                    #   instrumentation is inert / no uninitialised reads)
 cargo xtask fixtures [--case NAME] [--verify] [--big]   # regenerate fixtures from xtask/fixtures-config/cases.toml
-cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/testing/coverage.md
+cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/fidelity-to-xfoil/branch-coverage/ (two pages)
 ```
 
 **Documentation.** The docs site is built with [Zensical](https://zensical.org/) (the successor to Material for MkDocs)

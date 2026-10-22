@@ -11,7 +11,7 @@
 //! the inviscid side, and every BL entry of XFOIL's state moved by −1, 0 or +1 ULP), and a value may differ from XFOIL's by
 //! up to four times the furthest any jog moved it. That is the step's own conditioning, measured in
 //! the test: an ill-conditioned solution amplifies a last-bit difference within one step, and the
-//! test allows for exactly that amplification and no more (`docs/conventions/testing.md`).
+//! test allows for exactly that amplification and no more (`docs/contributing/the-test-suite.md`).
 //!
 //! The replay is self-contained. The inviscid side (SPECAL or SPECCL, the wake, QINV, DIJ) is a
 //! function of the panels and the call's operating point, so yFoil builds it from the case's

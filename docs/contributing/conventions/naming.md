@@ -3,7 +3,7 @@
 How variables, fields, functions, types, JSON keys and CLI flags are named in yFoil, and why.
 This document holds the *rules*. The *application* of the rules, the table of every XFOIL
 name and the yFoil name it became, lives in
-[`docs/user-guide/reference/xfoil-reference/xfoil-to-yfoil-mapping.md`](../user-guide/reference/xfoil-reference.md#xfoil-yfoil-mapping);
+[variable and routine names](../../fidelity-to-xfoil/translation-map/variable-and-routine-names.md);
 read that when you need to know what a particular XFOIL variable is called here, and read this
 when you need to name something new.
 
@@ -200,8 +200,8 @@ pressure-gradient term of the lag equation (`LAG_PRESSURE_GRADIENT_WEIGHT`); `CT
 coefficient in the equilibrium Cτ^½ closure (`SQRTCTAUEQ_COEFFICIENT`); `CFFAC` scales the
 turbulent Cf correlation (`CF_TURBULENT_FACTOR`).
 
-## Related notes
+## Related notes on naming
 
-- [`docs/user-guide/reference/xfoil-reference/xfoil-to-yfoil-mapping.md`](../user-guide/reference/xfoil-reference.md#xfoil-yfoil-mapping)
+- [variable and routine names](../../fidelity-to-xfoil/translation-map/variable-and-routine-names.md)
   — the remap table: every XFOIL name, the yFoil name, and what it is
-- [Commits & versioning](git-commits-and-versioning.md) — commit message form for the rename commits (`REF:`)
+- [Commits & versioning](branches-commits-and-versions.md#commits-and-versions) — commit message form for the rename commits (`REF:`)

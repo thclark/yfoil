@@ -16,7 +16,7 @@ set -euo pipefail
 
 zensical_version="0.0.60"
 
-# The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/conventions/figures.md).
+# The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/contributing/conventions/figures.md).
 # Pinned by version and checksum, fetched from the ironlab release into a versioned directory
 # (gitignored), so an upgrade changes every URL and no browser pairs a page with a stale engine.
 ironlab_version="0.12.0"

@@ -1,5 +1,5 @@
 //! `cargo xtask route [--case NAME]... [--reuse]`: is yFoil's route through each candidate step
-//! XFOIL's? The strong meaning of "tested" (`docs/conventions/testing.md`, 'What "tested" means for a branch').
+//! XFOIL's? The strong meaning of "tested" (`docs/fidelity-to-xfoil/branch-coverage/index.md`, 'What "tested" means for a branch').
 //!
 //! XFOIL's route through a step is its call count of every translated subroutine in the step,
 //! measured by `cargo xtask steps` from the gcov build (`target/coverage/steps.json`, `calls`).
@@ -427,7 +427,7 @@ pub fn route(flags: &[String]) {
         .filter(|d| d.get("found").and_then(|f| f.as_str()) != Some("route"))
         .collect();
     let mut s = String::from(
-        "# Steps whose replay does not take XFOIL's route: divergent comparisons\n# (docs/conventions/terminology.md). The step cover excludes them (`cargo xtask steps`).\n# Entries with found = \"route\" are written by `cargo xtask route` — do not edit them by hand;\n# the others record a divergence found by other means, with the evidence.\n",
+        "# Steps whose replay does not take XFOIL's route: divergent comparisons\n# (docs/contributing/conventions/terminology.md). The step cover excludes them (`cargo xtask steps`).\n# Entries with found = \"route\" are written by `cargo xtask route` — do not edit them by hand;\n# the others record a divergence found by other means, with the evidence.\n",
     );
     let diverged: Vec<&Compared> = compared
         .iter()

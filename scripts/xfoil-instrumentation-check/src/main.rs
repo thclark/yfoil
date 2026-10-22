@@ -52,7 +52,7 @@ pub const ALPHA_STEP_DEG: f64 = 0.5;
 pub const NPOINTS: usize = 51;
 /// Kill an XFOIL run after this long, or once its stdout has not grown for `STALL_SECS`: the
 /// reference spins forever in its plot-label formatter once CL or CD is non-finite
-/// (docs/user-guide/reference/known-xfoil-issues.md §4), and it prints a line per iteration until then
+/// (docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md §4), and it prints a line per iteration until then
 pub const RUN_TIMEOUT_SECS: u64 = 1800;
 pub const STALL_SECS: u64 = 90;
 

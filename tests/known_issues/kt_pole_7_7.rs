@@ -1,6 +1,6 @@
 //! (d) Known XFOIL weakness: known issues §7.7 and §4 (CPCALC/CLCALC): TYPE 2 drives itself onto the Kármán–Tsien pole,
 //! and XFOIL reports numbers past it without a warning. yFoil's defined behaviour is to replicate
-//! the numbers and classify them as invalid (`docs/user-guide/reference/solution-validity.md`); these tests check that
+//! the numbers and classify them as invalid (`docs/using-yfoil/whether-to-trust-a-result.md`); these tests check that
 //! classification against XFOIL's own record of the same occasions.
 //!
 //! The instrumented reference logs every occasion the validity record describes as an event in

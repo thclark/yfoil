@@ -1,5 +1,5 @@
-//! Known-issues cases (`docs/testing/known-issues/`): runs that show one of XFOIL's known
-//! issues (`docs/user-guide/reference/known-xfoil-issues.md`) arising, and whether yFoil does the same. The study is the
+//! Known-issues cases (`docs/fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md`): runs that show one of XFOIL's known
+//! issues (`docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md`) arising, and whether yFoil does the same. The study is the
 //! series cases' library run over `group = "known-issues"`; only its descriptor
 //! ([`series_cases::KNOWN_ISSUES`]) differs, and its figures are the series cases' (`series_cases::figures`).
 //!

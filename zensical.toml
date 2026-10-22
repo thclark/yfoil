@@ -32,64 +32,119 @@ extra_javascript = [
 
 # The navigation is written out explicitly so that the ordering is a deliberate
 # reading order, not the alphabetical accident of the filesystem. The file tree mirrors
-# it: each tab and section is a directory (kebab-case of its label) and each page is the
-# kebab-case of its title, so the side menu predicts the path ("User guide > Commands >
-# Analyse a single point" is docs/user-guide/commands/analyse-a-single-point.md). Moving a
-# page means moving its file.
+# it: each tab and section is a directory (kebab-case of its label) with an index.md, and each
+# page is the kebab-case of its title, so the side menu predicts the path ("Using yFoil >
+# Commands > Sweeping a polar" is docs/using-yfoil/commands/sweeping-a-polar.md). Moving a page
+# means moving its file. The four tabs split by reader and by what is compared against: users,
+# engineers assessing the results (physics, naca456, XFOIL under normal conditions), developers
+# checking the translation (the instrumented XFOIL itself), and contributors.
 nav = [
   { "Home" = "index.md" },
-  { "User guide" = [
-    "user-guide/index.md",
-    { "Get started" = [
-      "user-guide/get-started/install.md",
-      "user-guide/get-started/your-first-analysis.md",
-    ] },
+  { "Using yFoil" = [
+    "using-yfoil/index.md",
+    "using-yfoil/installing-yfoil.md",
+    "using-yfoil/your-first-analysis.md",
     { "Commands" = [
-      "user-guide/commands/geometry.md",
-      "user-guide/commands/analyse-a-single-point.md",
-      "user-guide/commands/polars.md",
-      "user-guide/commands/plotting.md",
-      "user-guide/commands/bindings.md",
+      "using-yfoil/commands/index.md",
+      "using-yfoil/commands/making-and-converting-geometry.md",
+      "using-yfoil/commands/analysing-one-operating-point.md",
+      "using-yfoil/commands/sweeping-a-polar.md",
+      "using-yfoil/commands/plotting-results.md",
+      "using-yfoil/commands/calling-yfoil-from-code.md",
     ] },
-    { "Reference" = [
-      "user-guide/reference/the-data-model.md",
-      "user-guide/reference/solution-validity.md",
-      "user-guide/reference/aerofoil-series.md",
-      "user-guide/reference/known-xfoil-issues.md",
-      "user-guide/reference/xfoil-reference.md",
-      "user-guide/reference/bibliography.md",
+    { "Aerofoil families" = [
+      "using-yfoil/aerofoil-families/index.md",
+      "using-yfoil/aerofoil-families/naca-4-digit-and-4-digit-modified.md",
+      "using-yfoil/aerofoil-families/naca-5-digit-including-reflex.md",
+      "using-yfoil/aerofoil-families/naca-16-series.md",
+      "using-yfoil/aerofoil-families/naca-6-and-6a-series.md",
+      "using-yfoil/aerofoil-families/karman-trefftz-sections.md",
+      "using-yfoil/aerofoil-families/thickness-perpendicular-to-the-camber-line.md",
+      "using-yfoil/aerofoil-families/panel-distributions.md",
+      "using-yfoil/aerofoil-families/trailing-edge-gap-and-sharpening.md",
+      "using-yfoil/aerofoil-families/provenance-of-a-generated-section.md",
+    ] },
+    "using-yfoil/output-data.md",
+    "using-yfoil/whether-to-trust-a-result.md",
+    "using-yfoil/bibliography.md",
+  ] },
+  { "Engineering validation" = [
+    "engineering-validation/index.md",
+    "engineering-validation/the-validation-set.md",
+    "engineering-validation/generated-sections-against-naca456.md",
+    "engineering-validation/physical-invariants.md",
+    "engineering-validation/agreement-with-xfoil-under-normal-conditions.md",
+    "engineering-validation/sensitivity-of-results-to-their-inputs.md",
+  ] },
+  { "Fidelity to XFOIL" = [
+    "fidelity-to-xfoil/index.md",
+    { "The reference XFOIL build" = [
+      "fidelity-to-xfoil/the-reference-xfoil-build/index.md",
+      "fidelity-to-xfoil/the-reference-xfoil-build/correctly-rounded-maths-in-both-codes.md",
+      "fidelity-to-xfoil/the-reference-xfoil-build/instrumentation-patches-and-logging.md",
+      "fidelity-to-xfoil/the-reference-xfoil-build/proofs-that-the-reference-is-sound.md",
+    ] },
+    "fidelity-to-xfoil/fixtures.md",
+    { "Tolerances" = [
+      "fidelity-to-xfoil/tolerances/index.md",
+      "fidelity-to-xfoil/tolerances/the-reference-noise-floor.md",
+    ] },
+    { "Subroutine equivalence" = [
+      "fidelity-to-xfoil/subroutine-equivalence/index.md",
+      "fidelity-to-xfoil/subroutine-equivalence/boundary-layer-closures.md",
+      "fidelity-to-xfoil/subroutine-equivalence/transition-and-amplification.md",
+      "fidelity-to-xfoil/subroutine-equivalence/boundary-layer-marching-and-the-newton-system.md",
+      "fidelity-to-xfoil/subroutine-equivalence/inviscid-panel-routines.md",
+      "fidelity-to-xfoil/subroutine-equivalence/xfoils-own-geometry-routines.md",
+    ] },
+    { "Execution equivalence" = [
+      "fidelity-to-xfoil/execution-equivalence/index.md",
+      "fidelity-to-xfoil/execution-equivalence/whole-run-comparison.md",
+      "fidelity-to-xfoil/execution-equivalence/step-by-step-replay.md",
+      "fidelity-to-xfoil/execution-equivalence/polars-and-reinitialisation.md",
+      "fidelity-to-xfoil/execution-equivalence/polar-break-points.md",
+      "fidelity-to-xfoil/execution-equivalence/validity-flags-against-xfoils-events.md",
+    ] },
+    { "Branch coverage" = [
+      "fidelity-to-xfoil/branch-coverage/index.md",
+      "fidelity-to-xfoil/branch-coverage/branches-the-reference-takes.md",
+      "fidelity-to-xfoil/branch-coverage/unreachable-and-open-branches.md",
+      "fidelity-to-xfoil/branch-coverage/which-test-covers-each-branch.md",
+      "fidelity-to-xfoil/branch-coverage/the-minimal-case-set.md",
+      "fidelity-to-xfoil/branch-coverage/non-finite-probes.md",
+    ] },
+    { "XFOIL's known issues" = [
+      "fidelity-to-xfoil/xfoils-known-issues/index.md",
+      "fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md",
+      "fidelity-to-xfoil/xfoils-known-issues/deliberate-divergences.md",
+      "fidelity-to-xfoil/xfoils-known-issues/runs-that-show-the-issues.md",
+    ] },
+    { "Translation map" = [
+      "fidelity-to-xfoil/translation-map/index.md",
+      "fidelity-to-xfoil/translation-map/variable-and-routine-names.md",
+      "fidelity-to-xfoil/translation-map/boundary-layer-state-layout.md",
+      "fidelity-to-xfoil/translation-map/architecture-diagram.md",
+      "fidelity-to-xfoil/translation-map/xfoils-control-flow-and-variables.md",
+      "fidelity-to-xfoil/translation-map/xfoils-source-files-routine-by-routine.md",
+      "fidelity-to-xfoil/translation-map/xfoils-common-blocks.md",
     ] },
   ] },
-  { "Validation" = [
-    "validation/index.md",
-    { "Series cases" = "validation/series-cases.md" },
-    { "Geometry validation" = [
-      "validation/geometry-validation/index.md",
-      "validation/geometry-validation/naca-4-digit.md",
-      "validation/geometry-validation/naca-4-digit-modified.md",
-      "validation/geometry-validation/naca-5-digit.md",
-      "validation/geometry-validation/naca-16-series.md",
-      "validation/geometry-validation/naca-6-series.md",
-      "validation/geometry-validation/naca-6a-series.md",
-      "validation/geometry-validation/karman-trefftz.md",
+  { "Contributing" = [
+    "contributing/index.md",
+    "contributing/finding-a-translation-bug.md",
+    "contributing/the-test-suite.md",
+    "contributing/regenerating-the-reports.md",
+    { "Conventions" = [
+      "contributing/conventions/index.md",
+      "contributing/conventions/naming.md",
+      "contributing/conventions/terminology.md",
+      "contributing/conventions/figures.md",
+      "contributing/conventions/branches-commits-and-versions.md",
+      "contributing/conventions/pull-requests.md",
+      "contributing/conventions/issues-and-labels.md",
     ] },
+    "contributing/building-the-documentation.md",
   ] },
-  # The Testing tab is hidden until its pages are presentable. The pages are still built and
-  # reachable by URL, just not listed in the navigation. Uncomment to restore.
-  # { "Testing" = [
-  #   "testing/README.md",
-  #   "testing/coverage.md",
-  #   "testing/branch-tests.md",
-  #   { "Branch coverage" = "testing/branch-coverage/README.md" },
-  #   { "Known issues" = "testing/known-issues/README.md" },
-  #   "testing/noise-floor.md",
-  #   { "Geometry" = "testing/geometry/README.md" },
-  #   { "Subroutines" = [
-  #     "testing/subroutines/README.md",
-  #     "testing/subroutines/closure.md",
-  #     "testing/subroutines/transition.md",
-  #   ] },
-  # ] },
 ]
 
 [project.theme]

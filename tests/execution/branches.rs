@@ -4,7 +4,7 @@
 //! in the step as XFOIL's (`cargo xtask route`, `xtask/fixtures-config/route.toml`). The steps are
 //! the cover `cargo xtask steps` chose, listed with the branches each takes in
 //! `xtask/fixtures-config/step-cover.toml`, which also lists any branch taken only at a step whose
-//! route diverges (`docs/conventions/testing.md`, 'What "tested" means for a branch').
+//! route diverges (`docs/fidelity-to-xfoil/branch-coverage/index.md`, 'What "tested" means for a branch').
 //!
 //! Fixtures: `tests/fixtures/xfoil/<case>/`, the files each step reads — `cargo xtask fixtures
 //! --case <case>` (the cover adds the dumps and the files to the case).

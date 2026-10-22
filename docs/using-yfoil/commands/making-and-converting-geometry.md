@@ -2,7 +2,7 @@
 icon: lucide/spline
 ---
 
-# Geometry
+# Making and converting geometry
 
 ``` sh
 yfoil geometry <SUBCOMMAND>   # alias: yfoil geom
@@ -13,7 +13,7 @@ Five subcommands: [`naca`](#naca), [`karman-trefftz`](#karman-trefftz),
 them prints its full help when run without arguments; `--help` gives the long
 form.
 
-## Conventions
+## Geometry conventions
 
 - Coordinates are normalised by chord.
 - Panel ordering is **trailing edge → upper surface → leading edge → lower
@@ -22,13 +22,13 @@ form.
   round trip is bit-exact.
 - A generated or repanelled geometry carries a `generator` record: the series,
   designation and parameters it was made from, and how it was panelled (see
-  [the data model](../reference/the-data-model.md#geometry)).
+  [provenance of a generated section](../aerofoil-families/provenance-of-a-generated-section.md)).
 
 ## The `naca` command { #naca }
 
 Generate a NACA section from its designation. Every family with a public,
 reproducible definition is covered; the formulas, what each family is for and
-the references are in [aerofoil series](../reference/aerofoil-series.md).
+the references are in [aerofoil families](../aerofoil-families/index.md).
 
 ``` sh
 yfoil geometry naca 0012 -n 160 -o naca0012.json
@@ -62,27 +62,12 @@ low-drag-range subscript (`64(1)-212`).
 | `-n`/`--nodes`, `--method`, PPAR flags, `--sharp`, `--te-gap`, `--te-blend`, `--panelling` | as [`repanel`](#repanel) | The panelling: `pangen` (default) samples the section at `n_buffer_nodes` stations (246, XFOIL's own buffer density; settable in a `--panelling` file) and runs XFOIL's PANGEN on them; `cosine` is the analytic cosine sampling in \(x\) (no bias applies) |
 | `-o`, `--output` | `naca<designation>.<format>` | Output file |
 
-!!! info "Thickness distribution"
-
-    yFoil applies the thickness distribution **perpendicular to the camber
-    line**, which is the NACA definition, and does so whatever the panelling
-    method. XFOIL's `NACA4`/`NACA5` apply it vertically
-    ([known issues §6.1](../reference/known-xfoil-issues.md)); that model is available as
-    `--thickness vertical` for 4- and 5-digit sections, on XFOIL's own 245-point
-    buffer and always PANGEN-panelled, only for replicating XFOIL's `NACA`
-    command output.
-
-    This is the only deliberate numerical divergence from XFOIL, and it does not
-    affect validation, because yFoil generates the panels and XFOIL consumes
-    them.
-
-!!! info "Trailing edges"
-
-    The 4-digit families have a finite trailing-edge thickness; the 6-series,
-    6A-series and Kármán–Trefftz sections close exactly. XFOIL does not blunt a
-    sharp trailing edge (it detects one and switches branches), so yFoil
-    generates each section as defined; `--sharp` and `--te-gap` are the
-    adjustments, applied after panelling as under [`repanel`](#repanel).
+`--thickness vertical` reproduces XFOIL's own `NACA` command, which lays the thickness
+vertically rather than perpendicular to the camber line; why yFoil's default differs is
+[thickness perpendicular to the camber line](../aerofoil-families/thickness-perpendicular-to-the-camber-line.md).
+Each section is generated as defined, sharp trailing edges included; `--sharp` and `--te-gap`
+change the trailing edge after panelling, as under [`repanel`](#repanel)
+([trailing-edge gap and sharpening](../aerofoil-families/trailing-edge-gap-and-sharpening.md)).
 
 ## The `karman-trefftz` command { #karman-trefftz }
 
@@ -133,44 +118,22 @@ yfoil geometry repanel sharp.dat -n 160 --te-gap 0.002 -o sharp_gap.json
 yfoil geometry repanel e387.dat --panelling panelling.json   # every option from one file
 ```
 
-### Methods
+### Panelling flags
 
-**`pangen` (default)** is XFOIL's `PANGEN`, translated line for line and tested
-against XFOIL's own output ([validation](../../testing/geometry/README.md)).
-It splines the input, forms the curvature along the arc length, smooths it, adds
-a *fictitious* curvature at the trailing edge and inside optional refinement
-windows, and then places the nodes so that
-\((1 + 6\,\mathrm{CVPAR}\cdot\kappa)\,\Delta s\) is the same on every
-panel. Its parameters are XFOIL's `PPAR` menu, here by descriptive names:
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-n`, `--nodes` | 160 | Number of panel nodes, trailing edge round to trailing edge (XFOIL's `PPAR N`) |
+| `--method` | `pangen` | `pangen` (XFOIL's `PANGEN`) or `cosine` (yFoil's own) |
+| `--curvature-bunching`, `--te-curvature-ratio`, `--refined-curvature-ratio`, `--refine-upper X1,X2`, `--refine-lower X1,X2` | XFOIL's | `pangen` only: XFOIL's `PPAR` parameters `P`, `T`, `R`, `XT`, `XB` |
+| `--cosine-te-bias` | 0.15 | `cosine` only: the trailing-edge bias of the cosine spacing |
+| `--sharp` | off | Close the trailing edge after panelling |
+| `--te-gap GAP`, `--te-blend F` | off | Set the trailing-edge gap after panelling, as XFOIL's `TGAP` does |
+| `--panelling FILE` | — | Every option above from one file (below) |
 
-| `PPAR` key | XFOIL variable | Flag | Default | Meaning |
-| --- | --- | --- | --- | --- |
-| `N` | `NPAN` | `-n`, `--nodes` | 160 | Number of panel nodes, trailing edge round to trailing edge (N − 1 surface panels plus the trailing-edge panel) |
-| `P` | `CVPAR` | `--curvature-bunching` | 1.0 | Curvature attraction; 0 gives uniform arc-length spacing |
-| `T` | `CTERAT` | `--te-curvature-ratio` | 0.15 | Fictitious trailing-edge curvature as a fraction of the leading-edge curvature ("TE/LE panel density ratio") |
-| `R` | `CTRRAT` | `--refined-curvature-ratio` | 0.2 | Fictitious curvature inside the refinement windows as a fraction of the leading-edge curvature |
-| `XT` | `XSREF1`, `XSREF2` | `--refine-upper X1,X2` | off | Upper-surface refinement window in \(x/c\) |
-| `XB` | `XPREF1`, `XPREF2` | `--refine-lower X1,X2` | off | Lower-surface refinement window in \(x/c\) |
-
-**`cosine`** is yFoil's own method and has no XFOIL equivalent: cosine spacing in
-arc length on each surface, its parameter warped by a power law set by
-`--cosine-te-bias` (1 is a plain cosine; below 1 coarser at the trailing edge
-and finer at the leading edge; above 1 finer at the trailing edge; default 0.15,
-clamped to 0.05…2). It places a node at the leading edge, so the upper surface
-carries one node more than the lower.
-
-### Trailing edge
-
-`--sharp` moves the two trailing-edge nodes to their midpoint (a closed edge,
-XFOIL's `SHARP` path); `--te-gap GAP [--te-blend F]` sets the gap with XFOIL's
-`TGAP`, moving the surfaces apart by
-\(\tfrac{1}{2}\Delta\,(x/c)\,e^{-(1 - x/c)(1/F - 1)}\) each. The two are
-exclusive. Both are applied **after** the nodes are distributed, so the blend
-profile is evaluated exactly at every output node rather than splined through a
-coarse input; XFOIL applies `TGAP` to the buffer aerofoil and `PANE` follows,
-and the two orders differ by that interpolation. On a closed edge `TGAP`
-delivers \(\cos(\tau/2)\) times the requested gap
-([known issues §6.5](../reference/known-xfoil-issues.md)).
+What each method does and what its parameters mean is
+[panel distributions](../aerofoil-families/panel-distributions.md); what `--sharp` and
+`--te-gap` do to the nodes is
+[trailing-edge gap and sharpening](../aerofoil-families/trailing-edge-gap-and-sharpening.md).
 
 ### One file instead of flags
 

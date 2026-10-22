@@ -4,7 +4,7 @@
 //! made its work directory, `target/fixtures/<case>/`) on five seeded 1-ULP twins of its panels,
 //! `ulp1` … `ulp5` beside it. A twin jogs every panel coordinate, x and y independently, by −1, 0
 //! or +1 ULP drawn from splitmix64 of (seed, node), so it is reproducible from its seed
-//! (`docs/conventions/terminology.md`, *twin*), and then writes the case's `noise_floor.json` from
+//! (`docs/contributing/conventions/terminology.md`, *twin*), and then writes the case's `noise_floor.json` from
 //! them (`noise_floor.rs`; study data, read by the studies and by no test).
 //!
 //! `cargo xtask steps [--case NAME]... [--rebuild]` then, for every candidate case:
@@ -22,7 +22,7 @@
 //! 3. **chooses the cover**: the fewest well-conditioned steps that take every branch any
 //!    candidate step takes (essential steps first, then greedily, then pruned), and lists the
 //!    branches that only ill-conditioned steps take — those get no test
-//!    (`docs/conventions/testing.md`, rule 3).
+//!    (`docs/contributing/the-test-suite.md`, rule 3).
 //!
 //! Output: `target/coverage/steps.json` (every step: its branches and its conditioning) and
 //! `xtask/fixtures-config/step-cover.toml` (the chosen steps, tracked: it is the input of the
@@ -724,7 +724,7 @@ fn case_steps(root: &Path, gdir: &Path, case: &super::Case) -> Result<Vec<Step>,
 /// taking some branch) first, then greedily by the number of branches still uncovered (ties: fewer
 /// SETBL calls into the run, so the replay's fixture comes from early in it), then pruned of any step
 /// the rest make redundant. Every step is eligible, ill-conditioned solutions included
-/// (`docs/conventions/testing.md`, rule 4); the twins' conditioning is recorded beside each step for
+/// (`docs/contributing/the-test-suite.md`, rule 4); the twins' conditioning is recorded beside each step for
 /// information. A step listed in `xtask/fixtures-config/route.toml` as divergent (its replay takes
 /// a different route from XFOIL's) or unmeasured (its replay could not be run) is excluded
 /// (`cargo xtask route`).

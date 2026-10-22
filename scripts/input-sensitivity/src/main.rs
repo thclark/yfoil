@@ -1,4 +1,4 @@
-//! XFOIL input-sensitivity study (run folders only, no docs page; listed in `docs/testing/README.md`).
+//! XFOIL input-sensitivity study (run folders only, no docs page; listed in `docs/contributing/regenerating-the-reports.md`).
 //!
 //! Runs the instrumented double-precision XFOIL 6.99 reference on one aerofoil over an upward
 //! alpha sweep, once for the base case and once per perturbation level of three input families —
@@ -74,7 +74,7 @@ pub const ALPHA_STEP_DELTAS: &[f64] = &[
 pub const SEED: u64 = 0x5eed_f011_0012_2026;
 /// Kill an XFOIL run after this long, or once its stdout has not grown for `STALL_SECS`: the
 /// reference spins forever in its plot-label formatter once CL or CD is non-finite
-/// (docs/user-guide/reference/known-xfoil-issues.md §4), and it prints a line per iteration until then
+/// (docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md §4), and it prints a line per iteration until then
 pub const RUN_TIMEOUT_SECS: u64 = 1800;
 pub const STALL_SECS: u64 = 90;
 

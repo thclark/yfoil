@@ -2,17 +2,23 @@
 icon: lucide/shield-check
 ---
 
-# Solution validity
+# Whether to trust a result
 
 XFOIL will hand back numbers for an operating point it has not actually solved. Sometimes it says
 something on the console first; sometimes it says nothing at all. Either way the numbers arrive
 looking exactly like good ones, and a polar plotted through them looks like a polar.
 
 yFoil reproduces XFOIL's arithmetic exactly, including the cases above — that is the point of the
-project ([Rule 2](known-xfoil-issues.md)) — so it computes the same wrong numbers. What it does
-differently is **say so**, and withhold them unless you ask for them anyway.
+project, quirks and all ([XFOIL's known issues](../fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md)) — so it computes the same wrong
+numbers. What it does differently is **say so**, and withhold them unless you ask for them anyway.
 
-## The contract
+This page reads in order: what every result promises ([the contract](#the-validity-contract)),
+what its fields mean ([status and reason codes](#status-and-reason-codes)), why only some failures
+withhold the numbers ([failure classes](#failure-classes-a-b-and-c)), what a `Valid` point still
+does not promise, and one case worked through. The fields themselves sit in the records described
+in [output data](output-data.md).
+
+## The validity contract
 
 Every operating point you ask for comes back as a record. A point is never silently missing from a
 result, and the record always carries a `status`:
@@ -45,7 +51,9 @@ failing to do what was asked, such as unreadable geometry.
 Summary statistics (`cl_max`, `ldratio_max`, `cd0`) and every plotted curve are computed from the
 valid points alone, so an artefact cannot become the reported CL~max~.
 
-## Status codes
+## Status and reason codes
+
+### Status codes
 
 | `status` | Meaning |
 |---|---|
@@ -53,7 +61,7 @@ valid points alone, so an artefact cannot become the reported CL~max~.
 | `Invalid` | Solved, but at least one `reason` applies, so the numbers are not to be believed. `values` withheld unless `--allow-invalid`. |
 | `NotAttempted` | Never solved. The sweep halted before reaching this alpha (XFOIL's NSEQEX rule ends a sequence after four consecutive non-converged points). It is reported because you asked for it. |
 
-## How failures are classified
+## Failure classes A, B and C
 
 Three distinct things can be wrong with a solved point, and they differ in something more important
 than severity: **what it would take to know**. Keeping them apart is what stops the scheme from
@@ -69,16 +77,16 @@ either over-claiming or quietly ignoring a real problem.
 performed, so they can be recorded as it runs, and both are grounds for withholding the numbers.
 They are detected by observation only: the solver records the evidence and never reads it back, so
 no numeric result can depend on a validity classification
-([Rule 2](known-xfoil-issues.md); `ci/validity-write-only.sh` enforces it).
+(`ci/validity-write-only.sh` enforces it).
 
 **C cannot be folded in, and that is not an oversight.** Conditioning is a property of the problem
 near that point, not of the arithmetic that was performed — there is nothing in a single run that
 distinguishes a well-conditioned answer from one balanced on a pole. Seeing it requires perturbing
 the input and running again: rerunning the reference with its panels jogged by one ULP (its
-*twins*, `docs/conventions/terminology.md`). So a Class C point is reported `Valid`, because nothing about the
+*twins*, defined in the [terminology](../contributing/conventions/terminology.md#twins)). So a Class C point is reported `Valid`, because nothing about the
 computation was invalid, and its uncertainty is carried by that study rather than by this flag.
 Such a point is *ill-conditioned* in the sense of
-[the project terminology](../../conventions/terminology.md).
+[the project terminology](../contributing/conventions/terminology.md#ill-conditioned-solution).
 
 Where each is embodied:
 
@@ -88,18 +96,18 @@ Where each is embodied:
 | B | `mach_cl_newton_exhausted`, `converged`, `inviscid_cl_iterations`, `nonfinite_station_failures` | `MachClNewtonExhausted`, `ClNewtonExhausted`, `ViscousNotConverged`, `NonFiniteStationFailure` | yes |
 | C | — not in the record — | — | no |
 
-On the [worked case](#worked-case) A and B between them separate the 61 points exactly, with no
+On the [worked case](#worked-case-the-karmantsien-pole) A and B between them separate the 61 points exactly, with no
 false positives and no false negatives, and **both are load-bearing**: two points have a positive
 denominator and are caught only by B. That is a measured result on one case, not a guarantee.
 
 `SequenceHalted` belongs to none of the three. It is not a failure of a computation — it records
 that no computation happened.
 
-## Reason codes
+### Reason codes
 
 A point is invalid on **exact, single-run facts only** — Class A or Class B above. Nothing is
 inferred from the size or the smoothness of a returned number; see
-[the caveat below](#what-valid-does-not-mean).
+[the caveat below](#what-a-valid-status-does-not-promise).
 
 | `reason` | Class | What happened | What it means for the numbers |
 |---|---|---|---|
@@ -107,10 +115,10 @@ inferred from the size or the smoothness of a returned number; see
 | `MachClNewtonExhausted` | B | `SPECAL`'s CL(M) Newton used all 20 iterations without reaching `\|DCLM\| ≤ 1e-6`. | What is reported is iterate 20, not a solution. Only reachable under `TYPE 2`/`TYPE 3`, where the Mach number follows the lift. |
 | `ClNewtonExhausted` | B | `SPECCL`'s alpha Newton used all 20 iterations without reaching `\|DALFA\| ≤ 1e-6`. | The alpha reported does not deliver the CL you asked for. Typically a CL beyond what the section can reach. |
 | `ViscousNotConverged` | B | `VISCAL` finished without `LVCONV`: the viscous–inviscid iteration did not converge in `--max-iterations`. | The BL and the outer flow are not consistent with each other. Common past stall; raising `--max-iterations` sometimes helps and sometimes does not. |
-| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's iterate fallback: beyond the third station the station is set from the one upstream, at the first three the non-finite iterate is kept. | The run passed through a NaN and kept going. See [known issues §4](known-xfoil-issues.md), the TRCHEK2 row. |
+| `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's iterate fallback: beyond the third station the station is set from the one upstream, at the first three the non-finite iterate is kept. | The run passed through a NaN and kept going. See [known issues §4](../fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md), the TRCHEK2 row. |
 | `SequenceHalted` | — | Only on `NotAttempted` points: the sweep stopped before this alpha. | Nothing was computed. |
 
-## Diagnostics
+### Diagnostics
 
 `diagnostics` is present whenever the point was attempted, and is present **even when the numbers
 are withheld** — these are facts about the computation, not physical results, and withholding them
@@ -133,7 +141,7 @@ violation of the two, spectacular only because its denominator is nearer zero. *
 anomaly does not track the severity of the failure**, so any judgement based on how odd a number
 looks will rank these backwards.
 
-## The `cl_floored` field is not a validity test
+### The `cl_floored` field is not a validity test
 
 `MRCL`'s flags describe the conditions the point was **reported at**, which is the last call
 `SPECAL` makes — not every substitution made while iterating. Past the Kármán–Tsien pole the CL
@@ -141,7 +149,7 @@ comes back *positive* at negative incidence, so the final `MRCL` call is handed 
 number and clamps nothing. On the worked case, α = −30° records no substitution at all and is still
 thoroughly out of domain. Read these fields as evidence, not as the verdict.
 
-## What `Valid` does not mean
+## What a valid status does not promise
 
 `Valid` means no formula was evaluated outside its domain (Class A) and no iteration ran out
 (Class B). It does **not** mean the answer is well conditioned — **Class C is invisible to it**.
@@ -152,11 +160,11 @@ all; it is measured with the twins, not by this flag. Post-CL~max~ polar points 
 deep-stall solutions are the usual cases: often `Valid`, and often not reproducible to better than
 their own noise. Treat validity as a *necessary* condition, not a sufficient one.
 
-## Worked case
+## Worked case: the Kármán–Tsien pole { #worked-case-the-karmantsien-pole }
 
 The NACA 64A010 swept −30° to +30° inviscid at `TYPE 2`, M₁ = 0.3, is the case the whole scheme was
 built against, and it is written up in full at
-[known issues §7.7](known-xfoil-issues.md). `TYPE 2` makes the Mach number follow the lift, so
+[known issues §7.7](../fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md). `TYPE 2` makes the Mach number follow the lift, so
 on a symmetric section the entire negative half of the sweep is outside the type's domain of
 definition; `MRCL` substitutes a floored CL and a Mach limited to 0.99, where the pole sits at
 `q/Q∞ = 1.153` — which this section's suction peak passes by α = ±1°.
@@ -166,9 +174,6 @@ on a symmetric aerofoil at −30°** and prints nothing at all; its Newton fails
 of the 61. Both reason classes are load-bearing: α = −11° and α = 0° have a positive denominator and
 are caught only by the exhaustion test.
 
-## Checking yFoil's flagging against XFOIL
-
-The instrumented reference build records the same occasions as branch events, so yFoil's flags can
-be cross-checked against XFOIL directly — without comparing any numbers. The event names, and what
-XFOIL does about each occasion on its own, are tabulated in
-[the instrumentation guide](xfoil-reference.md#validity-events).
+Whether yFoil raises these flags exactly where XFOIL's own branch events say it should is checked
+against the instrumented reference, without comparing any numbers:
+[validity flags against XFOIL's events](../fidelity-to-xfoil/execution-equivalence/validity-flags-against-xfoils-events.md).

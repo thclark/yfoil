@@ -1,4 +1,4 @@
-# Reference noise floor
+# The reference's noise floor
 
 **What this measures.** How much XFOIL's own outputs move when its *input* changes by the smallest
 possible amount — every panel coordinate perturbed by +1 ULP (`math.nextafter`) — with everything else

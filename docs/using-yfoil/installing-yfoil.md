@@ -2,9 +2,14 @@
 icon: lucide/download
 ---
 
-# Install
+# Installing yFoil
 
-## From source
+yFoil comes two ways: as the `yfoil` command-line tool, which is what the rest of this tab
+uses, and as a Rust library. There are no binary releases and no bindings for other
+languages yet ([calling yFoil from code](commands/calling-yfoil-from-code.md) says what
+exists).
+
+## The command-line tool
 
 yFoil is a Rust crate. With a [recent stable
 toolchain](https://rustup.rs/) and a C compiler installed (Xcode's command-line
@@ -33,7 +38,7 @@ cargo install --path . --features plotting
 cargo install ironlab-viewer --version 0.12.0
 ```
 
-## Check it works
+Check it works:
 
 ``` sh
 yfoil --version
@@ -46,3 +51,17 @@ yfoil --help
     yFoil exists is that keeping XFOIL building on current toolchains and
     architectures has become painful. Until they are published, build from
     source.
+
+## As a Rust library
+
+The same crate is a library. Add it to a Rust project from the repository (it is not on
+crates.io yet):
+
+``` sh
+cargo add --git https://github.com/thclark/yfoil.git yfoil
+```
+
+The same C compiler is needed, for the same reason. What the library offers is on
+[calling yFoil from code](commands/calling-yfoil-from-code.md).
+
+Next: [your first analysis](your-first-analysis.md).

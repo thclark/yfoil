@@ -2,7 +2,10 @@
 icon: lucide/activity
 ---
 
-# Analyse a single point
+# Analysing one operating point
+
+One operating point, solved from scratch: a fixed angle of attack or a fixed lift coefficient,
+viscous or inviscid.
 
 ``` sh
 yfoil analyse <GEOMETRY.json> [OPTIONS]
@@ -22,13 +25,13 @@ yfoil analyse naca0012.json --cl 0.6 --reynolds 1e6 -o cl06.json
 
 α becomes the unknown; `--cl` overrides `--alpha`.
 
-## Inviscid
+## An inviscid point
 
 ``` sh
 yfoil analyse naca0012.json --alpha 5 --inviscid
 ```
 
-## Options
+## Options of `analyse`
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -44,9 +47,9 @@ yfoil analyse naca0012.json --alpha 5 --inviscid
 
 Without `-o`, a summary is printed: \(C_L\), \(C_D\) (split into friction and
 pressure), \(C_M\), transition locations and the iteration count. With `-o`, the
-[full record](../reference/the-data-model.md) is written.
+[full record](../output-data.md#analysis-records) is written.
 
-## The XFOIL equivalent
+## The XFOIL equivalent of `analyse`
 
 ``` text
 LOAD naca0012.dat
@@ -55,3 +58,5 @@ VISC 1000000
 ITER 20
 ALFA 5
 ```
+
+A sequence of points, each starting from the last, is a polar: [sweeping a polar](sweeping-a-polar.md).

@@ -18,7 +18,7 @@ Two qualifications, neither of which is nondeterminism:
   disallows `std`'s `f64` methods, which call the host libm. A correctly rounded result is a property
   of its argument alone, so neither code's bits depend on the host. Until 2026-10-15 both took them
   from the host libm, where Apple libSystem and glibc differ by one ULP on 0.1 % (`exp`, `ln`, `pow`)
-  to 18 % (`tanh`) of inputs, and bit-identity was a same-host property (`docs/cross-platform-quirks.md`).
+  to 18 % (`tanh`) of inputs, and bit-identity was a same-host property (`docs/fidelity-to-xfoil/the-reference-xfoil-build/correctly-rounded-maths-in-both-codes.md`).
 - **Ill-conditioned solutions** and **divergent comparisons**, below.
 
 ## Tested, compared, covered — not "gated"
@@ -41,7 +41,7 @@ the stagnation-point fallbacks — exist precisely to cope with them, so the tes
 to cover those branches.
 
 A result can be ill-conditioned and still valid: conditioning is Class C in
-[solution validity](../user-guide/reference/solution-validity.md), which a single run cannot detect.
+[the validity contract](../../using-yfoil/whether-to-trust-a-result.md), which a single run cannot detect.
 
 ## Divergent comparison
 
@@ -55,7 +55,7 @@ station at which UPDATE's relaxation factor is limited.
 A divergent comparison is a *consequence* of an ill-conditioned solution — the control flow of a
 well-conditioned solution does not sit on a knife edge — but it is not itself ill-conditioning.
 It says nothing about whether the translation is right, so **no test is ever a divergent
-comparison** (`testing.md`). Whether a comparison diverges is decided by observing both codes'
+comparison** ([the test suite](../the-test-suite.md)). Whether a comparison diverges is decided by observing both codes'
 routes through it, not by the size of any difference in the results.
 
 In validation, as opposed to testing, divergent comparisons are expected in a polar that contains
@@ -86,7 +86,7 @@ of its twins. It is the reference's own spread under a one-ULP perturbation. It 
 quantity, used to derive the named tolerances in `tests/common/utilities/tolerances.rs` and in
 the studies, which read it from the `noise_floor.json` written with the twins beside each
 case's work directory. Tests do not read it (see
-[testing.md](testing.md), including its Status section).
+[the test suite](../the-test-suite.md), including its status).
 
 ## Case cover and step cover
 
@@ -107,6 +107,6 @@ inviscid call — that together take every branch any candidate step takes. It i
 `cargo xtask route` observed yFoil take XFOIL's route, and is recorded in
 `xtask/fixtures-config/step-cover.toml`. A **step-cover member** is one such step, replayed by one
 test in `tests/execution/branches.rs`. This is the cover the tests cover branches with
-([testing.md](testing.md), "How branch coverage is established").
+([how branch coverage is established](../../fidelity-to-xfoil/branch-coverage/index.md#how-branch-coverage-is-established)).
 
 Say which cover is meant; "the cover" alone is ambiguous.

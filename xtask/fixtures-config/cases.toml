@@ -360,7 +360,7 @@ keep = ["xfoil_pangen.dat"]
 track = true
 
 # ---------------------------------------------------------------------------------------------
-# Solution validity (docs/user-guide/reference/solution-validity.md): inviscid runs whose events.dat records XFOIL's
+# Whether to trust a result (docs/using-yfoil/whether-to-trust-a-result.md): inviscid runs whose events.dat records XFOIL's
 # Class A/B occasions (patch 19); tests/known_issues/kt_pole_7_7.rs asserts yFoil's validity record
 # against them point by point.
 # ---------------------------------------------------------------------------------------------
@@ -747,7 +747,7 @@ track = true
 # each member corresponds, more loosely, to a branch-coverage member, or shows a generator family
 # or a physical regime (Re 1e4 to 1e8, Ncrit 4 to 11, M 0 to 0.6, forced transition, fixed CL,
 # inviscid). All at N = 160, ITER 100 — N = 160 represents N = 240 where the flow is attached
-# (docs/user-guide/reference/known-xfoil-issues.md §7.13) — and each with its five 1-ULP twins. A polar is XFOIL's
+# (docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md §7.13) — and each with its five 1-ULP twins. A polar is XFOIL's
 # polar procedure (ALFA 0 / ASEQ, ITMAX+5 per point, the sequence halting after NSEQEX = 4
 # consecutive unconverged points), 0 -> +30, INIT, 0 -> -30 by 1 deg. No member's reference hangs.
 
@@ -959,7 +959,7 @@ track = false
 twins = true
 
 # ---- known-issues cases (scripts/known-issues, untracked) ---------------------------------------
-# Runs that show one of XFOIL's known issues (docs/user-guide/reference/known-xfoil-issues.md, the section in each
+# Runs that show one of XFOIL's known issues (docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md, the section in each
 # description) arising, to be brought one for one with the documented issues: the solution's and
 # its convergence's dependence on the panel count (§7.13, each case at N = 60, 160 and 240 with the
 # ITER it was studied at), the plot-label hang (§4, at the cheapest panel count whose reference
@@ -1250,7 +1250,7 @@ track = false
 # or `--group pathological`. No deterministic end is set — a later study is to watch them run and
 # establish why they are slow, why the 4412 sweeps hang while the BL state stays finite, and whether
 # yFoil does the same. What each showed, the physics it captures, and where that behaviour is tested
-# and shown in routine time: docs/user-guide/reference/known-xfoil-issues.md §9. Nothing runs them yet.
+# and shown in routine time: docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md §9. Nothing runs them yet.
 
 [[case]]
 name = "pathological_naca4412_n240_polar30_re1e6_iter200"    # copy of naca4412_n240_polar30_re1e6_iter200: hangs in the plot label at about 30 deg on the upper leg (non-finite CL; the BL state stays finite); twins ~23 min each (observed 2026-10-07)

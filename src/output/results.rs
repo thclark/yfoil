@@ -1,12 +1,12 @@
 //! The serialised results: one analysed point (`AnalysisOutput`), a polar (`PolarOutput`) and the
-//! geometry report (`GeometryInfo`). Keys are the variable names of `docs/conventions/naming.md`.
+//! geometry report (`GeometryInfo`). Keys are the variable names of `docs/contributing/conventions/naming.md`.
 
 use serde::{Deserialize, Serialize};
 
 /// Why a point is not valid. Each variant is an exact, single-run fact — a formula evaluated
 /// outside its analytic domain, or an iteration that ran out before meeting its tolerance.
 /// Nothing here is inferred from the size or the smoothness of a returned number
-/// (`docs/user-guide/reference/known-xfoil-issues.md` §7.10).
+/// (`docs/fidelity-to-xfoil/xfoils-known-issues/the-issue-register.md` §7.10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reason {
     /// The Kármán–Tsien denominator `β + BFAC·Cp_inc` reached zero or below, so the
