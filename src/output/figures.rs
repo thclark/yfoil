@@ -170,15 +170,15 @@ pub fn save_with_pdf(fig: &Figure, stem: &Path) -> Result<(), FigureError> {
 
 /// The documentation markup that embeds a figure file, `file_name` relative to the page: beside
 /// it, or in the directory beside it named after the page (`docs/conventions/figures.md`,
-/// "Embedding"). The figure's name is the file's stem.
+/// "Embedding"). The figure's name is the file's stem. The docs embed `.fig` only: `.fig.json`
+/// is too slow to load in the site.
 pub fn embed_html(file_name: &str, alt: &str) -> String {
     let stem = file_name.rsplit('/').next().unwrap();
-    let name = stem.trim_end_matches(".json").trim_end_matches(".fig");
+    let name = stem.trim_end_matches(".fig");
     let alt = alt.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
     // `format` is explicit: the site's cache-busting appends `?v=<hash>` to `src`
-    let format = if file_name.ends_with(".json") { "json" } else { "fig" };
     format!(
-        "<ironlab-figure src=\"{file_name}\" format=\"{format}\" name=\"{name}\" alt=\"{alt}\">{alt}</ironlab-figure>"
+        "<ironlab-figure src=\"{file_name}\" format=\"fig\" name=\"{name}\" alt=\"{alt}\">{alt}</ironlab-figure>"
     )
 }
 
