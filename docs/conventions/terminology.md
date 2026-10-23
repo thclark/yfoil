@@ -96,7 +96,7 @@ interchangeable.
 
 The **case cover** is the fewest whole reference cases that together take every branch of the
 analysis path a finite run can reach. It is chosen by the branch-coverage study
-(`scripts/branch-coverage`) from each candidate case's gcov counts, and its members are the cases
+(`studies/branch-coverage`) from each candidate case's gcov counts, and its members are the cases
 with `group = "branch-coverage"` in `xtask/fixtures-config/cases.toml`. A **case-cover member** is
 one of those cases (for example `naca0012_n60_a8_re1e4_damp`). It is a study's claim that this set
 of runs exercises the analysis path; the tests do not cover branches through it.

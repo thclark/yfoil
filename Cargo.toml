@@ -44,12 +44,12 @@ members = [
     ".",
     "cr-libm",
     "xtask",
-    "scripts/input-sensitivity",
-    "scripts/xfoil-instrumentation-check",
-    "scripts/aerofoil-series",
-    "scripts/branch-coverage",
-    "scripts/series-cases",
-    "scripts/known-issues",
+    "studies/input-sensitivity",
+    "studies/xfoil-instrumentation-check",
+    "studies/aerofoil-series",
+    "studies/branch-coverage",
+    "studies/series-cases",
+    "studies/known-issues",
 ]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a

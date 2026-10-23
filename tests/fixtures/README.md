@@ -46,8 +46,8 @@ scripts/cross-host.sh    # needs docker: reruns the reference on glibc on every 
 
 ## Study data (untracked)
 
-The studies (`scripts/branch-coverage`, `scripts/series-cases`, `scripts/known-issues`,
-`scripts/input-sensitivity`)
+The studies (`studies/branch-coverage`, `studies/series-cases`, `studies/known-issues`,
+`studies/input-sensitivity`)
 read the reference's full runs from `target/fixtures/<case>/`, never from `tests/fixtures/`, and no
 test reads what they produce. Their cases carry `group = "..."` in `cases.toml`; the ones only a study
 uses are `track = false`.
