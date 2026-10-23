@@ -19,6 +19,6 @@ image="yfoil-cross-host:ubuntu24"
 command -v docker >/dev/null 2>&1 || { echo "error: docker is needed for the Linux side" >&2; exit 1; }
 docker build -q -t "$image" "$repo_root/scripts/cross-host" >/dev/null
 mkdir -p "$tree"
-rsync -a --delete --exclude target --exclude .tmp --exclude .git --exclude 'scripts/*/runs' "$repo_root/" "$tree/"
+rsync -a --delete --exclude target --exclude .tmp --exclude .git --exclude 'studies/*/runs' "$repo_root/" "$tree/"
 docker run --rm -v "$tree":/work -w /work -e CARGO_TARGET_DIR=/work/target "$image" \
     bash -c 'cargo run -q -p xtask -- cross-host'

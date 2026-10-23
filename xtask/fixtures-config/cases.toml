@@ -518,7 +518,7 @@ ncrit = 9.0
 max_iterations = 20
 damp = true
 
-# ---- non-finite probes (scripts/branch-coverage, untracked) ------------------------------------
+# ---- non-finite probes (studies/branch-coverage, untracked) ------------------------------------
 # The stalled compressible and closed-TE-stall candidates of the branch-coverage search. Each
 # reaches analysis-path branches no finite case reaches, but only after XFOIL has produced a NaN
 # (TRCHEK2's transition-point Newton landing on the interval end, then MRCHUE/MRCHDU's iterate
@@ -742,7 +742,7 @@ run_through = 20
 step_calls = [21, 28]
 track = true
 
-# ---- series cases (scripts/series-cases, untracked) --------------------------------------------
+# ---- series cases (studies/series-cases, untracked) --------------------------------------------
 # The aerofoil series and flow regimes of interest under normal conditions, shown by the study:
 # each member corresponds, more loosely, to a branch-coverage member, or shows a generator family
 # or a physical regime (Re 1e4 to 1e8, Ncrit 4 to 11, M 0 to 0.6, forced transition, fixed CL,
@@ -958,7 +958,7 @@ group = "series"
 track = false
 twins = true
 
-# ---- known-issues cases (scripts/known-issues, untracked) ---------------------------------------
+# ---- known-issues cases (studies/known-issues, untracked) ---------------------------------------
 # Runs that show one of XFOIL's known issues (docs/user-guide/reference/known-xfoil-issues.md, the section in each
 # description) arising, to be brought one for one with the documented issues: the solution's and
 # its convergence's dependence on the panel count (§7.13, each case at N = 60, 160 and 240 with the

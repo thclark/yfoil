@@ -6,8 +6,8 @@ in the ironlab viewer, embedded live in this site, and exported to PDF for publi
 are implemented once, in `src/output/figures.rs` (feature `plotting`), and every figure is built through it.
 
 The exception is the branch-coverage study's two occupancy figures (`docs/testing/branch-coverage/`): the branch map
-and the case × subroutine matrix are not charts, and stay SVG drawn by matplotlib (`scripts/branch-coverage/plot.py`
-through `scripts/figures/render.sh`) until ironlab has a figure type for them.
+and the case × subroutine matrix are not charts, and stay SVG drawn by matplotlib (`studies/branch-coverage/plot.py`
+through `studies/figures/render.sh`) until ironlab has a figure type for them.
 
 ## Who computes what
 
