@@ -59,12 +59,12 @@ The reference cases serve two audiences, and their reports live in two places:
 
 - **Validation** (`docs/validation/`) is the engineering assessment: whether yFoil stacks up
   sensibly against XFOIL on the aerofoil series and flow regimes an aerodynamicist would run. Its
-  cases are the `series` group, whose results read as polars and boundary layers, and the selection
-  of aerofoils they are run on.
+  cases are the `series` group, whose results read as polars and boundary layers, the selection
+  of aerofoils they are run on, and the tolerances: the reference's noise floor they were set from.
 - **Consistency** (`docs/testing/`) is how the test suite tracks yFoil against XFOIL, for software
   developers (and aerodynamicists deep into XFOIL's edge cases): branch coverage and which test
   covers each branch, the minimal `branch-coverage` (finite) and `non-finite` sets, the
-  `known-issues` and `pathological` runs, the reference's noise floor, and the subroutine and
+  `known-issues` and `pathological` runs, and the subroutine and
   geometry comparisons.
 
 ## Layout
