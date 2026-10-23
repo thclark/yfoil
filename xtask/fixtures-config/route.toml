@@ -1,5 +1,5 @@
 # Steps whose replay does not take XFOIL's route: divergent comparisons
-# (docs/conventions/terminology.md). The step cover excludes them (`cargo xtask steps`).
+# (docs/development/conventions/terminology.md). The step cover excludes them (`cargo xtask steps`).
 # Entries with found = "route" are written by `cargo xtask route` — do not edit them by hand;
 # the others record a divergence found by other means, with the evidence.
 #

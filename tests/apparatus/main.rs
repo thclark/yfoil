@@ -2,7 +2,7 @@
 //!
 //! Checks on the reference and its fixtures rather than on yFoil.
 //!
-//! Categories and rules: `docs/conventions/testing.md`.
+//! Categories and rules: `docs/development/conventions/testing.md`.
 
 #[path = "../common/fixtures/mod.rs"]
 mod fixtures;

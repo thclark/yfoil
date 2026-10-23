@@ -32,13 +32,13 @@ use super::tolerances::{TOL_SOLVER, TOL_TRANSIENT};
 /// `cargo xtask twins` from the case's five seeded 1-ULP twins, the largest spread over them): a
 /// value is accepted when it is within the base tolerance *or* within `FLOOR_FACTOR` × the
 /// reference's own spread of that value. A study threshold: the tests do not read the floor
-/// (`docs/conventions/testing.md`).
+/// (`docs/development/conventions/testing.md`).
 pub const FLOOR_FACTOR: f64 = 4.0;
 /// Hypersensitivity threshold for the studies' third outcome. When one of the reference's own
 /// 1-ULP twins moves a per-iteration value by more than this (absolute), the reference cannot
 /// reproduce itself there; a yFoil run that matched every earlier iteration within
 /// `FLOOR_FACTOR` × floor and departs at such an iteration is classified *divergent*
-/// (`docs/conventions/terminology.md`), reported, not passed or failed.
+/// (`docs/development/conventions/terminology.md`), reported, not passed or failed.
 pub const DIVERGENCE_FLOOR: f64 = 1e-6;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -83,7 +83,7 @@ pub struct Records {
 /// Whether the reference itself was ill-conditioned at VISCAL call `k`, from its own five twins
 /// (`noise_floor.json`): a twin changed the call's branch trace (iteration count, convergence,
 /// IST, ITRAN — `flips`), or moved its converged point or any of its iterations' RMSBL by more than
-/// `DIVERGENCE_FLOOR` (`docs/conventions/terminology.md`, *ill-conditioned solution*). `None` when
+/// `DIVERGENCE_FLOOR` (`docs/development/conventions/terminology.md`, *ill-conditioned solution*). `None` when
 /// the case has no twins.
 pub fn reference_ill_conditioned(rec: &Records, k: usize) -> Option<bool> {
     let floor = rec.floor.as_ref()?;
@@ -417,6 +417,12 @@ pub struct CallReport {
     /// the point itself was compared (a match)
     pub point_diff: Vec<(&'static str, f64)>,
     pub outcome: Outcome,
+    /// how yFoil parted from the reference, when it did: `branch: <decision>` when a branch
+    /// decision differs (IST, ITRAN, the UPDATE limiter, the convergence test, SPECCL's ITAL — a
+    /// divergent comparison where the reference is ill-conditioned there), or `value: <name>`
+    /// when every branch decision matches and a value leaves tolerance
+    /// (`docs/development/conventions/terminology.md`, "Run parting")
+    pub parted_by: Option<String>,
 }
 
 fn value_ok(a: f64, b: f64, tol: f64, scale: f64, floor: f64, what: &str) -> Result<(), String> {
@@ -624,6 +630,13 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         let trace_ok =
             y.i_stagnation_node == r[7] as usize && y.i_transition_station[1..] == [r[8] as usize, r[9] as usize];
         if (parted_value.is_some() || !trace_ok || limiter_flip.is_some()) && floor_rmsbl > DIVERGENCE_FLOOR {
+            report.parted_by = Some(if limiter_flip.is_some() {
+                "branch: limiter".to_string()
+            } else if !trace_ok {
+                "branch: IST/ITRAN".to_string()
+            } else {
+                format!("value: {}", parted_value.unwrap().0)
+            });
             let parted = if let Some(m) = limiter_flip.clone() {
                 m
             } else if !trace_ok {
@@ -649,6 +662,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         for (m, (name, ours, theirs, scale)) in compared.iter().enumerate() {
             let floor = fl(fi, name);
             if let Err(why) = value_ok(*ours, *theirs, transient_tol, *scale, floor, &format!("{ictx}: {name}")) {
+                report.parted_by = Some(format!("value: {name}"));
                 mismatch(&mut report, why);
                 break;
             }
@@ -661,6 +675,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             break;
         }
         if y.i_stagnation_node != r[7] as usize {
+            report.parted_by = Some("branch: IST".into());
             mismatch(
                 &mut report,
                 format!("{ictx}: IST yfoil {} vs xfoil {}", y.i_stagnation_node, r[7]),
@@ -668,6 +683,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             break;
         }
         if y.i_transition_station[1..] != [r[8] as usize, r[9] as usize] {
+            report.parted_by = Some("branch: ITRAN".into());
             mismatch(
                 &mut report,
                 format!(
@@ -679,6 +695,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
             break;
         }
         if let Some(flip) = limiter_flip {
+            report.parted_by = Some("branch: limiter".into());
             mismatch(
                 &mut report,
                 format!(
@@ -695,6 +712,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         // every common iteration matched: the runs part at the convergence test of the last one
         let common = p.iterations.min(report.iterations.1);
         let floor_rmsbl = fl(cf.and_then(|c| c.iterations.get(common - 1)), "RMSBL");
+        report.parted_by = Some("branch: convergence test".into());
         let counts = format!(
             "iteration count yfoil {} (converged {}) vs xfoil {} (converged {})",
             p.iterations, p.converged, report.iterations.1, report.converged.1
@@ -737,6 +755,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
     if p.iterations != report.iterations.1 || p.converged != report.converged.1 {
         // count_flip: the common iterations matched; the runs part where one of them stops
         let at = p.iterations.min(report.iterations.1) + 1;
+        report.parted_by = Some("branch: convergence test".into());
         let why = format!(
             "one of the reference's own 1-ULP twins changes this call's iteration count / convergence ({}); yfoil {} iterations (converged {}), reference {} (converged {}), the common {} iterations match",
             within_call.join("; "),
@@ -776,12 +795,14 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
     ] {
         let theirs: f64 = fortran_real(&x[name]);
         if let Err(why) = value_ok(ours, theirs, TOL_SOLVER, scale, fl(fp, name), &format!("{ctx}: {name}")) {
+            report.parted_by = Some(format!("value: {name}"));
             mismatch(&mut report, why);
             return report;
         }
         report.point_diff.push((name, (ours - theirs).abs()));
     }
     if st.i_stagnation_node != x["IST"].parse::<usize>().unwrap() {
+        report.parted_by = Some("branch: IST".into());
         mismatch(
             &mut report,
             format!("{ctx}: IST yfoil {} vs xfoil {}", st.i_stagnation_node, x["IST"]),
@@ -793,6 +814,7 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         x["ITRAN2"].parse::<usize>().unwrap(),
     ];
     if p.i_transition_station[1..] != itran {
+        report.parted_by = Some("branch: ITRAN".into());
         mismatch(
             &mut report,
             format!(
@@ -843,6 +865,7 @@ pub fn compare_inviscid_call(rec: &Records, kind: &str, k: usize, p: &PointResul
         report.outcome = Outcome::Mismatch { why };
     };
     if kind == "speccl" && report.iterations.0 != report.iterations.1 {
+        report.parted_by = Some("branch: SPECCL iterations".into());
         let why = format!(
             "{ctx}: ITAL yfoil {} vs xfoil {}",
             report.iterations.0, report.iterations.1
@@ -853,6 +876,7 @@ pub fn compare_inviscid_call(rec: &Records, kind: &str, k: usize, p: &PointResul
     for (name, ours) in [("ALFA", p.alpha), ("CL", p.cl), ("CM", p.cm), ("CDP", p.cd_pressure)] {
         let theirs: f64 = fortran_real(&x[name]);
         if let Err(why) = value_ok(ours, theirs, TOL_SOLVER, 1.0, fl(name), &format!("{ctx}: {name}")) {
+            report.parted_by = Some(format!("value: {name}"));
             mismatch(&mut report, why);
             return report;
         }
@@ -880,6 +904,7 @@ pub fn compare_inviscid_call(rec: &Records, kind: &str, k: usize, p: &PointResul
                 fl(name),
                 &format!("{ctx}: {name}({i})"),
             ) {
+                report.parted_by = Some(format!("value: {name}"));
                 mismatch(&mut report, why);
                 return report;
             }

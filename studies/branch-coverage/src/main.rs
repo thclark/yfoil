@@ -1,11 +1,11 @@
-//! Branch-coverage study (`docs/testing/branch-coverage/`).
+//! Branch-coverage study (`docs/validation/branch-coverage/`).
 //!
 //! CLAUDE.md Rule 6: "numerically exact" is claimable only over branches that have been
 //! exercised. `cargo xtask coverage` measures which branches of the translated XFOIL subroutines
 //! the reference takes over *all* tracked cases; this study asks the sharper question — what is
 //! the **minimum set of cases** that takes every branch of the *analysis path* (the panelling
 //! generators and their spline/geometry helpers are excluded: they are tested by the `pangen_*`
-//! cases, `docs/testing/geometry/`) — and then compares every case of that set with its
+//! cases, `docs/development/testing/geometry/README.md`) — and then compares every case of that set with its
 //! instrumented reference, so that the coverage claim and the equivalence claim are made over
 //! the same runs.
 //!
@@ -26,7 +26,7 @@
 //!    set of `xtask/fixtures-config/cases.toml`, which is how the group is kept honest.
 //! 4. Every case of the cover — and, as a measurement rather than a claim, every non-finite
 //!    probe — is run through yFoil's `Session` and compared with its fixture
-//!    (`studies/study-support/records.rs`, the studies' floor comparison; the tests compare single steps instead, `docs/conventions/testing.md`): iteration counts and
+//!    (`studies/study-support/records.rs`, the studies' floor comparison; the tests compare single steps instead, `docs/development/conventions/testing.md`): iteration counts and
 //!    branch trace exact, values within tolerance or the reference's own 1-ULP spread ×
 //!    `FLOOR_FACTOR`, the third outcome divergent.
 //!
@@ -37,13 +37,18 @@
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
 //! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`; the
 //! figures are drawn from `summary.json` by `plot.py` through `studies/figures/render.sh`
-//! (matplotlib, presentation only). With `--docs` the Markdown page and the SVG figures are also
-//! written to `docs/testing/branch-coverage/`, the only tracked products.
+//! (matplotlib, presentation only). Every run also writes `publish/`, its tables and figures as
+//! the docs hold them (`studies/study-support/publish.rs`); `cargo xtask publish branch-coverage`
+//! copies it into `docs/validation/branch-coverage/`, whose pages are written by hand.
+//! `--render <run_dir>` redraws an existing run folder's figures and rewrites its index and
+//! `publish/` from its `summary.json`, without measuring or comparing again.
 //!
 //! Usage (from the repository root):
 //!
 //! ```text
-//! cargo run --release -p branch-coverage -- [--docs] [--no-measure]
+//! cargo run --release -p branch-coverage -- [--no-measure]
+//! cargo run --release -p branch-coverage -- --render studies/branch-coverage/runs/<UTC>
+//! cargo xtask publish branch-coverage [--run <UTC>]
 //! ```
 
 mod cover;
@@ -290,7 +295,22 @@ pub fn render(run_dir: &Path) -> bool {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let docs = args.iter().any(|a| a == "--docs");
+    assert!(
+        !args.iter().any(|a| a == "--docs"),
+        "--docs is gone: a run writes runs/<UTC>/publish/, and `cargo xtask publish branch-coverage` copies it into the docs"
+    );
+    if let Some(i) = args.iter().position(|a| a == "--render") {
+        let run_dir = PathBuf::from(args.get(i + 1).expect("--render <run_dir>"));
+        let summary: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("summary.json")).expect("summary.json in the run folder"),
+        )
+        .expect("parse summary.json");
+        report::write_index(&run_dir, &summary);
+        report::write_index_tex(&run_dir, &summary);
+        render(&run_dir);
+        report::write_publish(&run_dir, &summary);
+        return;
+    }
     let measure = !args.iter().any(|a| a == "--no-measure");
     let root = repo_root();
 
@@ -472,15 +492,10 @@ fn main() {
         serde_json::to_string_pretty(&summary).unwrap(),
     )
     .unwrap();
-    report::write_index(&run_dir, &summary, &universe, &candidates);
+    report::write_index(&run_dir, &summary);
     report::write_index_tex(&run_dir, &summary);
-    let drawn = render(&run_dir);
-    if docs {
-        let docs_dir = root.join("docs/testing/branch-coverage");
-        std::fs::create_dir_all(&docs_dir).unwrap();
-        report::write_docs(&docs_dir, &run_dir, &summary, &universe, &candidates, drawn);
-        println!("docs written to {}", docs_dir.display());
-    }
+    render(&run_dir);
+    report::write_publish(&run_dir, &summary);
     println!("run folder: {}", run_dir.display());
     if !group_matches {
         eprintln!(

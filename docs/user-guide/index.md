@@ -4,45 +4,34 @@ icon: lucide/book-open
 
 # User guide
 
-## Start here
+## About yFoil
 
-[Install yFoil](get-started/install.md), then [run your first analysis](get-started/your-first-analysis.md).
+If you're an aerodynamicist, you've almost certainly used XFOIL for 2D aerofoil section analysis. At [OST](https://www.ost.ch/de/), we love XFOIL and use it for building digital twins of wind turbines. It's used by amateurs and professionals alike - for drones, gliders, planes, hydrofoils, turbines, you name it.
+
+So we'd like to introduce [yFoil](https://github.com/thclark/yfoil/), our ground-up reimplementation of XFOIL, featuring:
+
+|| Feature | Benefit |
+|---|---|---|
+| :white_check_mark: | Platform-independence | *Same results on different machines, always* |
+| :white_check_mark: | Robust handling of ill-conditioned cases | *No random spikes post-stall* |
+| :white_check_mark: | Error and warning management | *No silent errors or warnings lost in swamps of terminal output* | 
+| :white_check_mark: | Memory-safe execution | *No crashes on some cases* | 
+| :white_check_mark: | A complete CLI | *Straightforwardly automatable* |
+| :white_check_mark: | Published data file schema | *Universally readable inputs-and-outputs in a standard file format* |
+| :white_check_mark: | Integration with [ironlab](https://ironlab.org/) | *Interactive and editable output plots, as publication-quality vector graphics* |
+| :white_check_mark: | Exact reproduction of XFOIL results | *If your processes already use XFOIL, you can drop yFoil right in* |
+
+!!! note "What does 'Exact reproduction' mean?"
+
+    Across every [well conditioned](../development/conventions/terminology.md#ill-conditioned-solution) and convergent case in the massive [validation data set](../validation/index.md) ( ≈ 2,050 operating points covering every line of code and logical branch across XFOIL's program), the **maximum absolute error is <= 1E-09** between yFoil and XFOIL results (values of CL, CD, CDp, CM and the transition locations)
+    
+
+To get started, [install yFoil](get-started/install.md), then [run your first analysis](get-started/your-first-analysis.md).
 Ten minutes, and you will have a converged viscous solution and a plot of it, like
-this comparison of two polars drawn with [`yfoil plot`](commands/plotting.md) as an
-[ironlab](https://github.com/thclark/ironlab) figure (pan, zoom, or click the key to hide a curve):
+these polars drawn with [ironlab](https://ironlab.org) via [`yfoil plot`](commands/plotting.md):
 
 <ironlab-figure src="figures/intro.fig" format="fig" name="intro" alt="NACA 0012 and NACA 4412 polars at Re 1e6, alpha -15 to 15 degrees: CL against alpha, CL against CD, CM against alpha and CD against alpha">NACA 0012 and NACA 4412 polars at Re 1e6, alpha -15 to 15 degrees: CL against alpha, CL against CD, CM against alpha and CD against alpha</ironlab-figure>
 
-If you already know XFOIL, the mapping is direct — `yfoil analyse` is one OPER
-point, `yfoil polar` is a `PACC`/`ASEQ` sweep — and each command below gives the
-equivalent XFOIL session.
-
-## The commands
-
-yFoil's CLI is four commands, and they compose through files:
-
-``` mermaid
-graph LR
-  A[yfoil geometry] -->|geometry.json| B[yfoil analyse]
-  A -->|geometry.json| C[yfoil polar]
-  B -->|analysis.json| D[yfoil plot]
-  C -->|polar.json| D
-```
-
-| Command | What it does |
-| --- | --- |
-| [`yfoil geometry`](commands/geometry.md) | Generate, convert, repanel and inspect aerofoil geometry |
-| [`yfoil analyse`](commands/analyse-a-single-point.md) | Solve a single operating point (fixed α or fixed \(C_L\)) |
-| [`yfoil polar`](commands/polars.md) | Sweep α as a state machine, exactly as XFOIL's `ASEQ` does |
-| [`yfoil plot`](commands/plotting.md) | Draw polars, \(C_p\)/\(U_e\) distributions and the foil itself as ironlab figures |
-
-Every command that reads a foil takes **JSON geometry**. Use
-[`yfoil geometry convert`](commands/geometry.md#convert) to bring in a `.dat` file.
-
-[Bindings](commands/bindings.md) covers calling yFoil from other languages, and
-the [data model](reference/the-data-model.md) documents the JSON that comes out.
-[Solution validity](reference/solution-validity.md) explains why a point may come back with a status and no numbers,
-and what each reason code means.
 
 ## Scope
 
@@ -51,17 +40,30 @@ points, forced transition, polars and Kármán–Tsien compressibility. Inverse
 design, interactive mode, multi-element sections and flap hinge moments are out
 of scope.
 
-Everything about how closely it reproduces XFOIL, and how that is measured, is
-in [validation](../validation/index.md).
+!!! warning "Help us understand what you need!"
+    If you need these functions, which we've deliberately placed out of scope to keep the initial project simple, please [raise an issue on GitHub](https://github.com/thclark/yfoil/issues) to let us know what you need!
 
-## Open source
 
-!!! note "Stub — to be written"
+## Open source license
 
-    yFoil is GPL-3.0-or-later, because XFOIL is vendored in-tree and a
-    translation is a derivative work. This section will cover what that means
-    for you: what you can do with yFoil, what you owe back, and how to
-    contribute.
+!!! warning "Copyleft licensing requirements"
+
+    yFoil is licensed as GPL-3.0-or-later for three reasons:
+
+    - the original XFOIL source (licensed GPL-2.0-or-later) is modified and vendored in-tree
+    - a translation is considered derivative work even if we hadn't vendored XFOIL
+    - unlike non-copyleft licenses like MIT and Apache, GPL variants respect that development is often done for the good of the community with no commercial goal, and requires consuming projects to 'pay it forward'.
+
+|  | In simple terms, this means: |
+|---|---|
+| :white_check_mark: | You can use the yFoil program executable with no restrictions at all, to make as many analyses as you wish. |
+| :white_check_mark: | You can use the yfoil plotting tools and the [ironlab viewer](https://ironlab.org/) the same way. |
+| :white_check_mark: | You can export figures and your results to PDF documents and use them in publications with no restrictions. |
+| :x: | You must not modify yFoil's source code without *immediately* publishing it under a compatible license. |
+| :x: | You must not link an executable to yFoil's underlying library without *immediately* also publishing that executable's source code under a compatible license. |
+
+ If your project is incompatible with GPL license, we suggest either automating analyses via the CLI (which leaves no copyleft requirement), or getting in touch to discuss whether licensing under commercial terms (to support ongoing development) is possible.
+
 
 ## FAIR data and software
 
@@ -72,10 +74,9 @@ in [validation](../validation/index.md).
     round-tripping precision, and no interactive state to reproduce. This
     section will set out how yFoil supports FAIR workflows.
 
-## How to cite yFoil
 
-TODO - add citations for our own papers and Mark Drela's.
+## Related projects
 
-Years work went into building and validating XFOIL. Authors, maintainers and
-users of yFoil owe a greate debt of thanks to Prof. Drela, Harold Youngren and
-any other contributors to the original XFOIL.
+**Fun fact:** there were *SO* many figures generated by successive rounds of validation studies, that the [ironlab](https://ironlab.org) application was
+conceived and built JUST so we could manage the amount of figures!! This let us sort and search within studies using figure parameters, then quickly edit the view 
+and export at publication quality for the paper. It was genuinely tons of fun to build a plotting library.

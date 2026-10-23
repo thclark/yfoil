@@ -43,8 +43,10 @@ nav = [
     { "Get started" = [
       "user-guide/get-started/install.md",
       "user-guide/get-started/your-first-analysis.md",
+      "user-guide/get-started/citing-yfoil.md",
     ] },
     { "Commands" = [
+      "user-guide/commands/overview.md",
       "user-guide/commands/geometry.md",
       "user-guide/commands/analyse-a-single-point.md",
       "user-guide/commands/polars.md",
@@ -60,27 +62,136 @@ nav = [
       "user-guide/reference/bibliography.md",
     ] },
   ] },
+  { "Development" = [
+    "development/index.md",
+    { "Conventions" = [
+      "development/conventions/naming.md",
+      "development/conventions/terminology.md",
+      "development/conventions/testing.md",
+      "development/conventions/figures.md",
+      "development/conventions/documentation.md",
+      "development/conventions/git-branching.md",
+      "development/conventions/git-commits-and-versioning.md",
+      "development/conventions/git-pull-requests.md",
+      "development/conventions/github-issues.md",
+    ] },
+    { "Testing" = [
+      "development/testing/README.md",
+      "development/testing/coverage.md",
+      "development/testing/branch-tests.md",
+      { "Geometry" = "development/testing/geometry/README.md" },
+      { "Subroutines" = [
+        "development/testing/subroutines/README.md",
+        "development/testing/subroutines/closure.md",
+        "development/testing/subroutines/transition.md",
+      ] },
+    ] },
+  ] },
   { "Validation" = [
     "validation/index.md",
-    { "Series cases" = "validation/series-cases.md" },
-    { "Aerofoil series" = "validation/aerofoil-series.md" },
-    "validation/tolerances.md",
+    { "Aerofoil series" = [
+      "validation/aerofoil-series/index.md",
+      "validation/aerofoil-series/generator-families.md",
+      "validation/aerofoil-series/against-naca456.md",
+    ] },
+    { "Series cases" = [
+      "validation/series-cases/index.md",
+      "validation/series-cases/baselines.md",
+      "validation/series-cases/reynolds-number.md",
+      "validation/series-cases/transition.md",
+      "validation/series-cases/compressibility.md",
+      "validation/series-cases/fixed-cl-and-inviscid.md",
+    ] },
+    { "Known issues" = [
+      "validation/known-issues/index.md",
+      { "1. Output" = [
+        "validation/known-issues/category-1/index.md",
+        { "1.1 DUMP prints one-step-stale closure quantities (H*, Cf, K, tau, Di)" = "validation/known-issues/category-1/1-1-dump-prints-one-step-stale-closure-quantities-h-cf-k-tau-di.md" },
+        { "1.2 DUMP's Ue/Vinf is signed by GAM" = "validation/known-issues/category-1/1-2-dump-s-ue-vinf-is-signed-by-gam.md" },
+        { "1.3 DUMP writes H = H* = 1 where THET = 0" = "validation/known-issues/category-1/1-3-dump-writes-h-h-1-where-thet-0.md" },
+        { "1.4 CPDISP's displacement surface has no scale factor and splits the wake δ* by TE values" = "validation/known-issues/category-1/1-4-cpdisp-s-displacement-surface-has-no-scale-factor-and-splits-the-wake-by-te-values.md" },
+        { "1.5 Formatted output precision" = "validation/known-issues/category-1/1-5-formatted-output-precision.md" },
+      ] },
+      { "2. Persistent state" = [
+        "validation/known-issues/category-2/index.md",
+        { "2.1 HVRAT is never assigned on the analysis path" = "validation/known-issues/category-2/2-1-hvrat-is-never-assigned-on-the-analysis-path.md" },
+        { "2.2 MRCHDU locals persist across sides" = "validation/known-issues/category-2/2-2-mrchdu-locals-persist-across-sides.md" },
+        { "2.3 TRDIF's transition-point station reuses station-2 COMMON" = "validation/known-issues/category-2/2-3-trdif-s-transition-point-station-reuses-station-2-common.md" },
+        { "2.4 BLVAR clamps HK2 in COMMON without touching its derivatives" = "validation/known-issues/category-2/2-4-blvar-clamps-hk2-in-common-without-touching-its-derivatives.md" },
+        { "2.5 TRCHEK2 leaves AMPL2, XT and XT_* as the loop left them" = "validation/known-issues/category-2/2-5-trchek2-leaves-ampl2-xt-and-xt-as-the-loop-left-them.md" },
+        { "2.6 VSREZ(4) is stale at MRCHUE's inner-loop entry" = "validation/known-issues/category-2/2-6-vsrez-4-is-stale-at-mrchue-s-inner-loop-entry.md" },
+        { "2.7 RADLE stays zero for a flat LE" = "validation/known-issues/category-2/2-7-radle-stays-zero-for-a-flat-le.md" },
+        { "2.8 MASS is never written on side 1's wake slots" = "validation/known-issues/category-2/2-8-mass-is-never-written-on-side-1-s-wake-slots.md" },
+        { "2.9 The closure log's s2 at laminar BLVAR calls is not a value BLVAR uses" = "validation/known-issues/category-2/2-9-the-closure-log-s-s2-at-laminar-blvar-calls-is-not-a-value-blvar-uses.md" },
+      ] },
+      { "3. Drela's fixes" = "validation/known-issues/category-3/index.md" },
+      { "4. Silent recovery" = "validation/known-issues/category-4/index.md" },
+      { "5. Dead code" = [
+        "validation/known-issues/category-5/index.md",
+        { "5.1 Subroutines never called" = "validation/known-issues/category-5/5-1-subroutines-never-called.md" },
+        { "5.2 LIMAGE is permanently false" = "validation/known-issues/category-5/5-2-limage-is-permanently-false.md" },
+        { "5.3 Stale duplicate source files" = "validation/known-issues/category-5/5-3-stale-duplicate-source-files.md" },
+        { "5.4 MATYP = 3 is unreachable" = "validation/known-issues/category-5/5-4-matyp-3-is-unreachable.md" },
+        { "5.5 OPER DAMP is reachable and undocumented" = "validation/known-issues/category-5/5-5-oper-damp-is-reachable-and-undocumented.md" },
+        { "5.6 Structurally dead branches" = "validation/known-issues/category-5/5-6-structurally-dead-branches.md" },
+      ] },
+      { "6. Geometry" = [
+        "validation/known-issues/category-6/index.md",
+        { "6.1 NACA4 applies thickness vertically" = "validation/known-issues/category-6/6-1-naca4-applies-thickness-vertically.md" },
+        { "6.2 LOAD reverses clockwise input" = "validation/known-issues/category-6/6-2-load-reverses-clockwise-input.md" },
+        { "6.3 CHORD and APANEL are not what their names suggest" = "validation/known-issues/category-6/6-3-chord-and-apanel-are-not-what-their-names-suggest.md" },
+        { "6.4 NW = N/12 + 10·INT(WAKLEN)" = "validation/known-issues/category-6/6-4-nw-n-12-10int-waklen.md" },
+        { "6.5 TGAP on a sharp trailing edge does not deliver the requested gap" = "validation/known-issues/category-6/6-5-tgap-on-a-sharp-trailing-edge-does-not-deliver-the-requested-gap.md" },
+        { "6.6 NACA generator constants: the ordinate program's precision" = "validation/known-issues/category-6/6-6-naca-generator-constants-the-ordinate-program-s-precision.md" },
+      ] },
+      { "7. Numerics" = [
+        "validation/known-issues/category-7/index.md",
+        { "7.1 SETEXP's 1e-5 Newton tolerance" = "validation/known-issues/category-7/7-1-setexp-s-1e-5-newton-tolerance.md" },
+        { "7.2 BLSOLV's VACC2/VACC3 association" = "validation/known-issues/category-7/7-2-blsolv-s-vacc2-vacc3-association.md" },
+        { "7.3 Kármán–Tsien TK must be formed as COMSET forms it" = "validation/known-issues/category-7/7-3-karmantsien-tk-must-be-formed-as-comset-forms-it.md" },
+        { "7.4 Integer powers" = "validation/known-issues/category-7/7-4-integer-powers.md" },
+        { "7.5 EQUIVALENCE aliasing of UNEW/QNEW onto VA/VB" = "validation/known-issues/category-7/7-5-equivalence-aliasing-of-unew-qnew-onto-va-vb.md" },
+        { "7.6 Single precision and FPE checks" = "validation/known-issues/category-7/7-6-single-precision-and-fpe-checks.md" },
+        { "7.7 TYPE 2 on a section that can reach negative CL drives itself onto the Kármán–Tsien pole" = "validation/known-issues/category-7/7-7-type-2-on-a-section-that-can-reach-negative-cl-drives-itself-onto-the-karmantsien-pole.md" },
+        { "7.8 UPDATE's largest-change report is a console label that rounding can decide" = "validation/known-issues/category-7/7-8-update-s-largest-change-report-is-a-console-label-that-rounding-can-decide.md" },
+        { "7.9 MRCHDU's station Newton at a transition station can amplify its seed a thousandfold" = "validation/known-issues/category-7/7-9-mrchdu-s-station-newton-at-a-transition-station-can-amplify-its-seed-a-thousandfold.md" },
+        { "7.10 The fallback tests are written so that a NaN residual takes the fallback" = "validation/known-issues/category-7/7-10-the-fallback-tests-are-written-so-that-a-nan-residual-takes-the-fallback.md" },
+        { "7.11 MRCHUE's failure path calls BLVAR(2) and then BLVAR(3) at a wake station" = "validation/known-issues/category-7/7-11-mrchue-s-failure-path-calls-blvar-2-and-then-blvar-3-at-a-wake-station.md" },
+        { "7.12 AMI = AMPL2 after a forced transition" = "validation/known-issues/category-7/7-12-ami-ampl2-after-a-forced-transition.md" },
+        { "7.13 Whether a sweep converges, and what it converges to, can depend on the panel count" = "validation/known-issues/category-7/7-13-whether-a-sweep-converges-and-what-it-converges-to-can-depend-on-the-panel-count.md" },
+      ] },
+      { "8. Open items" = "validation/known-issues/category-8/index.md" },
+      { "9. Pathological cases" = "validation/known-issues/category-9/index.md" },
+      { "Reproduction runs" = [
+        "validation/known-issues/runs/index.md",
+        "validation/known-issues/runs/naca-16-212-at-m-0-7.md",
+        "validation/known-issues/runs/naca-64a010-type-2.md",
+        "validation/known-issues/runs/naca-4412-inviscid-at-m-0-7.md",
+        "validation/known-issues/runs/naca-64a010-inviscid-type-2-at-m-0-3.md",
+        "validation/known-issues/runs/naca-0012-re-1e6-n-240.md",
+        "validation/known-issues/runs/naca-4412-re-1e6-n-240.md",
+        "validation/known-issues/runs/naca-4412-re-3e6-n-240.md",
+        "validation/known-issues/runs/naca-4412-at-m-0-6-n-240.md",
+        "validation/known-issues/runs/naca-63-415-at-m-0-5.md",
+        "validation/known-issues/runs/naca-64a010-type-2-at-m-0-3.md",
+        "validation/known-issues/runs/naca-23012-with-a-trip-upstream-of-stagnation.md",
+        "validation/known-issues/runs/naca-63-415-closed-trailing-edge.md",
+        "validation/known-issues/runs/naca-64a010-closed-trailing-edge.md",
+      ] },
+    ] },
+    { "Branch coverage" = [
+      "validation/branch-coverage/index.md",
+      "validation/branch-coverage/counting-branches.md",
+      "validation/branch-coverage/the-minimal-finite-set.md",
+      "validation/branch-coverage/do-loops.md",
+      "validation/branch-coverage/the-non-finite-set.md",
+      "validation/branch-coverage/branches-not-taken.md",
+    ] },
+    { "Tolerances" = [
+      "validation/tolerances/index.md",
+      "validation/tolerances/measurement-history.md",
+    ] },
   ] },
-  # The Testing tab is hidden until its pages are presentable. The pages are still built and
-  # reachable by URL, just not listed in the navigation. Uncomment to restore.
-  # { "Testing" = [
-  #   "testing/README.md",
-  #   "testing/coverage.md",
-  #   "testing/branch-tests.md",
-  #   { "Branch coverage" = "testing/branch-coverage/README.md" },
-  #   { "Known issues" = "testing/known-issues/README.md" },
-  #   { "Geometry" = "testing/geometry/README.md" },
-  #   { "Subroutines" = [
-  #     "testing/subroutines/README.md",
-  #     "testing/subroutines/closure.md",
-  #     "testing/subroutines/transition.md",
-  #   ] },
-  # ] },
 ]
 
 [project.theme]
@@ -161,7 +272,8 @@ pymdownx.keys = {}
 pymdownx.magiclink = {}
 pymdownx.mark = {}
 pymdownx.smartsymbols = {}
-# Generated tables are fragments included into hand-written pages: --8<-- "validation/tables/x.md".
+# Generated tables are fragments included into hand-written pages: --8<-- "validation/<study>/tables/x.md"
+# (copied in from a study run by `cargo xtask publish <study>`).
 # Paths resolve against docs/ (scripts/docs.sh runs zensical from the repository root).
 pymdownx.snippets = { base_path = ["docs"], check_paths = true }
 pymdownx.superfences.custom_fences = [
@@ -175,4 +287,4 @@ pymdownx.tilde = {}
 # The generated tables under */tables/ are fragments for pymdownx.snippets, not pages: keep them out
 # of the build. (The exclude plugin needs Zensical 0.0.68 or later; scripts/docs.sh pins the version.)
 [project.plugins.exclude]
-glob = ["validation/tables/*", "testing/tables/*", "user-guide/tables/*"]
+glob = ["validation/*/tables/*", "user-guide/tables/*"]

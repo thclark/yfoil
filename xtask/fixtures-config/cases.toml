@@ -763,6 +763,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "baselines"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -778,6 +779,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "baselines"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -793,6 +795,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "reynolds-number"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -808,6 +811,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "reynolds-number"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -823,6 +827,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "reynolds-number"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -838,6 +843,7 @@ ncrit = 4.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "transition"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -853,6 +859,7 @@ ncrit = 11.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "transition"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -869,6 +876,7 @@ max_iterations = 100
 damp = true
 polar = true
 group = "series"
+topic = "reynolds-number"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -885,6 +893,7 @@ max_iterations = 100
 polar = true
 xtr = [0.22, 0.22]
 group = "series"
+topic = "transition"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -900,6 +909,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "compressibility"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -915,6 +925,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "compressibility"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -930,6 +941,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "series"
+topic = "compressibility"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -944,6 +956,7 @@ mach = 0.0
 ncrit = 9.0
 max_iterations = 100
 group = "series"
+topic = "fixed-cl-and-inviscid"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -955,6 +968,7 @@ alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, 
 mach = 0.0
 inviscid = true
 group = "series"
+topic = "fixed-cl-and-inviscid"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 twins = true
 
@@ -978,6 +992,7 @@ ncrit = 9.0
 max_iterations = 20
 polar = true
 group = "known-issues"
+topic = "naca-16-212-at-m-0-7"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -992,6 +1007,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "known-issues"
+topic = "naca-16-212-at-m-0-7"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1006,6 +1022,7 @@ ncrit = 9.0
 max_iterations = 200
 polar = true
 group = "known-issues"
+topic = "naca-16-212-at-m-0-7"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1021,6 +1038,7 @@ max_iterations = 20
 matyp = 2
 polar = true
 group = "known-issues"
+topic = "naca-64a010-type-2"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1036,6 +1054,7 @@ max_iterations = 100
 matyp = 2
 polar = true
 group = "known-issues"
+topic = "naca-64a010-type-2"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1051,6 +1070,7 @@ max_iterations = 200
 matyp = 2
 polar = true
 group = "known-issues"
+topic = "naca-64a010-type-2"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1061,6 +1081,7 @@ alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, 
 mach = 0.7
 inviscid = true
 group = "known-issues"
+topic = "naca-4412-inviscid-at-m-0-7"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1071,6 +1092,7 @@ alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, 
 mach = 0.7
 inviscid = true
 group = "known-issues"
+topic = "naca-4412-inviscid-at-m-0-7"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1081,11 +1103,13 @@ alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, 
 mach = 0.7
 inviscid = true
 group = "known-issues"
+topic = "naca-4412-inviscid-at-m-0-7"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
 name = "naca64a010_n60_inviscid_polar30_type2_m03"    # known issues 7.13 and 7.7 at N = 60: NACA 64A010 inviscid TYPE 2 at M 0.3, MRCL's clamps and the Karman-Tsien pole
 group = "known-issues"
+topic = "naca-64a010-inviscid-type-2-at-m-0-3"   # the page of docs/validation/ that shows it (cargo xtask publish)
 foil = "naca:64A010"
 n_nodes = 60
 alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1097,6 +1121,7 @@ track = false
 [[case]]
 name = "naca64a010_n160_inviscid_polar30_type2_m03"    # known issues 7.13 and 7.7 at N = 160: NACA 64A010 inviscid TYPE 2 at M 0.3, MRCL's clamps and the Karman-Tsien pole
 group = "known-issues"
+topic = "naca-64a010-inviscid-type-2-at-m-0-3"   # the page of docs/validation/ that shows it (cargo xtask publish)
 foil = "naca:64A010"
 n_nodes = 160
 alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1108,6 +1133,7 @@ track = false
 [[case]]
 name = "naca64a010_n240_inviscid_polar30_type2_m03"    # known issues 7.13 and 7.7 at N = 240: NACA 64A010 inviscid TYPE 2 at M 0.3, MRCL's clamps and the Karman-Tsien pole
 group = "known-issues"
+topic = "naca-64a010-inviscid-type-2-at-m-0-3"   # the page of docs/validation/ that shows it (cargo xtask publish)
 foil = "naca:64A010"
 n_nodes = 240
 alphas = [-30.0, -29.0, -28.0, -27.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.0, -17.0, -16.0, -15.0, -14.0, -13.0, -12.0, -11.0, -10.0, -9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1128,6 +1154,7 @@ ncrit = 9.0
 max_iterations = 200
 polar = true
 group = "known-issues"
+topic = "naca-0012-re-1e6-n-240"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1142,6 +1169,7 @@ ncrit = 9.0
 max_iterations = 200
 polar = true
 group = "known-issues"
+topic = "naca-4412-re-1e6-n-240"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1156,6 +1184,7 @@ ncrit = 9.0
 max_iterations = 200
 polar = true
 group = "known-issues"
+topic = "naca-4412-re-3e6-n-240"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1170,6 +1199,7 @@ ncrit = 9.0
 max_iterations = 200
 polar = true
 group = "known-issues"
+topic = "naca-4412-at-m-0-6-n-240"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1184,6 +1214,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "known-issues"
+topic = "naca-63-415-at-m-0-5"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1199,6 +1230,7 @@ max_iterations = 100
 matyp = 2
 polar = true
 group = "known-issues"
+topic = "naca-64a010-type-2-at-m-0-3"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1214,6 +1246,7 @@ max_iterations = 20
 xtr = [0.22, 0.001]
 polar = true
 group = "known-issues"
+topic = "naca-23012-with-a-trip-upstream-of-stagnation"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 
@@ -1229,6 +1262,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "known-issues"
+topic = "naca-63-415-closed-trailing-edge"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 [[case]]
@@ -1243,6 +1277,7 @@ ncrit = 9.0
 max_iterations = 100
 polar = true
 group = "known-issues"
+topic = "naca-64a010-closed-trailing-edge"   # the page of docs/validation/ that shows it (cargo xtask publish)
 track = false
 
 # ---- pathological: copies of the cases whose reference runs are pathologically slow or hang

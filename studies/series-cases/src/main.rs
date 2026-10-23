@@ -5,8 +5,9 @@
 //! Usage (from the repository root):
 //!
 //! ```text
-//! cargo run --release -p series-cases -- [--docs]
-//! cargo run --release -p series-cases -- --render studies/series-cases/runs/<UTC> [--docs]
+//! cargo run --release -p series-cases
+//! cargo run --release -p series-cases -- --render studies/series-cases/runs/<UTC>
+//! cargo xtask publish series-cases [--run <UTC>]
 //! ```
 
 fn main() {

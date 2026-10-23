@@ -12,7 +12,7 @@
 //! XFOIL has no scale factor on δ* and marks no transition or separation on the aerofoil plot; the
 //! scaling and the markers are yFoil's.
 //!
-//! The figure is an ironlab figure (`docs/conventions/figures.md`). ironlab has no equal-aspect
+//! The figure is an ironlab figure (`docs/development/conventions/figures.md`). ironlab has no equal-aspect
 //! axes, so the limits are widened in Rust to the aspect of the plot area the layout gives
 //! ([`PLOT_AREA_MM`]), which keeps the aerofoil undistorted at the figure's own size.
 

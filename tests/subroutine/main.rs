@@ -3,7 +3,7 @@
 //! Each test runs one well-encapsulated yFoil subroutine on inputs XFOIL dumped and compares
 //! its outputs with XFOIL's, within a named tolerance (`common/utilities/tolerances.rs`).
 //!
-//! Categories and rules: `docs/conventions/testing.md`.
+//! Categories and rules: `docs/development/conventions/testing.md`.
 
 #[path = "../common/fixtures/mod.rs"]
 mod fixtures;

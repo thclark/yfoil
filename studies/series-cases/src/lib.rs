@@ -1,4 +1,4 @@
-//! Series cases (`docs/validation/series-cases.md`).
+//! Series cases (`docs/validation/series-cases/index.md`).
 //!
 //! Runs of the aerofoil series and flow conditions of interest, shown to an external reader:
 //! full polars (XFOIL's polar procedure, 0 → +30°, `INIT`, 0 → −30° by 1°), inviscid alpha sweeps
@@ -17,13 +17,14 @@
 //! `summary.json` (every point of every polar, both codes, with the outcome of each comparison),
 //! `README.md` / `README.tex`, and the figures, drawn from `summary.json` in Rust ([`figures`]) as
 //! ironlab figure files (`polars-<case>.fig`, `transition-position.fig`, each with its `.pdf` for
-//! `README.tex`; `docs/conventions/figures.md`). With `--docs` the Markdown page and the `.fig`
-//! files are also written to `docs/validation/series-cases.md` and `docs/validation/series-cases/`
-//! (the known-issues cases' to `docs/testing/known-issues/`). `--render <run_dir>` redraws an existing run folder's figures
-//! and rewrites its index (and with `--docs` the page) without rerunning the study.
+//! `README.tex`; `docs/development/conventions/figures.md`), and `publish/`, the run's tables and
+//! figures as the docs hold them (`studies/study-support/publish.rs`). A run never writes under
+//! `docs/`: `cargo xtask publish <study>` copies a chosen run's `publish/` into
+//! `docs/validation/<study>/`, whose pages are written by hand. `--render <run_dir>` redraws an
+//! existing run folder's figures and rewrites its index and `publish/` without rerunning the study.
 //!
-//! The library runs any [`Study`]: the series cases (`cargo run --release -p series-cases -- [--docs]`)
-//! and the known-issues cases (`cargo run --release -p known-issues -- [--docs]`) share every
+//! The library runs any [`Study`]: the series cases (`cargo run --release -p series-cases`)
+//! and the known-issues cases (`cargo run --release -p known-issues`) share every
 //! comparison, table and figure and differ only in their [`Study`] descriptor.
 
 pub mod figures;
@@ -62,6 +63,10 @@ pub struct Case {
     pub damp: bool,
     #[serde(default)]
     pub group: Option<String>,
+    /// the page of `docs/validation/<study>/` that shows the case: its runs are tabled in
+    /// `publish/tables/cases-<topic>.md`
+    #[serde(default)]
+    pub topic: Option<String>,
     #[serde(default)]
     pub re: f64,
     #[serde(default)]
@@ -218,9 +223,9 @@ pub fn load_cases(root: &Path) -> Vec<Case> {
     cases.cases
 }
 
-/// Redraw an existing run folder's figures from its `summary.json`, rewrite its `README.md` /
-/// `README.tex`, and with `docs` its documentation page, without rerunning the study.
-pub fn rerender(study: &Study, run_dir: &Path, docs: bool) {
+/// Redraw an existing run folder's figures from its `summary.json` and rewrite its `README.md`,
+/// `README.tex` and `publish/`, without rerunning the study.
+pub fn rerender(study: &Study, run_dir: &Path) {
     let root = repo_root();
     let summary: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(run_dir.join("summary.json")).expect("summary.json in the run folder"),
@@ -229,17 +234,8 @@ pub fn rerender(study: &Study, run_dir: &Path, docs: bool) {
     let cases = load_cases(&root);
     report::write_index(study, run_dir, &summary);
     report::write_index_tex(study, run_dir, &summary);
-    let drawn = render(study, &cases, run_dir, &summary);
-    if docs {
-        write_docs(study, &root, run_dir, &summary, drawn);
-    }
-}
-
-fn write_docs(study: &Study, root: &Path, run_dir: &Path, summary: &serde_json::Value, drawn: bool) {
-    let docs = root.join("docs");
-    std::fs::create_dir_all(docs.join(study.figures)).unwrap();
-    report::write_docs(study, &docs, run_dir, summary, drawn);
-    println!("docs written to {}", docs.join(study.page).display());
+    render(study, &cases, run_dir, &summary);
+    report::write_publish(study, &cases, run_dir, &summary);
 }
 
 /// The trailing `# comment` of each case's `name = "…"` line in cases.toml, its description.
@@ -260,25 +256,18 @@ pub fn descriptions(root: &Path) -> std::collections::BTreeMap<String, String> {
     out
 }
 
-/// What distinguishes one case study from another: the cases it runs, where it writes, and how
-/// its pages introduce themselves. The series cases and the known-issues cases share every
-/// comparison, table and figure.
+/// What distinguishes one case study from another: the cases it runs and how its run folder
+/// introduces itself. The series cases and the known-issues cases share every comparison, table
+/// and figure.
 pub struct Study {
-    /// the crate (`studies/<slug>/`)
+    /// the crate (`studies/<slug>/`), and the docs section its run is published into
+    /// (`docs/validation/<slug>/`)
     pub slug: &'static str,
-    /// the page, relative to `docs/`, in the section it belongs to: `validation` (the engineering
-    /// assessment) or `testing` (consistency with XFOIL, for developers; `docs/conventions/testing.md`).
-    /// The file tree mirrors the site navigation (`zensical.toml`), so a page in the navigation is
-    /// the kebab-case of its title
-    pub page: &'static str,
-    /// the directory the page's figures are copied into, relative to `docs/`: the page's own
-    /// directory, or one beside the page named after it
-    pub figures: &'static str,
     /// the `group` of `xtask/fixtures-config/cases.toml` it runs
     pub group: &'static str,
-    /// the page title
+    /// the title of the run folder's index
     pub title: &'static str,
-    /// the first paragraph of the page: what the study is for (Markdown)
+    /// the first paragraph of the run folder's index: what the study is for (Markdown)
     pub purpose: &'static str,
     /// the same for `README.tex`
     pub purpose_tex: &'static str,
@@ -288,32 +277,11 @@ impl Study {
     pub fn runs_root(&self) -> PathBuf {
         repo_root().join("studies").join(self.slug).join("runs")
     }
-
-    /// The docs section the page is in (`validation` or `testing`), also a figure label
-    pub fn section(&self) -> &'static str {
-        self.page.split('/').next().unwrap()
-    }
-
-    /// The relative path from the page up to `docs/` (`../` per directory the page is in)
-    pub fn up(&self) -> String {
-        "../".repeat(self.page.matches('/').count())
-    }
-
-    /// A figure's path relative to the page
-    pub fn figure_src(&self, file_name: &str) -> String {
-        let page_dir = Path::new(self.page).parent().unwrap();
-        let rel = Path::new(self.figures)
-            .strip_prefix(page_dir)
-            .expect("the figures directory is the page's or one below it");
-        rel.join(file_name).to_str().unwrap().to_string()
-    }
 }
 
-/// The series cases (`docs/validation/series-cases.md`).
+/// The series cases (`docs/validation/series-cases/index.md`).
 pub const SERIES: Study = Study {
     slug: "series-cases",
-    page: "validation/series-cases.md",
-    figures: "validation/series-cases",
     group: "series",
     title: "Series cases",
     purpose: "Runs of the aerofoil series and flow regimes of interest under normal conditions, shown to an \
@@ -324,11 +292,9 @@ pub const SERIES: Study = Study {
     purpose_tex: "Runs of the aerofoil series and flow regimes of interest under normal conditions: that yFoil follows the reference through each of them.",
 };
 
-/// The known-issues cases (`docs/testing/known-issues/README.md`).
+/// The known-issues cases (`docs/validation/known-issues/index.md`).
 pub const KNOWN_ISSUES: Study = Study {
     slug: "known-issues",
-    page: "testing/known-issues/README.md",
-    figures: "testing/known-issues",
     group: "known-issues",
     title: "Known-issues cases",
     purpose: "Runs that show one of XFOIL's known issues (`docs/user-guide/reference/known-xfoil-issues.md`) arising, and whether \
@@ -340,13 +306,18 @@ pub const KNOWN_ISSUES: Study = Study {
     purpose_tex: "Runs that show one of XFOIL's known issues arising, and whether yFoil does the same.",
 };
 
-/// Run a study over its cases' fixtures; `--docs` also writes its page under `docs/<section>/`.
+/// Run a study over its cases' fixtures into a new run folder (`runs/<UTC>/`, with its
+/// `publish/`).
 pub fn run(study: &Study) {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let docs = args.iter().any(|a| a == "--docs");
+    assert!(
+        !args.iter().any(|a| a == "--docs"),
+        "--docs is gone: a run writes runs/<UTC>/publish/, and `cargo xtask publish {}` copies it into the docs",
+        study.slug
+    );
     if let Some(i) = args.iter().position(|a| a == "--render") {
         let run_dir = args.get(i + 1).map(PathBuf::from).expect("--render <run_dir>");
-        rerender(study, &run_dir, docs);
+        rerender(study, &run_dir);
         return;
     }
     let root = repo_root();
@@ -404,9 +375,8 @@ pub fn run(study: &Study) {
     .unwrap();
     report::write_index(study, &run_dir, &summary);
     report::write_index_tex(study, &run_dir, &summary);
-    let drawn = render(study, &cases, &run_dir, &summary);
-    if docs {
-        write_docs(study, &root, &run_dir, &summary, drawn);
-    }
+    render(study, &cases, &run_dir, &summary);
+    report::write_publish(study, &cases, &run_dir, &summary);
     println!("run folder: {}", run_dir.display());
+    println!("publish it with: cargo xtask publish {} --run {stamp}", study.slug);
 }
