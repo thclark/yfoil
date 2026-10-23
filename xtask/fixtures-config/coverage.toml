@@ -715,7 +715,7 @@ branch = 1
 reach = "iteration cap: LEFIND's 50-iteration LE Newton exhausted"
 
 
-# ---- annotations from the branch-coverage study (scripts/branch-coverage, 2026-09-12) ----------
+# ---- annotations from the branch-coverage study (studies/branch-coverage, 2026-09-12) ----------
 # Structural claims below are code-reading proofs; the study's probe search is the check (an
 # annotated branch that a case takes is reported as stale, as happened to xoper.f:2784 branch 5:
 # MRCL's Mach clamp sets M_CLS = 0, so MINF_CLM = 0 is reachable and the claim was withdrawn).
