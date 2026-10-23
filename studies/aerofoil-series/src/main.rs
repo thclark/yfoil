@@ -1,4 +1,4 @@
-//! Aerofoil series study (`docs/validation/aerofoil-series.md`).
+//! Aerofoil series study (`docs/validation/aerofoil-series/index.md`).
 //!
 //! Draws every generator family yFoil offers — NACA 4-digit, 4-digit modified, 5-digit,
 //! 16-series, 6-series, 6A-series and the Kármán–Trefftz analytic section — as one figure per
@@ -14,20 +14,23 @@
 //! its `generator` provenance record), `summary.json` (every section, panel and comparison
 //! number) and the `README.md` / `README.tex` index; the figures are then built from those files
 //! as ironlab figures (`sheet.rs`, `<series>.fig` and `<series>.pdf`, conventions in
-//! `docs/conventions/figures.md`). `runs/` is gitignored. With `--docs` the `.fig` files and a
-//! generated Markdown page embedding them are also written to `docs/validation/aerofoil-series/` and `docs/validation/aerofoil-series.md`,
-//! the only place a run's products are tracked. `--render <run_dir>` redraws an existing run
-//! folder's figures from its `summary.json` and geometry files without rerunning the study (with
-//! `--docs`, it also rewrites the page from that run).
+//! `docs/development/conventions/figures.md`). `runs/` is gitignored. Every run also writes
+//! `publish/`, its tables and figures as the docs hold them (`studies/study-support/publish.rs`);
+//! `cargo xtask publish aerofoil-series` copies it into `docs/validation/aerofoil-series/`, whose
+//! pages are written by hand. `--render <run_dir>` redraws an existing run folder's figures and
+//! `publish/` from its `summary.json` and geometry files without rerunning the study.
 //!
 //! Usage (from the repository root):
 //!
 //! ```text
-//! cargo run --release -p aerofoil-series -- [--docs] [--series naca-6]
-//! cargo run --release -p aerofoil-series -- --render studies/aerofoil-series/runs/<UTC> [--docs]
+//! cargo run --release -p aerofoil-series -- [--series naca-6]
+//! cargo run --release -p aerofoil-series -- --render studies/aerofoil-series/runs/<UTC>
+//! cargo xtask publish aerofoil-series [--run <UTC>]
 //! ```
 
 mod naca456;
+#[path = "../../study-support/publish.rs"]
+mod publish;
 mod report;
 mod sheet;
 mod study;
@@ -114,14 +117,12 @@ pub fn write_metadata(run_dir: &Path, series: &[&str]) {
 }
 
 struct Args {
-    docs: bool,
     only: Option<String>,
     render: Option<PathBuf>,
 }
 
 fn parse_args() -> Args {
     let mut a = Args {
-        docs: false,
         only: None,
         render: None,
     };
@@ -129,7 +130,9 @@ fn parse_args() -> Args {
     let mut i = 0;
     while i < argv.len() {
         match argv[i].as_str() {
-            "--docs" => a.docs = true,
+            "--docs" => panic!(
+                "--docs is gone: a run writes runs/<UTC>/publish/, and `cargo xtask publish aerofoil-series` copies it into the docs"
+            ),
             "--render" => {
                 a.render = Some(PathBuf::from(&argv[i + 1]));
                 i += 1;
@@ -145,14 +148,6 @@ fn parse_args() -> Args {
     a
 }
 
-/// The tracked page from a run folder whose figures are drawn
-fn write_docs(run_dir: &Path, all: &[study::SeriesStudy], comparison: &[naca456::CaseComparison]) {
-    let page = repo_root().join("docs/validation/aerofoil-series.md");
-    let figures = repo_root().join("docs/validation/aerofoil-series");
-    report::write_docs(&page, &figures, run_dir, all, comparison);
-    println!("wrote {}", page.display());
-}
-
 fn main() {
     let args = parse_args();
     if let Some(run_dir) = &args.render {
@@ -161,9 +156,7 @@ fn main() {
         for stem in sheet::render(run_dir) {
             println!("drew {}", stem.with_extension("fig").display());
         }
-        if args.docs {
-            write_docs(run_dir, &study::series(), &naca456::compare(&repo_root()));
-        }
+        report::write_publish(run_dir, &study::series(), &naca456::compare(&repo_root()));
         return;
     }
     let run_dir = runs_root().join(utc_stamp());
@@ -199,8 +192,8 @@ fn main() {
     report::write_index(&run_dir, &selected, &comparison);
     report::write_index_tex(&run_dir, &selected, &comparison);
     sheet::render(&run_dir);
-    if args.docs {
-        write_docs(&run_dir, &all, &comparison);
+    if args.only.is_none() {
+        report::write_publish(&run_dir, &all, &comparison);
     }
     println!("run folder: {}", run_dir.display());
 }

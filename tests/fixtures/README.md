@@ -2,7 +2,7 @@
 
 Every tracked file under `tests/fixtures/` is read by a test (`cargo xtask fixtures --audit` fails
 otherwise), and every family has one producer. The tests that read each family name it, with its
-producer, in their module header (`docs/conventions/testing.md`).
+producer, in their module header (`docs/development/conventions/testing.md`).
 
 | Family | What it holds | Producer | Needs | Read by |
 |---|---|---|---|---|
@@ -57,9 +57,10 @@ cargo xtask fixtures --group series        # the series cases, each with its twi
 cargo xtask fixtures --group known-issues  # the known-issues cases (references only)
 cargo xtask fixtures --group branch-coverage  # likewise; --group non-finite for the probes
 cargo xtask twins --case NAME ...           # rerun a case's five twins and noise_floor.json alone
-cargo run --release -p branch-coverage -- --docs
-cargo run --release -p series-cases -- --docs
-cargo run --release -p known-issues -- --docs
+cargo run --release -p branch-coverage      # each run writes studies/<study>/runs/<UTC>/
+cargo run --release -p series-cases
+cargo run --release -p known-issues
+cargo xtask publish series-cases            # copy a run's tables and figures into docs/validation/
 ```
 
 Regenerating a case keeps its twins when its panels and script are unchanged.

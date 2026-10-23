@@ -39,8 +39,6 @@ pub struct SeriesStudy {
     pub parameters: &'static str,
     /// What the family was designed for, one paragraph
     pub description: &'static str,
-    /// Why the default is in the validation set, one paragraph
-    pub validation_use: &'static str,
     /// `docs/references.bib` keys
     pub references: &'static [&'static str],
 }
@@ -111,9 +109,6 @@ pub fn series() -> Vec<SeriesStudy> {
                 mean line, chosen to fit the best sections of the day (Clark Y, Göttingen 398). It remains the \
                 most used section family in general aviation and in codes' self-tests, and XFOIL's `NACA` command \
                 generates it.",
-            validation_use: "NACA 0012 is the symmetric baseline (Rule 6's XFOIL-independent invariants: \
-                C_L = C_M = 0 at α = 0, mirror symmetry at −α) and the CI reference case; NACA 4412 is the \
-                cambered 4-digit member and a real wing section (Lednicer lists the Champion 7EC Traveler).",
             references: &["jacobs1933", "abbott1959"],
             panels: vec![
                 panel(
@@ -149,9 +144,6 @@ pub fn series() -> Vec<SeriesStudy> {
                 the 4-digit form independently, at speeds up to and beyond the compressibility burble: index I = 6 \
                 is the 4-digit radius, 0 a sharp nose; M is in tenths of chord. The aft part is a cubic in (1 − x) \
                 with a fixed trailing-edge thickness.",
-            validation_use: "NACA 0012-34 has a sharper nose (I = 3) and its maximum thickness further aft than \
-                the 0012, with the same t: the pair separates the effect of leading-edge radius on transition and \
-                stagnation-point behaviour from that of thickness.",
             references: &["stack1934", "abbott1959", "ladson1975"],
             panels: vec![
                 panel(
@@ -186,9 +178,6 @@ pub fn series() -> Vec<SeriesStudy> {
             description: "Report 537 (1935) put the maximum camber unusually far forward — a cubic mean line \
                 joined to a straight (or, in the reflexed lines, a second cubic) aft part — to raise the maximum \
                 lift with little pitching moment. The 230 line (cl = 0.3, p = 0.15) is by far the most used.",
-            validation_use: "NACA 23018 is a real aircraft section (Lednicer lists the Beech 90 King Air root; \
-                the 23012 is its tip) and, with the camber concentrated at the nose, loads the leading edge \
-                heavily: transition and separation are exercised at the nose rather than mid-chord.",
             references: &["jacobs1935", "abbott1959"],
             panels: vec![
                 panel(
@@ -231,8 +220,6 @@ pub fn series() -> Vec<SeriesStudy> {
                 the 4-digit modified form with I = 4 and maximum thickness at mid-chord (a 16-0tt is a 00tt-45), \
                 on the uniform-load a = 1 mean line. They were developed for propellers, and 24 of them were \
                 tested at Mach 0.3–0.8 (TN 1546).",
-            validation_use: "NACA 16-212 is the compressible-flow member of the set: a section designed and \
-                measured at subcritical Mach numbers, where XFOIL's Kármán–Tsien correction applies.",
             references: &["stack1943", "lindsey1948", "ladson1975"],
             panels: vec![
                 panel(
@@ -262,10 +249,6 @@ pub fn series() -> Vec<SeriesStudy> {
                 pressure in tenths of chord — on the a mean line, which carries uniform load to x = a and falls \
                 linearly to zero at the trailing edge. There is no closed form: the sections are defined by the \
                 tabulated ε and ψ mapping functions of TM-4741.",
-            validation_use: "NACA 63-415 was the standard wind-turbine section before dedicated families \
-                appeared; the Risø catalogue (Bertagnolio et al. 2001) compares measurements with both \
-                Navier–Stokes and XFOIL results for it. Its trailing edge closes, so it runs XFOIL's sharp-TE \
-                branch, and the 6-series is the family whose generator is *not* a formula.",
             references: &["abbott1945", "abbott1959", "ladson1974", "ladson1996", "carmichael2001", "bertagnolio2001"],
             panels: vec![
                 panel(
@@ -310,8 +293,6 @@ pub fn series() -> Vec<SeriesStudy> {
                 the 6A thickness forms are straight-sided from 0.8 chord, and the modified a = 0.8 mean line is \
                 straight aft of 0.86 chord, so the cambered sections are too. The trailing-edge angle is finite \
                 and the sections are easier to build.",
-            validation_use: "NACA 64A010 is the classic transonic and unsteady-aerodynamics test section (the \
-                AGARD standard cases): symmetric, sharp trailing edge with a finite angle, straight-sided aft.",
             references: &["loftin1948", "ladson1974", "ladson1996"],
             panels: vec![
                 panel(
@@ -348,9 +329,6 @@ pub fn series() -> Vec<SeriesStudy> {
                 1910 transformation to a finite trailing-edge angle. The potential-flow solution is known in \
                 closed form, so the section checks a panel method against an exact answer without a boundary \
                 layer in the way. It is not a wing section anyone builds.",
-            validation_use: "The analytic member: its exact inviscid pressure distribution is an \
-                XFOIL-independent reference for the panel solver, and its sharp trailing edge with a finite \
-                angle exercises the SHARP branch on a smooth, non-NACA shape.",
             references: &["karman1918", "joukowski1910"],
             panels: vec![
                 panel(

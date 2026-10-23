@@ -24,7 +24,7 @@
 
 {% block extrahead %}
   {{ super() }}
-  {#- the <ironlab-figure> element (docs/conventions/figures.md, "Embedding"); the version is
+  {#- the <ironlab-figure> element (docs/development/conventions/figures.md, "Embedding"); the version is
       pinned in scripts/docs.sh, which fetches the bundle -#}
   <link rel="stylesheet" href="{{ 'javascripts/ironlab-0.12.0/ironlab.css' | url }}">
   <script type="module" src="{{ 'javascripts/ironlab-0.12.0/ironlab.js' | url }}"></script>

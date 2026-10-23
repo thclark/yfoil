@@ -1,5 +1,5 @@
 //! The instrumentation-check figure, built from `summary.json` alone as an ironlab figure
-//! (`docs/conventions/figures.md`): a legend panel across the top with one entry per build (its
+//! (`docs/development/conventions/figures.md`): a legend panel across the top with one entry per build (its
 //! converged count and where its plotted series ends), then a 2×2 grid against α — CL, CD and CM
 //! (pristine red with crosses, instrumented blue with open circles) and the upper-surface
 //! trailing-edge boundary layer on a logarithmic axis (one colour per variable, pristine solid,

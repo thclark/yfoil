@@ -1,5 +1,5 @@
 //! The serialised results: one analysed point (`AnalysisOutput`), a polar (`PolarOutput`) and the
-//! geometry report (`GeometryInfo`). Keys are the variable names of `docs/conventions/naming.md`.
+//! geometry report (`GeometryInfo`). Keys are the variable names of `docs/development/conventions/naming.md`.
 
 use serde::{Deserialize, Serialize};
 

@@ -6,7 +6,7 @@
 //! every branch that was never taken. `xtask/fixtures-config/coverage.toml` names the translated set and
 //! carries the annotations for branches that are unreachable on the analysis path; anything
 //! never taken and not annotated is *open*, and the fixture set is complete when the open
-//! list is empty. The report is `docs/testing/coverage.md`.
+//! list is empty. The report is `docs/development/testing/coverage.md`.
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -613,7 +613,7 @@ pub(crate) fn run(flags: &[String]) {
         &gcov,
         big,
     );
-    let out = root.join("docs/testing/coverage.md");
+    let out = root.join("docs/development/testing/coverage.md");
     fs::write(&out, md).unwrap();
     let open: usize = reports
         .iter()
@@ -687,6 +687,7 @@ fn render(
     let taken: usize = reports.iter().map(|r| r.taken).sum();
     let (open, loops, unreach) = (count(Kind::Open), count(Kind::LoopEntry), count(Kind::Unreachable));
     let mut s = String::new();
+    s += "---\nicon: lucide/gauge\n---\n\n";
     s += "# Branch coverage of the translated XFOIL subroutines\n\n";
     s += "Which branches the reference takes over every tracked case, and why the others are never taken. \
           Which test covers each branch is [branch-tests.md](branch-tests.md).\n\n";

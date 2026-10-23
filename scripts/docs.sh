@@ -18,7 +18,7 @@ set -euo pipefail
 
 zensical_version="0.0.71"
 
-# The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/conventions/figures.md).
+# The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/development/conventions/figures.md).
 # Pinned by version and checksum, fetched from the ironlab release into a versioned directory
 # (gitignored), so an upgrade changes every URL and no browser pairs a page with a stale engine.
 ironlab_version="0.12.0"
@@ -41,6 +41,10 @@ if [[ ! -f "$ironlab_dir/ironlab.js" ]]; then
     echo "$ironlab_sha256  .tmp/$archive" | shasum -a 256 -c --quiet -
     tar xzf ".tmp/$archive" -C "$ironlab_dir"
 fi
+
+# The sidebar rules (icons, well-formed front matter) are checked before every build and serve:
+# scripts/docs-check.py names each page that breaks one.
+uv run --no-project --quiet python scripts/docs-check.py
 
 uv run --no-project --quiet \
     --with "zensical==$zensical_version" \

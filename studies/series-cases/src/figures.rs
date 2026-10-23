@@ -1,5 +1,5 @@
 //! The study's figures, drawn from a run folder's `summary.json` as ironlab figure files
-//! (`docs/conventions/figures.md`): one polar sheet per case (`polars-<case>.fig`) and the
+//! (`docs/development/conventions/figures.md`): one polar sheet per case (`polars-<case>.fig`) and the
 //! transition-position strip (`transition-position.fig`), each with its PDF for `README.tex`.
 //!
 //! Every number on a figure, axis limits included, is computed here from `summary.json`.
@@ -67,7 +67,7 @@ fn grey_diamond() -> Color {
     figures::with_alpha(Color::BLACK, 0.35)
 }
 
-/// The figure parameters and labels of one case (`docs/conventions/figures.md`).
+/// The figure parameters and labels of one case (`docs/development/conventions/figures.md`).
 fn describe(fig: Figure, study: &Study, figure: &str, case: &Case, run: &Value) -> Figure {
     let mut fig = fig
         .parameter("study", study.slug)
@@ -82,7 +82,7 @@ fn describe(fig: Figure, study: &Study, figure: &str, case: &Case, run: &Value) 
     if let Some([leg, alpha]) = run["parted"].as_array().map(Vec::as_slice) {
         fig = fig.parameter("parted", format!("leg {leg} α {alpha}°"));
     }
-    fig = fig.label(study.section()).label("xfoil-comparison");
+    fig = fig.label("validation").label("xfoil-comparison");
     for tag in regime_labels(case) {
         fig = fig.label(tag);
     }
@@ -475,7 +475,7 @@ pub fn transition_strip(study: &Study, cases: &[&Case], runs: &[Value]) -> Figur
             "matched",
             runs.iter().map(|r| r["matched"].as_i64().unwrap_or(0)).sum::<i64>(),
         )
-        .label(study.section())
+        .label("validation")
         .label("xfoil-comparison");
     let mut tags: Vec<&str> = cases.iter().flat_map(|c| regime_labels(c)).collect();
     tags.sort_unstable();

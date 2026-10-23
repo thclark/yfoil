@@ -1,7 +1,8 @@
-//! The run's `summary.json`, its `README.md` / `README.tex` index, and the generated
-//! documentation page (`docs/<Study::page>`, its figures in `docs/<Study::figures>`).
+//! The run's `summary.json`, its `README.md` / `README.tex` index, and its docs bundle
+//! (`publish/`: the tables and figures `cargo xtask publish` copies into `docs/validation/<study>/`).
 
 use crate::polars::PolarRun;
+use crate::utilities::publish::Bundle;
 use crate::Study;
 use serde_json::{json, Value};
 use std::fs;
@@ -26,17 +27,28 @@ pub fn summary(runs: &[PolarRun]) -> Value {
 
 fn parted(r: &Value) -> String {
     match r["parted"].as_array() {
-        Some(a) if a.len() == 2 => format!("leg {} α {}°", a[0], a[1]),
+        Some(a) if a.len() == 2 => {
+            // how it parted there (`parted_by`, absent in run folders made before it was recorded)
+            let by = r["points"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|p| p["leg"] == a[0] && p["alpha_deg"] == a[1])
+                .and_then(|p| p["parted_by"].as_str())
+                .map(|b| format!(" ({b})"))
+                .unwrap_or_default();
+            format!("leg {} α {}°{by}", a[0], a[1])
+        }
         _ => "—".into(),
     }
 }
 
 /// One row per polar: what each code recorded and where they part.
-fn table_md(s: &Value) -> String {
+fn table_md<'a>(polars: impl Iterator<Item = &'a Value>) -> String {
     let mut t = String::from(
         "| case | section | OPER | XFOIL points | yFoil points | followed to the end | parts at | XFOIL ill-conditioned (its twins) | reference hung |\n|---|---|---|---:|---:|---:|---|---|---|\n",
     );
-    for r in s["polars"].as_array().unwrap() {
+    for r in polars {
         // the points at which the reference's own twins changed its branch trace or moved it by
         // more than DIVERGENCE_FLOOR
         let pts = r["points"].as_array().cloned().unwrap_or_default();
@@ -97,23 +109,23 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           point with the studies' whole-run floor comparison (`studies/study-support/records.rs`: iteration \
           count, LVCONV, IST and ITRAN exact, every transient and the converged point within \
           `max(tol · scale, FLOOR_FACTOR · floor)` with *floor* the reference's own 1-ULP spread of the value, \
-          *divergent* — `docs/conventions/terminology.md` — where the reference itself moves by more than \
+          *divergent* — `docs/development/conventions/terminology.md` — where the reference itself moves by more than \
           `DIVERGENCE_FLOOR`), an inviscid point on CL, CM, CDp and every node's γ, q and Cp at `TOL_SOLVER`. \
           Every member is run with its five seeded 1-ULP twins (`twins = true`), so the table also says at \
           which points XFOIL was itself ill-conditioned. The tests check the same behaviours minimally, one \
-          step at a time (`docs/conventions/testing.md`); this page demonstrates them.\n\n",
+          step at a time (`docs/development/conventions/testing.md`); this page demonstrates them.\n\n",
         study.group
     );
-    m += &"The study follows each run past convergence: through stall, and into the region where the \
+    m += "The study follows each run past convergence: through stall, and into the region where the \
           reference goes non-finite. The reference may record fewer points than the script — its sequence \
           halted, or the fixture driver's watchdog ended a run that had gone non-finite and hung in XFOIL's \
-          plot-label loop ([known issues §4]({up}user-guide/reference/known-xfoil-issues.md)); yFoil's sweep continues to its own \
+          plot-label loop (known issues §4, `docs/user-guide/reference/known-xfoil-issues.md`); yFoil's sweep continues to its own \
           halt either way. A point is *followed to the end* when every one of its iterations agrees with the \
           reference's within tolerance (or parts from it only where one of the reference's own 1-ULP twins had \
           already parted earlier in the sweep); *parts at* is the first recorded point (leg, α) at which yFoil's \
           iterations part from the reference's. Whether XFOIL is ill-conditioned there is measured on XFOIL \
           alone, by its twins — five reruns of the reference with every panel coordinate jogged by −1, 0 or +1 \
-          ULP (`docs/conventions/terminology.md`): where the largest spread of a value over the twins exceeds \
+          ULP (`docs/development/conventions/terminology.md`): where the largest spread of a value over the twins exceeds \
           `DIVERGENCE_FLOOR`, a parting there is the expected consequence of an **ill-conditioned** solution; \
           where the twins agree, a parting is a \
           *mismatch*, settled by the one-step replay of CLAUDE.md Rule 3 — seed yFoil with XFOIL's exact state \
@@ -124,8 +136,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           steps. Why a sweep parts where the reference is stable against its twins — MRCHDU's station Newton at \
           a transition station amplifying its seed a thousandfold, which both codes follow iterate for iterate \
           from the same state — is recorded with its measurements in \
-          [known issues §7.9]({up}user-guide/reference/known-xfoil-issues.md).\n\n"
-        .replace("{up}", &study.up());
+          known issues §7.9 (`docs/user-guide/reference/known-xfoil-issues.md`).\n\n";
     m += "One figure per case: CL and CD against α (top), the last iteration's RMSBL and the iterations taken \
           (second row), and the transition location x/c on the upper and lower side (third row, from XOCTR and \
           yFoil's transition point; an open triangle marks a point whose final stagnation or transition station — \
@@ -150,7 +161,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
           in any iteration; where the plotted value is itself NaN and cannot be placed, an orange plus at the top \
           of the panel marks its α. A black outer diamond marks a point within which yFoil parts from the \
           reference where XFOIL is **ill-conditioned** (one of XFOIL's own twins parts there too: a divergent \
-          comparison, `docs/conventions/terminology.md`; the one-step replay from XFOIL's state at that \
+          comparison, `docs/development/conventions/terminology.md`; the one-step replay from XFOIL's state at that \
           iteration is the evidence that the step is faithful). A filled grey diamond marks a point within \
           which yFoil parts where XFOIL is **well-conditioned** (its twins agree): a *mismatch*, to be settled \
           by the same replay. Only the point at which a leg first parts carries a diamond; the points after it \
@@ -169,7 +180,7 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
                 "**`{name}`** — {}\n\n{}\n\n",
                 r["description"].as_str().unwrap_or(""),
                 figures::embed_html(
-                    &study.figure_src(&format!("polars-{name}.fig")),
+                    &format!("polars-{name}.fig"),
                     &format!(
                         "{name}: CL, CD, the last RMSBL, iterations, transition location and position in its \
                          station interval against alpha, XFOIL and yFoil"
@@ -178,9 +189,9 @@ fn body_md(study: &Study, s: &Value, figure: bool) -> String {
             );
         }
     }
-    m += &table_md(s);
+    m += &table_md(s["polars"].as_array().unwrap().iter());
     if figure {
-        m += &transition_md(study, s);
+        m += &transition_md(s);
     }
     let st = state_table_md(s);
     if !st.is_empty() {
@@ -227,7 +238,7 @@ fn state_rows(s: &Value) -> Vec<Value> {
                 let w = &p["state"][0];
                 rows.push(json!({
                     "case": r["name"], "leg": leg, "alpha_deg": p["alpha_deg"], "followed": p["followed"],
-                    "outcome": p["outcome"], "iterations": [p["yfoil"]["iterations"], p["xfoil"]["iterations"]],
+                    "outcome": p["outcome"], "parted_by": p["parted_by"], "iterations": [p["yfoil"]["iterations"], p["xfoil"]["iterations"]],
                     "array": w["array"], "index": w["index"], "diff": w["diff"], "floor": w["floor"], "ratio": w["ratio"],
                 }));
             }
@@ -242,11 +253,11 @@ fn state_table_md(s: &Value) -> String {
         return String::new();
     }
     let mut t = String::from(
-        "| case | leg | α | iterations yFoil / XFOIL | followed | worst array (entry) | abs Δ | 1-ULP floor | Δ / tolerance |\n|---|---:|---:|---:|---|---|---:|---:|---:|\n",
+        "| case | leg | α | iterations yFoil / XFOIL | followed | parted by | worst array (entry) | abs Δ | 1-ULP floor | Δ / tolerance |\n|---|---:|---:|---:|---|---|---|---:|---:|---:|\n",
     );
     for r in &rows {
         t += &format!(
-            "| `{}` | {} | {} | {} / {} | {} | {} ({}) | {:.1e} | {:.1e} | {:.2} |\n",
+            "| `{}` | {} | {} | {} / {} | {} | {} | {} ({}) | {:.1e} | {:.1e} | {:.2} |\n",
             r["case"].as_str().unwrap(),
             r["leg"],
             r["alpha_deg"],
@@ -257,6 +268,7 @@ fn state_table_md(s: &Value) -> String {
             } else {
                 r["outcome"].as_str().unwrap_or("no")
             },
+            r["parted_by"].as_str().unwrap_or("—"),
             r["array"].as_str().unwrap(),
             r["index"],
             r["diff"].as_f64().unwrap_or(f64::NAN),
@@ -377,47 +389,47 @@ pub fn write_index_tex(study: &Study, run_dir: &Path, s: &Value) {
     }
 }
 
-pub fn write_docs(study: &Study, docs: &Path, run_dir: &Path, s: &Value, drawn: bool) {
+/// The run's docs bundle (`publish/`): every table the study's pages include and every figure
+/// they embed. `tables/cases.md` is every run of the study; `tables/cases-<topic>.md` the runs of
+/// one page (`topic` in `cases.toml`).
+pub fn write_publish(study: &Study, cases: &[crate::Case], run_dir: &Path, s: &Value) {
     let meta: Value = serde_json::from_str(&fs::read_to_string(run_dir.join("metadata.json")).unwrap()).unwrap();
-    let mut m = format!("# {}\n\n", study.title);
-    m += &format!(
-        "Generated by `cargo run --release -p {} -- --docs` on {} (git {}{}, host {}). Do not edit; \
-         regenerate. The run folder (`studies/{}/runs/`, gitignored) holds `summary.json` with \
-         every point of every polar and `README.tex` with the same table for the paper.\n\n",
-        study.slug,
+    let bundle = Bundle::create(run_dir);
+    bundle.provenance(
+        &format!("cargo run --release -p {}", study.slug),
         meta["generated"].as_str().unwrap_or(""),
         meta["git_describe"].as_str().unwrap_or(""),
-        if meta["git_dirty"].as_bool().unwrap_or(false) {
-            ", dirty"
-        } else {
-            ""
-        },
+        meta["git_dirty"].as_bool().unwrap_or(false),
         meta["host"].as_str().unwrap_or(""),
-        study.slug
     );
-    m += &body_md(study, s, drawn);
-    fs::write(docs.join(study.page), m).unwrap();
-    let figures_dir = docs.join(study.figures);
-    // the docs hold `.fig` only: remove every figure of an earlier page (the matplotlib SVGs
-    // among them) before copying this run's
-    for old in fs::read_dir(&figures_dir).unwrap().flatten() {
-        let name = old.file_name().to_string_lossy().into_owned();
-        if name.ends_with(".svg") || name.ends_with(".fig") || name.ends_with(".pdf") {
-            fs::remove_file(old.path()).unwrap();
-        }
+    let polars = s["polars"].as_array().unwrap();
+    bundle.table("cases", &table_md(polars.iter()));
+    let topic = |name: &str| {
+        cases
+            .iter()
+            .find(|c| c.name == name)
+            .and_then(|c| c.topic.clone())
+            .unwrap_or_else(|| panic!("case {name} has no `topic` in cases.toml: name the page that shows it"))
+    };
+    let mut topics: Vec<String> = polars.iter().map(|r| topic(r["name"].as_str().unwrap())).collect();
+    topics.dedup();
+    topics.sort();
+    topics.dedup();
+    for t in &topics {
+        bundle.table(
+            &format!("cases-{t}"),
+            &table_md(polars.iter().filter(|r| topic(r["name"].as_str().unwrap()) == *t)),
+        );
     }
-    let mut names: Vec<String> = s["polars"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|r| format!("polars-{}.fig", r["name"].as_str().unwrap()))
-        .collect();
-    names.push("transition-position.fig".into());
-    for name in names {
-        if run_dir.join(&name).exists() {
-            fs::copy(run_dir.join(&name), figures_dir.join(&name)).unwrap();
-        }
+    bundle.table("final-state", &state_table_md(s));
+    for r in polars {
+        bundle.figure(&run_dir.join(format!("polars-{}.fig", r["name"].as_str().unwrap())));
     }
+    println!(
+        "publish/ written: cargo xtask publish {} --run {}",
+        study.slug,
+        meta["generated"].as_str().unwrap_or("")
+    );
 }
 
 /// The transition position of every recorded point at which a run parts: (case, leg, α,
@@ -447,7 +459,7 @@ fn parted_transition_rows(s: &Value) -> Vec<Value> {
     rows
 }
 
-fn transition_md(study: &Study, s: &Value) -> String {
+fn transition_md(s: &Value) -> String {
     let mut m = String::from("\n### Where transition sits between the stations\n\n");
     m += "XFOIL places transition at an arc length XSSITR inside the interval between two consecutive BL \
           stations, ITRAN − 1 and ITRAN (the first turbulent station), and TRDIF treats the transition interval \
@@ -460,10 +472,17 @@ fn transition_md(study: &Study, s: &Value) -> String {
           transition; the per-case figures carry the same quantity against α in their fourth row. Points whose \
           ITRAN is the trailing-edge station (no transition on the airfoil) are left out.\n\n";
     m += &figures::embed_html(
-        &study.figure_src("transition-position.fig"),
+        "transition-position.fig",
         "Position of transition within its station interval for every recorded point of every case, upper and lower side",
     );
     m += "\n\n";
+    m += &transition_table_md(s);
+    m
+}
+
+/// The transition position at every recorded point at which a run parts.
+fn transition_table_md(s: &Value) -> String {
+    let mut m = String::new();
     let rows = parted_transition_rows(s);
     if !rows.is_empty() {
         m += "| case | leg | α | outcome | side | ITRAN | position in interval | distance to nearer station |\n\

@@ -1,5 +1,5 @@
 # The translated subroutine set for the Rule-6 branch-completeness measurement
-# (`cargo xtask coverage` -> docs/testing/coverage.md).
+# (`cargo xtask coverage` -> docs/development/testing/coverage.md).
 #
 # `file` entries name the XFOIL subroutines yFoil translates, per Fortran file; gcov branch
 # counts are reported for exactly these. `unreachable` entries annotate branches that can
@@ -53,7 +53,7 @@ name = "xgeom.f"
 subroutines = ["LEFIND", "GEOPAR"]
 
 # ---- annotated unreachable branches --------------------------------------------------------
-# class: structural | mode | guard | compiler (see docs/testing/coverage.md)
+# class: structural | mode | guard | compiler (see docs/development/testing/coverage.md)
 
 [[unreachable]]
 file = "xpanel.f"
@@ -457,84 +457,84 @@ why = "duplicated end point STOP: ABCOPY/PANGEN never produce one"
 file = "xpanel.f"
 line = 1365
 branch = 1
-reach = "GAM(1) < 0 at the upper TE node (a negative TE vorticity at a closed TE in deep stall) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "GAM(1) < 0 at the upper TE node (a negative TE vorticity at a closed TE in deep stall) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_stfind_negative_te_vorticity_in_the_prologue"
 
 [[note]]
 file = "xpanel.f"
 line = 1737
 branch = 0
-reach = "UEDG <= UEPS at a station after the stagnation-point shift (a non-positive Ue copied into a surviving slot) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "UEDG <= UEPS at a station after the stagnation-point shift (a non-positive Ue copied into a surviving slot) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_stmove_ue_floor_after_call_18"
 
 [[note]]
 file = "xbl.f"
 line = 788
 branch = 1
-reach = "MRCHUE Newton failure with residual > 0.1 at IBL <= 3 (the rejected iterate is kept) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/); IBL = 3 reached there, IBL = 2 by none"
+reach = "MRCHUE Newton failure with residual > 0.1 at IBL <= 3 (the rejected iterate is kept) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/); IBL = 3 reached there, IBL = 2 by none"
 test = "tests/execution/events.rs::test_mrchue_iterate_fallback_events"
 
 [[note]]
 file = "xbl.f"
 line = 792
 branch = 0
-reach = "MRCHUE Newton failure with residual > 0.1 at the first wake station (IBL = IBLTE+1: TE values used) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "MRCHUE Newton failure with residual > 0.1 at the first wake station (IBL = IBLTE+1: TE values used) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_mrchue_iterate_fallback_events"
 
 [[note]]
 file = "xbl.f"
 line = 1111
 branch = 1
-reach = "MRCHDU Newton failure with residual > 0.1 at IBL <= 3 — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "MRCHDU Newton failure with residual > 0.1 at IBL <= 3 — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_mrchdu_iterate_fallback_events_call_1"
 
 [[note]]
 file = "xbl.f"
 line = 1116
 branch = 0
-reach = "MRCHDU Newton failure with residual > 0.1 at the first wake station — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "MRCHDU Newton failure with residual > 0.1 at the first wake station — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_mrchdu_iterate_fallback_events_call_1"
 
 [[note]]
 file = "xbl.f"
 line = 1135
 branch = 1
-reach = "MRCHDU Newton failure with residual > 0.1 at the similarity station — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "MRCHDU Newton failure with residual > 0.1 at the similarity station — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_mrchdu_iterate_fallback_events_call_1"
 
 [[note]]
 file = "xbl.f"
 line = 1474
 branch = 0
-reach = "an UPDATE step with RLX*|DUEDG|/0.25 < -0.5: needs a negative or non-finite RLX/DN — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "an UPDATE step with RLX*|DUEDG|/0.25 < -0.5: needs a negative or non-finite RLX/DN — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_update_ue_relaxation_below_low_call_7"
 
 [[note]]
 file = "xbl.f"
 line = 1537
 branch = 2
-reach = "an island of negative Ue after UPDATE: a station away from the stagnation point driven below zero by one relaxed step — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "an island of negative Ue after UPDATE: a station away from the stagnation point driven below zero by one relaxed step — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_update_negative_ue_island_call_51"
 
 [[note]]
 file = "xblsys.f"
 line = 390
 branch = 0
-reach = "TRCHEK2's N2 Newton finds no amplification over the X1..XT interval (AX <= 0) and leaves at once — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/): naca23012_n100_a1_a2_re1e6_xtr022_0001 at SETBL 7, 28 calls at laminar stations downstream of the lower-side trip, each with finite inputs"
+reach = "TRCHEK2's N2 Newton finds no amplification over the X1..XT interval (AX <= 0) and leaves at once — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/): naca23012_n100_a1_a2_re1e6_xtr022_0001 at SETBL 7, 28 calls at laminar stations downstream of the lower-side trip, each with finite inputs"
 test = "tests/subroutine/transition.rs::test_trchek2_no_amplification_exit_matches_xfoil"
 
 [[note]]
 file = "xblsys.f"
 line = 432
 branch = 1
-reach = "a laminar station with XIFORC <= X1 (the trip upstream of a still-laminar station after a stagnation-point move) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "a laminar station with XIFORC <= X1 (the trip upstream of a still-laminar station after a stagnation-point move) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_mrchdu_trip_upstream_of_a_laminar_station_call_2"
 
 [[note]]
 file = "xblsys.f"
 line = 843
 branch = 2
-reach = "Us > 0.99995 in the wake (Hk at its wake floor with a large Rtheta) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "Us > 0.99995 in the wake (Hk at its wake floor with a large Rtheta) — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_blvar_wake_us_clamp_call_8"
 
 [[note]]
@@ -782,7 +782,7 @@ why = "the 10-iteration cap of SINVRT's Newton on the monotone chord-fraction sp
 file = "xpanel.f"
 line = 1364
 branch = 1
-reach = "the scan finds no sign change of GAM ('STFIND: Stagnation point not found. Continuing', I = N/2): every GAM of one sign or NaN — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/testing/branch-coverage/)"
+reach = "the scan finds no sign change of GAM ('STFIND: Stagnation point not found. Continuing', I = N/2): every GAM of one sign or NaN — reached so far only in runs the reference had driven non-finite (the `non-finite` probes of cases.toml; docs/validation/branch-coverage/)"
 test = "tests/execution/events.rs::test_stfind_not_found_after_call_1"
 
 [[unreachable]]

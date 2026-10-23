@@ -211,8 +211,10 @@ mod tests {
     /// Every family's sheet is in the documentation, loads, names its series, and is embedded
     #[test]
     fn documentation_holds_every_family_sheet() {
-        let docs = crate::repo_root().join("docs/validation/aerofoil-series");
-        let page = std::fs::read_to_string(crate::repo_root().join("docs/validation/aerofoil-series.md")).unwrap();
+        let docs = crate::repo_root().join("docs/validation/aerofoil-series/figures");
+        let page =
+            std::fs::read_to_string(crate::repo_root().join("docs/validation/aerofoil-series/generator-families.md"))
+                .unwrap();
         for s in crate::study::series() {
             let file = format!("{}.fig", s.slug);
             let fig = Figure::load(docs.join(&file)).unwrap_or_else(|e| panic!("{file}: {e}"));
@@ -237,7 +239,7 @@ mod tests {
             assert!(fig.validate().errors.is_empty(), "{file}");
             assert_eq!(fig.ir().axes.len(), s.panels.len(), "{file}: one panel per parameter");
             assert!(
-                page.contains(&format!("<ironlab-figure src=\"aerofoil-series/{file}\"")),
+                page.contains(&format!("<ironlab-figure src=\"figures/{file}\"")),
                 "{file} not embedded"
             );
         }

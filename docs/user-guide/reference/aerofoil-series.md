@@ -17,7 +17,7 @@ x_l = x + y_t \sin\theta,\quad y_l = y_c - y_t \cos\theta,\qquad
 The formulas below are those of the NASA ordinate program
 ([ladson1996](bibliography.md#ladson1996)) and its public-domain revision `naca456`
 ([carmichael2001](bibliography.md#carmichael2001)), against which yFoil's generators are tested
-(see [validation](../../validation/aerofoil-series.md)). Every generated file carries a
+(see [validation](../../validation/aerofoil-series/index.md)). Every generated file carries a
 [provenance record](#provenance) naming the family, the parameters and these references.
 
 | Series | Designation | Thickness form | Mean line | Command |

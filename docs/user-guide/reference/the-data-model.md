@@ -130,7 +130,7 @@ cannot represent a result to better than about 1e-5, which makes them useless as
 a validation reference and awkward as an automation interface. JSON with full
 round-tripping precision is both.
 
-The names follow [the naming conventions](../../conventions/naming.md): symbols
+The names follow [the naming conventions](../../development/conventions/naming.md): symbols
 from the equations, not XFOIL's six-character Fortran abbreviations. The XFOIL
 name of every variable is recorded in the [mapping
 table](xfoil-reference.md#xfoil-yfoil-mapping).
