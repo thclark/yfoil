@@ -8,7 +8,7 @@ icon: lucide/chart-line
 
     Plotting is behind a cargo feature. Build with `--features plotting`.
 
-`yfoil plot` writes [ironlab](https://github.com/thclark/ironlab) figures: files that hold
+`yfoil plot` writes [ironlab](https://ironlab.org) figures: files that hold
 the figure's own data structure (every curve's numbers, its axes, key and labels), not a
 picture of it. `-o` names the file; a `.fig` extension writes the compact binary form and
 `.fig.json` the same figure as JSON. Any other extension is refused.

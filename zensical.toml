@@ -46,6 +46,7 @@ nav = [
       "user-guide/get-started/citing-yfoil.md",
     ] },
     { "Commands" = [
+      "user-guide/commands/overview.md",
       "user-guide/commands/geometry.md",
       "user-guide/commands/analyse-a-single-point.md",
       "user-guide/commands/polars.md",

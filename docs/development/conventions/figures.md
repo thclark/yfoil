@@ -4,7 +4,7 @@ icon: lucide/image
 
 # Figures
 
-Every yFoil figure is an [ironlab](https://github.com/thclark/ironlab) figure: a file holding the figure's own
+Every yFoil figure is an [ironlab](https://ironlab.org) figure: a file holding the figure's own
 data structure (`.fig`, Protocol Buffers; `.fig.json`, the same model as JSON), not a picture of it. It is opened
 in the ironlab viewer, embedded live in this site, and exported to PDF for publication. The shared conventions
 are implemented once, in `src/output/figures.rs` (feature `plotting`), and every figure is built through it.

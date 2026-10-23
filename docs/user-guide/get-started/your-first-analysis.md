@@ -45,7 +45,7 @@ ironlab-viewer naca0012_polar.fig naca0012_a5.fig
 ```
 
 The figures open in the [ironlab viewer](../commands/plotting.md#viewing-and-exporting), which exports
-each as a vector PDF. Using [`yfoil plot`](../commands/plotting.md) and [ironlab](https://github.com/thclark/ironlab)
+each as a vector PDF. Using [`yfoil plot`](../commands/plotting.md) and [ironlab](https://ironlab.org)
 to visualise them, this analysis should produce the polar and distributions below.
 
 <ironlab-figure src="../figures/naca0012_polar.fig" format="fig" name="naca0012_polar" alt="NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees">NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>

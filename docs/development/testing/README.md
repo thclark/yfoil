@@ -16,7 +16,7 @@ Every page here is generated from data the fixture pipeline produced (the refere
 tracked inputs. The tests themselves are the evidence (`docs/development/conventions/testing.md`); the study pages
 measure the reference and compare whole runs, and add nothing the tests rely on.
 
-Figures are [ironlab](https://github.com/thclark/ironlab) figures, built in Rust by each study from the numbers it
+Figures are [ironlab](https://ironlab.org) figures, built in Rust by each study from the numbers it
 computes (`docs/development/conventions/figures.md`). They are embedded live in these pages: pan, zoom and toggle lines from the
 legend. Each carries parameters (case, conditions, outputs) and labels, so every study's figures can be loaded
 together into the ironlab viewer and sorted, filtered and grouped. A study's run folder also holds a PDF of each. The branch-coverage study's branch map and case matrix are the exception: they are SVGs drawn by

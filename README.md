@@ -47,7 +47,7 @@ This repo `yFoil` is licenced under `GPL v3 or later` (SPDX `GPL-3.0-or-later`),
 - we modify the original source for the purpose of instrumentation (machine-precision level cross validation fo all subroutines), and
 - we include the exact package of source code used for validation within the version-controlled repo.
 
-The optional `plotting` feature (`yfoil plot`, and the studies' figures) links [ironlab](https://github.com/thclark/ironlab), which is licensed `AGPL-3.0-or-later`. GPLv3 §13 permits that combination. A binary built with `plotting` is distributed under the GPLv3 for yFoil's part and the AGPLv3 for ironlab's part, whose network-use clause applies if you serve it to users over a network. The default build doesn't include ironlab.
+The optional `plotting` feature (`yfoil plot`, and the studies' figures) links [ironlab](https://ironlab.org), which is licensed `AGPL-3.0-or-later`. GPLv3 §13 permits that combination. A binary built with `plotting` is distributed under the GPLv3 for yFoil's part and the AGPLv3 for ironlab's part, whose network-use clause applies if you serve it to users over a network. The default build doesn't include ironlab.
 
 ## Development
 
