@@ -29,12 +29,10 @@ are expected. What matters is whether XFOIL's own twins part there too.
 
 A run [parts](../../development/conventions/terminology.md#run-parting) where yFoil stops matching
 XFOIL, either because a branch decision differs or because a value leaves tolerance; *parted by* in
-the table says which. These runs have no 1-ULP twins, so the floor column is zero and each ratio is against the named
-tolerance alone; the table cannot say whether XFOIL is ill-conditioned at a point. It shows each point
+the table says which. Each run carries its five 1-ULP twins, so the floor column is the reference's own spread and the
+outcome says whether XFOIL is ill-conditioned where yFoil parts (*divergent*). The table shows each point
 where yFoil parts and the four points of the leg before it, with the worst array of yFoil's final state
-against XFOIL's, the difference there, and the difference as a ratio of its tolerance. On some runs the
-ratio is above 1 at points whose iterations all agree with XFOIL's, and on the closed-trailing-edge
-NACA 63-415 it grows from point to point along the downward leg.
+against XFOIL's, the difference there, and the difference as a ratio of its tolerance.
 
 !!! note "Stub — to be written"
 
