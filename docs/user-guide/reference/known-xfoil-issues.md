@@ -614,11 +614,11 @@ four runs are known-issues cases at all three panel counts (`group = "known-issu
 - The `pathological` cases (§9) are to be studied: why each is slow or hangs, why the 4412 sweeps
   hang with a finite boundary layer, and whether yFoil does the same — the first part of a study
   that replicates every known issue with its yFoil equivalent (open).
-- `scripts/noise-floor.sh` (one all-coordinates +1-ULP twin of the reference case, the origin of the
+- The tolerances study, `studies/tolerances/tolerances.sh` (one all-coordinates +1-ULP twin of the reference case, the origin of the
   tolerance constants in `tests/common/utilities/tolerances.rs`) predates the seeded twins and moves
   every coordinate the same way, which `docs/conventions/terminology.md` notes measures little. The
   reference case's own five twins, which `cargo xtask fixtures` can now run (`twins = true`), are to
-  derive `docs/testing/noise-floor.md` instead, after which the script can be retired (open).
+  derive `docs/validation/tolerances.md` instead, after which the script can be retired (open).
 
 ## 9. Pathological cases
 

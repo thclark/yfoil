@@ -11,10 +11,12 @@
 # so there is no virtualenv to manage and no Python state in the working tree.
 #
 # The version is pinned here, and only here, so that a build is reproducible.
-# Bump it deliberately, and check the rendered site before committing the bump.
+# Bump it deliberately, and check the rendered site before committing the bump. The pin moved
+# from 0.0.60 to 0.0.71 (2026-10-23) for the exclude plugin (from 0.0.68), which keeps the
+# generated table fragments (zensical.toml) out of the build; no page's article content changed.
 set -euo pipefail
 
-zensical_version="0.0.60"
+zensical_version="0.0.71"
 
 # The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/conventions/figures.md).
 # Pinned by version and checksum, fetched from the ironlab release into a versioned directory

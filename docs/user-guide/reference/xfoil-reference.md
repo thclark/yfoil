@@ -549,8 +549,8 @@ never `PANE`, never `PPAR`, because different panels make any comparison meaning
 ### Comparing values
 
 There is no fixed tolerance ladder. Tolerances are **derived from the reference's own noise floor**
-(`scripts/noise-floor.sh`, `docs/testing/noise-floor.md`) and live as four named constants in
-`tests/utilities/tolerances.rs` — `TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, `TOL_TRANSIENT` — with
+(the tolerances study, `studies/tolerances/tolerances.sh`, and its page `docs/validation/tolerances.md`) and
+live as four named constants in `tests/common/utilities/tolerances.rs` — `TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, `TOL_TRANSIENT` — with
 no ad-hoc literals anywhere else.
 
 The error metric is
