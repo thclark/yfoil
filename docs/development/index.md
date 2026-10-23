@@ -32,4 +32,4 @@ Anthropic's Claude Code harness was used exclusively, with:
 - Fable 5.x model delivering the core implementation (very capable but costly, exhausted a 20x max plan several times over a couple of months)
 - Opus 5.5 model reworking validation studies and tests into a coherent structure (used since its release, our experience is that it is at least as capable as Fable, but quicker and much cheaper) 
 
-Token budget is difficult to estimate as we weren't recording as we went, but the majority of the project was achieved working ~40% human time over ~3 months, on a Claud Max 20x subscription (175GBP/month).
+Token budget is difficult to estimate as we weren't recording as we went, but the majority of the project was achieved working ~40% human time over ~3 months, on a Claude Max 20x subscription (175GBP/month).
