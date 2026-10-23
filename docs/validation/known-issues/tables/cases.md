@@ -1,23 +1,23 @@
 | case | section | OPER | XFOIL points | yFoil points | followed to the end | parts at | XFOIL ill-conditioned (its twins) | reference hung |
 |---|---|---|---:|---:|---:|---|---|---|
-| `naca16-212_n60_polar30_re1e6_m07` | NACA 16-212 | Re 1e6; M 0.7; Ncrit 9; ITER 20; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 40 | 40 | 32 | leg 1 α 6.0° (value: RLX) | — | no |
-| `naca16-212_n160_polar30_re1e6_m07_iter100` | NACA 16-212 | Re 1e6; M 0.7; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 62 | 53 | 32 | leg 1 α 15.0° (value: RMSBL) | — | no |
-| `naca16-212_n240_polar30_re1e6_m07_iter200` | NACA 16-212 | Re 1e6; M 0.7; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 62 | 62 | 7 | leg 1 α 0.0° (value: RLX) | — | no |
-| `naca64a010_n60_polar30_re1e6_type2` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 20; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 14 | 14 | 1 | leg 1 α 0.0° (value: RLX) | — | no |
-| `naca64a010_n160_polar30_re1e6_type2_iter100` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 100; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 21 | 21 | 0 | leg 1 α 0.0° (value: RMSBL) | — | no |
-| `naca64a010_n240_polar30_re1e6_type2_iter200` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 200; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 0 | leg 1 α 0.0° (value: RMSBL) | — | no |
-| `naca4412_n60_inviscid_polar30_m07` | NACA 4412 | inviscid; M 0.7; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | — | no |
-| `naca4412_n160_inviscid_polar30_m07` | NACA 4412 | inviscid; M 0.7; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | — | no |
-| `naca4412_n240_inviscid_polar30_m07` | NACA 4412 | inviscid; M 0.7; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | — | no |
-| `naca64a010_n60_inviscid_polar30_type2_m03` | NACA 64A010 | inviscid; M 0.3; TYPE 2; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | — | no |
-| `naca64a010_n160_inviscid_polar30_type2_m03` | NACA 64A010 | inviscid; M 0.3; TYPE 2; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 48 | leg 1 α -22.0° (value: CL) | — | no |
-| `naca64a010_n240_inviscid_polar30_type2_m03` | NACA 64A010 | inviscid; M 0.3; TYPE 2; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 45 | leg 1 α -27.0° (value: CL) | — | no |
-| `naca0012_n240_polar30_re1e6_iter200` | NACA 0012 | Re 1e6; M 0; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 25 | 52 | 16 | leg 1 α 0.0° (value: RLX) | — | yes |
-| `naca4412_n240_polar30_re1e6_iter200` | NACA 4412 | Re 1e6; M 0; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 51 | 52 | 32 | leg 1 α 1.0° (value: RMSBL) | — | no |
-| `naca4412_n240_polar30_re3e6_iter200` | NACA 4412 | Re 3e6; M 0; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 62 | 62 | 46 | leg 1 α 3.0° (value: RLX) | — | no |
-| `naca4412_n240_polar30_re1e6_m06_iter200` | NACA 4412 | Re 1e6; M 0.6; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 22 | 56 | 18 | leg 1 α 2.0° (value: RMSBL) | — | yes |
-| `naca63-415_n160_polar30_re1e6_m05_iter100` | NACA 63-415 | Re 1e6; M 0.5; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 0 | leg 1 α 0.0° (value: RMSBL) | — | no |
-| `naca64a010_n160_polar30_re1e6_m03_type2_iter100` | NACA 64A010 | Re 1e6; M 0.3; Ncrit 9; ITER 100; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 14 | 19 | 0 | leg 1 α 0.0° (value: RMSBL) | — | yes |
-| `naca23012_n60_polar30_re1e6_xtr022_0001` | NACA 23012 | Re 1e6; M 0; Ncrit 9; ITER 20; XTR 0.22 0.001; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 27 | 27 | 23 | leg 2 α -18.0° (value: RMSBL) | — | no |
-| `naca63-415_n160_polar30_re1e6_iter100` | NACA 63-415 | Re 1e6; M 0; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 10 | — | — | no |
-| `naca64a010_n160_polar30_re1e6_iter100` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 8 | leg 1 α 3.0° (value: RMSBL) | — | no |
+| `naca16-212_n60_polar30_re1e6_m07` | NACA 16-212 | Re 1e6; M 0.7; Ncrit 9; ITER 20; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 40 | 40 | 37 | leg 1 α 13.0° (value: RMSBL) | 19 of 40 (from 1/13°, 1/14°, 1/15°, 1/16°, …) | no |
+| `naca16-212_n160_polar30_re1e6_m07_iter100` | NACA 16-212 | Re 1e6; M 0.7; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 62 | 53 | 40 | leg 1 α 27.0° (branch: IST/ITRAN) | 20 of 53 (from 1/6°, 1/16°, 1/27°, 1/28°, …) | no |
+| `naca16-212_n240_polar30_re1e6_m07_iter200` | NACA 16-212 | Re 1e6; M 0.7; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 62 | 62 | 56 | leg 1 α 0.0° (branch: IST/ITRAN) | 29 of 62 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |
+| `naca64a010_n60_polar30_re1e6_type2` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 20; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 14 | 14 | 11 | leg 1 α 0.0° (value: RMSBL) | 13 of 14 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |
+| `naca64a010_n160_polar30_re1e6_type2_iter100` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 100; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 21 | 21 | 12 | leg 1 α 1.0° (branch: IST/ITRAN) | 20 of 21 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |
+| `naca64a010_n240_polar30_re1e6_type2_iter200` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 200; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 0 | leg 1 α 0.0° (branch: IST/ITRAN) | 10 of 10 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |
+| `naca4412_n60_inviscid_polar30_m07` | NACA 4412 | inviscid; M 0.7; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | none of 61 | no |
+| `naca4412_n160_inviscid_polar30_m07` | NACA 4412 | inviscid; M 0.7; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | none of 61 | no |
+| `naca4412_n240_inviscid_polar30_m07` | NACA 4412 | inviscid; M 0.7; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | none of 61 | no |
+| `naca64a010_n60_inviscid_polar30_type2_m03` | NACA 64A010 | inviscid; M 0.3; TYPE 2; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | 8 of 61 (from 1/-23°, 1/-21°, 1/-12°, 1/-11°, …) | no |
+| `naca64a010_n160_inviscid_polar30_type2_m03` | NACA 64A010 | inviscid; M 0.3; TYPE 2; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | 9 of 61 (from 1/-19°, 1/-17°, 1/-16°, 1/-15°, …) | no |
+| `naca64a010_n240_inviscid_polar30_type2_m03` | NACA 64A010 | inviscid; M 0.3; TYPE 2; ALFA -30 … 30 (one SPECAL each) | 61 | 61 | 61 | — | 9 of 61 (from 1/-27°, 1/-19°, 1/-15°, 1/-11°, …) | no |
+| `naca0012_n240_polar30_re1e6_iter200` | NACA 0012 | Re 1e6; M 0; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 25 | 52 | 22 | leg 1 α 22.0° (branch: IST/ITRAN) | 4 of 25 (from 1/21°, 1/22°, 1/23°, 1/24°) | yes |
+| `naca4412_n240_polar30_re1e6_iter200` | NACA 4412 | Re 1e6; M 0; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 51 | 52 | 40 | leg 1 α 27.0° (value: RMSBL) | 16 of 51 (from 1/1°, 1/2°, 1/27°, 1/28°, …) | no |
+| `naca4412_n240_polar30_re3e6_iter200` | NACA 4412 | Re 3e6; M 0; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 62 | 62 | 55 | leg 2 α -20.0° (branch: IST/ITRAN) | 12 of 62 (from 1/3°, 1/30°, 2/-15°, 2/-18°, …) | no |
+| `naca4412_n240_polar30_re1e6_m06_iter200` | NACA 4412 | Re 1e6; M 0.6; Ncrit 9; ITER 200; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 22 | 56 | 21 | leg 1 α 21.0° (value: CD) | 2 of 22 (from 1/2°, 1/21°) | yes |
+| `naca63-415_n160_polar30_re1e6_m05_iter100` | NACA 63-415 | Re 1e6; M 0.5; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 6 | leg 2 α -1.0° (value: RMSBL) | 10 of 10 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |
+| `naca64a010_n160_polar30_re1e6_m03_type2_iter100` | NACA 64A010 | Re 1e6; M 0.3; Ncrit 9; ITER 100; TYPE 2; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 14 | 19 | 6 | leg 1 α 0.0° (branch: IST/ITRAN) | 14 of 14 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | yes |
+| `naca23012_n60_polar30_re1e6_xtr022_0001` | NACA 23012 | Re 1e6; M 0; Ncrit 9; ITER 20; XTR 0.22 0.001; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 27 | 27 | 25 | leg 2 α -20.0° (branch: IST/ITRAN) | 7 of 27 (from 1/1°, 1/2°, 1/3°, 1/4°, …) | no |
+| `naca63-415_n160_polar30_re1e6_iter100` | NACA 63-415 | Re 1e6; M 0; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 10 | — | 10 of 10 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |
+| `naca64a010_n160_polar30_re1e6_iter100` | NACA 64A010 | Re 1e6; M 0; Ncrit 9; ITER 100; ALFA 0 / ASEQ 1 30 1; INIT / ALFA 0 / ASEQ -1 -30 -1 | 10 | 10 | 10 | — | 10 of 10 (from 1/0°, 1/1°, 1/2°, 1/3°, …) | no |

@@ -413,8 +413,8 @@ the generator runs the reference twice to dump each of their SETBL calls). `xtas
 (written by `cargo xtask steps`, from the steps `cargo xtask route` found to take XFOIL's route —
 `route.toml`, with `route-map.toml` naming the XFOIL call sites yFoil translates without a call, whose calls are
 taken off XFOIL's counts) adds
-the dumps and files of the branch cover's steps. `twins = true` (every `branch-coverage`, `non-finite` and `series`
-case) runs the case's five seeded 1-ULP twins after the reference and writes its `noise_floor.json` (study data,
+the dumps and files of the branch cover's steps. `twins = true` (every `branch-coverage`, `non-finite`, `series` and
+`known-issues` case) runs the case's five seeded 1-ULP twins after the reference and writes its `noise_floor.json` (study data,
 `target/fixtures/<case>/ulp<seed>/`, kept when the case is regenerated from the same inputs; `cargo xtask twins --case
 NAME` reruns them alone); `group = "name"`
 (`--group name` selects it) names the study a case belongs to — `branch-coverage` the minimal set, `non-finite`
