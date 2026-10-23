@@ -18,8 +18,9 @@ rules below are non-negotiable; the nuance in Rule 1 exists to make them *provab
 pinned flags (`-ffp-contract=off`, one fixed optimisation level) on a recorded toolchain. Stock single-precision
 XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it means the DP reference build.
 
-**Tolerances are derived, not asserted.** The reference's own noise floor is measured by `scripts/noise-floor.sh`
-(1-ULP input perturbation, per stage, per variable; results in `docs/testing/noise-floor.md`) and every
+**Tolerances are derived, not asserted.** The reference's own noise floor is measured by the tolerances study,
+`studies/tolerances/tolerances.sh` (1-ULP input perturbation, per stage, per variable; results in
+`docs/validation/tolerances.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
 Jacobian) can only be compared with a row-scaled metric. Four named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
@@ -446,13 +447,13 @@ reference case, and `scripts/cross-host.sh` for every tracked run case.
 
 **Reports are generated, never hand-fed.** They live in two sections (`docs/conventions/testing.md`,
 "Validation and consistency"): `docs/validation/` is the engineering assessment for aerodynamicists (the series
-cases and the aerofoil selection), `docs/testing/` the consistency tracking against XFOIL for developers (coverage,
-branch tests, the branch-coverage and known-issues studies, the noise floor, subroutines, geometry). Both hold only
+cases, the aerofoil selection and the tolerances), `docs/testing/` the consistency tracking against XFOIL for developers (coverage,
+branch tests, the branch-coverage and known-issues studies, subroutines, geometry). Both hold only
 Markdown, ironlab figures (`.fig`, embedded live in the site) and the branch-coverage study's two SVGs; every number in them is derived from a fixture directory (`tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/`
 for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report is generated. No XFOIL dump,
 `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
 it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
-Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-tests.md), `scripts/noise-floor.sh` (noise-floor.md),
+Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-tests.md), `studies/tolerances/tolerances.sh` (validation/tolerances.md, from fragments in validation/tables/),
 `cargo run -p branch-coverage -- --docs` (testing/branch-coverage/), `cargo run -p series-cases -- --docs` (validation/series-cases.md),
 `cargo run -p known-issues -- --docs` (testing/known-issues/), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
 (`studies/study-support/records.rs`) — study evidence beside the tests, never read by them;

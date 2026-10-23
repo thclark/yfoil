@@ -64,6 +64,7 @@ nav = [
     "validation/index.md",
     { "Series cases" = "validation/series-cases.md" },
     { "Aerofoil series" = "validation/aerofoil-series.md" },
+    "validation/tolerances.md",
   ] },
   # The Testing tab is hidden until its pages are presentable. The pages are still built and
   # reachable by URL, just not listed in the navigation. Uncomment to restore.
@@ -73,7 +74,6 @@ nav = [
   #   "testing/branch-tests.md",
   #   { "Branch coverage" = "testing/branch-coverage/README.md" },
   #   { "Known issues" = "testing/known-issues/README.md" },
-  #   "testing/noise-floor.md",
   #   { "Geometry" = "testing/geometry/README.md" },
   #   { "Subroutines" = [
   #     "testing/subroutines/README.md",
@@ -161,6 +161,9 @@ pymdownx.keys = {}
 pymdownx.magiclink = {}
 pymdownx.mark = {}
 pymdownx.smartsymbols = {}
+# Generated tables are fragments included into hand-written pages: --8<-- "validation/tables/x.md".
+# Paths resolve against docs/ (scripts/docs.sh runs zensical from the repository root).
+pymdownx.snippets = { base_path = ["docs"], check_paths = true }
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]
@@ -168,3 +171,8 @@ pymdownx.tabbed.alternate_style = true
 pymdownx.tabbed.combine_header_slug = true
 pymdownx.tasklist.custom_checkbox = true
 pymdownx.tilde = {}
+
+# The generated tables under */tables/ are fragments for pymdownx.snippets, not pages: keep them out
+# of the build. (The exclude plugin needs Zensical 0.0.68 or later; scripts/docs.sh pins the version.)
+[project.plugins.exclude]
+glob = ["validation/tables/*", "testing/tables/*", "user-guide/tables/*"]

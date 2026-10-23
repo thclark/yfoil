@@ -1,16 +1,33 @@
-# Reference noise floor
+# Tolerances
 
 **What this measures.** How much XFOIL's own outputs move when its *input* changes by the smallest
 possible amount — every panel coordinate perturbed by +1 ULP (`math.nextafter`) — with everything else
 identical. This is the floor below which no comparison between yFoil and XFOIL can be meaningful, and the
-tolerances in `tests/utilities/tolerances.rs` are derived from it (CLAUDE.md Rule 1).
+tolerances in `tests/common/utilities/tolerances.rs` are derived from it (CLAUDE.md Rule 1): the study's
+findings were read, and the four named constants there (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
+`TOL_TRANSIENT`) were set from them by hand. No test reads the study's output.
 
-**How.** `scripts/noise-floor.sh` takes the tracked reference case
+**How.** The tolerances study, `studies/tolerances/tolerances.sh`, takes the tracked reference case
 (`tests/fixtures/xfoil/naca0012_n60_a2_re1e6`: NACA 0012, N=60, α=2°, Re=1e6, M=0, Ncrit=9, ITER 20),
 runs the instrumented double-precision reference twice (base and perturbed), and compares every
 `ES24.16` dump line-by-line. Metric per value: `|a−b|` and, for `max(|a|,|b|) > 1e-8`, `|a−b| / max(|a|,|b|)`.
 Both runs converged in the same number of iterations (5) with the same branch trace, so this is the
 *continuous* floor — branch flips are a separate phenomenon (plan addendum R3).
+
+## Current measurement
+
+The latest run of the study, on the CORE-MATH reference (2026-10-15, below). The study writes these
+tables itself, into `docs/validation/tables/`, and this page includes them.
+
+!!! note
+    These tables were produced by an earlier version of the script, whose list of dumps differs from
+    the current one's; they are replaced at the study's next run.
+
+--8<-- "validation/tables/tolerances-floor.md"
+
+--8<-- "validation/tables/tolerances-iterations.md"
+
+## 2026-09-03 — first measurement
 
 **Result (2026-09-03, arm64 macOS, gfortran 14.2, `-O -fdefault-real-8 -ffp-contract=off`).**
 
@@ -52,7 +69,7 @@ and on any other host before comparing fixtures across hosts (libm differences, 
 
 ## 2026-09-04 — current dumps, and the polar script
 
-Re-measured after stages S5–S10 replaced the dump set (`scripts/noise-floor.sh`, same method:
+Re-measured after stages S5–S10 replaced the dump set (the tolerances study, same method:
 every panel coordinate +1 ULP, instrumented XFOIL, line-aligned ES24.16 comparison).
 
 ### Single point (`naca0012_n60_a2_re1e6`, ALFA 2)
@@ -160,19 +177,8 @@ to its first solve (`tests/xfoil_polar_tests.rs`).
 ## 2026-10-15 — remeasured on the CORE-MATH reference
 
 Both codes now take their transcendentals from CORE-MATH, not the host libm (CLAUDE.md Rule 1). The
-floor of the tracked reference case, remeasured with `scripts/noise-floor.sh` on that reference (arm64
+floor of the tracked reference case, remeasured with the tolerances study on that reference (arm64
 macOS, gfortran 14.2, same flags), is of the same order at every stage as on the host-libm reference;
 the per-iteration and converged forces peak at 1.55e-10 (2.2e-10 before), so the tolerances stand. Both
-runs converged in 5 iterations with the same branch trace.
-
-| file | lines | misaligned | max abs diff | max rel (abs>1e-8) | p99 rel | median rel | stage |
-|---|---|---|---|---|---|---|---|
-| xfoil_panels.dat | 71 | 0 | 7.30e-15 | 5.25e-14 | 2.45e-14 | 1.45e-16 | geometry after ABCOPY |
-| xfoil_inviscid.dat | 129 | 0 | 1.95e-12 | 4.12e-11 | 9.49e-12 | 5.06e-14 | inviscid GAM/QINV |
-| xfoil_dij.dat | 5628 | 0 | 1.01e-08 | 5.89e-06 | 2.59e-07 | 1.64e-11 | DIJ matrix |
-| blsolv_input.dat | 17802 | 0 | 6.49e-05 | 4.54e-03 | 1.36e-06 | 4.91e-11 | SETBL VA/VB/VM/VDEL (calls 1..3) |
-| blsolv_output.dat | 231 | 0 | 1.25e-10 | 2.13e-08 | 1.55e-08 | 5.33e-11 | BLSOLV VDEL out (calls 1..3) |
-| viscal_iter.dat | 120 | 0 | 1.27e-11 | 1.05e-10 | 5.38e-11 | 3.91e-13 | per-iteration CL/CD/RMSBL/RLX (VISCAL call 1) |
-| viscal_final.dat | 169 | 0 | 9.47e-12 | 1.55e-10 | 1.14e-11 | 7.97e-14 | converged point (VISCAL call 1) |
-| viscal_iters_all.dat | 6 | 0 | 2.50e-12 | 1.05e-10 | 3.19e-11 | 2.94e-13 | per-iteration record, all VISCAL calls |
-| viscal_points.dat | 21 | 0 | 2.18e-13 | 5.41e-12 | 2.67e-12 | 1.00e-13 | per-point CL/CD/CM/XTR (all VISCAL calls) |
+runs converged in 5 iterations with the same branch trace. The table is the
+[current measurement](#current-measurement) above.
