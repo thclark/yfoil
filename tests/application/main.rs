@@ -3,7 +3,7 @@
 //! yFoil-only functionality with no XFOIL equivalent: CLI, I/O, geometry generators, output
 //! records, ids — against its specification, external references or regression snapshots.
 //!
-//! Categories and rules: `docs/conventions/testing.md`.
+//! Categories and rules: `docs/development/conventions/testing.md`.
 
 #[path = "../common/fixtures/mod.rs"]
 mod fixtures;

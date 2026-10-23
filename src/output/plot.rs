@@ -1,6 +1,6 @@
 //! The `yfoil plot analysis` and `yfoil plot polar` figures, and what the three `yfoil plot`
 //! figures share: their error type and the parameters and labels the ironlab viewer sorts,
-//! filters and groups by (`docs/conventions/figures.md`). The foil figure is in `foil_plot.rs`.
+//! filters and groups by (`docs/development/conventions/figures.md`). The foil figure is in `foil_plot.rs`.
 //!
 //! Every figure is an ironlab figure, written as `.fig` (or `.fig.json`) through
 //! [`figures::save`], which refuses a figure with validation errors.
@@ -53,7 +53,7 @@ pub(crate) fn condition_parameters(conditions: &FlowConditions) -> BTreeMap<Stri
         .clone()
 }
 
-/// The regime labels of a set of flow conditions (`docs/conventions/figures.md`, "Labels")
+/// The regime labels of a set of flow conditions (`docs/development/conventions/figures.md`, "Labels")
 pub(crate) fn regime_labels(conditions: &FlowConditions) -> Vec<&'static str> {
     let mut labels = Vec::new();
     match conditions.re {

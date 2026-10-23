@@ -20,7 +20,7 @@ XFOIL agrees with this build only to ~1e-7; when this document says "XFOIL" it m
 
 **Tolerances are derived, not asserted.** The reference's own noise floor is measured by the tolerances study,
 `studies/tolerances/tolerances.sh` (1-ULP input perturbation, per stage, per variable; results in
-`docs/validation/tolerances.md`) and every
+`docs/validation/tolerances/index.md`) and every
 tolerance is that floor times a safety factor. Measured 2026-09-03: forces/RMSBL move ≤ 2.2e-10 per iteration,
 BL state ≤ 2e-11, inviscid ≤ 6e-11 — so 1e-10 on forces is *at* the floor, and matrix entries (DIJ, SETBL
 Jacobian) can only be compared with a row-scaled metric. Four named constants live in `tests/common/utilities/tolerances.rs` (`TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`,
@@ -50,7 +50,7 @@ and produces O(1) differences that are **not translation bugs**. So:
   `DIRECT`). Those are compared exactly.
 - For iterative solvers the iteration count must be identical and per-iteration `RMSBL` is compared.
 - A branch at which XFOIL and yFoil take different routes because its operands are within rounding of
-  the threshold is a **divergent comparison** (`docs/conventions/terminology.md`): it says nothing about the
+  the threshold is a **divergent comparison** (`docs/development/conventions/terminology.md`): it says nothing about the
   translation, so no test is one. It is a consequence of an **ill-conditioned solution** — stall, separation,
   the Kármán–Tsien pole — and those solutions *are* tested, because most rarely-taken branches exist for them.
 - **Mechanised per test:** a whole run is a run test only if it takes XFOIL's route with values in tolerance to
@@ -58,7 +58,7 @@ and produces O(1) differences that are **not translation bugs**. So:
   replayed from XFOIL's exact dumped state (`tests/execution/step.rs`), with decisions compared exactly and
   each value within the named tolerance or four times the step's own sensitivity — measured in the test by
   replaying the step from three copies of its inputs jogged by one ULP. How each case is tested, and why, is
-  recorded beside it in `xtask/fixtures-config/cases.toml`; `docs/conventions/testing.md` has the rules. The
+  recorded beside it in `xtask/fixtures-config/cases.toml`; `docs/development/conventions/testing.md` has the rules. The
   reference's own twins (`cargo xtask twins`) are a study instrument, read by no test.
 
 Under those conditions: if values differ by more than tolerance, **it is a bug**. 1%, 0.1%, 1e-6 — all bugs. There
@@ -87,7 +87,9 @@ Adding a row to that table requires the same evidence standard as a bug report a
 
 Every XFOIL quirk, dated fix, silent self-correction, uninitialised variable and dead branch found during
 the translation, with how yFoil handles it (replicated / overcome / out of scope), is registered in
-`docs/user-guide/reference/known-xfoil-issues.md`. Add to it whenever you find another.
+`docs/validation/known-issues/category-<n>/` — one page per numbered issue x.y, with the category's table in its
+`index.md` (categories 3, 4, 8 and 9 are numbered tables or lists on the index itself); the nine categories are
+summarised in `docs/user-guide/reference/known-xfoil-issues.md`. Add to it whenever you find another.
 
 ### Rule 3: Debug by forward-stepping through XFOIL's execution
 
@@ -152,12 +154,12 @@ branch coverage; it reports per-variable ULP distributions, iteration-count and 
 divergent comparisons — not a single worst-case number. Which step of which case takes each branch, and the
 fewest steps that take them all, are measured by `cargo xtask steps`, and `cargo xtask route` observes that yFoil
 takes XFOIL's route through each step — the same call count of every translated subroutine — so a branch is
-tested only by a step whose route agrees (`docs/conventions/testing.md`, "How branch coverage is established" and
-'What "tested" means for a branch'; the record is `docs/testing/branch-tests.md`).
+tested only by a step whose route agrees (`docs/development/conventions/testing.md`, "How branch coverage is established" and
+'What "tested" means for a branch'; the record is `docs/development/testing/branch-tests.md`).
 
 **The measurement is mechanised.** `scripts/xfoil-build.sh --gcov` builds the pristine DP reference with
 `-fprofile-arcs -ftest-coverage`; `cargo xtask coverage` runs every tracked case through it from its tracked
-`xfoil.inp`/`panels.dat`, reads the counters back with gcov and writes `docs/testing/coverage.md`.
+`xfoil.inp`/`panels.dat`, reads the counters back with gcov and writes `docs/development/testing/coverage.md`.
 `xtask/fixtures-config/coverage.toml` names the translated subroutine set (77 subroutines, 10 files) and carries the
 annotations: `[[unreachable]]` entries with a class (*structural*, *mode*, *guard*, *compiler*) and a reason,
 `[[note]]` entries recording how an open branch can be reached, `[[dead]]` entries for subroutines XFOIL never
@@ -205,7 +207,7 @@ coefficients and splines; explicit data passing everywhere; plotting behind a ca
 appended to side 2 (`NBL(2) = IBLTE(2) + NW`), explicit station→node and station→row maps (`i_node`, `i_row`,
 `velocity_sign`, `i_te_station`, `n_stations`, `i_transition_station`), and 1-based station arrays with a dummy
 slot 0, so a translated statement corresponds one-for-one to its Fortran line. There is no third "wake surface".
-**Names are not XFOIL's**: they follow `docs/conventions/naming.md` (symbols from the equations, the four index
+**Names are not XFOIL's**: they follow `docs/development/conventions/naming.md` (symbols from the equations, the four index
 systems, `_d_<token>` sensitivities), and the XFOIL name of every variable and routine is recorded in
 `docs/user-guide/reference/xfoil-reference.md` and in `#[doc(alias = "SETBL")]` on the translating function.
 Inside a translated body, short locals bound at the top from the named fields (`let hk1 = station1.hk;`) keep the
@@ -302,7 +304,7 @@ Failures are classified by *what it would take to know*, not by severity (`docs/
 "How failures are classified"): **Class A** a domain violation, **Class B** an iteration exhaustion —
 both exact from a single run, both recorded, both withholding the numbers — and **Class C**
 conditioning, which needs two runs to see, stays `Valid`: such a result is *ill-conditioned*
-(`docs/conventions/terminology.md`), measured by the twins every validation run carries. A result is therefore invalid on exact, single-run facts only
+(`docs/development/conventions/terminology.md`), measured by the twins every validation run carries. A result is therefore invalid on exact, single-run facts only
 (A or B), **never** on the size or smoothness of a number: `docs/user-guide/reference/known-xfoil-issues.md` §7.7 is the
 worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
 records the evidence, write-only, enforced by `ci/validity-write-only.sh`. Ill-conditioned but converged
@@ -387,7 +389,8 @@ handoff, and keeps the inputs plus the files the case's tests read under `tests/
 (`track = true`) or everything under `target/fixtures/<case>/`. Case options: `alphas`, `alphas_after_reinit` (INIT between), `polar = true`
 (drive with `ALFA a0 / ASEQ a1 aN da` like the polar procedure; ASEQ points get ITMAX+5), `cls` (OPER `CL x`
 points), `matyp` (OPER `TYPE n`), `inviscid = true` (no VISC: each ALFA is one SPECAL, each CL one SPECCL),
-`events = true` (keep `events.dat`, the reference's `EVLOG` branch events), `keep = [...]` (track these
+`events = true` (keep `events.dat`, the reference's `EVLOG` branch events), `topic = "page"` (the page of
+`docs/validation/<study>/` that shows a series or known-issues case), `keep = [...]` (track these
 work-directory files besides the inputs), `closures = true` (cut the reference's closure log into
 `tests/fixtures/subroutines/`), and how the case is tested: `run = true` / `run_through = N` (the whole run
 compared, or its first N calls) and `step_calls = [...]` (every iteration of those calls replayed as a step;
@@ -420,10 +423,10 @@ directory walk.
 
 ## Testing
 
-**Read `docs/conventions/testing.md` first.** Every test has exactly one purpose — (a) subroutine
+**Read `docs/development/conventions/testing.md` first.** Every test has exactly one purpose — (a) subroutine
 equivalence, (b) execution equivalence, (c) yFoil functionality, (d) known XFOIL weaknesses, (e) physical
 invariants, (f) reference integrity — and (b) test cases must be well-conditioned. The words
-*deterministic*, *ill-conditioned*, *twin* and *noise floor* are defined in `docs/conventions/terminology.md`
+*deterministic*, *ill-conditioned*, *twin* and *noise floor* are defined in `docs/development/conventions/terminology.md`
 and used in that sense only.
 
 ```
@@ -445,22 +448,32 @@ rebuild the reference and re-prove it free of host maths, inert and free of unin
 (`cargo xtask fixtures --verify`) holds on any host; the `reference-build` workflow checks it on Linux for the CI
 reference case, and `scripts/cross-host.sh` for every tracked run case.
 
-**Reports are generated, never hand-fed.** They live in two sections (`docs/conventions/testing.md`,
-"Validation and consistency"): `docs/validation/` is the engineering assessment for aerodynamicists (the series
-cases, the aerofoil selection and the tolerances), `docs/testing/` the consistency tracking against XFOIL for developers (coverage,
-branch tests, the branch-coverage and known-issues studies, subroutines, geometry). Both hold only
-Markdown, ironlab figures (`.fig`, embedded live in the site) and the branch-coverage study's two SVGs; every number in them is derived from a fixture directory (`tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/`
-for `--big` cases) or from `tests/fixtures/subroutines/`, at the time the report is generated. No XFOIL dump,
-`.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever committed under `docs/` — `.gitignore` enforces
-it — and a report that cannot be regenerated from tracked inputs plus `cargo xtask fixtures` is not evidence.
-Current generators: `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-tests.md), `studies/tolerances/tolerances.sh` (validation/tolerances.md, from fragments in validation/tables/),
-`cargo run -p branch-coverage -- --docs` (testing/branch-coverage/), `cargo run -p series-cases -- --docs` (validation/series-cases.md),
-`cargo run -p known-issues -- --docs` (testing/known-issues/), the three studies reading `target/fixtures/` only and comparing whole runs by their floor comparison
-(`studies/study-support/records.rs`) — study evidence beside the tests, never read by them;
-`generate_subroutine_validation` (subroutines/), `cargo run -p aerofoil-series -- --docs`
-(aerofoil-series.md: the validation selection, one figure per generator family, the naca456 comparison). The user guide's figures (`docs/user-guide/figures/`) are the output of the commands the guide prints, regenerated by
+**Numbers are generated; prose is written.** Reports live in two places
+(`docs/development/conventions/testing.md`, "Validation and consistency"; the mechanics are
+`docs/development/conventions/documentation.md`). `docs/validation/` is the studies, written up for engineers: one
+section per study (aerofoil series, series cases, known issues, branch coverage, tolerances), each an index page
+(what the study is for, main results, its pages) plus chart pages. Those pages are **written by hand**, and every
+table they show is **included** (`--8<-- "validation/<study>/tables/<name>.md"`) and every figure **embedded**
+(`figures/<name>.fig`) from a study run: a number that changes from run to run is never typed into prose. A study
+never writes under `docs/`: each run writes `studies/<study>/runs/<UTC>/` (gitignored) with a `publish/` bundle,
+and `cargo xtask publish <study> [--run <UTC>] [--dry-run]` copies one run's bundle into
+`docs/validation/<study>/{tables,figures}/`, refusing if a page uses a table or figure the run lacks.
+`docs/development/testing/` is the consistency tracking for developers (coverage, branch tests, subroutines,
+geometry), pages generated whole by `cargo xtask coverage` (coverage.md), `cargo xtask steps` (branch-tests.md) and
+`generate_subroutine_validation` (subroutines/). Every published number is derived from a fixture directory
+(`tests/fixtures/xfoil/<case>/` or `target/fixtures/<case>/` for `--big` cases) or from `tests/fixtures/subroutines/`.
+Only Markdown, ironlab figures (`.fig`, embedded live in the site) and the branch-coverage study's two SVGs are
+committed under `docs/`. No XFOIL dump, `.dat`, `.pol`, `DUMP`/`CPWR` output or other reference data is ever
+committed there — `.gitignore` enforces it — and a table that cannot be regenerated from tracked inputs plus
+`cargo xtask fixtures` is not evidence. The studies: `cargo run -p aerofoil-series` (the validation selection, one
+figure per generator family, the naca456 comparison), `cargo run -p series-cases`, `cargo run -p known-issues`,
+`cargo run -p branch-coverage` (the three reading `target/fixtures/` only and comparing whole runs by their floor
+comparison, `studies/study-support/records.rs` — study evidence beside the tests, never read by them) and
+`studies/tolerances/tolerances.sh`; each Rust study takes `--render <run_dir>` to redraw a run's figures and
+`publish/` without rerunning. A series or known-issues case is placed on its page by `topic` in `cases.toml`. The
+user guide's figures (`docs/user-guide/figures/`) are the output of the commands the guide prints, regenerated by
 `scripts/guide-figures.sh`.
-Figures are ironlab figures (`docs/conventions/figures.md`), built in Rust by each study from the numbers it
+Figures are ironlab figures (`docs/development/conventions/figures.md`), built in Rust by each study from the numbers it
 computes, through `src/output/figures.rs` (colours, ordered-family colours, parameters and labels the ironlab viewer
 filters by, linked axes, validated saving); run folders also hold a PDF of each. The exception is the
 branch-coverage study's branch map and case matrix, still drawn by matplotlib (`studies/branch-coverage/plot.py`
@@ -476,11 +489,12 @@ plots for the ±15° N=160 polar) is generated from the `--big` fixture case and
 - Integer powers written as explicit multiplications where bit-exactness matters (`x*x*x`, not `powi(3)`) to match
   gfortran's inline expansion.
 - Temporary files go in `.tmp/`, never `/tmp`.
-- The docs site's file tree mirrors its navigation (`zensical.toml`): each tab and section is a directory
-  with an `index.md`, and each page is the kebab-case of its title
-  (`docs/user-guide/commands/analyse-a-single-point.md`). A page's own assets go in a directory beside it
-  named after it (`docs/validation/series-cases.md` + `docs/validation/series-cases/*.fig`). Moving or retitling a page moves its file.
-- Naming: `docs/conventions/naming.md` (the rules) and `docs/user-guide/reference/xfoil-reference.md` (the
+- The docs site's three tabs are User guide, Development and Validation; its file tree mirrors its navigation
+  (`zensical.toml`): each tab and section is a directory whose `index.md` is its landing page, and each page is the kebab-case of its title
+  (`docs/user-guide/commands/analyse-a-single-point.md`). A study section's published products sit in its
+  `tables/` and `figures/` (`docs/validation/series-cases/figures/*.fig`). Moving or retitling a page moves its
+  file. The rules are `docs/development/conventions/documentation.md`.
+- Naming: `docs/development/conventions/naming.md` (the rules) and `docs/user-guide/reference/xfoil-reference.md` (the
   XFOIL → yFoil remap table). Symbols from the equations are names; XFOIL abbreviations are not.
 
 ## Polar sweep procedure
@@ -528,19 +542,19 @@ Minimum cases, each tabulated and plotted with BL-variable difference tables:
 - NACA 0012, α=0 — symmetry, base viscous case, XFOIL-independent invariants
 - NACA 0012, 0°→+1° and 0°→−1° — initialisation from a previous solution, sign checks
 - NACA 4412, full ±15° polar — beyond the limits of convergence
-- One section per further generator family (docs/validation/aerofoil-series.md): NACA 0012-34
+- One section per further generator family (docs/validation/aerofoil-series/index.md): NACA 0012-34
   (4-digit modified), 23018 (5-digit), 16-212 (16-series, compressible), 63-415 (6-series,
   closed TE, wind turbine), 64A010 (6A-series) and a Kármán–Trefftz section (analytic, sharp TE)
 - Plus the branch-coverage cases of Rule 6: sharpened TE, M=0.3, high-α separated, low-Re laminar separation,
   `XSTRIP`, `MATYP≠1` — and the study's minimal set (`group = "branch-coverage"`): inviscid-only (Kármán–Trefftz;
   the 64A010 TYPE 2 M 0.3 at −23°, 0° and 19°), fixed CL far from alpha, a trip upstream of the stagnation point,
   a stalled first march at Re 3e6, deep stall at ITER 50, Re 1e4 with DAMP
-- The series cases (`studies/series-cases`, `docs/validation/series-cases.md`, `group = "series"`): the
+- The series cases (`studies/series-cases`, `docs/validation/series-cases/index.md`, `group = "series"`): the
   aerofoil series and flow regimes of interest under normal conditions (Re 1e4–1e8, Ncrit 4–11, M 0–0.6,
   forced transition, fixed CL, inviscid), swept 0 → ±30° by XFOIL's polar procedure at N = 160, ITER 100
   (N = 160 represents N = 240 where the flow is attached, `docs/user-guide/reference/known-xfoil-issues.md` §7.13), yFoil
   driven the same way and compared point by point (a study; the tests replay the chased calls step by step)
-- The known-issues cases (`studies/known-issues`, `docs/testing/known-issues/`, `group = "known-issues"`):
+- The known-issues cases (`studies/known-issues`, `docs/validation/known-issues/`, `group = "known-issues"`):
   runs that show XFOIL's known issues arising — the dependence on the panel count (§7.13, each case at
   N = 60, 160 and 240), the plot-label hang (§4), and the sweeps whose purpose is one issue — to be
   brought one for one with `docs/user-guide/reference/known-xfoil-issues.md`

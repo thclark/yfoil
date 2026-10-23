@@ -1,32 +1,113 @@
+---
+icon: lucide/badge-check
+---
+
 # Validation
 
-The engineering assessment: whether yFoil stacks up sensibly against XFOIL on the aerofoil series and
-flow regimes an aerodynamicist would actually run. The results read as polars, transition locations and
-boundary layers, and what they mean is plain to anyone who uses XFOIL. How the test suite tracks yFoil
-against XFOIL statement by statement — branch coverage, the minimal finite and non-finite case sets,
-the known-issues and pathological runs — is for software developers, and
-lives in [Testing](../testing/README.md).
+The purpose of this section is to give interested users a detailed insight into the studies undertaken
+when translating yFoil from XFOIL, to ensure correctness. 
 
-Every page here is generated from data the fixture pipeline produced, and can be regenerated at any time
-from tracked inputs. Nothing here is a baseline: the reference is the instrumented double-precision XFOIL
-6.99 build (CLAUDE.md, *Reference implementation*), its dumps live under `tests/fixtures/xfoil/<case>/`
-(tracked) or `target/fixtures/<case>/` (`--big` cases), and the reports read those directories. Only
-Markdown, ironlab figures (`.fig`) and the branch-coverage SVGs are committed under `docs/`.
+A direct 1:1 translation is not possible, due to variations between platforms (regardless of translation,
+XFOIL itself yields different results on different platforms due to tiny variations in system math libraries),
+making extensive validation and testing necessary to build confidence that yFoil matches the output of XFOIL, not 
+just in **most**, but in **all**, possible cases.
 
-Figures are [ironlab](https://github.com/thclark/ironlab) figures, built in Rust by each study from the numbers it
-computes (`docs/conventions/figures.md`). They are embedded live in these pages: pan, zoom and toggle lines from the
-legend. Each carries parameters (case, conditions, outputs) and labels, so every study's figures can be loaded
-together into the ironlab viewer and sorted, filtered and grouped. A study's run folder also holds a PDF of each.
+The process is covered in depth in the written paper (see ['Citing yFoil'](../user-guide/get-started/citing-yfoil.md)).
 
-| Page | What it shows | Regenerate with |
-|---|---|---|
-| [Series cases](series-cases.md) | Runs of the aerofoil series and flow regimes of interest under normal conditions — full ±30° polars by XFOIL's polar procedure, an inviscid alpha sweep and a fixed-CL sweep, at N = 160, ITER 100 — with yFoil driven the same way and compared point by point; each run with its own five 1-ULP twins, so the page also says where XFOIL itself was ill-conditioned | `cargo xtask fixtures --group series` (runs the twins too), then `cargo run --release -p series-cases -- --docs` |
-| [Aerofoil series](aerofoil-series.md) | The selection of aerofoils the series and the test cases run on (one per family, with why), every generator family drawn one panel per parameter, and the NACA generators against the public-domain NASA/PDAS `naca456` ordinates (`tests/fixtures/naca456/`, written by `scripts/naca456-fixtures.sh`; tested by `tests/application/naca456.rs`) | `cargo run --release -p aerofoil-series -- --docs` |
-| [Tolerances](tolerances.md) | Rule 1: the reference's own noise floor — its 1-ULP sensitivity per stage and variable — from which the constants in `tests/common/utilities/tolerances.rs` were set by hand. The tables are fragments the study writes into `tables/`, included into the page | `studies/tolerances/tolerances.sh` |
+!!! note "The meaning of 'Validation'"
 
-**Analysis (polar) validation** — the ±15° N=160 polar with per-alpha CL/CD/CM/XTR and BL-distribution
-difference tables against the instrumented per-alpha dumps of the `naca0012_n160_polar_re1e6` case — is
-the remaining validation stage and will land here as a generated `analysis/` section. It is deliberately
-absent until then: an earlier version of this directory carried XFOIL's formatted `DUMP`/`CPWR`/`PACC`
-files (F9.5, F11.5, F10.5 — about 1e-5) as committed reference data, which cannot support the project's
-tolerances (CLAUDE.md Rule 4), and was removed from history on 2026-09-04.
+    yFoil is a translation of XFOIL 6.99, so 'validation', here, means showing that it
+    - gives XFOIL's answers where possible, and 
+    - fails in a controlled way otherwise.
+    
+    This is **not** a validation that yFoil agrees with wind-tunnel data: there are plenty of papers
+    detailing XFOIL's results against experiments which commutatively apply to yFoil too.
+
+
+## Pristine and reference builds
+
+To enable deep comparison between internal values XFOIL source code is copied, compiled in double precision, linked to 
+an explicit system maths library (to deliver identical results across platforms) and instrumented to:
+ - accept input values (like panel nodes) at double precision (17 significant figures),
+ - dump intermediate state (like boundary layer variables or solver residuals) at double precision,
+ - record events (like entry or exit of loops) for branch coverage studies, and
+ - dump output state at double precision.
+
+This is the **reference** build, against which we compare yFoil. However, to create the reference, the XFOIL source code was modified. 
+To ensure those modifications did not inadvertently alter XFOIL's results, a complete set of tests was undertaken comparing the reference
+XFOIL to an unaltered copy of the source code compiled with the same options (the **pristine** build).
+
+A comparison between yFoil and the reference:
+ - passes when both codes take the same branches, and every value is within a tolerance taken from XFOIL's own noise floor (see [Tolerances](tolerances/index.md))
+ - is invalid where XFOIL is ill-conditioned (severely post-stall, separation, the Kármán–Tsien pole) 
+ - is indeterminate where branches diverge only due to extremely small variations between yFoil and XFOIL (theoretically possible but not seen in the test set)
+ - fails otherwise.
+
+
+## The studies
+
+Validation processes evolved during the build of yFoil, but the main steps have been captured and turned into a compact set of
+reproducible studies:
+
+- [Aerofoil series](aerofoil-series/index.md): Selects a set of different aerofoil geometry families ('series') for use in the
+  other validation studies, each with a physical rationale for why they've been selected. Correct generation of aerofoil geometry 
+  (panelling) is then validated against externally defined references like the NACA456 geometry program.
+
+- [Series cases](series-cases/index.md): For each series, runs simulations a typical aerodynamicist would run (full polars swept 
+  through stall at a range of operating points appropriate to the series), then compares those polars against the reference.
+ 
+- [Known issues](known-issues/index.md): Catalogues a wide number of issues with XFOIL's behaviour (from minor 
+  issues like dead code or outdated comments to pathological behaviour like program crashes) that emerged during development of yFoil.
+  
+- [Branch coverage](branch-coverage/index.md): Extracts the smallest set of analysis cases that takes **every reachable branch** of XFOIL's 
+  analysis path. This study was used as a basis to generate unit test fixtures that comprehensively demonstrate yFoil's consistency with XFOIL
+  in every situation.
+
+- [Tolerances](tolerances/index.md): Determines much XFOIL's internal and output values move under 1-ULP ('Unit of Least Precision') changes to its
+  inputs. This study was used as a basis to generate tolerances for comparisons between yFoil and XFOIL (for the series cases and for unit test fixtures).
+
+
+## Reproducing studies
+
+Each study page states the run it shows. To make a run yourself, generate the study's fixtures (where it has them), then run the
+study. Every command runs from the repository root, and each run writes a dated folder under `studies/<study>/runs/<UTC>/`.
+
+```sh
+# Aerofoil series (no fixtures needed)
+cargo run --release -p aerofoil-series
+
+# Series cases
+cargo xtask fixtures --group series
+cargo run --release -p series-cases
+
+# Known issues
+cargo xtask fixtures --group known-issues
+cargo run --release -p known-issues
+
+# Branch coverage
+cargo xtask fixtures --group branch-coverage
+cargo xtask fixtures --group non-finite
+cargo run --release -p branch-coverage
+
+# Tolerances (builds the reference if it is missing)
+studies/tolerances/tolerances.sh
+```
+
+A run never changes documentation pages. How the pages and the runs fit together is set out in 
+[Documentation](../development/conventions/documentation.md). To update a page's tables and figures from 
+a run, publish it:
+
+```sh
+cargo xtask publish <study> --dry-run       # Shows what would change
+cargo xtask publish <study>                 # Copies results across to the docs from the newest run...
+cargo xtask publish <study> --run <UTC>     # ...or a chosen historical run
+```
+
+`<study>` is `aerofoil-series`, `series-cases`, `known-issues`, `branch-coverage` or `tolerances`.
+
+
+!!! note "Developer note"
+    A run folder made before a change to a study's output can be redrawn without rerunning the study, using
+    `cargo run --release -p <study> -- --render studies/<study>/runs/<UTC>` (every study but tolerances).
+
+

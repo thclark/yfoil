@@ -37,6 +37,9 @@ pub struct PolarPoint {
     /// (`reference_ill_conditioned`); `None` without twins or a matching call
     pub xfoil_ill_conditioned: Option<bool>,
     pub parted_iteration: Option<usize>,
+    /// how yFoil parted from the reference at this point, when it did: `branch: <decision>` or
+    /// `value: <name>` (`CallReport::parted_by`; terminology.md, "Run parting")
+    pub parted_by: Option<String>,
     /// iterations of the call compared within tolerance (all of them when yFoil followed the
     /// reference to the end of the call, whatever the twin did)
     pub compared_iterations: Option<usize>,
@@ -152,7 +155,7 @@ impl PolarRun {
             "truncated_by_watchdog": self.truncated_by_watchdog, "parted": self.parted(),
             "points": self.points.iter().map(|p| json!({
                 "leg": p.leg, "alpha_deg": p.alpha_deg, "yfoil": pt(&p.yfoil),
-                "xfoil": p.xfoil.as_ref().map(pt), "outcome": p.outcome, "xfoil_ill_conditioned": p.xfoil_ill_conditioned, "parted_iteration": p.parted_iteration,
+                "xfoil": p.xfoil.as_ref().map(pt), "outcome": p.outcome, "xfoil_ill_conditioned": p.xfoil_ill_conditioned, "parted_iteration": p.parted_iteration, "parted_by": p.parted_by,
                 "compared_iterations": p.compared_iterations, "followed": Self::followed(p),
                 "yfoil_nonfinite": p.yfoil_nonfinite, "xfoil_nonfinite": p.xfoil_nonfinite,
                 "yfoil_nonfinite_stations": p.yfoil_nonfinite_stations, "xfoil_nan_tokens": p.xfoil_nan_tokens,
@@ -261,6 +264,27 @@ pub fn inviscid_sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                 "mismatch".to_string()
             }
         });
+        // an inviscid alpha point has no branch decision that is compared: it parts on a value
+        let parted_by = x.and_then(|x| {
+            let st = session.state();
+            [("CL", p.cl, x.0), ("CM", p.cm, x.1), ("CDP", p.cd_pressure, x.2)]
+                .iter()
+                .find(|(k, a, b)| !within(*a, *b, k))
+                .map(|(k, _, _)| format!("value: {k}"))
+                .or_else(|| {
+                    x.3.iter().enumerate().find_map(|(i, n)| {
+                        let i = i + 1;
+                        [
+                            ("GAM", st.gamma.get(i).copied().unwrap_or(f64::NAN), n[0]),
+                            ("QINV", st.q_inviscid.get(i).copied().unwrap_or(f64::NAN), n[1]),
+                            ("CPI", st.cp_inviscid.get(i).copied().unwrap_or(f64::NAN), n[2]),
+                        ]
+                        .iter()
+                        .find(|(k, a, b)| !within(*a, *b, k))
+                        .map(|(k, _, _)| format!("value: {k}"))
+                    })
+                })
+        });
         let ill = (!spreads.is_empty()).then(|| ["CL", "CM", "CDP"].iter().any(|k| !(spread(k) <= DIVERGENCE_FLOOR)));
         points.push(PolarPoint {
             leg: 1,
@@ -271,6 +295,7 @@ pub fn inviscid_sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
             outcome,
             xfoil_ill_conditioned: x.and(ill),
             parted_iteration: None,
+            parted_by,
             yfoil_nonfinite: ![p.cl, p.cm, p.cd_pressure].iter().all(|v| v.is_finite()),
             xfoil_nonfinite: x.map(|x| ![x.0, x.1, x.2].iter().all(|v| v.is_finite())),
             yfoil_nonfinite_stations: 0,
@@ -369,6 +394,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
             let mut xfoil_transition = None;
             let mut xfoil_stations = None;
             let state = k.and_then(|k| compare_state(&rec, &dir, k, session.state()));
+            let mut parted_by = None;
             let (xfoil, outcome, parted, compared) = if let Some(k) = k {
                 let r = compare_call(&rec, k, &p, session.state(), transient_tol(k));
                 let (o, at) = match &r.outcome {
@@ -382,6 +408,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                 if r.compared_iterations < r.iterations.1 {
                     departed = true;
                 }
+                parted_by = r.parted_by.clone();
                 xfoil_transition = Some(r.xfoil_transition);
                 xfoil_stations = Some(r.xfoil_stations);
                 (
@@ -422,6 +449,7 @@ pub fn sweep(root: &Path, case: &Case, description: &str) -> PolarRun {
                 outcome,
                 xfoil_ill_conditioned: k.and_then(|k| reference_ill_conditioned(&rec, k)),
                 parted_iteration: parted,
+                parted_by,
                 compared_iterations: compared,
                 yfoil_nonfinite,
                 xfoil_nonfinite,

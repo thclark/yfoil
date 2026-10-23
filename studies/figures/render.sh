@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Draw the branch-coverage study's occupancy figures (branch map, case matrix) from its run folder
-# with matplotlib: the only figures ironlab cannot yet express (docs/conventions/figures.md; every
+# with matplotlib: the only figures ironlab cannot yet express (docs/development/conventions/figures.md; every
 # other figure is an ironlab figure built in Rust).
 #
 #   studies/figures/render.sh <study> <run_dir>      e.g. branch-coverage studies/branch-coverage/runs/2026-10-15T14-17-40Z

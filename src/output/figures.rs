@@ -1,6 +1,6 @@
 //! Shared conventions for yFoil's ironlab figures: the colours, the ordered-family colours that
 //! replace a colourmap, the parameters and labels the ironlab viewer sorts, filters and groups
-//! by, and saving. The rules are in `docs/conventions/figures.md`.
+//! by, and saving. The rules are in `docs/development/conventions/figures.md`.
 //!
 //! Figure size and fonts are ironlab's defaults (set up for AMS journals). A figure sets
 //! `size_mm` only to change its aspect ratio, keeping the default width.
@@ -168,8 +168,8 @@ pub fn save_with_pdf(fig: &Figure, stem: &Path) -> Result<(), FigureError> {
     save(fig, &fig_path)
 }
 
-/// The documentation markup that embeds a figure file, `file_name` relative to the page: beside
-/// it, or in the directory beside it named after the page (`docs/conventions/figures.md`,
+/// The documentation markup that embeds a figure file, `file_name` relative to the page (a study
+/// section's pages embed `figures/<name>.fig`; `docs/development/conventions/figures.md`,
 /// "Embedding"). The figure's name is the file's stem. The docs embed `.fig` only: `.fig.json`
 /// is too slow to load in the site.
 pub fn embed_html(file_name: &str, alt: &str) -> String {

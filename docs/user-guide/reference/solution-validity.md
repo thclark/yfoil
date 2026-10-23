@@ -75,10 +75,10 @@ no numeric result can depend on a validity classification
 near that point, not of the arithmetic that was performed — there is nothing in a single run that
 distinguishes a well-conditioned answer from one balanced on a pole. Seeing it requires perturbing
 the input and running again: rerunning the reference with its panels jogged by one ULP (its
-*twins*, `docs/conventions/terminology.md`). So a Class C point is reported `Valid`, because nothing about the
+*twins*, `docs/development/conventions/terminology.md`). So a Class C point is reported `Valid`, because nothing about the
 computation was invalid, and its uncertainty is carried by that study rather than by this flag.
 Such a point is *ill-conditioned* in the sense of
-[the project terminology](../../conventions/terminology.md).
+[the project terminology](../../development/conventions/terminology.md).
 
 Where each is embodied:
 

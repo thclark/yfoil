@@ -63,7 +63,7 @@ replay value, failing only on those macOS-specific pins.
 - The 4412 twin run regenerated on glibc hung at exit in XFOIL's sequence-plot label loop on a non-finite
   CL (known-issues §4), even with graphics off; all 34 calls were on disk. `cargo xtask fixtures` now
   keeps such a run: its watchdog ends a reference that stops producing output and keeps what it wrote.
-- CLAUDE.md, `docs/testing/README.md` (*Polar break points*) and `docs/user-guide/reference/known-xfoil-issues.md` §7.4
+- CLAUDE.md, `docs/development/testing/README.md` (*Polar break points*) and `docs/user-guide/reference/known-xfoil-issues.md` §7.4
   record the measurement.
 
 ## Resolution: one correctly rounded libm for both codes (2026-10-15)

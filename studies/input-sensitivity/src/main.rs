@@ -1,4 +1,4 @@
-//! XFOIL input-sensitivity study (run folders only, no docs page; listed in `docs/testing/README.md`).
+//! XFOIL input-sensitivity study (run folders only, no docs page; listed in `docs/development/testing/README.md`).
 //!
 //! Runs the instrumented double-precision XFOIL 6.99 reference on one aerofoil over an upward
 //! alpha sweep, once for the base case and once per perturbation level of three input families —

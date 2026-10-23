@@ -38,7 +38,7 @@ If you use yFoil in any research or work leading to a publication or technical r
 
 Years of work went into building and validating XFOIL. Authors, maintainers and users of yFoil owe a greate debt of thanks to Prof. Drela, Harold Youngren and any other contributors to the original XFOIL.
 
-See [citations](docs/citations.md) and the [license](LICENSE) for how to properly credit our months of work (yFoil) and their years (XFOIL).
+See [Citing yFoil](https://yfoil.net/user-guide/get-started/citing-yfoil/) and the [license](LICENSE) for how to properly credit our months of work (yFoil) and their years (XFOIL).
 
 ## License
 
@@ -47,7 +47,7 @@ This repo `yFoil` is licenced under `GPL v3 or later` (SPDX `GPL-3.0-or-later`),
 - we modify the original source for the purpose of instrumentation (machine-precision level cross validation fo all subroutines), and
 - we include the exact package of source code used for validation within the version-controlled repo.
 
-The optional `plotting` feature (`yfoil plot`, and the studies' figures) links [ironlab](https://github.com/thclark/ironlab), which is licensed `AGPL-3.0-or-later`. GPLv3 §13 permits that combination. A binary built with `plotting` is distributed under the GPLv3 for yFoil's part and the AGPLv3 for ironlab's part, whose network-use clause applies if you serve it to users over a network. The default build doesn't include ironlab.
+The optional `plotting` feature (`yfoil plot`, and the studies' figures) links [ironlab](https://ironlab.org), which is licensed `AGPL-3.0-or-later`. GPLv3 §13 permits that combination. A binary built with `plotting` is distributed under the GPLv3 for yFoil's part and the AGPLv3 for ironlab's part, whose network-use clause applies if you serve it to users over a network. The default build doesn't include ironlab.
 
 ## Development
 
@@ -96,7 +96,7 @@ for `yfoil plot`, which writes ironlab figures (`.fig`, opened with `ironlab-vie
 cargo xtask xfoil-build [--verify] [--snan]        # build the DP reference into target/xfoil-ref/ (and prove
                                                    #   instrumentation is inert / no uninitialised reads)
 cargo xtask fixtures [--case NAME] [--verify] [--big]   # regenerate fixtures from xtask/fixtures-config/cases.toml
-cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/testing/coverage.md
+cargo xtask coverage [--case NAME] [--big] [--rebuild]  # gcov branch coverage -> docs/development/testing/coverage.md
 ```
 
 **Documentation.** The docs site is built with [Zensical](https://zensical.org/) (the successor to Material for MkDocs)

@@ -11,7 +11,7 @@
 //! the same correctly rounded functions (CORE-MATH), so neither depends on the host's libm. There is
 //! no third outcome: a run whose
 //! route differs from XFOIL's anywhere is a divergent comparison and not a run test
-//! (`docs/conventions/testing.md`, rule 3) — such cases are tested by single steps. An inviscid
+//! (`docs/development/conventions/testing.md`, rule 3) — such cases are tested by single steps. An inviscid
 //! case's points are compared one by one (`step.rs`, `replay_inviscid`).
 
 use crate::fixtures::cases::{load, Op};

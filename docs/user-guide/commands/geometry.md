@@ -136,7 +136,7 @@ yfoil geometry repanel e387.dat --panelling panelling.json   # every option from
 ### Methods
 
 **`pangen` (default)** is XFOIL's `PANGEN`, translated line for line and tested
-against XFOIL's own output ([validation](../../testing/geometry/README.md)).
+against XFOIL's own output ([validation](../../development/testing/geometry/README.md)).
 It splines the input, forms the curvature along the arc length, smooths it, adds
 a *fictitious* curvature at the trailing edge and inside optional refinement
 windows, and then places the nodes so that

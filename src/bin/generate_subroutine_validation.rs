@@ -640,6 +640,7 @@ fn validate_dampl(fixture_dir: &Path) -> ValidationResult {
 fn write_summary_report(results: &[ValidationResult], fixture_dir: &Path, output_dir: &Path) -> std::io::Result<()> {
     let mut file = File::create(output_dir.join("README.md"))?;
 
+    writeln!(file, "---\nicon: lucide/sigma\n---\n")?;
     writeln!(file, "# Subroutine comparison")?;
     writeln!(file)?;
     writeln!(
@@ -865,7 +866,7 @@ fn write_transition_report(results: &[ValidationResult], output_dir: &Path) -> s
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let fixture_dir = project_root.join("tests/fixtures/subroutines");
-    let output_dir = project_root.join("docs/testing/subroutines");
+    let output_dir = project_root.join("docs/development/testing/subroutines");
 
     fs::create_dir_all(&output_dir)?;
 

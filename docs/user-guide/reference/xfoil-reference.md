@@ -108,7 +108,7 @@ Input Geometry (X, Y coordinates)
 ### yFoil equivalents
 
 The full XFOIL → yFoil name mapping is [the mapping section below](#xfoil-yfoil-mapping);
-the naming rules are [`docs/conventions/naming.md`](../../conventions/naming.md). Where the
+the naming rules are [`docs/development/conventions/naming.md`](../../development/conventions/naming.md). Where the
 translated routines live:
 
 | XFOIL             | yFoil                                                  |
@@ -549,7 +549,7 @@ never `PANE`, never `PPAR`, because different panels make any comparison meaning
 ### Comparing values
 
 There is no fixed tolerance ladder. Tolerances are **derived from the reference's own noise floor**
-(the tolerances study, `studies/tolerances/tolerances.sh`, and its page `docs/validation/tolerances.md`) and
+(the tolerances study, `studies/tolerances/tolerances.sh`, and its page `docs/validation/tolerances/index.md`) and
 live as four named constants in `tests/common/utilities/tolerances.rs` — `TOL_PURE`, `TOL_LINALG`, `TOL_SOLVER`, `TOL_TRANSIENT` — with
 no ad-hoc literals anywhere else.
 
@@ -938,7 +938,7 @@ Every XFOIL name (COMMON variable, subroutine, local of note) and the yFoil name
 what the quantity is. The *rules* behind these names — symbols as names, the underscore
 meanings, the four index systems, the derivative tokens, and the interpretation notes on `AC`,
 `CTAU`, `US`, `RMSBL` and `GAMMA` — are in
-[`docs/conventions/naming.md`](../../conventions/naming.md); this file is their application and is
+[`docs/development/conventions/naming.md`](../../development/conventions/naming.md); this file is their application and is
 kept current whenever a field, variable or function is added or renamed (CLAUDE.md, Architecture).
 
 Indexing is unchanged from XFOIL: 1-based, side 1 = upper and 2 = lower, the wake appended to
@@ -3074,7 +3074,7 @@ This is the primary COMMON block include file containing global state for XFOIL.
 ### yFoil mapping
 
 See [the mapping section](#xfoil-yfoil-mapping) (tables 1–4 cover this
-block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).
+block) and the rules in [`docs/development/conventions/naming.md`](../../development/conventions/naming.md).
 
 ## XBL.INC - Boundary Layer Local Variables
 
@@ -3337,7 +3337,7 @@ This allows copying all station variables with a single array operation.
 ### yFoil mapping
 
 See [the mapping section](#xfoil-yfoil-mapping) (tables 1–4 cover this
-block) and the rules in [`docs/conventions/naming.md`](../../conventions/naming.md).
+block) and the rules in [`docs/development/conventions/naming.md`](../../development/conventions/naming.md).
 
 ## BLPAR.INC - Boundary Layer Closure Parameters
 
