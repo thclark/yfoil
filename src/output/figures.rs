@@ -177,9 +177,7 @@ pub fn embed_html(file_name: &str, alt: &str) -> String {
     let name = stem.trim_end_matches(".fig");
     let alt = alt.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
     // `format` is explicit: the site's cache-busting appends `?v=<hash>` to `src`
-    format!(
-        "<ironlab-figure src=\"{file_name}\" format=\"fig\" name=\"{name}\" alt=\"{alt}\">{alt}</ironlab-figure>"
-    )
+    format!("<ironlab-figure src=\"{file_name}\" format=\"fig\" name=\"{name}\" alt=\"{alt}\">{alt}</ironlab-figure>")
 }
 
 #[cfg(test)]
