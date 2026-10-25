@@ -28,19 +28,51 @@ replicates each (with the message as a code comment) so that its results and bra
 | 4.17 | `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `input-sensitivity` driver and the fixture runner detect the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
 | 4.18 | `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the iterate fallback above sets the station from the one upstream with finite values (beyond station 3) and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/validation/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are tested one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
 
-!!! note "Which reference reaches the plot-label hang (4.17)"
+## Reproducing the plot-label hang (4.17) on the host libm
 
-    Whether a sweep reaches a non-finite CL or CD, and so the hang, depends on the maths library,
-    because the runs that reach it are ill-conditioned. Four known-issues sweeps hung on the
-    host-libm reference used before 2026-10-15 and do not hang on the CORE-MATH reference:
-    `naca4412_n240_polar30_re1e6_iter200` (30°), `naca4412_n240_polar30_re3e6_iter200` (−24°),
-    `naca16-212_n160_polar30_re1e6_m07_iter100` (−18°) and, with the panels yFoil generated then,
-    `naca64a010_n160_polar30_re1e6_type2_iter100` (12°). Their `pathological_…_host_libm` copies in
-    `cases.toml` recreate those hangs on `scripts/xfoil-build.sh --host-libm`. Because that build
-    takes its maths from the host, it is not a reference, and what it does depends on the host
-    (`tests/fixtures/README.md`). On CORE-MATH, `naca0012_n240_polar30_re1e6_iter200`,
-    `naca4412_n240_polar30_re1e6_m06_iter200` and `naca64a010_n160_polar30_re1e6_m03_type2_iter100`
-    still hang (checked 2026-10-25).
+Whether a sweep reaches a non-finite CD, and so the hang, depends on the maths library, because the
+runs that reach it are ill-conditioned. Four known-issues sweeps hung on the host-libm reference used
+before 2026-10-15 and do not hang on the CORE-MATH reference. Each can be repeated without yFoil,
+from a committed bundle under `xtask/fixtures-config/reproduce/` (the `panels.dat` XFOIL loads, the
+`xfoil.inp` that drives it, and `panels.json`) and the host-libm build of XFOIL. Its run page gives
+the steps.
+
+!!! info "Verified 2026-10-25"
+
+    yFoil 0.1.0 <!-- commit: fill in after merge -->, host-libm reference `inputs_fingerprint`
+    `a72447693d15adef02ff948d7ee42dc1d4abba50835c9e9e9b05764e3e0846b0`, GNU Fortran 14.2.0
+    (Homebrew GCC), on macOS 15.6.1 (24G90), arm64, Apple `libSystem.B.dylib` 1345.120.2. Each
+    bundle was run alone on the pristine and on the instrumented host-libm build, and both stopped at
+    the same point:
+
+    | Run page | Bundle panels | Hangs at | VISCAL / SETBL call |
+    |---|---|---|---|
+    | [NACA 4412, Re 1e6, N = 240](../runs/naca-4412-re-1e6-n-240.md#reproducing-the-hang) | today's | 30°, upward leg | 31 / 1032 |
+    | [NACA 4412, Re 3e6, N = 240](../runs/naca-4412-re-3e6-n-240.md#reproducing-the-hang) | today's | −24°, downward leg | 56 / 1827 |
+    | [NACA 16-212 at M 0.7](../runs/naca-16-212-at-m-0-7.md#reproducing-the-hang-n-160) (N = 160) | before CORE-MATH | −19°, downward leg | 51 / 1205 |
+    | [NACA 64A010, TYPE 2](../runs/naca-64a010-type-2.md#reproducing-the-hang-n-160) (N = 160) | before CORE-MATH | 12°, upward leg | 13 / 464 |
+
+In short, from the repository root:
+
+```bash
+scripts/xfoil-build.sh --host-libm      # needs gfortran and X11 (macOS: brew install gcc libx11)
+mkdir -p .tmp/hang && cp xtask/fixtures-config/reproduce/<case>/{panels.dat,xfoil.inp} .tmp/hang/
+cd .tmp/hang && GFORTRAN_UNBUFFERED_ALL=y ../../target/xfoil-ref/host-libm/pristine/bin/xfoil < xfoil.inp
+```
+
+The last point's final iteration prints `CD = Infinity` and `VISCAL:  Convergence failed`, and then
+XFOIL never returns. The alternative is `cargo xtask fixtures --case <case>`, where `<case>` is the
+`pathological_…_host_libm` copy in `cases.toml`; its watchdog marks the run `truncated_by_watchdog`.
+
+!!! warning "Depends on the platform's maths library"
+
+    XFOIL's plot-label loop on a non-finite CD causes these hangs, not the maths library. What the
+    library decides is whether a run gets there: its one-ULP differences put an ill-conditioned run
+    on another path. On another OS or libm (glibc, or CORE-MATH), these cases may not hang, or may
+    hang at another operating point. Three known-issues sweeps hang on the CORE-MATH reference too,
+    at other angles: `naca0012_n240_polar30_re1e6_iter200` (24° there, 22° on the host libm),
+    `naca4412_n240_polar30_re1e6_m06_iter200` (21°) and
+    `naca64a010_n160_polar30_re1e6_m03_type2_iter100` (13°).
 
 ## Runs that show it
 

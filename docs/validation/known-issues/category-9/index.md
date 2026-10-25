@@ -21,8 +21,8 @@ the same behaviour is tested and shown in routine time.
 The removed `…_iter200_stall` copy repeated the first row's conditions exactly and is not kept.
 
 These observations were made on the host-libm reference, before 2026-10-15. On the CORE-MATH
-reference, 9.1 and 9.2 do not hang. Their `_host_libm` copies recreate the hangs ([§4](../category-4/index.md), the note
-under the table).
+reference, 9.1 and 9.2 do not hang. Their `_host_libm` copies recreate the hangs, from committed bundles
+([§4, reproducing the plot-label hang](../category-4/index.md#reproducing-the-plot-label-hang-417-on-the-host-libm)).
 
 **Slow only through its twins: run time as a symptom of ill-conditioning.** Three of the four cases
 are not slow in their own reference run; their seeded 1-ULP twins are — the same script, every panel
