@@ -13,12 +13,13 @@
 #   --gcov     additionally build target/xfoil-ref/gcov/ — pristine + build series compiled
 #              and linked with -fprofile-arcs -ftest-coverage, the branch-coverage
 #              instrument behind `cargo xtask coverage` (CLAUDE.md Rule 6)
-#   --host-libm  additionally build target/xfoil-ref/host-libm/ — the instrumented reference
-#              linked against the HOST libm instead of CORE-MATH, as every reference was before
-#              2026-10-15. Not a reference: its runs depend on the host's libm (Apple libSystem and
-#              glibc differ), so its manifest names that libm, and no test or study reads it. It
-#              exists to recreate the runs observed on the host-libm reference (the `pathological`
-#              cases with `reference = "host-libm"`); the other stages and proof 3 are unchanged
+#   --host-libm  additionally build target/xfoil-ref/host-libm/{pristine,instrumented}/ — the two
+#              builds above linked against the HOST libm instead of CORE-MATH, as every reference
+#              was before 2026-10-15. Not a reference: its runs depend on the host's libm (Apple
+#              libSystem and glibc differ), so host-libm/manifest.txt names that libm, and no test or
+#              study reads it. It exists to recreate the runs observed on the host-libm reference
+#              (the `pathological` cases with `reference = "host-libm"`, and the bundles under
+#              xtask/fixtures-config/reproduce/); the other stages and proof 3 are unchanged
 #   --fingerprint  print the hash of the build's inputs and exit (see fingerprint() below)
 set -euo pipefail
 
@@ -57,7 +58,7 @@ CORE_MATH_CFLAGS="-O2 -ffp-contract=off"
 stage() { # stage <name> <extra-fflags> <series...>   (STAGE_LIBM=host: link the host libm, --host-libm only)
   local name="$1"; shift; local extra="$1"; shift
   local dir="$OUT/$name"
-  rm -rf "$dir"; mkdir -p "$OUT"; cp -R "$SRC" "$dir"
+  rm -rf "$dir"; mkdir -p "$(dirname "$dir")"; cp -R "$SRC" "$dir"
   for s in "$@"; do
     while IFS= read -r p; do
       [ -z "$p" ] && continue
@@ -134,13 +135,15 @@ host_libm() { # host_libm <binary>: the host libm the binary resolves its maths 
 cat "$OUT/manifest.txt"
 
 if [ "$HOST_LIBM" = 1 ]; then
-  STAGE_LIBM=host stage host-libm "" series.build series.instrument
+  rm -rf "$OUT/host-libm"
+  STAGE_LIBM=host stage host-libm/pristine     "" series.build
+  STAGE_LIBM=host stage host-libm/instrumented "" series.build series.instrument
   # its own manifest: a host-libm run depends on the host, so the libm is named explicitly
   # (the OS release fixes Apple's libSystem; on glibc, its version)
   {
     sed '/^libm:/d' "$OUT/manifest.txt"
-    echo "libm:                   HOST $(host_libm "$OUT/host-libm/bin/xfoil"); $( (command -v sw_vers >/dev/null && echo "macOS $(sw_vers -productVersion) ($(sw_vers -buildVersion))") || (ldd --version 2>&1 | head -1) )"
-    echo "host_maths:             $(nm -u "$OUT/host-libm/bin/xfoil" | awk '{print $NF}' | sed 's/@.*//; s/^_*//' \
+    echo "libm:                   HOST $(host_libm "$OUT/host-libm/pristine/bin/xfoil"); $( (command -v sw_vers >/dev/null && echo "macOS $(sw_vers -productVersion) ($(sw_vers -buildVersion))") || (ldd --version 2>&1 | head -1) )"
+    echo "host_maths:             $(nm -u "$OUT/host-libm/pristine/bin/xfoil" | awk '{print $NF}' | sed 's/@.*//; s/^_*//' \
       | grep -xE 'c?(a?(sin|cos|tan)h?|atan2|exp(2|10|m1)?|log(2|10|1p)?|pow|cbrt|hypot|erfc?|[lt]gamma)|sincos|sincos_stret|cexpi' | tr '\n' ' ')"
   } > "$OUT/host-libm/manifest.txt"
   cat "$OUT/host-libm/manifest.txt"

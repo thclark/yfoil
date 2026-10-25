@@ -46,6 +46,8 @@ xfoil/third-party/xfoil-6.99/plotlib/libPlt*.a
 !xfoil/third-party/*.ORIGIN
 !docs/**/*.html
 !overrides/**
+# the panels.dat of each host-libm reproduction bundle (not a fixture: no test reads it)
+!xtask/fixtures-config/reproduce/*/panels.dat
 
 # Python bytecode from the figure scripts
 __pycache__/

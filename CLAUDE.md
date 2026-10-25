@@ -341,8 +341,10 @@ third-party/core-math/            - CORE-MATH's correctly rounded EXP/LOG/LOG10/
                                     (scripts/xfoil-build/core_math_libm.c), and yFoil's cr-libm compiles the same
                                     files with the same flags
 target/xfoil-ref/{pristine,instrumented,snan}/ - build output; never edit in place
-target/xfoil-ref/host-libm/       - `--host-libm` only: the instrumented build linked against the HOST libm, as
-                                    every reference was before 2026-10-15; not a reference (below)
+target/xfoil-ref/host-libm/{pristine,instrumented}/ - `--host-libm` only: both builds linked against the HOST
+                                    libm, as every reference was before 2026-10-15; not a reference (below)
+xtask/fixtures-config/reproduce/  - one bundle per host-libm hang (panels.json, panels.dat, xfoil.inp), runnable
+                                    on the host-libm XFOIL without yFoil; not fixtures, read by no test
 scripts/xfoil-build.sh            - the build; `cargo xtask xfoil-build [--verify] [--snan] [--host-libm]` wraps it
 ```
 
@@ -365,9 +367,11 @@ study: the same instrumented build left on the host libm, its manifest (`target/
 naming that libm and OS, and the build failing unless the maths *does* resolve from the host. It exists to
 recreate runs observed on the host-libm reference — the plot-label hangs (known issues §4) that four
 known-issues sweeps reached then and do not reach on CORE-MATH — by `pathological` copies with
-`reference = "host-libm"` (one also needs `panels`, the panels yFoil's generators produced on the host
-libm then, `xtask/fixtures-config/panels/`). A host-libm run depends on the host (libSystem and glibc
-differ), so `cargo xtask fixtures` refuses both options on any other case.
+`reference = "host-libm"`, each run from its committed bundle (`reproduce = "xtask/fixtures-config/reproduce/<case>"`:
+the panels XFOIL loads, two of them yFoil's of before 2026-10-15, when its generators used the host libm too,
+and the script, which must equal the one generated for the case). A host-libm run depends on the host
+(libSystem and glibc differ), so `cargo xtask fixtures` refuses both options on any other case. The
+known-issues category-4 page gives the steps to reproduce each hang with XFOIL alone.
 
 Every stage records `fingerprint`, the hash of everything the build depends on (sources, patch series,
 shim, build script); every `cargo xtask` that runs the reference rebuilds a stage whose fingerprint is

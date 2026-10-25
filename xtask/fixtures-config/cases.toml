@@ -996,7 +996,7 @@ topic = "naca-16-212-at-m-0-7"   # the page of docs/validation/ that shows it (c
 track = false
 
 [[case]]
-name = "naca16-212_n160_polar30_re1e6_m07_iter100"    # known issues 7.13 at N = 160: NACA 16-212, M 0.7 (first unconverged 3 deg; on CORE-MATH the sweep completes; on the host-libm reference (before 2026-10-15) CD is infinite at -18 deg and it hangs, 4: pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm)
+name = "naca16-212_n160_polar30_re1e6_m07_iter100"    # known issues 7.13 at N = 160: NACA 16-212, M 0.7 (first unconverged 3 deg; on CORE-MATH the sweep completes; on the host-libm reference (before 2026-10-15) CD turns infinite and it hangs, 4, at -19 deg with the panels of then and at -18 deg with today's: pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm)
 foil = "naca:16-212"
 n_nodes = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1288,8 +1288,10 @@ track = false
 # and shown in routine time: docs/user-guide/reference/known-xfoil-issues.md §9. Nothing runs them yet.
 # The `_host_libm` copies (at the end) recreate the plot-label hangs (known issues §4) that four
 # known-issues sweeps reached on the host-libm reference and do not reach on CORE-MATH:
-# `reference = "host-libm"` runs them on `scripts/xfoil-build.sh --host-libm`, and the 64A010 copy also
-# takes yFoil's panels of then (`panels`). Host-dependent by construction (recorded on macOS libSystem).
+# `reference = "host-libm"` runs them on `scripts/xfoil-build.sh --host-libm`; the 16-212 and 64A010 copies
+# take yFoil's panels of then; each runs from its committed bundle (`reproduce`,
+# xtask/fixtures-config/reproduce/<case>/), which also runs without yFoil. Host-dependent by
+# construction (recorded on macOS libSystem).
 
 [[case]]
 name = "pathological_naca4412_n240_polar30_re1e6_iter200"    # copy of naca4412_n240_polar30_re1e6_iter200: hung in the plot label at about 30 deg on the upper leg (non-finite CL; the BL state stays finite); twins ~23 min each (observed 2026-10-07, on the host-libm reference: on CORE-MATH it does not hang; the hang is recreated by its _host_libm copy below)
@@ -1362,6 +1364,7 @@ max_iterations = 200
 polar = true
 group = "pathological"
 reference = "host-libm"
+reproduce = "xtask/fixtures-config/reproduce/pathological_naca4412_n240_polar30_re1e6_iter200_host_libm"   # today's panels (byte-identical to those of before 2026-10-15)
 track = false
 
 [[case]]
@@ -1377,10 +1380,11 @@ max_iterations = 200
 polar = true
 group = "pathological"
 reference = "host-libm"
+reproduce = "xtask/fixtures-config/reproduce/pathological_naca4412_n240_polar30_re3e6_iter200_host_libm"   # today's panels (byte-identical to those of before 2026-10-15)
 track = false
 
 [[case]]
-name = "pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm"    # copy of naca16-212_n160_polar30_re1e6_m07_iter100 on the host-libm reference: hangs in the plot label at -18 deg on the downward leg (VISCAL call 50, SETBL call 1384; CD infinite) (observed 2026-10-25, macOS 15.6.1 arm64)
+name = "pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm"    # copy of naca16-212_n160_polar30_re1e6_m07_iter100 on the host-libm reference: with the panels of then, hangs in the plot label at -19 deg on the downward leg (VISCAL call 51, SETBL call 1205; CD infinite); today's panels hang at -18 deg (call 50) (observed 2026-10-25, macOS 15.6.1 arm64)
 foil = "naca:16-212"
 n_nodes = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1392,6 +1396,7 @@ max_iterations = 100
 polar = true
 group = "pathological"
 reference = "host-libm"
+reproduce = "xtask/fixtures-config/reproduce/pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm"   # yFoil's panels of b448f8d4, before its generators moved to CORE-MATH
 track = false
 
 [[case]]
@@ -1408,5 +1413,5 @@ matyp = 2
 polar = true
 group = "pathological"
 reference = "host-libm"
-panels = "xtask/fixtures-config/panels/naca64a010_n160_cosine_b448f8d4.json"   # yFoil's panels before CORE-MATH (b448f8d4); today's do not hang on either reference
+reproduce = "xtask/fixtures-config/reproduce/pathological_naca64a010_n160_polar30_re1e6_type2_iter100_host_libm"   # yFoil's panels of b448f8d4, before its generators moved to CORE-MATH
 track = false
