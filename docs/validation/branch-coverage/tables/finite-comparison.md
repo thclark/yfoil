@@ -9,4 +9,4 @@
 | `naca4412_n60_a20_re1e6_iter50` | 1 | 50 | divergent | call 1 it. 0 | call 1 | — | — | — | 2.4e0 | 3.6e-1 | 5.1e3 |
 | `naca4412_n60_cl1_clm05_re1e6` | 2 | 26 | match | — | no call | 1.1e-9 | 7.8e-12 | 5.9e-11 | 1.7e-8 | 1.0e0 | 3.1e-8 |
 | `naca64a010_n60_inviscid_type2_m03_am23_a0_a19` | 3 | 0 | match | — | call 1 | 0 | — | 0 | 0 † | 0 | 5.8e3 |
-| `naca64a010_n60_type2_a0_re1e6` | 1 | 16 | MISMATCH | call 1 it. 16 | call 1 | — | — | — | 4.1e-4 | 4.2e-3 | 4.6e7 |
+| `naca64a010_n60_type2_a0_re1e6` | 1 | 16 | divergent | call 1 it. 16 | call 1 | — | — | — | 4.1e-4 | 4.2e-3 | 4.6e7 |

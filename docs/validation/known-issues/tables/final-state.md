@@ -17,7 +17,7 @@
 | `naca16-212_n160_polar30_re1e6_m07_iter100` | 2 | -2.0 | 105 / 105 | divergent | branch: IST/ITRAN | CTAU (104) | 9.0e0 | 9.4e0 | 0.24 |
 | `naca16-212_n240_polar30_re1e6_m07_iter200` | 1 | 0.0 | 60 / 86 | divergent | branch: IST/ITRAN | CTAU (215) | 1.8e-6 | 7.4e-6 | 0.06 |
 | `naca16-212_n240_polar30_re1e6_m07_iter200` | 2 | 0.0 | 60 / 86 | divergent | branch: IST/ITRAN | CTAU (215) | 1.8e-6 | 7.4e-6 | 0.06 |
-| `naca64a010_n60_polar30_re1e6_type2` | 1 | 0.0 | 16 / 16 | mismatch | value: RMSBL | XSSI (76) | 6.4e-13 | 3.1e-10 | 0.00 |
+| `naca64a010_n60_polar30_re1e6_type2` | 1 | 0.0 | 16 / 16 | divergent | value: RMSBL | XSSI (76) | 6.4e-13 | 3.1e-10 | 0.00 |
 | `naca64a010_n60_polar30_re1e6_type2` | 2 | 0.0 | 16 / 16 | divergent | value: RMSBL | XSSI (76) | 6.4e-13 | 3.1e-10 | 0.00 |
 | `naca64a010_n160_polar30_re1e6_type2_iter100` | 1 | 0.0 | 100 / 100 | yes | — | CPI (2) | 8.6e-14 | 6.2e-11 | 0.00 |
 | `naca64a010_n160_polar30_re1e6_type2_iter100` | 1 | 1.0 | 27 / 27 | divergent | branch: IST/ITRAN | MASS (161) | 2.3e-10 | 6.6e-9 | 0.01 |
