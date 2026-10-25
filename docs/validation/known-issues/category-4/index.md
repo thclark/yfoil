@@ -28,6 +28,20 @@ replicates each (with the message as a code comment) so that its results and bra
 | 4.17 | `plotlib/plt_font.f:249` (PLNUMBABS, via ASEQ → SEQPLT at `xoper.f:719` and via ALFA → CPX → COEFPL) | plot labels are formatted even with graphics off (`PLOP / G F`), and PLNUMBABS's digit-extraction loop never terminates on a non-finite value. Reached by both the sequence-plot label and the Cp-plot coefficient label, so every OPER point whose CL/CD has become Infinity hangs XFOIL at 100 % CPU (NACA 0012, `ITER 100`, past ~21° on either leg; stacks sampled 2026-09-10). The `input-sensitivity` driver and the fixture runner detect the stall (stdout stops growing) and kills the run | Out of scope (plot library); the sequence data up to the hang is intact. yFoil has no plot label and halts the sequence normally (`compute_polar`) |
 | 4.18 | `xblsys.f:396-425` (TRCHEK2) | the transition-point Newton can drive `XT` onto `X2` (the interval end); the station's Newton then fails with `Res = NaN`, the iterate fallback above sets the station from the one upstream with finite values (beyond station 3) and the run carries on (`MRCHUE: Convergence failed at 37 side 1 Res = NaN`, `x: 0.88282 0.88572 0.88572 N: 0.683 9.000 NaN`). Seen on the NACA 63-415 (closed TE) from α = 10° and on stalled compressible points (`docs/validation/branch-coverage/`, the `non-finite` cases of `cases.toml`) | Replicated at the event level: the fallback and every other branch these runs reach are tested one call at a time by `tests/execution/events.rs` (NaN where XFOIL has NaN); the whole run is not, because the reference's own 1-ULP twins wander by O(10²) on it. Such runs are excluded from the validation set and the branches only they reach are reported as *non-finite only* (§8); the fallback's NaN behaviour is §7.10 |
 
+!!! note "Which reference reaches the plot-label hang (4.17)"
+
+    Whether a sweep reaches a non-finite CL or CD, and so the hang, depends on the maths library,
+    because the runs that reach it are ill-conditioned. Four known-issues sweeps hung on the
+    host-libm reference used before 2026-10-15 and do not hang on the CORE-MATH reference:
+    `naca4412_n240_polar30_re1e6_iter200` (30°), `naca4412_n240_polar30_re3e6_iter200` (−24°),
+    `naca16-212_n160_polar30_re1e6_m07_iter100` (−18°) and, with the panels yFoil generated then,
+    `naca64a010_n160_polar30_re1e6_type2_iter100` (12°). Their `pathological_…_host_libm` copies in
+    `cases.toml` recreate those hangs on `scripts/xfoil-build.sh --host-libm`. Because that build
+    takes its maths from the host, it is not a reference, and what it does depends on the host
+    (`tests/fixtures/README.md`). On CORE-MATH, `naca0012_n240_polar30_re1e6_iter200`,
+    `naca4412_n240_polar30_re1e6_m06_iter200` and `naca64a010_n160_polar30_re1e6_m03_type2_iter100`
+    still hang (checked 2026-10-25).
+
 ## Runs that show it
 
 - [NACA 16-212 at M 0.7](../runs/naca-16-212-at-m-0-7.md)

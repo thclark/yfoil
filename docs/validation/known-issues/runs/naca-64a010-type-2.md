@@ -16,7 +16,7 @@ Shows: [§7.13 Whether a sweep converges, and what it converges to, can depend o
 
 ## N = 160
 
-`naca64a010_n160_polar30_re1e6_type2_iter100` — Known issues 7.13 at N = 160: NACA 64A010, viscous TYPE 2, M 0 (11 of 13 converge; non-finite at 12 deg and hangs, 4).
+`naca64a010_n160_polar30_re1e6_type2_iter100` — Known issues 7.13 at N = 160: NACA 64A010, viscous TYPE 2, M 0 (on CORE-MATH 12-15 deg fail and the downward leg halts at -4 deg, no hang; on the host-libm reference (before 2026-10-15) with the panels of then, 11 of 13 converge, CD is infinite at 12 deg and it hangs, 4: pathological_naca64a010_n160_polar30_re1e6_type2_iter100_host_libm).
 
 <ironlab-figure src="../figures/polars-naca64a010_n160_polar30_re1e6_type2_iter100.fig" format="fig" name="polars-naca64a010_n160_polar30_re1e6_type2_iter100" alt="naca64a010_n160_polar30_re1e6_type2_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil">naca64a010_n160_polar30_re1e6_type2_iter100: CL, CD, the last RMSBL, iterations, transition location and position in its station interval against alpha, XFOIL and yFoil</ironlab-figure>
 
