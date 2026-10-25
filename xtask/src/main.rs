@@ -1,6 +1,6 @@
 //! Repository automation: reference XFOIL build and fixture pipeline.
 //!
-//!   cargo xtask xfoil-build [--verify] [--snan]
+//!   cargo xtask xfoil-build [--verify] [--snan] [--host-libm]
 //!   cargo xtask fixtures [--case NAME]... [--verify] [--big]
 //!   cargo xtask coverage [--case NAME]... [--big] [--rebuild]   (docs/development/testing/coverage.md)
 //!   cargo xtask publish <study> [--run <UTC>|latest] [--dry-run]  (a study run → docs/validation/<study>/)
@@ -123,6 +123,18 @@ struct Case {
     /// a validation run is known only from them
     #[serde(default)]
     twins: bool,
+    /// the reference that runs the case: absent = the instrumented reference (CORE-MATH);
+    /// `"host-libm"` = the same build linked against the host libm (`scripts/xfoil-build.sh
+    /// --host-libm`), to recreate a run observed before 2026-10-15. Its runs depend on the host, so
+    /// only an untracked `pathological` copy may use it
+    #[serde(default)]
+    reference: Option<String>,
+    /// a panels.json yFoil generated at an earlier commit, used in place of generating the panels
+    /// now (path from the repository root; `foil` and `n_nodes` must describe it): yFoil's
+    /// generators took their maths from the host libm before 2026-10-15, so a run observed then
+    /// can need the panels of then. Only an untracked `pathological` copy may use it
+    #[serde(default)]
+    panels: Option<String>,
 }
 /// XFOIL's PPAR menu values for a geometry-only case
 #[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
@@ -273,14 +285,15 @@ fn main() {
         Some("publish") => publish::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <xfoil-build [--verify] [--snan] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse] | cross-host | publish <study> [--run <UTC>|latest] [--dry-run]>"
+                "usage: cargo xtask <xfoil-build [--verify] [--snan] [--gcov] [--host-libm] | fixtures [--case NAME] [--group NAME] [--verify] [--audit] [--big] | coverage [--case NAME] [--group NAME] [--with-group NAME] [--big] [--rebuild] [--per-case] | twins --case NAME | steps [--case NAME] [--from-json] | route [--case NAME] [--reuse] | cross-host | publish <study> [--run <UTC>|latest] [--dry-run]>"
             );
             std::process::exit(2);
         }
     }
 }
 
-/// Builds the reference stage (`instrumented`, or `gcov` with `--gcov`) unless it exists and was
+/// Builds the reference stage (`instrumented`, `gcov` with `--gcov`, or `host-libm` with
+/// `--host-libm`) unless it exists and was
 /// built from the current inputs: its `fingerprint` must equal `scripts/xfoil-build.sh
 /// --fingerprint`. A reference built from older sources, patches or maths library is never used.
 pub(crate) fn ensure_reference(stage: &str) -> PathBuf {
@@ -294,10 +307,10 @@ pub(crate) fn ensure_reference(stage: &str) -> PathBuf {
     let have = fs::read_to_string(dir.join("fingerprint")).unwrap_or_default();
     if !dir.join("bin/xfoil").exists() || have.trim() != want {
         println!("reference `{stage}` missing or built from other inputs: rebuilding");
-        xfoil_build(&if stage == "gcov" {
-            vec!["--gcov".to_string()]
-        } else {
-            vec![]
+        xfoil_build(&match stage {
+            "gcov" => vec!["--gcov".to_string()],
+            "host-libm" => vec!["--host-libm".to_string()],
+            _ => vec![],
         });
     }
     dir.join("bin/xfoil")
@@ -337,7 +350,7 @@ fn fixtures(flags: &[String]) {
     )
     .expect("parse cases.toml");
     steps::apply_cover(&root, &mut cases.cases);
-    let xfoil = ensure_reference("instrumented");
+    let reference = ensure_reference("instrumented");
     let yfoil = root.join("target/debug/yfoil");
     run(
         Command::new("cargo")
@@ -345,7 +358,7 @@ fn fixtures(flags: &[String]) {
             .current_dir(&root),
         "cargo build yfoil",
     );
-    let ref_manifest = fs::read_to_string(root.join("target/xfoil-ref/manifest.txt")).unwrap_or_default();
+    let reference_manifest = fs::read_to_string(root.join("target/xfoil-ref/manifest.txt")).unwrap_or_default();
 
     let mut failures = 0;
     let group: Option<&str> = flags.windows(2).find(|w| w[0] == "--group").map(|w| w[1].as_str());
@@ -365,12 +378,40 @@ fn fixtures(flags: &[String]) {
             );
             std::process::exit(1);
         }
+        // a host-libm run depends on the host's libm, so it can be neither a test nor evidence
+        match case.reference.as_deref() {
+            None => {}
+            Some("host-libm") if !case.track && case.group.as_deref() == Some("pathological") => {}
+            Some("host-libm") => {
+                eprintln!(
+                    "{}: `reference = \"host-libm\"` is for untracked `pathological` copies only",
+                    case.name
+                );
+                std::process::exit(1);
+            }
+            Some(r) => {
+                eprintln!("{}: unknown reference `{r}` (absent, or \"host-libm\")", case.name);
+                std::process::exit(1);
+            }
+        }
+        if case.panels.is_some() && (case.track || case.group.as_deref() != Some("pathological")) {
+            eprintln!("{}: `panels` is for untracked `pathological` copies only", case.name);
+            std::process::exit(1);
+        }
     }
     for case in &cases.cases {
         if !case.selected(&selected, group, big) {
             continue;
         }
         println!("== {} ==", case.name);
+        let (xfoil, ref_manifest) = if case.reference.as_deref() == Some("host-libm") {
+            let xfoil = ensure_reference("host-libm");
+            let manifest = fs::read_to_string(root.join("target/xfoil-ref/host-libm/manifest.txt")).unwrap_or_default();
+            println!("  reference: host-libm ({})", xfoil.display());
+            (xfoil, manifest)
+        } else {
+            (reference.clone(), reference_manifest.clone())
+        };
         let work = root.join("target/fixtures").join(&case.name);
         // the case's twins (`cargo xtask twins`, study data) are set aside and put back if the
         // regenerated run has the same inputs and reference, so regenerating does not discard them
@@ -487,7 +528,12 @@ fn fixtures(flags: &[String]) {
                 gargs.push("--sharp");
             }
         }
-        run(Command::new(&yfoil).args(&gargs).current_dir(&work), "yfoil geometry");
+        if let Some(p) = &case.panels {
+            // yFoil's panels of an earlier commit (`panels`), converted below as usual
+            fs::copy(root.join(p), work.join("panels.json")).unwrap_or_else(|e| panic!("{p}: {e}"));
+        } else {
+            run(Command::new(&yfoil).args(&gargs).current_dir(&work), "yfoil geometry");
+        }
         run(
             Command::new(&yfoil)
                 .args([
@@ -738,6 +784,12 @@ fn fixtures(flags: &[String]) {
         }
         if case.stop_on_nonfinite {
             manifest["case"]["stop_on_nonfinite"] = serde_json::json!(true);
+        }
+        if let Some(r) = &case.reference {
+            manifest["case"]["reference"] = serde_json::json!(r);
+        }
+        if let Some(p) = &case.panels {
+            manifest["case"]["panels"] = serde_json::json!(p);
         }
         // written only when it happened, so the manifest of every run that ends on its own is
         // unchanged; the studies read it (the plot-label hang, known issues §4)

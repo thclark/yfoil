@@ -996,7 +996,7 @@ topic = "naca-16-212-at-m-0-7"   # the page of docs/validation/ that shows it (c
 track = false
 
 [[case]]
-name = "naca16-212_n160_polar30_re1e6_m07_iter100"    # known issues 7.13 at N = 160: NACA 16-212, M 0.7 (first unconverged 3 deg; non-finite at -18 deg and hangs, 4)
+name = "naca16-212_n160_polar30_re1e6_m07_iter100"    # known issues 7.13 at N = 160: NACA 16-212, M 0.7 (first unconverged 3 deg; on CORE-MATH the sweep completes; on the host-libm reference (before 2026-10-15) CD is infinite at -18 deg and it hangs, 4: pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm)
 foil = "naca:16-212"
 n_nodes = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1042,7 +1042,7 @@ topic = "naca-64a010-type-2"   # the page of docs/validation/ that shows it (car
 track = false
 
 [[case]]
-name = "naca64a010_n160_polar30_re1e6_type2_iter100"    # known issues 7.13 at N = 160: NACA 64A010, viscous TYPE 2, M 0 (11 of 13 converge; non-finite at 12 deg and hangs, 4)
+name = "naca64a010_n160_polar30_re1e6_type2_iter100"    # known issues 7.13 at N = 160: NACA 64A010, viscous TYPE 2, M 0 (on CORE-MATH 12-15 deg fail and the downward leg halts at -4 deg, no hang; on the host-libm reference (before 2026-10-15) with the panels of then, 11 of 13 converge, CD is infinite at 12 deg and it hangs, 4: pathological_naca64a010_n160_polar30_re1e6_type2_iter100_host_libm)
 foil = "naca:64A010"
 n_nodes = 160
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1143,7 +1143,7 @@ inviscid = true
 track = false
 
 [[case]]
-name = "naca0012_n240_polar30_re1e6_iter200"    # known issues 4: NACA 0012, Re 1e6; non-finite at 22 deg and the reference hangs in the plot label (N = 160 does not)
+name = "naca0012_n240_polar30_re1e6_iter200"    # known issues 4: NACA 0012, Re 1e6; CD infinite at 24 deg and the reference hangs in the plot label (at 22 deg on the host-libm reference (before 2026-10-15)) (N = 160 does not)
 foil = "naca4:0012"
 n_nodes = 240
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1158,7 +1158,7 @@ topic = "naca-0012-re-1e6-n-240"   # the page of docs/validation/ that shows it 
 track = false
 
 [[case]]
-name = "naca4412_n240_polar30_re1e6_iter200"    # known issues 4: NACA 4412, Re 1e6; non-finite at 30 deg and the reference hangs in the plot label (N = 160 does not)
+name = "naca4412_n240_polar30_re1e6_iter200"    # known issues 4: NACA 4412, Re 1e6; on CORE-MATH 27-30 deg fail to converge and the downward leg halts at -19 deg, no hang; on the host-libm reference (before 2026-10-15) CD is infinite at 30 deg and it hangs in the plot label: pathological_naca4412_n240_polar30_re1e6_iter200_host_libm (N = 160 does not)
 foil = "naca4:4412"
 n_nodes = 240
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1173,7 +1173,7 @@ topic = "naca-4412-re-1e6-n-240"   # the page of docs/validation/ that shows it 
 track = false
 
 [[case]]
-name = "naca4412_n240_polar30_re3e6_iter200"    # known issues 4: NACA 4412, Re 3e6; non-finite at -24 deg on the downward leg and the reference hangs in the plot label (N = 160 does not)
+name = "naca4412_n240_polar30_re3e6_iter200"    # known issues 4: NACA 4412, Re 3e6; on CORE-MATH the sweep completes, no hang; on the host-libm reference (before 2026-10-15) CD is infinite at -24 deg on the downward leg and it hangs in the plot label: pathological_naca4412_n240_polar30_re3e6_iter200_host_libm (N = 160 does not)
 foil = "naca4:4412"
 n_nodes = 240
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1286,9 +1286,13 @@ track = false
 # establish why they are slow, why the 4412 sweeps hang while the BL state stays finite, and whether
 # yFoil does the same. What each showed, the physics it captures, and where that behaviour is tested
 # and shown in routine time: docs/user-guide/reference/known-xfoil-issues.md §9. Nothing runs them yet.
+# The `_host_libm` copies (at the end) recreate the plot-label hangs (known issues §4) that four
+# known-issues sweeps reached on the host-libm reference and do not reach on CORE-MATH:
+# `reference = "host-libm"` runs them on `scripts/xfoil-build.sh --host-libm`, and the 64A010 copy also
+# takes yFoil's panels of then (`panels`). Host-dependent by construction (recorded on macOS libSystem).
 
 [[case]]
-name = "pathological_naca4412_n240_polar30_re1e6_iter200"    # copy of naca4412_n240_polar30_re1e6_iter200: hangs in the plot label at about 30 deg on the upper leg (non-finite CL; the BL state stays finite); twins ~23 min each (observed 2026-10-07)
+name = "pathological_naca4412_n240_polar30_re1e6_iter200"    # copy of naca4412_n240_polar30_re1e6_iter200: hung in the plot label at about 30 deg on the upper leg (non-finite CL; the BL state stays finite); twins ~23 min each (observed 2026-10-07, on the host-libm reference: on CORE-MATH it does not hang; the hang is recreated by its _host_libm copy below)
 foil = "naca4:4412"
 n_nodes = 240
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1302,7 +1306,7 @@ group = "pathological"
 track = false
 
 [[case]]
-name = "pathological_naca4412_n240_polar30_re3e6_iter200"    # copy of naca4412_n240_polar30_re3e6_iter200: hangs in the plot label; twins 80+ min each (observed 2026-10-07)
+name = "pathological_naca4412_n240_polar30_re3e6_iter200"    # copy of naca4412_n240_polar30_re3e6_iter200: hung in the plot label; twins 80+ min each (observed 2026-10-07, on the host-libm reference: on CORE-MATH it does not hang; the hang is recreated by its _host_libm copy below)
 foil = "naca4:4412"
 n_nodes = 240
 alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
@@ -1345,3 +1349,64 @@ polar = true
 group = "pathological"
 track = false
 
+[[case]]
+name = "pathological_naca4412_n240_polar30_re1e6_iter200_host_libm"    # copy of naca4412_n240_polar30_re1e6_iter200 on the host-libm reference: hangs in the plot label at 30 deg on the upward leg (VISCAL call 31, SETBL call 1032; CD infinite) (observed 2026-10-25, macOS 15.6.1 arm64)
+foil = "naca4:4412"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+polar = true
+group = "pathological"
+reference = "host-libm"
+track = false
+
+[[case]]
+name = "pathological_naca4412_n240_polar30_re3e6_iter200_host_libm"    # copy of naca4412_n240_polar30_re3e6_iter200 on the host-libm reference: hangs in the plot label at -24 deg on the downward leg (VISCAL call 56, SETBL call 1827; CD infinite) (observed 2026-10-25, macOS 15.6.1 arm64)
+foil = "naca4:4412"
+n_nodes = 240
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 3.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 200
+polar = true
+group = "pathological"
+reference = "host-libm"
+track = false
+
+[[case]]
+name = "pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm"    # copy of naca16-212_n160_polar30_re1e6_m07_iter100 on the host-libm reference: hangs in the plot label at -18 deg on the downward leg (VISCAL call 50, SETBL call 1384; CD infinite) (observed 2026-10-25, macOS 15.6.1 arm64)
+foil = "naca:16-212"
+n_nodes = 160
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.7
+ncrit = 9.0
+max_iterations = 100
+polar = true
+group = "pathological"
+reference = "host-libm"
+track = false
+
+[[case]]
+name = "pathological_naca64a010_n160_polar30_re1e6_type2_iter100_host_libm"    # copy of naca64a010_n160_polar30_re1e6_type2_iter100 on the host-libm reference: with the panels of then, hangs in the plot label at 12 deg on the upward leg (VISCAL call 13, SETBL call 464; CD infinite), 11 of 13 points converged (observed 2026-10-25, macOS 15.6.1 arm64)
+foil = "naca:64A010"
+n_nodes = 160
+alphas = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0]
+alphas_after_reinit = [0.0, -1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0, -13.0, -14.0, -15.0, -16.0, -17.0, -18.0, -19.0, -20.0, -21.0, -22.0, -23.0, -24.0, -25.0, -26.0, -27.0, -28.0, -29.0, -30.0]
+re = 1.0e+06
+mach = 0.0
+ncrit = 9.0
+max_iterations = 100
+matyp = 2
+polar = true
+group = "pathological"
+reference = "host-libm"
+panels = "xtask/fixtures-config/panels/naca64a010_n160_cosine_b448f8d4.json"   # yFoil's panels before CORE-MATH (b448f8d4); today's do not hang on either reference
+track = false

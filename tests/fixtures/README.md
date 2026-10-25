@@ -65,3 +65,27 @@ cargo xtask publish series-cases            # copy a run's tables and figures in
 
 Regenerating a case keeps its twins when its panels and script are unchanged.
 
+## Pathological runs on the host libm (untracked)
+
+Before 2026-10-15 the reference took its maths from the host libm, and four known-issues sweeps
+hung in XFOIL's plot label (known issues §4). On CORE-MATH they do not hang. Their
+`pathological_…_host_libm` copies in `cases.toml` recreate the hangs. Each copy carries
+`reference = "host-libm"`, which runs it on the instrumented build linked against the host libm.
+The 64A010 copy also carries `panels = "xtask/fixtures-config/panels/…_b448f8d4.json"`, the panels
+yFoil generated before its own generators moved to CORE-MATH; with today's panels the 64A010 sweep
+does not hang on either reference.
+
+```bash
+cargo xtask xfoil-build --host-libm        # target/xfoil-ref/host-libm/ (built on demand too)
+cargo xtask fixtures --case pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm
+cargo xtask fixtures --group pathological  # every pathological copy, the host-libm ones included
+```
+
+A run that hangs is ended by the watchdog and its manifest carries `truncated_by_watchdog`. The
+copies' descriptions give where each one hung (alpha, leg, VISCAL and SETBL call). The host-libm
+build is not a reference and no test or study reads its runs. They depend on the host: the
+descriptions were recorded on macOS 15.6.1 (arm64, libSystem), and
+`target/xfoil-ref/host-libm/manifest.txt` names the libm a rerun used. On glibc the same run may
+take another route. `cargo xtask fixtures` refuses `reference` and `panels` on any case that is not
+an untracked `pathological` copy.
+

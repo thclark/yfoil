@@ -375,6 +375,15 @@ pub(crate) fn run(flags: &[String]) {
         if !case.selected(&selected, group, big) && !added {
             continue;
         }
+        // the gcov build takes its maths from CORE-MATH: a host-libm copy's run is not its own
+        if case.reference.is_some() {
+            println!(
+                "  {}: skipped (runs on the `{}` reference, not the gcov build)",
+                case.name,
+                case.reference.as_deref().unwrap_or_default()
+            );
+            continue;
+        }
         let src = if case.track {
             root.join("tests/fixtures/xfoil").join(&case.name)
         } else {
