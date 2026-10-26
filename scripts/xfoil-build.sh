@@ -5,7 +5,7 @@
 #   target/xfoil-ref/pristine/      pristine 6.99 + build-config patches only (double precision)
 #   target/xfoil-ref/instrumented/  the above + instrumentation patches
 #
-# Usage: scripts/xfoil-build.sh [--verify] [--snan] [--gcov] | --fingerprint
+# Usage: scripts/xfoil-build.sh [--verify] [--snan] [--gcov] [--host-libm] | --fingerprint
 #   --verify   after building, run both binaries on the smoke case and assert
 #              their numeric output is byte-identical (instrumentation is inert)
 #   --snan     additionally build a pristine variant with -finit-real=snan
@@ -13,6 +13,13 @@
 #   --gcov     additionally build target/xfoil-ref/gcov/ — pristine + build series compiled
 #              and linked with -fprofile-arcs -ftest-coverage, the branch-coverage
 #              instrument behind `cargo xtask coverage` (CLAUDE.md Rule 6)
+#   --host-libm  additionally build target/xfoil-ref/host-libm/{pristine,instrumented}/ — the two
+#              builds above linked against the HOST libm instead of CORE-MATH, as every reference
+#              was before 2026-10-15. Not a reference: its runs depend on the host's libm (Apple
+#              libSystem and glibc differ), so host-libm/manifest.txt names that libm, and no test or
+#              study reads it. It exists to recreate the runs observed on the host-libm reference
+#              (the `pathological` cases with `reference = "host-libm"`, and the bundles under
+#              xtask/fixtures-config/reproduce/); the other stages and proof 3 are unchanged
 #   --fingerprint  print the hash of the build's inputs and exit (see fingerprint() below)
 set -euo pipefail
 
@@ -20,8 +27,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/xfoil/third-party/xfoil-6.99"
 PATCHES="$ROOT/xfoil/instrumentation"
 OUT="$ROOT/target/xfoil-ref"
-VERIFY=0; SNAN=0; GCOV=0; FINGERPRINT=0
-for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; --gcov) GCOV=1;; --fingerprint) FINGERPRINT=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
+VERIFY=0; SNAN=0; GCOV=0; HOST_LIBM=0; FINGERPRINT=0
+for a in "$@"; do case "$a" in --verify) VERIFY=1;; --snan) SNAN=1;; --gcov) GCOV=1;; --host-libm) HOST_LIBM=1;; --fingerprint) FINGERPRINT=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
 
 # --- fingerprint of everything a build depends on ----------------------------------
 # The vendored sources' manifests, both patch series, the CORE-MATH shim, the gcov flush and this
@@ -48,10 +55,10 @@ CORE_MATH_CFLAGS="-O2 -ffp-contract=off"
   || { echo "third-party/core-math does not match its checksum manifest" >&2; exit 1; }
 
 # --- stage a tree and apply a series -------------------------------------------
-stage() { # stage <name> <extra-fflags> <series...>
+stage() { # stage <name> <extra-fflags> <series...>   (STAGE_LIBM=host: link the host libm, --host-libm only)
   local name="$1"; shift; local extra="$1"; shift
   local dir="$OUT/$name"
-  rm -rf "$dir"; mkdir -p "$OUT"; cp -R "$SRC" "$dir"
+  rm -rf "$dir"; mkdir -p "$(dirname "$dir")"; cp -R "$SRC" "$dir"
   for s in "$@"; do
     while IFS= read -r p; do
       [ -z "$p" ] && continue
@@ -63,12 +70,14 @@ stage() { # stage <name> <extra-fflags> <series...>
   fi
   # CORE-MATH's correctly rounded functions in place of the host libm's, the same sources
   # yFoil's build.rs compiles with the same flags (scripts/xfoil-build/core_math_libm.c)
-  mkdir -p "$dir/core-math"
-  for c in "$CORE_MATH"/src/binary64/*/*.c "$ROOT/scripts/xfoil-build/core_math_libm.c"; do
-    cc -c $CORE_MATH_CFLAGS -o "$dir/core-math/$(basename "$c" .c).o" "$c" \
-      || { echo "$c failed to compile" >&2; exit 1; }
-  done
-  sed -i.bak "s|^	\$(FC) -o xfoil |	\$(FC) -o xfoil $dir/core-math/*.o |" "$dir/bin/Makefile" && rm -f "$dir/bin/Makefile.bak"
+  if [ "${STAGE_LIBM:-core-math}" != host ]; then
+    mkdir -p "$dir/core-math"
+    for c in "$CORE_MATH"/src/binary64/*/*.c "$ROOT/scripts/xfoil-build/core_math_libm.c"; do
+      cc -c $CORE_MATH_CFLAGS -o "$dir/core-math/$(basename "$c" .c).o" "$c" \
+        || { echo "$c failed to compile" >&2; exit 1; }
+    done
+    sed -i.bak "s|^	\$(FC) -o xfoil |	\$(FC) -o xfoil $dir/core-math/*.o |" "$dir/bin/Makefile" && rm -f "$dir/bin/Makefile.bak"
+  fi
   case "$extra" in *profile-arcs*)
     # the link step has no FFLAGS; libgcov must be linked in explicitly. gcov_flush.o writes the
     # counters on SIGTERM, so a run the fixture watchdog ends keeps its counts
@@ -91,7 +100,12 @@ stage() { # stage <name> <extra-fflags> <series...>
   leaked="$(nm -u "$dir/bin/xfoil" | awk '{print $NF}' | sed 's/@.*//; s/^_*//' \
     | grep -xE 'c?(a?(sin|cos|tan)h?|atan2|exp(2|10|m1)?|log(2|10|1p)?|pow|cbrt|hypot|erfc?|[lt]gamma)|sincos|sincos_stret|cexpi' \
     | grep -vxE 'cabs|clog' || true)"
-  [ -z "$leaked" ] || { echo "$name: host libm still provides: $leaked" >&2; exit 1; }
+  if [ "${STAGE_LIBM:-core-math}" = host ]; then
+    # the converse: the host-libm stage must really take its maths from the host
+    [ -n "$leaked" ] || { echo "$name: no maths function resolved from the host libm" >&2; exit 1; }
+  else
+    [ -z "$leaked" ] || { echo "$name: host libm still provides: $leaked" >&2; exit 1; }
+  fi
   fingerprint > "$dir/fingerprint"
   echo "built $dir/bin/xfoil"
 }
@@ -105,6 +119,9 @@ if [ "$GCOV" = 1 ]; then
 fi
 
 # --- provenance manifest -------------------------------------------------------
+host_libm() { # host_libm <binary>: the host libm the binary resolves its maths from
+  (otool -L "$1" 2>/dev/null | grep -m1 libSystem | awk '{print $1, $NF}') || (ldd "$1" | grep -m1 libm)
+}
 {
   echo "source_sha256_manifest: $(shasum -a 256 "$ROOT/xfoil/third-party/xfoil-6.99.sha256" | cut -d' ' -f1)"
   echo "series_build_sha256:    $(cat "$PATCHES"/build/*.patch | shasum -a 256 | cut -d' ' -f1)"
@@ -113,9 +130,24 @@ fi
   echo "fflags:                 $(grep -m1 '^FFLAGS' "$OUT/pristine/bin/Makefile") / $(grep -m1 '^DBL' "$OUT/pristine/bin/Makefile")"
   echo "inputs_fingerprint:     $(fingerprint)"
   echo "host:                   $(uname -m)-$(uname -s)-$(uname -r)"
-  echo "libm:                   CORE-MATH $(cut -d' ' -f3 "$ROOT/third-party/core-math.ORIGIN") ($CORE_MATH_CFLAGS); host $( (otool -L "$OUT/pristine/bin/xfoil" 2>/dev/null | grep -m1 libSystem | awk '{print $1, $NF}') || (ldd "$OUT/pristine/bin/xfoil" | grep -m1 libm) )"
+  echo "libm:                   CORE-MATH $(cut -d' ' -f3 "$ROOT/third-party/core-math.ORIGIN") ($CORE_MATH_CFLAGS); host $(host_libm "$OUT/pristine/bin/xfoil")"
 } > "$OUT/manifest.txt"
 cat "$OUT/manifest.txt"
+
+if [ "$HOST_LIBM" = 1 ]; then
+  rm -rf "$OUT/host-libm"
+  STAGE_LIBM=host stage host-libm/pristine     "" series.build
+  STAGE_LIBM=host stage host-libm/instrumented "" series.build series.instrument
+  # its own manifest: a host-libm run depends on the host, so the libm is named explicitly
+  # (the OS release fixes Apple's libSystem; on glibc, its version)
+  {
+    sed '/^libm:/d' "$OUT/manifest.txt"
+    echo "libm:                   HOST $(host_libm "$OUT/host-libm/pristine/bin/xfoil"); $( (command -v sw_vers >/dev/null && echo "macOS $(sw_vers -productVersion) ($(sw_vers -buildVersion))") || (ldd --version 2>&1 | head -1) )"
+    echo "host_maths:             $(nm -u "$OUT/host-libm/pristine/bin/xfoil" | awk '{print $NF}' | sed 's/@.*//; s/^_*//' \
+      | grep -xE 'c?(a?(sin|cos|tan)h?|atan2|exp(2|10|m1)?|log(2|10|1p)?|pow|cbrt|hypot|erfc?|[lt]gamma)|sincos|sincos_stret|cexpi' | tr '\n' ' ')"
+  } > "$OUT/host-libm/manifest.txt"
+  cat "$OUT/host-libm/manifest.txt"
+fi
 
 # --- smoke case: the tracked reference case's panels, alpha=2, Re=1e6, ITER 20 ----
 smoke() { # smoke <bindir> <workdir>

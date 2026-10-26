@@ -65,3 +65,42 @@ cargo xtask publish series-cases            # copy a run's tables and figures in
 
 Regenerating a case keeps its twins when its panels and script are unchanged.
 
+## Pathological runs on the host libm (untracked)
+
+Before 2026-10-15 the reference took its maths from the host libm, and four known-issues sweeps
+hung in XFOIL's plot label (known issues §4). On CORE-MATH they do not hang. Each hang is kept as a
+reproduction bundle, `xtask/fixtures-config/reproduce/pathological_<case>_host_libm/`, which is not a
+fixture: no test reads it. A bundle holds:
+
+- `panels.dat`, the panels XFOIL loads. For the two 4412 sweeps these are today's panels. For the
+  16-212 and 64A010 sweeps they are the panels yFoil generated before its own generators moved to
+  CORE-MATH; with today's panels, the 16-212 sweep hangs at another angle and the 64A010 sweep does
+  not hang at all.
+- `xfoil.inp`, the script that drives the run.
+- `panels.json`, which the pipeline's geometry handoff check reads.
+
+To reproduce a hang with XFOIL alone, without yFoil, use the pristine host-libm build:
+
+```bash
+scripts/xfoil-build.sh --host-libm         # target/xfoil-ref/host-libm/{pristine,instrumented}/
+mkdir -p .tmp/hang && cp xtask/fixtures-config/reproduce/<case>/{panels.dat,xfoil.inp} .tmp/hang/
+cd .tmp/hang && GFORTRAN_UNBUFFERED_ALL=y ../../target/xfoil-ref/host-libm/pristine/bin/xfoil < xfoil.inp
+```
+
+Through the pipeline, the `pathological_…_host_libm` copies in `cases.toml` run the instrumented
+host-libm build on their bundle. `reference = "host-libm"` selects the build, and `reproduce =
+"<bundle>"` makes the pipeline use the bundle's panels instead of running yFoil. The pipeline also
+checks that the script it generates for the case equals the bundle's.
+
+```bash
+cargo xtask fixtures --case pathological_naca16-212_n160_polar30_re1e6_m07_iter100_host_libm
+cargo xtask fixtures --group pathological  # every pathological copy, the host-libm ones included
+```
+
+A run that hangs is ended by the watchdog, and its manifest carries `truncated_by_watchdog`. The
+copies' descriptions, and the known-issues run pages under "Reproducing the hang", give where each
+one hangs (alpha, leg, VISCAL and SETBL call) and what it was verified on. The host-libm build is not
+a reference, and no test or study reads its runs. They depend on the host: they were verified on
+macOS 15.6.1 (arm64, libSystem), and `target/xfoil-ref/host-libm/manifest.txt` names the libm that a
+rerun used. On glibc the same run may take another route. `cargo xtask fixtures` refuses
+`reference` and `reproduce` on any case that is not an untracked `pathological` copy.
