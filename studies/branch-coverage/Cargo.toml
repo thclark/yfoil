@@ -10,7 +10,8 @@ description = "Branch-coverage study: the minimal case set covering every reacha
 workspace = true
 
 [dependencies]
-yfoil = { path = "../..", default-features = false }
+yfoil = { path = "../..", default-features = false, features = ["plotting"] }
+ironlab = "=0.16.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["float_roundtrip"] }
 toml = "0.8"

@@ -1,5 +1,5 @@
 //! The `yfoil plot analysis` and `yfoil plot polar` figures, and what the three `yfoil plot`
-//! figures share: their error type and the parameters and labels the ironlab viewer sorts,
+//! figures share: their error type and the parameters and tags the ironlab viewer sorts,
 //! filters and groups by (`docs/development/conventions/figures.md`). The foil figure is in `foil_plot.rs`.
 //!
 //! Every figure is an ironlab figure, written as `.fig` (or `.fig.json`) through
@@ -43,7 +43,7 @@ pub fn save_figure(fig: &Figure, path: &Path) -> Result<(), PlotError> {
 }
 
 // ============================================================================
-// Parameters and labels
+// Parameters and tags
 // ============================================================================
 
 /// The flow conditions as figure parameters (`figures::flow_condition_parameters`), as a map
@@ -53,21 +53,21 @@ pub(crate) fn condition_parameters(conditions: &FlowConditions) -> BTreeMap<Stri
         .clone()
 }
 
-/// The regime labels of a set of flow conditions (`docs/development/conventions/figures.md`, "Labels")
-pub(crate) fn regime_labels(conditions: &FlowConditions) -> Vec<&'static str> {
-    let mut labels = Vec::new();
+/// The regime tags of a set of flow conditions (`docs/development/conventions/figures.md`, "Tags")
+pub(crate) fn regime_tags(conditions: &FlowConditions) -> Vec<&'static str> {
+    let mut tags = Vec::new();
     match conditions.re {
-        None => labels.push("inviscid"),
-        Some(re) if re < 1e5 => labels.push("low-re"),
+        None => tags.push("inviscid"),
+        Some(re) if re < 1e5 => tags.push("low-re"),
         Some(_) => {}
     }
     if conditions.mach > 0.0 {
-        labels.push("compressible");
+        tags.push("compressible");
     }
     if conditions.re.is_some() && conditions.x_trip.iter().any(|&x| x < 1.0) {
-        labels.push("forced-transition");
+        tags.push("forced-transition");
     }
-    labels
+    tags
 }
 
 /// The parameters of one operating point: its inputs (`alpha_deg`) and outputs (forces,
@@ -125,8 +125,8 @@ pub(crate) fn shared_parameters(sets: &[BTreeMap<String, Parameter>]) -> BTreeMa
         .collect()
 }
 
-/// The labels every list holds
-pub(crate) fn shared_labels(sets: &[Vec<&'static str>]) -> Vec<&'static str> {
+/// The tags every list holds
+pub(crate) fn shared_tags(sets: &[Vec<&'static str>]) -> Vec<&'static str> {
     let Some((first, rest)) = sets.split_first() else {
         return Vec::new();
     };
@@ -137,13 +137,13 @@ pub(crate) fn shared_labels(sets: &[Vec<&'static str>]) -> Vec<&'static str> {
         .collect()
 }
 
-/// Set a figure's parameters and labels
-pub(crate) fn describe(mut fig: Figure, parameters: BTreeMap<String, Parameter>, labels: &[&str]) -> Figure {
+/// Set a figure's parameters and tags
+pub(crate) fn describe(mut fig: Figure, parameters: BTreeMap<String, Parameter>, tags: &[&str]) -> Figure {
     for (name, value) in parameters {
         fig = fig.parameter(name, value);
     }
-    for label in labels {
-        fig = fig.label(*label);
+    for tag in tags {
+        fig = fig.tag(*tag);
     }
     fig
 }
@@ -198,11 +198,12 @@ impl Default for AnalysisPlotConfig {
 /// Height of the analysis figure (mm): two distribution panels over a strip with the aerofoil
 const ANALYSIS_HEIGHT_MM: f64 = 120.0;
 
-/// The analysis figure: −Cp (top) and Ue/U∞ (middle) over x/c, upper surface blue and lower
-/// red, over a strip with the aerofoil outline; x is linked across the three.
+/// The analysis figure: Cp (top, on a reversed axis so suction is up, the aerodynamic
+/// convention) and Ue/U∞ (middle) over x/c, upper surface blue and lower red, over a strip with
+/// the aerofoil outline; x is linked across the three.
 ///
-/// Cp is drawn as −Cp because ironlab has no reversed axis (the aerodynamic convention puts
-/// suction up).
+/// The outline is a tile of its own rather than an inset under the Cp curve: ironlab has no inset
+/// axes or second y axis, by decision (thclark/ironlab#80).
 pub fn analysis_figure(analysis: &AnalysisOutput, config: &AnalysisPlotConfig) -> Result<Figure, PlotError> {
     let (Some((x_upper, cp_upper, q_upper)), Some((x_lower, cp_lower, q_lower))) =
         (analysis.upper_surface(), analysis.lower_surface())
@@ -212,14 +213,11 @@ pub fn analysis_figure(analysis: &AnalysisOutput, config: &AnalysisPlotConfig) -
             analysis.foil
         )));
     };
-    let minus = |v: &[f64]| v.iter().map(|c| -c).collect::<Vec<f64>>();
-    let (minus_cp_upper, minus_cp_lower) = (minus(&cp_upper), minus(&cp_lower));
-
     let g = &analysis.geometry;
     let chord = g.chord;
     let (x_lo, x_hi) = padded_range(g.x.iter(), 0.0, 0.0);
     let xlim = (x_lo - 0.05 * chord, x_hi + 0.1 * chord);
-    let cp_lim = padded_range(minus_cp_upper.iter().chain(&minus_cp_lower), 0.1, 1e-3);
+    let cp_lim = padded_range(cp_upper.iter().chain(&cp_lower), 0.1, 1e-3);
     let q_lim = padded_range(q_upper.iter().chain(&q_lower), 0.1, 1e-3);
     let y_lim = padded_range(g.y.iter(), 0.1, 1e-3);
 
@@ -240,21 +238,23 @@ pub fn analysis_figure(analysis: &AnalysisOutput, config: &AnalysisPlotConfig) -
         .tiles(3, 1)
         .row_weights([3.0, 3.0, 1.0])
         .title(Text::plain(title));
-    fig = describe(fig, parameters, &regime_labels(&analysis.conditions));
+    fig = describe(fig, parameters, &regime_tags(&analysis.conditions));
 
     let (upper, lower) = (rgb(config.upper_color), rgb(config.lower_color));
     let mut ax = fig.axes(0, 0);
-    ax.plot(&x_upper, &minus_cp_upper)
-        .display_name("Upper surface")
+    ax.plot(&x_upper, &cp_upper)
+        .label("Upper surface")
         .color(upper)
         .line_width(1.5);
-    ax.plot(&x_lower, &minus_cp_lower)
-        .display_name("Lower surface")
+    ax.plot(&x_lower, &cp_lower)
+        .label("Lower surface")
         .color(lower)
         .line_width(1.5);
-    ax.ylabel("$-C_p$")
+    ax.ylabel("$C_p$")
         .xlim(xlim.0, xlim.1)
         .ylim(cp_lim.0, cp_lim.1)
+        .yreverse(true)
+        .xtick_labels_hidden()
         .grid(true)
         .legend(LegendLocation::NorthEast);
     let cp_axes = ax.id();
@@ -265,6 +265,7 @@ pub fn analysis_figure(analysis: &AnalysisOutput, config: &AnalysisPlotConfig) -
     ax.ylabel("$U_e/U_\\infty$")
         .xlim(xlim.0, xlim.1)
         .ylim(q_lim.0, q_lim.1)
+        .xtick_labels_hidden()
         .grid(true);
     let ue_axes = ax.id();
 
@@ -453,19 +454,19 @@ pub fn polars_figure(series: &[PolarSeries], config: &PolarsPlotConfig) -> Resul
             }
         }
     }
-    let labels = shared_labels(&series.iter().map(|s| regime_labels(&s.conditions)).collect::<Vec<_>>());
+    let tags = shared_tags(&series.iter().map(|s| regime_tags(&s.conditions)).collect::<Vec<_>>());
 
-    // the key: up to four series to a row, its row sized to the rows of entries
+    // the key: up to four series to a row, in a row sized to its entries
     let key_columns = series.len().min(4);
-    let key_rows = series.len().div_ceil(4);
     let mut fig = Figure::new()
         .size_mm(figures::WIDTH_MM, POLAR_HEIGHT_MM)
         .tiles(3, 2)
-        .row_weights([3.0, 3.0, 0.4 + 0.5 * key_rows as f64])
+        .fit_row(2)
         .title(Text::plain(title));
-    fig = describe(fig, parameters, &labels);
+    fig = describe(fig, parameters, &tags);
     let key = fig
-        .panel_legend_span(2, 0, 1, 2)
+        .panel_span(2, 0, 1, 2)
+        .legend()
         .columns(LegendEntryColumns::Count(key_columns as u32))
         .order(LegendEntryOrder::RowMajor)
         .id();
@@ -487,7 +488,7 @@ pub fn polars_figure(series: &[PolarSeries], config: &PolarsPlotConfig) -> Resul
             let marker = config.markers[i % config.markers.len()];
             let (x, y) = extract(s);
             let mut line = ax.plot(x, y);
-            line.display_name(Text::plain(s.label.clone()))
+            line.label(Text::plain(s.label.clone()))
                 .color(color)
                 .line_width(1.0)
                 .marker(marker.shape)
@@ -545,7 +546,7 @@ mod tests {
         assert!(shared.contains_key("mach"));
         assert_eq!(shared_parameters(std::slice::from_ref(&a)), a);
         assert_eq!(
-            shared_labels(&[vec!["inviscid", "compressible"], vec!["compressible"]]),
+            shared_tags(&[vec!["inviscid", "compressible"], vec!["compressible"]]),
             vec!["compressible"]
         );
     }

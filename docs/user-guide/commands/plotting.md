@@ -19,7 +19,7 @@ Open a figure in the ironlab viewer, a desktop application that pans, zooms, rea
 the curves and hides series from the key:
 
 ``` sh
-cargo install ironlab-viewer --version 0.12.0
+cargo install ironlab-viewer --version 0.16.0
 ironlab-viewer naca0012.fig
 ironlab-viewer *.fig           # several: the figure browser lists them
 ```
@@ -65,12 +65,11 @@ yfoil plot analysis a5.json                              # writes a5.fig
 
 For the NACA 4412 at α = 5°, Re = 10⁶:
 
-<ironlab-figure src="../figures/a5.fig" format="fig" name="a5" alt="NACA 4412 at alpha 5 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 4412 at alpha 5 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
+<ironlab-figure src="../figures/a5.fig" format="fig" name="a5" alt="NACA 4412 at alpha 5 degrees, Re 1e6: Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 4412 at alpha 5 degrees, Re 1e6: Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
 
-\(-C_p\) and \(U_e/U_\infty\) over \(x/c\) from a single-point analysis, upper surface
+\(C_p\) and \(U_e/U_\infty\) over \(x/c\) from a single-point analysis, upper surface
 blue and lower red, above a strip with the aerofoil outline; the three share a linked
-\(x\) axis. \(C_p\) is plotted negated, with suction up, because ironlab has no reversed
-axis. A point whose numbers were withheld (an invalid point analysed without
+\(x\) axis. The \(C_p\) axis is reversed, so suction is up. A point whose numbers were withheld (an invalid point analysed without
 `--allow-invalid`) has no distributions to draw, and is refused.
 
 ## The `plot foil` command { #foil }
@@ -110,6 +109,7 @@ polar JSON written with `--distributions` (one design point per α).
 Each quantity gets its own hue and its own scale; each design point gets a tone
 and dash pattern, so several angles overlay legibly. The markers are open shapes, one per
 kind (○ stagnation, □ transition, ◇ forced transition, △ separation, ▽ reattachment),
-yellow on the upper surface and green on the lower, and the key below the axes names each
-kind and side drawn. The axes are scaled equally in \(x\) and \(y\) at the figure's own
-size, so the section is undistorted; zooming in the viewer changes the two independently.
+yellow on the upper surface and green on the lower. Below the axes are two keys: the curves,
+and the markers, which explain each shape drawn once in grey and each side's colour once.
+The axes are kept at equal aspect, in the viewer while panning and zooming too, so the
+section and the offsets normal to it are undistorted.

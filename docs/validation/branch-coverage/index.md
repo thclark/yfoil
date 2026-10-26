@@ -17,7 +17,7 @@ CLAUDE.md Rule 6: "numerically exact" is claimable only over branches that have 
 
 --8<-- "validation/branch-coverage/tables/status.md"
 
-![Branch map](figures/branch-map.svg)
+<ironlab-figure src="figures/branch-map.fig" format="fig" name="branch-map" alt="Every branch of the analysis path, one row per subroutine grouped by source file, coloured by status">Every branch of the analysis path, one row per subroutine grouped by source file, coloured by status</ironlab-figure>
 
 *Every branch of the analysis path, one row per subroutine in XFOIL's file order: taken by the finite set (green), taken by the non-finite set (blue), taken only in pathological cases (orange), not reachable — annotated unreachable or a never-taken DO-line edge (grey), not taken (red).*
 

@@ -35,9 +35,8 @@
 //! (`studies/known-issues`).
 //!
 //! Every invocation creates `runs/<UTC datetime>/` next to this crate with `metadata.json`,
-//! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`; the
-//! figures are drawn from `summary.json` by `plot.py` through `studies/figures/render.sh`
-//! (matplotlib, presentation only). Every run also writes `publish/`, its tables and figures as
+//! `summary.json` (every number of the tables and figures), `README.md` / `README.tex`, and the
+//! two ironlab figures drawn from `summary.json` (`figures.rs`; `.fig` and `.pdf`). Every run also writes `publish/`, its tables and figures as
 //! the docs hold them (`studies/study-support/publish.rs`); `cargo xtask publish branch-coverage`
 //! copies it into `docs/validation/branch-coverage/`, whose pages are written by hand.
 //! `--render <run_dir>` redraws an existing run folder's figures and rewrites its index and
@@ -53,6 +52,7 @@
 
 mod cover;
 mod drive;
+mod figures;
 mod report;
 
 mod utilities;
@@ -273,26 +273,6 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// Draw the run folder's figures with `studies/figures/render.sh branch-coverage <run_dir>`.
-pub fn render(run_dir: &Path) -> bool {
-    let root = repo_root();
-    let status = std::process::Command::new(root.join("studies/figures/render.sh"))
-        .arg("branch-coverage")
-        .arg(run_dir)
-        .status();
-    match status {
-        Ok(st) if st.success() => true,
-        other => {
-            eprintln!(
-                "figures not drawn ({}): run `studies/figures/render.sh branch-coverage {}`",
-                other.map(|s| s.to_string()).unwrap_or_else(|e| e.to_string()),
-                run_dir.display()
-            );
-            false
-        }
-    }
-}
-
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     assert!(
@@ -307,7 +287,7 @@ fn main() {
         .expect("parse summary.json");
         report::write_index(&run_dir, &summary);
         report::write_index_tex(&run_dir, &summary);
-        render(&run_dir);
+        figures::render(&run_dir, &summary);
         report::write_publish(&run_dir, &summary);
         return;
     }
@@ -494,7 +474,7 @@ fn main() {
     .unwrap();
     report::write_index(&run_dir, &summary);
     report::write_index_tex(&run_dir, &summary);
-    render(&run_dir);
+    figures::render(&run_dir, &summary);
     report::write_publish(&run_dir, &summary);
     println!("run folder: {}", run_dir.display());
     if !group_matches {

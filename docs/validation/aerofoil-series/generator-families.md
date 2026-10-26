@@ -20,9 +20,9 @@ Parameters: m (maximum camber), p (its position), t (maximum thickness).
 
 The 1933 family of Report 460: a four-term polynomial thickness form on a two-parabola mean line, chosen to fit the best sections of the day (Clark Y, Göttingen 398). It remains the most used section family in general aviation and in codes' self-tests, and XFOIL's `NACA` command generates it.
 
-<ironlab-figure src="figures/naca-4-digit.fig" format="fig" name="naca-4-digit" alt="NACA 4-digit: default NACA 0012 in black; maximum camber m (p = 0.4, t = 0.12); maximum-camber position p (m = 0.04, t = 0.12); maximum thickness t (m = 0)">NACA 4-digit: default NACA 0012 in black; maximum camber m (p = 0.4, t = 0.12); maximum-camber position p (m = 0.04, t = 0.12); maximum thickness t (m = 0)</ironlab-figure>
+<ironlab-figure src="figures/naca-4-digit.fig" format="fig" name="naca-4-digit" alt="NACA 4-digit: default NACA 0012 in black; maximum camber m (p = 0.4, t = 0.12); position of maximum camber p (m = 0.04, t = 0.12); maximum thickness t (m = 0)">NACA 4-digit: default NACA 0012 in black; maximum camber m (p = 0.4, t = 0.12); position of maximum camber p (m = 0.04, t = 0.12); maximum thickness t (m = 0)</ironlab-figure>
 
-*NACA 4-digit: default NACA 0012 in black; maximum camber m (p = 0.4, t = 0.12); maximum-camber position p (m = 0.04, t = 0.12); maximum thickness t (m = 0).*
+*NACA 4-digit: default NACA 0012 in black; maximum camber m (p = 0.4, t = 0.12); position of maximum camber p (m = 0.04, t = 0.12); maximum thickness t (m = 0).*
 
 **In the validation set:** NACA 0012 is the symmetric baseline (Rule 6's XFOIL-independent invariants: C_L = C_M = 0 at α = 0, mirror symmetry at −α) and the CI reference case; NACA 4412 is the cambered 4-digit member and a real wing section (Lednicer lists the Champion 7EC Traveler).
 
@@ -34,9 +34,9 @@ Parameters: m, p (the 2-digit mean line), t, I (leading-edge radius index), M (p
 
 Report 492 (1934) varied the leading-edge radius and the position of maximum thickness of the 4-digit form independently, at speeds up to and beyond the compressibility burble: index I = 6 is the 4-digit radius, 0 a sharp nose; M is in tenths of chord. The aft part is a cubic in (1 − x) with a fixed trailing-edge thickness.
 
-<ironlab-figure src="figures/naca-4-digit-modified.fig" format="fig" name="naca-4-digit-modified" alt="NACA 4-digit modified: default NACA 0012-34 in black; leading-edge radius index I (M = 0.4, t = 0.12); maximum-thickness position M (I = 3, t = 0.12); maximum thickness t (I = 3, M = 0.4)">NACA 4-digit modified: default NACA 0012-34 in black; leading-edge radius index I (M = 0.4, t = 0.12); maximum-thickness position M (I = 3, t = 0.12); maximum thickness t (I = 3, M = 0.4)</ironlab-figure>
+<ironlab-figure src="figures/naca-4-digit-modified.fig" format="fig" name="naca-4-digit-modified" alt="NACA 4-digit modified: default NACA 0012-34 in black; leading-edge radius index I (M = 0.4, t = 0.12); position of maximum thickness M (I = 3, t = 0.12); maximum thickness t (I = 3, M = 0.4)">NACA 4-digit modified: default NACA 0012-34 in black; leading-edge radius index I (M = 0.4, t = 0.12); position of maximum thickness M (I = 3, t = 0.12); maximum thickness t (I = 3, M = 0.4)</ironlab-figure>
 
-*NACA 4-digit modified: default NACA 0012-34 in black; leading-edge radius index I (M = 0.4, t = 0.12); maximum-thickness position M (I = 3, t = 0.12); maximum thickness t (I = 3, M = 0.4).*
+*NACA 4-digit modified: default NACA 0012-34 in black; leading-edge radius index I (M = 0.4, t = 0.12); position of maximum thickness M (I = 3, t = 0.12); maximum thickness t (I = 3, M = 0.4).*
 
 **In the validation set:** NACA 0012-34 has a sharper nose (I = 3) and its maximum thickness further aft than the 0012, with the same t: the pair separates the effect of leading-edge radius on transition and stagnation-point behaviour from that of thickness.
 
@@ -48,9 +48,9 @@ Parameters: cl (design lift coefficient), p (position of maximum camber), reflex
 
 Report 537 (1935) put the maximum camber unusually far forward — a cubic mean line joined to a straight (or, in the reflexed lines, a second cubic) aft part — to raise the maximum lift with little pitching moment. The 230 line (cl = 0.3, p = 0.15) is by far the most used.
 
-<ironlab-figure src="figures/naca-5-digit.fig" format="fig" name="naca-5-digit" alt="NACA 5-digit: default NACA 23018 in black; design lift coefficient cl (p = 0.15, t = 0.18); maximum-camber position p (cl = 0.3, t = 0.18); reflex mean line, position p (cl = 0.3, t = 0.18); maximum thickness t (230 mean line)">NACA 5-digit: default NACA 23018 in black; design lift coefficient cl (p = 0.15, t = 0.18); maximum-camber position p (cl = 0.3, t = 0.18); reflex mean line, position p (cl = 0.3, t = 0.18); maximum thickness t (230 mean line)</ironlab-figure>
+<ironlab-figure src="figures/naca-5-digit.fig" format="fig" name="naca-5-digit" alt="NACA 5-digit: default NACA 23018 in black; design lift coefficient cl (p = 0.15, t = 0.18); position of maximum camber p (cl = 0.3, t = 0.18); reflex mean line, position p (cl = 0.3, t = 0.18); maximum thickness t (230 mean line)">NACA 5-digit: default NACA 23018 in black; design lift coefficient cl (p = 0.15, t = 0.18); position of maximum camber p (cl = 0.3, t = 0.18); reflex mean line, position p (cl = 0.3, t = 0.18); maximum thickness t (230 mean line)</ironlab-figure>
 
-*NACA 5-digit: default NACA 23018 in black; design lift coefficient cl (p = 0.15, t = 0.18); maximum-camber position p (cl = 0.3, t = 0.18); reflex mean line, position p (cl = 0.3, t = 0.18); maximum thickness t (230 mean line).*
+*NACA 5-digit: default NACA 23018 in black; design lift coefficient cl (p = 0.15, t = 0.18); position of maximum camber p (cl = 0.3, t = 0.18); reflex mean line, position p (cl = 0.3, t = 0.18); maximum thickness t (230 mean line).*
 
 **In the validation set:** NACA 23018 is a real aircraft section (Lednicer lists the Beech 90 King Air root; the 23012 is its tip) and, with the camber concentrated at the nose, loads the leading edge heavily: transition and separation are exercised at the nose rather than mid-chord.
 
@@ -76,9 +76,9 @@ Parameters: family (63…67: position of minimum pressure), cl (design lift coef
 
 The laminar-flow sections of Report 824 (1945): thickness forms derived by conformal mapping for a prescribed pressure distribution — the family digit is the position of minimum pressure in tenths of chord — on the a mean line, which carries uniform load to x = a and falls linearly to zero at the trailing edge. There is no closed form: the sections are defined by the tabulated ε and ψ mapping functions of TM-4741.
 
-<ironlab-figure src="figures/naca-6.fig" format="fig" name="naca-6" alt="NACA 6-series: default NACA 63-415 in black; family: minimum-pressure position (cl = 0.4, t = 0.15); design lift coefficient cl (63, t = 0.15); extent of uniform loading a (63-415); maximum thickness t (63, cl = 0.4)">NACA 6-series: default NACA 63-415 in black; family: minimum-pressure position (cl = 0.4, t = 0.15); design lift coefficient cl (63, t = 0.15); extent of uniform loading a (63-415); maximum thickness t (63, cl = 0.4)</ironlab-figure>
+<ironlab-figure src="figures/naca-6.fig" format="fig" name="naca-6" alt="NACA 6-series: default NACA 63-415 in black; family: position of minimum pressure (cl = 0.4, t = 0.15); design lift coefficient cl (63, t = 0.15); extent of uniform loading a (63-415); maximum thickness t (63, cl = 0.4)">NACA 6-series: default NACA 63-415 in black; family: position of minimum pressure (cl = 0.4, t = 0.15); design lift coefficient cl (63, t = 0.15); extent of uniform loading a (63-415); maximum thickness t (63, cl = 0.4)</ironlab-figure>
 
-*NACA 6-series: default NACA 63-415 in black; family: minimum-pressure position (cl = 0.4, t = 0.15); design lift coefficient cl (63, t = 0.15); extent of uniform loading a (63-415); maximum thickness t (63, cl = 0.4).*
+*NACA 6-series: default NACA 63-415 in black; family: position of minimum pressure (cl = 0.4, t = 0.15); design lift coefficient cl (63, t = 0.15); extent of uniform loading a (63-415); maximum thickness t (63, cl = 0.4).*
 
 **In the validation set:** NACA 63-415 was the standard wind-turbine section before dedicated families appeared; the Risø catalogue (Bertagnolio et al. 2001) compares measurements with both Navier–Stokes and XFOIL results for it. Its trailing edge closes, so it runs XFOIL's sharp-TE branch, and the 6-series is the family whose generator is *not* a formula.
 

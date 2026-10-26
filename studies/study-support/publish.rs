@@ -13,7 +13,7 @@
 //! publish/
 //!   tables/run.md     which run this is (included at the top of the study's index page)
 //!   tables/*.md       Markdown table fragments
-//!   figures/*         ironlab `.fig` (and the branch-coverage study's SVGs)
+//!   figures/*         ironlab `.fig`
 //! ```
 
 use std::fs;
