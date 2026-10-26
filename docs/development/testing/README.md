@@ -18,10 +18,8 @@ measure the reference and compare whole runs, and add nothing the tests rely on.
 
 Figures are [ironlab](https://ironlab.org) figures, built in Rust by each study from the numbers it
 computes (`docs/development/conventions/figures.md`). They are embedded live in these pages: pan, zoom and toggle lines from the
-legend. Each carries parameters (case, conditions, outputs) and labels, so every study's figures can be loaded
-together into the ironlab viewer and sorted, filtered and grouped. A study's run folder also holds a PDF of each. The branch-coverage study's branch map and case matrix are the exception: they are SVGs drawn by
-matplotlib (`studies/branch-coverage/plot.py` through `studies/figures/render.sh`, which needs
-[`uv`](https://docs.astral.sh/uv/) installed).
+legend. Each carries parameters (case, conditions, outputs) and tags, so every study's figures can be loaded
+together into the ironlab viewer and sorted, filtered and grouped. A study's run folder also holds a PDF of each.
 
 | Page | What it shows | Regenerate with |
 |---|---|---|

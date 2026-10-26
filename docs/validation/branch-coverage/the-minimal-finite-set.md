@@ -10,9 +10,15 @@ Branches taken by exactly one finite candidate make that candidate essential; th
 
 Every case: yFoil generates the panels (`--method cosine`), XFOIL `LOAD`s them (bitwise handoff asserted), one OPER script, one instrumented run plus its five 1-ULP twins.
 
-![Case × subroutine](figures/case-matrix.svg)
+<ironlab-figure src="figures/case-matrix.fig" format="fig" name="case-matrix" alt="Fraction of each subroutine's branches taken by each case of the minimal finite set">Fraction of each subroutine's branches taken by each case of the minimal finite set</ironlab-figure>
 
-*Fraction of each subroutine's branches taken by each case of the set; a dot marks a subroutine in which the case takes a branch no other finite candidate takes. The three columns on the right count, per subroutine, every branch, the reachable ones (not annotated unreachable and not a never-taken DO-line edge) and those taken on any measured run, the non-finite set included.*
+*Fraction of each subroutine's branches taken by each case of the set; a light grey cell is a subroutine the case never entered, and a dot marks a subroutine in which the case takes a branch no other finite candidate takes.*
+
+??? note "Branches of each subroutine"
+
+    Per subroutine, every branch, the reachable ones (not annotated unreachable and not a never-taken DO-line edge) and those taken on any measured run, the non-finite set included.
+
+    --8<-- "validation/branch-coverage/tables/subroutine-counts.md"
 
 ## Whole-run comparison
 

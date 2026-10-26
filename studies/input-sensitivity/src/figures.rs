@@ -3,14 +3,15 @@
 //!
 //! Seven stacked rows share α — CL, CD, δ* and H at the upper-surface trailing edge, the
 //! upper-surface transition and trailing-edge separation x/c, and the final RMSBL on a log axis —
-//! one column per input family. The base case is black, 1.5 pt, with filled markers, drawn last
-//! so it lies on top; the perturbation levels are drawn behind it, largest first, coloured by
-//! perturbation size (`figures::ylgnbu`, lightest = smallest). Unconverged points carry open
-//! circles. The axes span the converged extents `metrics.json` records; a value beyond them (an
+//! one column per input family; only the bottom row carries α tick labels. The base case is
+//! black, 1.5 pt, with filled markers, drawn last so it lies on top, and listed first in the key
+//! on a row of its own; the perturbation levels are drawn behind it and listed after it by
+//! increasing perturbation, coloured by perturbation size (`figures::ylgnbu`, lightest =
+//! smallest). Unconverged points carry open circles. The axes span the converged extents `metrics.json` records; a value beyond them (an
 //! unconverged state can be anything, up to CD = 1e19) is drawn on the axis edge, and a value
 //! that cannot be drawn (non-finite, or non-positive on the log axis) is left out. Each column
-//! has a title and its own legend panel below it. The node and alpha-step families share a
-//! two-column sheet; every family also gets a one-column figure.
+//! has a title and its own legend panel below it, in a row fitted to the tallest key. The node
+//! and alpha-step families share a two-column sheet; every family also gets a one-column figure.
 //!
 //! Each figure is saved as `<run>/naca<foil>_<name>.fig` with its PDF beside it (`README.tex`
 //! includes the PDFs).
@@ -92,9 +93,9 @@ const ROWS: [(&str, Get, &str, bool); 7] = [
     ("rmsbl", |p| p.rmsbl, "RMSBL", true),
 ];
 
-/// Height (mm) of a unit row weight: a data row has weight 1, so the figure's height (at the
-/// default width) follows from its rows and its legend
-const ROW_HEIGHT_MM: f64 = 29.0;
+/// Height (mm) of the figure per data row; the legend row is fitted to its key and the data rows
+/// share the rest
+const ROW_HEIGHT_MM: f64 = 32.0;
 /// Legend columns: two under a full-width column, one under each column of the sheet (two
 /// would not fit its width at the default font)
 const LEGEND_COLUMNS_FULL_WIDTH: u32 = 2;
@@ -103,9 +104,6 @@ const BASE_WIDTH_PT: f64 = 1.5;
 const LEVEL_WIDTH_PT: f64 = 0.75;
 const MARKER_PT: f64 = 2.4;
 const OPEN_MARKER_PT: f64 = 4.4;
-/// Height of one legend entry, and of the legend's insets, relative to a data row
-const LEGEND_ENTRY_WEIGHT: f64 = 0.14;
-const LEGEND_INSET_WEIGHT: f64 = 0.36;
 
 fn exponent(v: f64) -> i32 {
     -(cr_libm::log10(v).round() as i32)
@@ -189,22 +187,13 @@ fn draw(run_dir: &Path, meta: &Metadata, metrics: &Metrics, families: &[Family],
     } else {
         LEGEND_COLUMNS_FULL_WIDTH
     };
-    let legend_rows = families
-        .iter()
-        .map(|f| metrics.levels_by_family.get(f.slug()).map_or(0, Vec::len))
-        .max()
-        .unwrap_or(0)
-        .div_ceil(legend_columns as usize);
-    let legend_weight = LEGEND_ENTRY_WEIGHT * legend_rows as f64 + LEGEND_INSET_WEIGHT;
-    let mut weights = vec![1.0; ROWS.len()];
-    weights.push(legend_weight);
-    let height_mm = ROW_HEIGHT_MM * (ROWS.len() as f64 + legend_weight);
+    let height_mm = ROW_HEIGHT_MM * ROWS.len() as f64;
 
     let slugs: Vec<&str> = families.iter().map(|f| f.slug()).collect();
     let mut fig = Figure::new()
         .size_mm(figures::WIDTH_MM, height_mm)
         .tiles(nrow + 1, ncol)
-        .row_weights(weights)
+        .fit_row(nrow)
         .parameter("study", "input-sensitivity")
         .parameter("figure", "sensitivity-sheet")
         .parameter("foil", meta.foil.as_str())
@@ -216,12 +205,12 @@ fn draw(run_dir: &Path, meta: &Metadata, metrics: &Metrics, families: &[Family],
         .parameter("ncrit", meta.base.ncrit)
         .parameter("max_iterations", meta.base.iter as i64)
         .parameter("alpha_step_deg", meta.base.alpha_step_deg)
-        .label("testing");
+        .tag("testing");
     if meta.base.mach > 0.0 {
-        fig = fig.label("compressible");
+        fig = fig.tag("compressible");
     }
     if meta.base.re < 1e5 {
-        fig = fig.label("low-re");
+        fig = fig.tag("low-re");
     }
 
     let mut row_axes: Vec<Vec<NodeId>> = vec![Vec::new(); ROWS.len()];
@@ -233,19 +222,16 @@ fn draw(run_dir: &Path, meta: &Metadata, metrics: &Metrics, families: &[Family],
             .ok_or_else(|| format!("metrics.json has no family {}", family.slug()))?;
         let levels = ordered(levels);
         let n = (levels.len().max(2) - 2).max(1) as f64;
-        let key = {
-            let mut panel = fig.panel_legend(nrow, c);
-            panel
-                .columns(LegendEntryColumns::Count(legend_columns))
-                .order(LegendEntryOrder::RowMajor)
-                .align(LegendLocation::North);
-            panel.id()
-        };
+        let key = fig.panel(nrow, c).legend().id();
+        // the top row's artists, in key order (base first), which the key lists explicitly
+        let mut keyed: Vec<(bool, NodeId)> = Vec::new();
         for (r, (quantity, get, label, log)) in ROWS.iter().enumerate() {
             let (lo, hi) = y_limits(extent(quantity)?, *log);
             let mut ax = fig.axes(r as u32, c);
-            // the stack, largest perturbation first so the base lands on top
-            for (i, level) in levels.iter().enumerate().rev() {
+            // the levels by increasing perturbation, then the base last so it lands on top
+            let (bases, rest): (Vec<usize>, Vec<usize>) = (0..levels.len()).partition(|&i| levels[i].magnitude == 0.0);
+            for i in rest.into_iter().chain(bases) {
+                let level = levels[i];
                 let is_base = level.magnitude == 0.0;
                 let colour = if is_base {
                     Color::BLACK
@@ -267,9 +253,12 @@ fn draw(run_dir: &Path, meta: &Metadata, metrics: &Metrics, families: &[Family],
                     let mut line = ax.plot(&a, &v);
                     line.color(colour)
                         .line_width(if is_base { BASE_WIDTH_PT } else { LEVEL_WIDTH_PT })
-                        .display_name(level_label(level, meta));
+                        .label(level_label(level, meta));
                     if is_base {
                         line.marker(Marker::Circle).marker_size(MARKER_PT).marker_face(colour);
+                    }
+                    if r == 0 {
+                        keyed.push((is_base, line.id()));
                     }
                 }
                 let (ua, uv): (Vec<f64>, Vec<f64>) = drawn.iter().filter(|d| !d.2).map(|d| (d.0, d.1)).unzip();
@@ -293,8 +282,22 @@ fn draw(run_dir: &Path, meta: &Metadata, metrics: &Metrics, families: &[Family],
             }
             if r + 1 == ROWS.len() {
                 ax.xlabel("$\\alpha$ (°)");
+            } else {
+                ax.xtick_labels_hidden();
             }
             row_axes[r].push(ax.id());
+        }
+        // the key: the base alone on its first row, then the levels by increasing perturbation
+        let mut panel = fig.panel(nrow, c);
+        let mut legend = panel.legend();
+        legend
+            .columns(LegendEntryColumns::Count(legend_columns))
+            .order(LegendEntryOrder::RowMajor);
+        for &(_, id) in keyed.iter().filter(|(is_base, _)| *is_base) {
+            legend.full_row(id);
+        }
+        for &(_, id) in keyed.iter().filter(|(is_base, _)| !*is_base) {
+            legend.item(id);
         }
     }
     fig.link_all_x().map_err(|e| format!("{e}"))?;
@@ -397,6 +400,7 @@ mod tests {
         for f in written {
             let fig = Figure::load(dir.join(&f)).unwrap();
             assert!(fig.validate().errors.is_empty(), "{f}");
+            assert!(fig.layout_warnings().is_empty(), "{f}: {:?}", fig.layout_warnings());
             assert!(dir.join(f.replace(".fig", ".pdf")).exists());
         }
     }

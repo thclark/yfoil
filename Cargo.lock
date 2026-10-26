@@ -568,6 +568,7 @@ dependencies = [
 name = "branch-coverage"
 version = "0.1.0"
 dependencies = [
+ "ironlab",
  "serde",
  "serde_json",
  "toml",
@@ -1779,9 +1780,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e871db7a272d22e8f165c860f88446f15503d893d9b623ffe23371bc1c47594"
+checksum = "d65b727b3a22c073d0313a7734fef667cd34702c209a228a49512cb58ebe0148"
 dependencies = [
  "eframe",
  "ironlab-canvas",
@@ -1796,9 +1797,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab-canvas"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63c461e95cdda6002a63189d7ee0105817e75aaef9267fb98bc2df151c28f34b"
+checksum = "d3fd7c9db424ba9867b5f9e00188ddc85913c8f124c5c179fcfc44e561eeb6cf"
 dependencies = [
  "bytemuck",
  "ecolor",
@@ -1818,9 +1819,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab-ir"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7408e7779898f072a4f228f5e1168fc3907642ce1859c223c9913cf52345f1f9"
+checksum = "98b1753e5234cc2dd7c0b5db5a00f833dd788f543dfaac4e9a5b78b0046dd955"
 dependencies = [
  "prost",
  "schemars",
@@ -1831,9 +1832,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab-pdf"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c330eaf6294ab321224398d6158ce790deda6229a01f7749039bcbd8363ef892"
+checksum = "4d2ee6dfd4beac3197d166b256e8542b8da5c7201a4b64f9df223773b2b6fdcb"
 dependencies = [
  "ironlab-ir",
  "ironlab-scene",
@@ -1844,9 +1845,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab-scene"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d40368c81998b3d0e4b70d622997604c7ab4d2d1ed8e6de128b782358b399dc"
+checksum = "6270aaa05242fce24dd390749b4cd51a68ff97ffdecec9f869baa7073961e84d"
 dependencies = [
  "ironlab-ir",
  "ironlab-text",
@@ -1856,9 +1857,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab-text"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fb80068a4d4d5103b97f73ccb55e0da46fa400542b23af367976c108c118f84"
+checksum = "51d73f342292dc6fe5fb0d3d1fa98bcd6c39ffc97c224acca8d2159ff2feb1d8"
 dependencies = [
  "harfrust 0.13.3",
  "kurbo",
@@ -1869,9 +1870,9 @@ dependencies = [
 
 [[package]]
 name = "ironlab-viewer"
-version = "0.12.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26921110578fa5352c220f697d81567acd299fdeaa966ecf21cfeb3f91071507"
+checksum = "7c806b4882d451db5ef8c5211fed6fb5a02da9a1490b4dc1c580910a47aee411"
 dependencies = [
  "eframe",
  "egui",

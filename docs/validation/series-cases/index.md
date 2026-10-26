@@ -87,8 +87,8 @@ iteration of the point agrees with XFOIL's. It is hollow where the iterations pa
 where an earlier point in the same leg parted (that point started from a state XFOIL never computed,
 so its comparison is informational).
 
-- An **orange square** marks a point where that code went through a non-finite value. An orange plus
-  at the top of a panel marks a value that is itself NaN and cannot be plotted.
+- An **orange square** marks a point where that code went through a non-finite value. An orange tick
+  at the top edge of a panel marks a value that is itself NaN and cannot be plotted.
 - A **black diamond** marks where yFoil parts from XFOIL and XFOIL is ill-conditioned there (one of its
   own twins parts too).
 - A **grey diamond** marks where yFoil parts from XFOIL and XFOIL is well-conditioned (a mismatch).

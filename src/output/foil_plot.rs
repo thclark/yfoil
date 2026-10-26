@@ -12,19 +12,21 @@
 //! XFOIL has no scale factor on δ* and marks no transition or separation on the aerofoil plot; the
 //! scaling and the markers are yFoil's.
 //!
-//! The figure is an ironlab figure (`docs/development/conventions/figures.md`). ironlab has no equal-aspect
-//! axes, so the limits are widened in Rust to the aspect of the plot area the layout gives
-//! ([`PLOT_AREA_MM`]), which keeps the aerofoil undistorted at the figure's own size.
+//! The figure is an ironlab figure (`docs/development/conventions/figures.md`), drawn at equal
+//! aspect so the aerofoil and the offsets normal to it are undistorted at any size or zoom. Its key
+//! is two legends: the curves, and the markers, whose shape is the kind of location and whose
+//! colour is the side, each explained once.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use ironlab::prelude::*;
+use ironlab::{LineStyle, MarkerStyle};
 
 use crate::geometry::PanelledFoil;
 use crate::output::plot::{
-    condition_parameters, describe, point_parameters, regime_labels, rgb, save_figure, shared_labels,
-    shared_parameters, PlotError, STUDY,
+    condition_parameters, describe, point_parameters, regime_tags, rgb, save_figure, shared_parameters, shared_tags,
+    PlotError, STUDY,
 };
 use crate::output::{
     AnalysisOutput, BlQuantity, BoundaryLayerOutput, FoilNodes, PointRecord, PolarOutput, SeparationKind, SideStations,
@@ -90,8 +92,15 @@ impl Default for MarkerSet {
     }
 }
 
-/// The dash patterns cycled over design points: ironlab's four stroked patterns
-pub const DASH_CYCLE: [Dash; 4] = [Dash::Solid, Dash::Dotted, Dash::Dashed, Dash::DashDot];
+/// The dash patterns cycled over design points: ironlab's six stroked patterns
+pub const DASH_CYCLE: [Dash; 6] = [
+    Dash::Solid,
+    Dash::Dotted,
+    Dash::Dashed,
+    Dash::DashDot,
+    Dash::LongDash,
+    Dash::DashDotDot,
+];
 
 /// Configuration of the foil figure
 #[derive(Debug, Clone)]
@@ -396,6 +405,8 @@ const MARK_LOWER: (u8, u8, u8) = (0, 165, 0);
 const MARK_STAGNATION: (u8, u8, u8) = (40, 40, 40);
 /// Marker size (pt)
 const MARK_SIZE_PT: f64 = 5.0;
+/// The marker key's shapes, which stand for the kind of location whatever its side
+const MARK_KEY: (u8, u8, u8) = (128, 128, 128);
 
 /// The kinds of significant location, each with its own open shape
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -445,17 +456,6 @@ struct Mark {
     kind: MarkKind,
     side: usize,
     rgb: (u8, u8, u8),
-}
-
-impl Mark {
-    /// The key entry of a (kind, side): its shape in its side's colour
-    fn key(&self) -> String {
-        match self.side {
-            1 => format!("{} (upper surface)", self.kind.label()),
-            2 => format!("{} (lower surface)", self.kind.label()),
-            _ => self.kind.label().to_string(),
-        }
-    }
 }
 
 /// Everything laid out in data coordinates before the figure exists
@@ -702,30 +702,6 @@ fn layout(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Layout, Plo
     Ok(lay)
 }
 
-/// The plot area (width, height in mm) the foil figure's layout gives its axes, without and with
-/// the key row: the default 160 × 100 mm figure less the title, the tick and axis labels and the
-/// legend row below. ironlab has no equal-aspect axes, so the limits are widened to this aspect
-/// instead. The areas were measured on ironlab 0.12.0 renders; the tick labels' widths move them
-/// by a millimetre or so, so the aspect is equal to within about one per cent.
-pub const PLOT_AREA_MM: [(f64, f64); 2] = [(142.0, 80.5), (142.0, 57.5)];
-
-/// The limits that show `bounds` (x_min, x_max, y_min, y_max) at one scale on both axes in a plot
-/// area of `area` (width, height): the short side is widened about its centre
-pub fn equal_aspect_limits(bounds: (f64, f64, f64, f64), area: (f64, f64)) -> ((f64, f64), (f64, f64)) {
-    let (x0, x1, y0, y1) = bounds;
-    let (dx, dy) = (x1 - x0, y1 - y0);
-    let aspect = area.1 / area.0;
-    if dy / dx < aspect {
-        let half = 0.5 * dx * aspect;
-        let c = 0.5 * (y0 + y1);
-        ((x0, x1), (c - half, c + half))
-    } else {
-        let half = 0.5 * dy / aspect;
-        let c = 0.5 * (x0 + x1);
-        ((c - half, c + half), (y0, y1))
-    }
-}
-
 /// The parameters of the foil figure: provenance, and for one design point its inputs and
 /// outputs; for several, the conditions they share
 fn foil_parameters(points: &[DesignPoint]) -> (BTreeMap<String, Parameter>, Vec<&'static str>) {
@@ -753,11 +729,44 @@ fn foil_parameters(points: &[DesignPoint]) -> (BTreeMap<String, Parameter>, Vec<
             parameters.extend(point_parameters(record, p.boundary_layer.as_ref()));
         }
     }
-    let labels: Vec<Vec<&'static str>> = points
+    let tags: Vec<Vec<&'static str>> = points
         .iter()
-        .map(|p| p.conditions.as_ref().map(regime_labels).unwrap_or_default())
+        .map(|p| p.conditions.as_ref().map(regime_tags).unwrap_or_default())
         .collect();
-    (parameters, shared_labels(&labels))
+    (parameters, shared_tags(&tags))
+}
+
+/// The marker key: one open grey shape per kind of location drawn, then one swatch per side
+/// that has a marker
+fn marker_key(markers: &[Mark]) -> Vec<(LegendSample, String)> {
+    let mut kinds: Vec<MarkKind> = markers.iter().map(|m| m.kind).collect();
+    kinds.sort();
+    kinds.dedup();
+    let mut key: Vec<(LegendSample, String)> = kinds
+        .into_iter()
+        .map(|kind| {
+            let sample = LegendSample::Line {
+                line: LineStyle {
+                    color: ColorSpec::Rgba { color: rgb(MARK_KEY) },
+                    dash: Dash::None,
+                    ..LineStyle::default()
+                },
+                marker: MarkerStyle {
+                    shape: kind.shape(),
+                    size_pt: MARK_SIZE_PT,
+                    face: ColorSpec::None,
+                    edge: ColorSpec::Auto,
+                },
+            };
+            (sample, kind.label().to_string())
+        })
+        .collect();
+    for (side, colour, name) in [(1, MARK_UPPER, "upper surface"), (2, MARK_LOWER, "lower surface")] {
+        if markers.iter().any(|m| m.side == side) {
+            key.push((LegendSample::swatch(rgb(colour)), name.to_string()));
+        }
+    }
+    key
 }
 
 /// Build the foil figure
@@ -765,15 +774,13 @@ pub fn foil_figure(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Fi
     let lay = layout(points, config)?;
     let chord = points[0].geometry.chord;
 
-    // bounds: everything drawn, padded by 5% chord, then widened to the plot area's aspect
+    // limits: everything drawn, padded by 5% chord; equal aspect widens the short side
     let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
     for (x, y) in lay.points().filter(|(x, y)| x.is_finite() && y.is_finite()) {
         (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
     }
     let pad = 0.05 * chord;
-    let named = !lay.curve_key().is_empty() || !lay.markers.is_empty();
-    let area = PLOT_AREA_MM[usize::from(named)];
-    let (xlim, ylim) = equal_aspect_limits((x0 - pad, x1 + pad, y0 - pad, y1 + pad), area);
+    let (xlim, ylim) = ((x0 - pad, x1 + pad), (y0 - pad, y1 + pad));
 
     let title = config.title.clone().unwrap_or_else(|| {
         if points.len() == 1 {
@@ -782,21 +789,39 @@ pub fn foil_figure(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Fi
             "Foil".to_string()
         }
     });
+    // the key row holds the curve key, the marker key, or both side by side
+    let curves_named = !lay.curve_key().is_empty();
+    let markers_keyed = !lay.markers.is_empty();
+    let keys = usize::from(curves_named) + usize::from(markers_keyed);
     let mut fig = Figure::new().title(Text::plain(title));
-    if named {
-        fig = fig.tiles(2, 1).row_weights([3.0, 1.0]);
+    fig = match keys {
+        0 => fig,
+        1 => fig.tiles(2, 1).fit_row(1),
+        _ => fig.tiles(2, 2).fit_row(1),
+    };
+    let (parameters, tags) = foil_parameters(points);
+    fig = describe(fig, parameters, &tags);
+    let curve_key = curves_named.then(|| fig.panel(1, 0).legend().id());
+    if markers_keyed {
+        let mut panel = fig.panel(1, if curves_named { 1 } else { 0 });
+        let mut legend = panel.legend();
+        for (sample, name) in marker_key(&lay.markers) {
+            legend.custom_item(sample, name);
+        }
+        legend.columns(LegendEntryColumns::Auto);
     }
-    let (parameters, labels) = foil_parameters(points);
-    fig = describe(fig, parameters, &labels);
-    let key = named.then(|| fig.panel_legend(1, 0).id());
 
-    let mut ax = fig.axes(0, 0);
+    let mut ax = if keys == 2 {
+        fig.axes_span(0, 0, 1, 2)
+    } else {
+        fig.axes(0, 0)
+    };
     let draw = |ax: &mut AxesMut, c: &Curve, width: f64| {
         let (x, y): (Vec<f64>, Vec<f64>) = c.pts.iter().copied().unzip();
         let mut line = ax.plot(x, y);
         line.color(rgb(c.rgb)).dash(c.dash).line_width(width);
         if let Some(name) = &c.name {
-            line.display_name(name.as_str());
+            line.label(name.as_str());
         }
     };
     for c in &lay.surfaces {
@@ -826,26 +851,23 @@ pub fn foil_figure(points: &[DesignPoint], config: &FoilPlotConfig) -> Result<Fi
     for c in &lay.curves {
         draw(&mut ax, c, 1.0);
     }
-    // markers: one artist each; the first of each (kind, side) carries its key entry
-    let mut keyed = Vec::new();
+    // markers: one artist each, unnamed; the marker key explains shape and colour once
     for m in &lay.markers {
-        let mut line = ax.plot([m.at.0], [m.at.1]);
-        line.color(rgb(m.rgb))
+        ax.plot([m.at.0], [m.at.1])
+            .color(rgb(m.rgb))
             .dash(Dash::None)
             .marker(m.kind.shape())
             .marker_size(MARK_SIZE_PT)
             .line_width(1.0);
-        if !keyed.contains(&(m.kind, m.side)) {
-            keyed.push((m.kind, m.side));
-            line.display_name(m.key());
-        }
     }
     ax.xlabel("$x/c$")
         .ylabel("$y/c$")
         .xlim(xlim.0, xlim.1)
         .ylim(ylim.0, ylim.1)
+        .aspect(Aspect::Equal)
+        .aspect_adjust(AspectAdjust::Limits)
         .grid(true);
-    if let Some(key) = key {
+    if let Some(key) = curve_key {
         ax.legend_in(key);
     }
     Ok(fig)
@@ -997,7 +1019,8 @@ mod tests {
         let s0 = point_style(0, 0, 1, &c);
         assert_eq!(s0.rgb, c.palette[0], "single point: base hue");
         assert_eq!(s0.dash, Dash::Solid);
-        assert_eq!(point_style(0, 4, 6, &c).dash, Dash::Solid, "cycle wraps after four");
+        assert_eq!(point_style(0, 5, 7, &c).dash, Dash::DashDotDot, "six distinct patterns");
+        assert_eq!(point_style(0, 6, 7, &c).dash, Dash::Solid, "cycle wraps after six");
         assert_eq!(point_style(7, 0, 1, &c).rgb, c.palette[1], "palette cycles");
     }
 
@@ -1146,17 +1169,7 @@ mod tests {
     }
 
     #[test]
-    fn equal_aspect_widens_the_short_side_about_its_centre() {
-        let ((x0, x1), (y0, y1)) = equal_aspect_limits((0.0, 2.0, -0.1, 0.1), (100.0, 50.0));
-        assert_eq!((x0, x1), (0.0, 2.0));
-        assert!((y0 + 0.5).abs() < 1e-15 && (y1 - 0.5).abs() < 1e-15);
-        let ((x0, x1), (y0, y1)) = equal_aspect_limits((0.0, 1.0, 0.0, 2.0), (100.0, 50.0));
-        assert_eq!((y0, y1), (0.0, 2.0));
-        assert!((x0 + 1.5).abs() < 1e-15 && (x1 - 2.5).abs() < 1e-15);
-    }
-
-    #[test]
-    fn figure_has_markers_dots_and_one_keyed_entry_per_kind_and_side() {
+    fn figure_has_markers_dots_a_curve_key_and_a_marker_key() {
         let pts = [point("a", 0.01, true)];
         let config = FoilPlotConfig {
             quantities: vec![BlQuantity::Dstar],
@@ -1165,36 +1178,44 @@ mod tests {
         };
         let fig = foil_figure(&pts, &config).unwrap();
         assert!(fig.validate().errors.is_empty());
+        assert!(fig.layout_warnings().is_empty(), "{:?}", fig.layout_warnings());
         let ir = fig.ir();
         assert_eq!(ir.axes.len(), 1);
-        assert_eq!(ir.panel_legends.len(), 1);
-        let lines: Vec<_> = ir.axes[0]
+        assert_eq!(ir.axes[0].aspect, Aspect::Equal);
+        assert_eq!(ir.panels.len(), 2, "a curve key and a marker key");
+        let series: Vec<_> = ir.axes[0]
             .artists
             .iter()
             .filter_map(|a| match a {
-                Artist::Line(l) => Some(l),
+                Artist::Series(s) => Some(s),
                 _ => None,
             })
             .collect();
         // surface + dots + (upper, lower) + stagnation, transition, forced transition
-        assert_eq!(lines.len(), 1 + 1 + 2 + 3);
-        let names: Vec<&str> = lines
+        assert_eq!(series.len(), 1 + 1 + 2 + 3);
+        let names: Vec<&str> = series
             .iter()
-            .filter_map(|l| l.display_name.as_ref().map(|t| t.content.as_str()))
+            .filter_map(|l| l.label.as_ref().map(|t| t.content.as_str()))
             .collect();
-        assert_eq!(names.len(), 4);
+        assert_eq!(names.len(), 1, "only the curve is named; the markers are keyed once");
         assert!(names[0].starts_with("$\\delta^*$, scaled ×"));
-        assert_eq!(
-            &names[1..],
-            [
-                "stagnation",
-                "transition (upper surface)",
-                "forced transition (lower surface)"
-            ]
-        );
-        let shapes: Vec<Marker> = lines.iter().map(|l| l.marker.shape).collect();
+        let shapes: Vec<Marker> = series.iter().map(|l| l.marker.shape).collect();
         assert_eq!(shapes[1], Marker::Point);
         assert_eq!(&shapes[4..], [Marker::Circle, Marker::Square, Marker::Diamond]);
+        let key: Vec<String> = marker_key(&layout(&pts, &config).unwrap().markers)
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        assert_eq!(
+            key,
+            [
+                "stagnation",
+                "transition",
+                "forced transition",
+                "upper surface",
+                "lower surface"
+            ]
+        );
         assert_eq!(fig.parameters().get("figure"), Some(&Parameter::from("foil")));
         assert_eq!(fmt_alpha(3.0000000000000004), "3");
         assert_eq!(fmt_alpha(-2.5), "-2.5");

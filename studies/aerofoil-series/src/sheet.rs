@@ -3,22 +3,18 @@
 //! rerunning the study (`--render <run_dir>`).
 //!
 //! Layout: two columns of panels, one per parameter, each panel followed in the row below by its
-//! own legend panel (row-major; the default's entry is last, because ironlab lists entries in
-//! drawing order and the default is drawn on top). Every panel has the same linked axes
-//! (`X_RANGE` × `Y_RANGE`); the members are drawn 0.75 pt in `figures::ylgnbu(i / (n − 1))`
-//! (already ordered by parameter value), the family default black 1.5 pt on top. ironlab has no
-//! equal-aspect axes, so the figure height and the row weights are chosen here so that the plot
-//! areas come out close to equal scale at the default width.
-//!
-//! A legend has three columns of entries where they fit the panel's width and fewer where they do
-//! not (a long default label, such as the Kármán–Trefftz one): the sheet is laid out, compiled by
-//! ironlab, and any legend ironlab reports as overflowing is given one column fewer and a taller
-//! row, until none overflows.
+//! own legend panel. Every panel has the same linked axes (`X_RANGE` × `Y_RANGE`) at equal aspect
+//! with the same ticks (`X_TICKS`, `Y_TICKS`), titled by the parameter it varies, aligned with its
+//! plot area's left edge. The parameters it holds fixed title its legend: a panel title in full
+//! ("position of maximum camber p (m = 0.04, t = 0.12)") is wider than a column at ironlab's
+//! default font, and ironlab sets text on one line.
+//! The members are drawn 0.75 pt in `figures::ylgnbu(i / (n − 1))` (already ordered by parameter
+//! value), the family default black 1.5 pt on top. Each legend lists the default first, on a row of
+//! its own, then the members in as many columns as fit the panel's width, in a row fitted to them.
 
 use std::path::{Path, PathBuf};
 
 use ironlab::prelude::*;
-use ironlab::SceneWarningKind;
 use serde_json::Value;
 use yfoil::output::figures;
 
@@ -26,19 +22,14 @@ use crate::{X_RANGE, Y_RANGE};
 
 /// Columns of panels
 const COLUMNS: usize = 2;
-/// Columns of entries in a legend, where they fit
-const LEGEND_COLUMNS: usize = 3;
-
-// Heights (mm) from which the figure height and the row weights are set. The plot area of a panel
-// is the column width less the space ironlab reserves for the tick labels and the y label
-// (PLOT_AREA_WIDTH_MM); its height follows from the equal-scale aspect, and the plot row adds the
-// title above and the x tick labels and label below. Measured on an export at ironlab's defaults
-// (160 mm wide, 9 pt).
-const PLOT_AREA_WIDTH_MM: f64 = 63.5;
-const PLOT_ROW_EXTRA_MM: f64 = 16.6;
-const LEGEND_ENTRY_ROW_MM: f64 = 4.0;
-const LEGEND_PAD_MM: f64 = 2.5;
-const TITLE_MM: f64 = 8.0;
+/// The ticks of every panel
+const X_TICKS: [f64; 8] = [-0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2];
+const Y_TICKS: [f64; 5] = [-0.4, -0.2, 0.0, 0.2, 0.4];
+/// The nominal height (mm) of a row of panels with its legend. The legend row is fitted to its
+/// entries and the plot takes the rest; equal aspect then sizes each plot area within it.
+const ROW_MM: f64 = 95.0;
+/// The figure title (mm)
+const TITLE_MM: f64 = 10.0;
 
 /// A geometry file's coordinates
 fn coordinates(path: &Path) -> (Vec<f64>, Vec<f64>) {
@@ -58,38 +49,31 @@ fn f64_of(v: &Value, key: &str) -> f64 {
         .unwrap_or_else(|| panic!("summary.json: missing number {key}"))
 }
 
+/// A panel title split into the parameter it varies and the ones it holds fixed:
+/// "maximum camber m (p = 0.4, t = 0.12)" → ("maximum camber m", "p = 0.4, t = 0.12")
+fn split_title(title: &str) -> (&str, Option<&str>) {
+    match title.rsplit_once(" (") {
+        Some((varied, held)) if held.ends_with(')') => (varied, Some(&held[..held.len() - 1])),
+        _ => (title, None),
+    }
+}
+
 fn members(panel: &Value) -> &Vec<Value> {
     panel["members"].as_array().expect("summary.json: members")
 }
 
-/// The family sheet of one `summary.json` series entry, with `legend_columns[k]` columns of
-/// entries in panel k's legend; returns the figure and the legend panels' ids
-pub fn family_sheet(run_dir: &Path, series: &Value, n_nodes: i64, legend_columns: &[usize]) -> (Figure, Vec<NodeId>) {
+/// The family sheet of one `summary.json` series entry
+pub fn family_sheet(run_dir: &Path, series: &Value, n_nodes: i64) -> Figure {
     let slug = str_of(series, "slug");
     let panels = series["panels"].as_array().expect("summary.json: panels");
     let default = &series["default"];
     let rows = panels.len().div_ceil(COLUMNS);
 
-    // row weights: a plot row, then the legend row its panels' legends need
-    let plot_area_h = PLOT_AREA_WIDTH_MM * (Y_RANGE.1 - Y_RANGE.0) / (X_RANGE.1 - X_RANGE.0);
-    let plot_row = plot_area_h + PLOT_ROW_EXTRA_MM;
-    let mut weights = Vec::with_capacity(2 * rows);
-    for r in 0..rows {
-        let entry_rows = (r * COLUMNS..((r + 1) * COLUMNS).min(panels.len()))
-            .map(|k| (members(&panels[k]).len() + 1).div_ceil(legend_columns[k]))
-            .max()
-            .unwrap_or(1);
-        weights.push(plot_row);
-        weights.push(entry_rows as f64 * LEGEND_ENTRY_ROW_MM + 2.0 * LEGEND_PAD_MM);
-    }
-    let height = weights.iter().sum::<f64>() + TITLE_MM;
-
     let mut fig = Figure::new()
-        .size_mm(figures::WIDTH_MM, height)
+        .size_mm(figures::WIDTH_MM, rows as f64 * ROW_MM + TITLE_MM)
         .tiles((2 * rows) as u32, COLUMNS as u32)
-        .row_weights(weights)
         .title(Text::plain(str_of(series, "title")))
-        .label("validation")
+        .tag("validation")
         .parameter("study", "aerofoil-series")
         .parameter("figure", "family-sheet")
         .parameter("series", slug)
@@ -97,90 +81,72 @@ pub fn family_sheet(run_dir: &Path, series: &Value, n_nodes: i64, legend_columns
         .parameter("designation", str_of(default, "designation"))
         .parameter("max_thickness", f64_of(default, "max_thickness"))
         .parameter("te_gap", f64_of(default, "te_gap"));
+    for r in 0..rows {
+        fig = fig.fit_row((2 * r + 1) as u32);
+    }
 
     let (default_x, default_y) = coordinates(&run_dir.join(slug).join(str_of(default, "file")));
     let default_label = format!("{} (default)", str_of(default, "label"));
     let mut axes = Vec::with_capacity(panels.len());
-    let mut legends = Vec::with_capacity(panels.len());
     for (k, panel) in panels.iter().enumerate() {
         let (r, c) = ((k / COLUMNS) as u32, (k % COLUMNS) as u32);
-        let key = {
-            let mut legend = fig.panel_legend(2 * r + 1, c);
-            legend
-                .columns(LegendEntryColumns::Count(legend_columns[k] as u32))
-                .order(LegendEntryOrder::RowMajor)
-                .align(LegendLocation::North)
-                .boxed(false);
-            legend.id()
-        };
         let members = members(panel);
         let span = (members.len().max(2) - 1) as f64;
         let mut ax = fig.axes(2 * r, c);
+        let mut ids = Vec::with_capacity(members.len());
         for (i, m) in members.iter().enumerate() {
             let (x, y) = coordinates(&run_dir.join(slug).join(str_of(panel, "slug")).join(str_of(m, "file")));
-            ax.plot(&x, &y)
-                .display_name(Text::plain(str_of(m, "label")))
+            let id = ax
+                .plot(&x, &y)
+                .label(Text::plain(str_of(m, "label")))
                 .color(figures::ylgnbu(i as f64 / span))
-                .line_width(0.75);
+                .line_width(0.75)
+                .id();
+            ids.push(id);
         }
         // the default last, so that it is drawn on top
-        ax.plot(&default_x, &default_y)
-            .display_name(Text::plain(default_label.clone()))
+        let default_id = ax
+            .plot(&default_x, &default_y)
+            .label(Text::plain(default_label.clone()))
             .color(Color::rgb(0.0, 0.0, 0.0))
-            .line_width(1.5);
-        ax.title(Text::plain(str_of(panel, "title")))
+            .line_width(1.5)
+            .id();
+        let (varied, held) = split_title(str_of(panel, "title"));
+        ax.title(Text::plain(varied))
+            .title_align(TitleAlign::Left)
             .xlabel("$x/c$")
             .ylabel("$y/c$")
             .xlim(X_RANGE.0, X_RANGE.1)
             .ylim(Y_RANGE.0, Y_RANGE.1)
-            .legend_in(key);
+            .xticks(X_TICKS)
+            .yticks(Y_TICKS)
+            .aspect(Aspect::Equal)
+            .aspect_adjust(AspectAdjust::Box);
         axes.push(ax.id());
-        legends.push(key);
+        // listed first, on a row of its own, then the members
+        let key = {
+            let mut panel = fig.panel(2 * r + 1, c);
+            panel.align(PanelLocation::NorthWest);
+            if let Some(held) = held {
+                panel.title(Text::plain(held)).title_align(TitleAlign::Left);
+            }
+            let mut legend = panel.legend();
+            legend.full_row(default_id);
+            for id in ids {
+                legend.item(id);
+            }
+            legend
+                .columns(LegendEntryColumns::Auto)
+                .order(LegendEntryOrder::RowMajor)
+                .boxed(false);
+            legend.id()
+        };
+        fig.axes(2 * r, c).legend_in(key);
     }
     // the same x/c and y/c on every panel
     fig.link(Dim::X, &axes).expect("the panels belong to this figure");
     fig.link(Dim::Y, &axes).expect("the panels belong to this figure");
-    (fig, legends)
-}
-
-/// The legends of a figure that ironlab reports as overflowing, compiling it through a PDF export
-/// to `probe`
-fn overflowing(fig: &Figure, probe: &Path) -> Vec<NodeId> {
-    let report = fig
-        .export_pdf(probe)
-        .unwrap_or_else(|e| panic!("{}: {e}", probe.display()));
-    report
-        .scene
-        .iter()
-        .filter(|w| matches!(w.kind, SceneWarningKind::LegendOverflow { .. }))
-        .filter_map(|w| w.node)
-        .collect()
-}
-
-/// Draw one series' sheet to `<stem>.fig` and `<stem>.pdf`, with as many legend columns (up to
-/// three) as fit
-fn draw(run_dir: &Path, series: &Value, n_nodes: i64, stem: &Path) {
-    let n_panels = series["panels"].as_array().expect("summary.json: panels").len();
-    let mut columns = vec![LEGEND_COLUMNS; n_panels];
-    let probe = stem.with_extension("pdf");
-    loop {
-        let (fig, legends) = family_sheet(run_dir, series, n_nodes, &columns);
-        let over = overflowing(&fig, &probe);
-        if over.is_empty() {
-            figures::save_with_pdf(&fig, stem).unwrap_or_else(|e| panic!("{e}"));
-            return;
-        }
-        for (k, id) in legends.iter().enumerate() {
-            if over.contains(id) {
-                assert!(
-                    columns[k] > 1,
-                    "{}: panel {k}'s legend overflows in one column",
-                    stem.display()
-                );
-                columns[k] -= 1;
-            }
-        }
-    }
+    fig
 }
 
 /// Draw every family sheet of a run folder (`<slug>.fig` and `<slug>.pdf`); returns the stems
@@ -197,7 +163,7 @@ pub fn render(run_dir: &Path) -> Vec<PathBuf> {
         .iter()
         .map(|s| {
             let stem = run_dir.join(str_of(s, "slug"));
-            draw(run_dir, s, n_nodes, &stem);
+            figures::save_with_pdf(&family_sheet(run_dir, s, n_nodes), &stem).unwrap_or_else(|e| panic!("{e}"));
             stem
         })
         .collect()
@@ -205,6 +171,15 @@ pub fn render(run_dir: &Path) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn titles_split_into_the_varied_and_the_held_parameters() {
+        assert_eq!(
+            super::split_title("position of maximum camber p (m = 0.04, t = 0.12)"),
+            ("position of maximum camber p", Some("m = 0.04, t = 0.12"))
+        );
+        assert_eq!(super::split_title("family"), ("family", None));
+    }
+
     use ironlab::ir::Parameter;
     use ironlab::prelude::*;
 
@@ -235,7 +210,7 @@ mod tests {
                 Some(&Parameter::String(s.default.designation.clone())),
                 "{file}"
             );
-            assert!(fig.labels().iter().any(|l| l == "validation"), "{file}");
+            assert!(fig.tags().iter().any(|l| l == "validation"), "{file}");
             assert!(fig.validate().errors.is_empty(), "{file}");
             assert_eq!(fig.ir().axes.len(), s.panels.len(), "{file}: one panel per parameter");
             assert!(

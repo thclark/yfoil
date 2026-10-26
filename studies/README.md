@@ -23,5 +23,4 @@ Each study writes a dated run folder under its own `runs/` (gitignored), and nev
 | `xfoil-instrumentation-check/` | The instrumentation is inert on a polar through stall: pristine and instrumented builds compared byte for byte on XFOIL's own `PACC` and `DUMP` output | `cargo run --release -p xfoil-instrumentation-check` | its run folder only |
 
 Shared support, not studies: `study-support/records.rs` is the studies' whole-run floor comparison
-(used by `branch-coverage` and `series-cases`), `study-support/publish.rs` writes a run's `publish/`, and `figures/` (`render.sh`, `style.py`) draws the
-branch-coverage study's two matplotlib figures (needs [`uv`](https://docs.astral.sh/uv/)).
+(used by `branch-coverage` and `series-cases`) and `study-support/publish.rs` writes a run's `publish/`.

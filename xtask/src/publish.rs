@@ -6,7 +6,7 @@
 //! this command replaces `docs/validation/<study>/{tables,figures}/` with the chosen run's bundle.
 //! It never writes a page: the pages of `docs/validation/<study>/` are written by hand, and only
 //! include the tables (`--8<-- "validation/<study>/tables/<name>.md"`) and embed the figures
-//! (`<ironlab-figure src="figures/<name>.fig">`, `![...](figures/<name>.svg)`).
+//! (`<ironlab-figure src="figures/<name>.fig">`).
 //!
 //! Before copying, every reference the study's pages make into its `tables/` or `figures/` is
 //! checked against the bundle, and the publish is refused if one is missing (Zensical would fail on

@@ -7,11 +7,10 @@ icon: lucide/image
 Every yFoil figure is an [ironlab](https://ironlab.org) figure: a file holding the figure's own
 data structure (`.fig`, Protocol Buffers; `.fig.json`, the same model as JSON), not a picture of it. It is opened
 in the ironlab viewer, embedded live in this site, and exported to PDF for publication. The shared conventions
-are implemented once, in `src/output/figures.rs` (feature `plotting`), and every figure is built through it.
-
-The exception is the branch-coverage study's two occupancy figures (`docs/validation/branch-coverage/`): the branch map
-and the case × subroutine matrix are not charts, and stay SVG drawn by matplotlib (`studies/branch-coverage/plot.py`
-through `studies/figures/render.sh`) until ironlab has a figure type for them.
+are implemented once, in `src/output/figures.rs` (feature `plotting`), and every figure is built through it. That
+includes the branch-coverage study's occupancy figures (`docs/validation/branch-coverage/`): the branch map is an
+ironlab occupancy matrix (`ax.occupancy` under `ax.ycategory_groups`) and the case × subroutine matrix is `ax.cells`
+on categorical axes.
 
 ## Who computes what
 
@@ -30,9 +29,9 @@ axis extents. There is no presentation layer that transforms data.
   colourmap for line colours. The family's default or base case is black and drawn on top.
 - **Unordered families of up to four** use `figures::CATEGORY`.
 
-## Parameters and labels
+## Parameters and tags
 
-The viewer sorts, filters and groups figures by their **parameters** (name → value) and **labels** (plain words).
+The viewer sorts, filters and groups figures by their **parameters** (name → value) and **tags** (plain words).
 Every figure carries both, so that all the figures every study produces can be loaded into one viewer and sliced.
 
 **Parameters** say *which* figure this is and *what went in and came out*:
@@ -47,12 +46,25 @@ Every figure carries both, so that all the figures every study produces can be l
 A name that exists as a key in yFoil's own JSON output is spelled exactly as that key. A new value at a place
 is named `<quantity>_<place>_<side>`.
 
-**Labels** are for tags a reader filters on, not for values:
+**Tags** (`fig.tag`) are words a reader filters on, not values:
 
 - the documentation section a figure appears in: `validation`;
 - `xfoil-comparison` for a figure that plots the reference against yFoil;
 - regime tags taken from the inputs: `inviscid`, `compressible` (M > 0), `forced-transition`, `fixed-cl`,
   `low-re` (Re < 1e5).
+
+## Axes
+
+- **Geometry** (an aerofoil section, offsets drawn normal to its surface) is drawn at `Aspect::Equal`, which the
+  layout, the viewer and export all keep. Limits are never widened by hand to fake it.
+- **Pressure coefficient** is plotted as \(C_p\) on a reversed axis (`yreverse(true)`), suction up, never as
+  \(-C_p\).
+- **Rows of names** (cases, subroutines) are categorical axes (`ycategories`, first at the top), set in monospace
+  with `\texttt{…}` (escape `_`).
+- **Reference lines** (a tolerance, interval ends) are `hline` / `vline`, which span the axes at any zoom.
+- **Non-finite values** are marked by `Marker::VLine` ticks at the top edge, at data x and axes-fraction y with
+  clipping off, so they stay at the edge while the axes autoscale, pan and zoom.
+- **Stacks sharing x** show x tick labels on the bottom row only (`xtick_labels_hidden()` above).
 
 ## Linked axes
 
@@ -62,14 +74,22 @@ dependent axis linked too. Two axes with different quantities are never linked, 
 
 ## Legends
 
-Where a figure has one key for many panels, the legend goes in a **panel legend** (`fig.panel_legend(row, col)` +
-`ax.legend_in(key)`) in a tile of its own. This replaces the hand-placed legend strips of the matplotlib figures.
+Where a figure has one key for many panels, the legend goes in a **panel legend** (`fig.panel(row, col).legend()` +
+`ax.legend_in(key)`) in a tile of its own, whose row is sized to it (`fit_row`), never by a calibrated weight.
 A legend that belongs to one panel stays in that panel.
+
+- **A reference and its variants**: the default section or base case is drawn last, so it is on top, and listed
+  first, on a row of its own (`full_row`), the members after it in order.
+- **Meanings shared by many artists** (a marker shape for a kind of point, a colour for a side) are explained once by
+  `custom_item` entries, in a key of their own if the figure also names curves, never by dummy artists or one entry
+  per combination.
+- Columns are `LegendEntryColumns::Auto` or a fixed count, never chosen by trial export.
 
 ## Saving
 
-- `figures::save(fig, path)` validates the figure and refuses to write one with validation errors. The encoding
-  follows the extension.
+- `figures::save(fig, path)` validates the figure and refuses to write one with validation errors, or whose layout
+  (`Figure::layout_warnings`) overflows a legend, clashes two legend entries or puts text beyond the page. The
+  encoding follows the extension.
 - `figures::save_with_pdf(fig, stem)` also writes the PDF, for the run folders' LaTeX reports.
 - Study run folders hold `.fig` and `.pdf`. The documentation holds `.fig` only.
 - The user guide's figures (`docs/user-guide/figures/`) are the output of the very commands the guide prints, run by

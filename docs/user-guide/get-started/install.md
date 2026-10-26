@@ -30,7 +30,7 @@ Plotting is behind a cargo feature; build with it enabled if you want
 
 ``` sh
 cargo install --path . --features plotting
-cargo install ironlab-viewer --version 0.12.0
+cargo install ironlab-viewer --version 0.16.0
 ```
 
 ## Check it works

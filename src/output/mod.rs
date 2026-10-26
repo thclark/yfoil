@@ -29,9 +29,8 @@ pub use results::{
 
 #[cfg(feature = "plotting")]
 pub use foil_plot::{
-    check_same_geometry, equal_aspect_limits, foil_figure, plot_foil, point_style, quantity_symbol, scale_factors,
-    surface_offset, wake_band, CurveStyle, DesignPoint, FoilPlotConfig, MarkerSet, OffsetScale, PanelStyle, Pt,
-    DASH_CYCLE, PLOT_AREA_MM,
+    check_same_geometry, foil_figure, plot_foil, point_style, quantity_symbol, scale_factors, surface_offset,
+    wake_band, CurveStyle, DesignPoint, FoilPlotConfig, MarkerSet, OffsetScale, PanelStyle, Pt, DASH_CYCLE,
 };
 #[cfg(feature = "plotting")]
 pub use plot::{

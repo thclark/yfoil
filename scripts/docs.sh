@@ -21,8 +21,8 @@ zensical_version="0.0.71"
 # The ironlab-web bundle that draws the <ironlab-figure> embeds (docs/development/conventions/figures.md).
 # Pinned by version and checksum, fetched from the ironlab release into a versioned directory
 # (gitignored), so an upgrade changes every URL and no browser pairs a page with a stale engine.
-ironlab_version="0.12.0"
-ironlab_sha256="7f5d2a1225cbe4e699697347e2657ca4249784b0d4cc71514641f72d0dd0821b"
+ironlab_version="0.16.0"
+ironlab_sha256="ad1160b9052f555eb060390b3fbd04116448c10888f53eac69ecd8dbd2e67380"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"

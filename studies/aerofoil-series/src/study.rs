@@ -120,7 +120,7 @@ pub fn series() -> Vec<SeriesStudy> {
                 ),
                 panel(
                     "camber-position",
-                    "maximum-camber position p (m = 0.04, t = 0.12)",
+                    "position of maximum camber p (m = 0.04, t = 0.12)",
                     (1..=9)
                         .map(|p| naca(&format!("4{p}12"), p as f64 / 10.0, format!("p = 0.{p}")))
                         .collect(),
@@ -155,7 +155,7 @@ pub fn series() -> Vec<SeriesStudy> {
                 ),
                 panel(
                     "max-thickness-position",
-                    "maximum-thickness position M (I = 3, t = 0.12)",
+                    "position of maximum thickness M (I = 3, t = 0.12)",
                     (2..=6)
                         .map(|m| naca(&format!("0012-3{m}"), m as f64 / 10.0, format!("M = 0.{m}")))
                         .collect(),
@@ -189,7 +189,7 @@ pub fn series() -> Vec<SeriesStudy> {
                 ),
                 panel(
                     "camber-position",
-                    "maximum-camber position p (cl = 0.3, t = 0.18)",
+                    "position of maximum camber p (cl = 0.3, t = 0.18)",
                     (1..=5)
                         .map(|p| naca(&format!("2{p}018"), p as f64 / 20.0, format!("p = {:.2}", p as f64 / 20.0)))
                         .collect(),
@@ -253,7 +253,7 @@ pub fn series() -> Vec<SeriesStudy> {
             panels: vec![
                 panel(
                     "family",
-                    "family: minimum-pressure position (cl = 0.4, t = 0.15)",
+                    "family: position of minimum pressure (cl = 0.4, t = 0.15)",
                     (3..=7)
                         .map(|f| naca(&format!("6{f}-415"), f as f64 / 10.0, format!("6{f}")))
                         .collect(),

@@ -1,5 +1,5 @@
 //! Shared conventions for yFoil's ironlab figures: the colours, the ordered-family colours that
-//! replace a colourmap, the parameters and labels the ironlab viewer sorts, filters and groups
+//! replace a colourmap, the parameters and tags the ironlab viewer sorts, filters and groups
 //! by, and saving. The rules are in `docs/development/conventions/figures.md`.
 //!
 //! Figure size and fonts are ironlab's defaults (set up for AMS journals). A figure sets
@@ -106,24 +106,39 @@ pub enum FigureError {
     Ironlab { path: String, source: ironlab::Error },
 }
 
+/// Refuse a figure with validation errors, or whose layout leaves something off the page or
+/// out of its legend: entries that do not fit, two entries of one legend with the same name and
+/// different samples, or text beyond the page edge. The layout warnings are scene warnings, not
+/// validation errors, so a figure with one would otherwise be written silently.
 fn check(fig: &Figure, path: &Path) -> Result<(), FigureError> {
     let report = fig.validate();
-    if report.errors.is_empty() {
+    let mut errors: Vec<String> = report.errors.iter().map(|e| format!("{e:?}")).collect();
+    if errors.is_empty() {
+        errors.extend(
+            fig.layout_warnings()
+                .into_iter()
+                .filter(|w| {
+                    matches!(
+                        w.kind,
+                        ironlab::SceneWarningKind::LegendOverflow { .. }
+                            | ironlab::SceneWarningKind::LegendNameClash { .. }
+                            | ironlab::SceneWarningKind::TextOutsidePage { .. }
+                    )
+                })
+                .map(|w| w.message),
+        );
+    }
+    if errors.is_empty() {
         return Ok(());
     }
     Err(FigureError::Invalid {
         path: path.display().to_string(),
-        errors: report
-            .errors
-            .iter()
-            .map(|e| format!("{e:?}"))
-            .collect::<Vec<_>>()
-            .join("; "),
+        errors: errors.join("; "),
     })
 }
 
 /// Validate and save a figure; the encoding follows the extension (`.fig` or `.fig.json`).
-/// A figure with validation errors is never written.
+/// A figure that does not validate or does not lay out ([`check`]) is never written.
 pub fn save(fig: &Figure, path: &Path) -> Result<(), FigureError> {
     check(fig, path)?;
     fig.save(path).map_err(|source| FigureError::Ironlab {
@@ -133,38 +148,14 @@ pub fn save(fig: &Figure, path: &Path) -> Result<(), FigureError> {
 }
 
 /// Validate and save `<stem>.fig` and, for the run folders' LaTeX reports, `<stem>.pdf`.
-///
-/// Drawing the PDF is also the only check ironlab offers on layout: a legend whose entries do
-/// not fit, or two entries of one legend with the same name and different samples, are scene
-/// warnings, not validation errors. Either would be written silently (an entry clipped from
-/// its legend), so either refuses the figure and both files are removed.
 pub fn save_with_pdf(fig: &Figure, stem: &Path) -> Result<(), FigureError> {
     let fig_path = stem.with_extension("fig");
     check(fig, &fig_path)?;
     let pdf = stem.with_extension("pdf");
-    let report = fig.export_pdf(&pdf).map_err(|source| FigureError::Ironlab {
+    fig.export_pdf(&pdf).map_err(|source| FigureError::Ironlab {
         path: pdf.display().to_string(),
         source,
     })?;
-    let layout: Vec<String> = report
-        .scene
-        .iter()
-        .filter(|w| {
-            matches!(
-                w.kind,
-                ironlab::SceneWarningKind::LegendOverflow { .. } | ironlab::SceneWarningKind::LegendNameClash { .. }
-            )
-        })
-        .map(|w| w.message.clone())
-        .collect();
-    if !layout.is_empty() {
-        let _ = std::fs::remove_file(&pdf);
-        let _ = std::fs::remove_file(&fig_path);
-        return Err(FigureError::Invalid {
-            path: fig_path.display().to_string(),
-            errors: layout.join("; "),
-        });
-    }
     save(fig, &fig_path)
 }
 

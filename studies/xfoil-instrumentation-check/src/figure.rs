@@ -1,6 +1,7 @@
 //! The instrumentation-check figure, built from `summary.json` alone as an ironlab figure
-//! (`docs/development/conventions/figures.md`): a legend panel across the top with one entry per build (its
-//! converged count and where its plotted series ends), then a 2×2 grid against α — CL, CD and CM
+//! (`docs/development/conventions/figures.md`): a legend panel across the top, in a row fitted to it, with
+//! one entry per build (its converged count and where its plotted series ends), then a 2×2 grid
+//! against α (tick labels on the bottom row only) — CL, CD and CM
 //! (pristine red with crosses, instrumented blue with open circles) and the upper-surface
 //! trailing-edge boundary layer on a logarithmic axis (one colour per variable, pristine solid,
 //! instrumented dashed). α is linked across all four panels; no two panels plot the same
@@ -72,9 +73,9 @@ pub fn build(s: &Summary) -> Figure {
     let fig = Figure::new()
         .size_mm(figures::WIDTH_MM, HEIGHT_MM)
         .tiles(3, 2)
-        .row_weights([0.5, 2.0, 2.0])
-        .label("testing")
-        .label("xfoil-comparison")
+        .fit_row(0)
+        .tag("testing")
+        .tag("xfoil-comparison")
         .parameter("study", "xfoil-instrumentation-check")
         .parameter("figure", "instrumentation-check")
         .parameter("foil", format!("naca{}", s.foil))
@@ -85,7 +86,8 @@ pub fn build(s: &Summary) -> Figure {
         .parameter("dumps_identical", s.comparison.dumps_identical as i64);
     let mut fig = figures::flow_condition_parameters(fig, &conditions(s));
     let key = fig
-        .panel_legend_span(0, 0, 1, 2)
+        .panel_span(0, 0, 1, 2)
+        .legend()
         .boxed(false)
         .columns(LegendEntryColumns::Count(1))
         .id();
@@ -102,7 +104,7 @@ pub fn build(s: &Summary) -> Figure {
             let end = b.series_end_alpha_deg.map_or("—".to_string(), |a| format!("{a:.1}°"));
             let values: Vec<f64> = b.series.iter().map(get).collect();
             ax.plot(alphas(&b.series), values)
-                .display_name(format!(
+                .label(format!(
                     "{}: {} converged points, series to {end}",
                     b.label,
                     b.points.len()
@@ -112,10 +114,13 @@ pub fn build(s: &Summary) -> Figure {
                 .marker(marker)
                 .marker_size(MARKER_PT);
         }
-        ax.xlabel(r"$\alpha$ (°)")
-            .ylabel(*label)
-            .xlim(x_lo, x_hi)
-            .legend_in(key);
+        if i == 2 {
+            ax.xlabel(r"$\alpha$ (°)");
+        }
+        ax.ylabel(*label).xlim(x_lo, x_hi).legend_in(key);
+        if i < 2 {
+            ax.xtick_labels_hidden();
+        }
         if let Some(e) = s.extents.get(*metric) {
             let (lo, hi) = padded(e);
             ax.ylim(lo, hi);
@@ -149,7 +154,7 @@ pub fn build(s: &Summary) -> Figure {
                 .marker_size(MARKER_PT);
             // one entry per variable, drawn from the pristine (solid) line
             if b.build == Build::Pristine {
-                line.display_name(*label);
+                line.label(*label);
             }
         }
     }
@@ -206,19 +211,12 @@ mod tests {
     }
 
     #[test]
-    fn figure_validates_and_exports_without_legend_warnings() {
+    fn figure_validates_and_lays_out_without_warnings() {
         let fig = build(&summary());
         let report = fig.validate();
         assert!(report.errors.is_empty(), "{:?}", report.errors);
-        // temporary files go in the repository's .tmp/, never /tmp
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.tmp")
-            .join(format!("xfoil-instrumentation-check-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let export = fig.export_pdf(dir.join("check.pdf")).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
-        assert!(export.scene.is_empty(), "{:?}", export.scene);
+        assert!(fig.layout_warnings().is_empty(), "{:?}", fig.layout_warnings());
         assert_eq!(fig.parameters().get("re"), Some(&1e6.into()));
-        assert_eq!(fig.labels(), ["testing", "xfoil-comparison"]);
+        assert_eq!(fig.tags(), ["testing", "xfoil-comparison"]);
     }
 }
