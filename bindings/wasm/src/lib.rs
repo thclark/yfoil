@@ -17,8 +17,11 @@ use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 use yfoil::geometry::{panel_foil, Geometry, PanelConfig, Section};
-use yfoil::output::{AnalysisOutput, PolarOutput};
-use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
+use yfoil::output::{AnalysisOutput, OutputOptions, PointRecord, PolarOutput, Thresholds};
+use yfoil::solver::analysis::{
+    compute_polar, compute_polar_with, Classifier, FlowConditions, HaltRule, PolarConfig, Session,
+};
+use yfoil::solver::Twins;
 
 /// The yFoil version this module was built from (the version in every record's point id)
 #[wasm_bindgen]
@@ -93,6 +96,9 @@ pub struct AnalyseOptions {
     pub max_iterations: usize,
     pub include_lagged_closures: bool,
     pub allow_invalid: bool,
+    pub conditioning: Conditioning,
+    pub spread_warning_threshold: Option<f64>,
+    pub spread_error_threshold: Option<f64>,
     /// The foil name in the record (the CLI uses the geometry file's stem)
     pub name: String,
 }
@@ -109,6 +115,9 @@ impl Default for AnalyseOptions {
             max_iterations: 20,
             include_lagged_closures: false,
             allow_invalid: false,
+            conditioning: Conditioning::On,
+            spread_warning_threshold: None,
+            spread_error_threshold: None,
             name: "Unknown".to_owned(),
         }
     }
@@ -129,6 +138,10 @@ pub struct PolarOptions {
     pub distributions: bool,
     pub include_lagged_closures: bool,
     pub allow_invalid: bool,
+    pub conditioning: Conditioning,
+    pub spread_warning_threshold: Option<f64>,
+    pub spread_error_threshold: Option<f64>,
+    pub halt_on: String,
     /// The foil name in the record (the CLI uses the geometry file's stem)
     pub name: String,
 }
@@ -147,9 +160,39 @@ impl Default for PolarOptions {
             distributions: false,
             include_lagged_closures: false,
             allow_invalid: false,
+            conditioning: Conditioning::On,
+            spread_warning_threshold: None,
+            spread_error_threshold: None,
+            halt_on: "xfoil".to_owned(),
             name: "Unknown".to_owned(),
         }
     }
+}
+
+/// `--conditioning`: whether each point is solved with its twins
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Conditioning {
+    On,
+    Off,
+    Study,
+}
+
+/// The CLI's [`OutputOptions`] for these flags, and whether the twins run
+fn output_options(
+    allow_invalid: bool,
+    conditioning: Conditioning,
+    warning: Option<f64>,
+    error: Option<f64>,
+) -> Result<(OutputOptions, bool), String> {
+    let twins_run = conditioning != Conditioning::Off;
+    let thresholds = Thresholds::from_options(warning, error, twins_run)?;
+    let options = OutputOptions {
+        allow_invalid,
+        thresholds,
+        study: conditioning == Conditioning::Study,
+    };
+    Ok((options, twins_run))
 }
 
 fn parse_options<T: Default + for<'de> Deserialize<'de>>(options: &str) -> Result<T, String> {
@@ -186,7 +229,15 @@ pub fn naca_json(designation: &str, panelling: &str, a: Option<f64>) -> Result<S
 /// [`analyse`] without the JavaScript error type
 pub fn analyse_json(geometry: &str, options: &str) -> Result<String, String> {
     let options: AnalyseOptions = parse_options(options)?;
-    let foil = panel_foil(&parse_geometry(geometry)?);
+    let (output_options, twins_run) = output_options(
+        options.allow_invalid,
+        options.conditioning,
+        options.spread_warning_threshold,
+        options.spread_error_threshold,
+    )?;
+    let geometry = parse_geometry(geometry)?;
+    let foil = panel_foil(&geometry);
+    let twins = twins_run.then(|| Twins::new(&geometry));
     let conditions = FlowConditions {
         re: if options.inviscid { None } else { Some(options.reynolds) },
         mach: options.mach,
@@ -194,7 +245,9 @@ pub fn analyse_json(geometry: &str, options: &str) -> Result<String, String> {
         max_iterations: options.max_iterations,
         ..FlowConditions::default()
     };
-    let mut session = Session::new(&foil, conditions);
+    let mut session = Session::new(&foil, conditions)
+        .with_twins(twins)
+        .keeping_twin_sessions(output_options.study);
     let point = match options.cl {
         Some(clspec) => session.cl(clspec),
         None => session.alpha(options.alpha.to_radians()),
@@ -204,7 +257,7 @@ pub fn analyse_json(geometry: &str, options: &str) -> Result<String, String> {
         &point,
         &options.name,
         options.include_lagged_closures,
-        options.allow_invalid,
+        &output_options,
     )
     .to_json()
     .map_err(|e| e.to_string())
@@ -213,7 +266,21 @@ pub fn analyse_json(geometry: &str, options: &str) -> Result<String, String> {
 /// [`polar`] without the JavaScript error type
 pub fn polar_json(geometry: &str, options: &str) -> Result<String, String> {
     let options: PolarOptions = parse_options(options)?;
-    let foil = panel_foil(&parse_geometry(geometry)?);
+    let (output_options, twins_run) = output_options(
+        options.allow_invalid,
+        options.conditioning,
+        options.spread_warning_threshold,
+        options.spread_error_threshold,
+    )?;
+    let halt_on = HaltRule::parse_list(&options.halt_on, twins_run)?;
+    // the rules that count a class judge each point as its record will: the same reasons, the
+    // same thresholds
+    let thresholds = output_options.thresholds;
+    let classifier = Classifier(std::sync::Arc::new(move |p| {
+        PointRecord::from_point(p, true, false, thresholds).classes
+    }));
+    let geometry = parse_geometry(geometry)?;
+    let foil = panel_foil(&geometry);
     let config = PolarConfig {
         alpha_max: options.alpha_max,
         alpha_min: options.alpha_min,
@@ -225,7 +292,10 @@ pub fn polar_json(geometry: &str, options: &str) -> Result<String, String> {
             max_iterations: options.max_iterations,
             ..FlowConditions::default()
         },
-        ..Default::default()
+        twins: twins_run.then(|| Twins::new(&geometry)),
+        keep_twin_sessions: output_options.study && options.distributions,
+        halt_on,
+        classifier: Some(classifier),
     };
     let mut records: Vec<AnalysisOutput> = Vec::new();
     let result = if options.distributions {
@@ -235,7 +305,7 @@ pub fn polar_json(geometry: &str, options: &str) -> Result<String, String> {
                 p,
                 &options.name,
                 options.include_lagged_closures,
-                options.allow_invalid,
+                &output_options,
             ));
         })
     } else {
@@ -248,7 +318,7 @@ pub fn polar_json(geometry: &str, options: &str) -> Result<String, String> {
             .partial_cmp(&b.results.alpha_deg)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let mut output = PolarOutput::from_polar(&result, &options.name, options.allow_invalid);
+    let mut output = PolarOutput::from_polar(&result, &options.name, &output_options);
     output.label = options.label;
     output.distributions = records;
     output.to_json().map_err(|e| e.to_string())

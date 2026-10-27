@@ -141,10 +141,14 @@ module as `0x7ff8…`. The CLI itself, built for `wasm32-wasip1` and run by
 wasmtime, also writes the reference case's record byte for byte as the native CLI
 does.
 
-Speed: the CI reference case's analysis (NACA 0012, N = 60, α = 2°) takes 11 ms in
-wasm against 2.8 ms native; an N = 160 NACA 4412 at α = 4° 49 ms against 20 ms, and
-its default 41-point polar 1.1 s against 0.5 s. The module is 824 kB (360 kB
-gzipped, 267 kB brotli).
+Speed, without the twins (`"conditioning": "off"`): the CI reference case's
+analysis (NACA 0012, N = 60, α = 2°) takes 13 ms in wasm against 2.8 ms native; an
+N = 160 NACA 4412 at α = 4° 57 ms against 20 ms, and its default 41-point polar
+1.1 s against 0.5 s. With them, the default, each point is solved six times;
+natively the five twins run concurrently with the point, but WebAssembly has no
+threads, so in the module they run one after another: the reference case takes
+62 ms against 4.6 ms native, the NACA 4412 point 324 ms, and its polar 9.8 s
+against 1.1 s. The module is 899 kB (388 kB gzipped).
 
 ## Python
 

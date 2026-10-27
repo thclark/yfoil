@@ -42,6 +42,26 @@ pub struct Thresholds {
     pub error: f64,
 }
 
+impl Thresholds {
+    /// The thresholds given by `--spread-warning-threshold` and `--spread-error-threshold`, the
+    /// defaults for those not given; refused when the warning would come after the error, or when
+    /// there are no twins to judge (`twins_run` false).
+    pub fn from_options(warning: Option<f64>, error: Option<f64>, twins_run: bool) -> Result<Self, String> {
+        if !twins_run && (warning.is_some() || error.is_some()) {
+            return Err("--spread-warning-threshold and --spread-error-threshold judge the twins, which --conditioning off does not run".into());
+        }
+        let warning = warning.unwrap_or(CONDITIONING_WARNING_THRESHOLD);
+        let error = error.unwrap_or(CONDITIONING_ERROR_THRESHOLD);
+        if !(warning > 0.0 && warning <= error) {
+            return Err(format!(
+                "--spread-warning-threshold ({warning:e}) must be positive and no larger than \
+                 --spread-error-threshold ({error:e})"
+            ));
+        }
+        Ok(Self { warning, error })
+    }
+}
+
 impl Default for Thresholds {
     fn default() -> Self {
         Self {

@@ -10,12 +10,9 @@ use yfoil::geometry::{
     write_dat_file, write_geometry_to_json, CosineConfig, Geometry, KarmanTrefftz, PanelConfig, PanelMethod,
     PangenConfig, RepanelError, Section, Series, TeGap,
 };
-use yfoil::output::{
-    AnalysisOutput, OutputOptions, PointRecord, PolarOutput, Reason, Thresholds, ValidityClass, Warning,
-    CONDITIONING_ERROR_THRESHOLD, CONDITIONING_WARNING_THRESHOLD,
-};
+use yfoil::output::{AnalysisOutput, OutputOptions, PointRecord, PolarOutput, Reason, Thresholds, Warning};
 use yfoil::solver::analysis::{
-    compute_polar, compute_polar_with, Classifier, FlowConditions, HaltCriterion, HaltRule, PolarConfig, Session,
+    compute_polar, compute_polar_with, Classifier, FlowConditions, HaltRule, PolarConfig, Session,
 };
 use yfoil::solver::Twins;
 
@@ -682,68 +679,14 @@ fn usage_error(message: &str) -> ! {
     std::process::exit(2);
 }
 
-/// The thresholds given on the command line, refused when the warning would come after the error
-/// or when there are no twins to judge.
+/// The thresholds given on the command line ([`Thresholds::from_options`]).
 fn thresholds(conditioning: Conditioning, warning: Option<f64>, error: Option<f64>) -> Thresholds {
-    if conditioning == Conditioning::Off && (warning.is_some() || error.is_some()) {
-        usage_error("--spread-warning-threshold and --spread-error-threshold judge the twins, which --conditioning off does not run");
-    }
-    let warning = warning.unwrap_or(CONDITIONING_WARNING_THRESHOLD);
-    let error = error.unwrap_or(CONDITIONING_ERROR_THRESHOLD);
-    if !(warning > 0.0 && warning <= error) {
-        eprintln!(
-            "error: --spread-warning-threshold ({warning:e}) must be positive and no larger than \
-             --spread-error-threshold ({error:e})"
-        );
-        std::process::exit(2);
-    }
-    Thresholds { warning, error }
+    Thresholds::from_options(warning, error, conditioning != Conditioning::Off).unwrap_or_else(|e| usage_error(&e))
 }
 
-/// `--halt-on`: CRITERION[=N],... into rules, `none` into none.
+/// `--halt-on` ([`HaltRule::parse_list`]).
 fn parse_halt_on(spec: &str, conditioning: Conditioning) -> Vec<HaltRule> {
-    let spec = spec.trim();
-    if spec == "none" {
-        return Vec::new();
-    }
-    let mut rules: Vec<HaltRule> = Vec::new();
-    for item in spec.split(',').map(str::trim) {
-        let (name, n) = match item.split_once('=') {
-            Some((name, n)) => (name.trim(), Some(n.trim())),
-            None => (item, None),
-        };
-        let criterion = match name {
-            "xfoil" => HaltCriterion::Xfoil,
-            "none" => usage_error("--halt-on none cannot be combined with other criteria"),
-            "anomalous" => usage_error("--halt-on anomalous needs anomaly detection, which is not yet available (issue #12)"),
-            _ => match ValidityClass::ALL.into_iter().find(|c| c.name() == name) {
-                Some(c) => HaltCriterion::Class(c),
-                None => usage_error(&format!(
-                    "--halt-on: unknown criterion `{name}` (expected xfoil, out-of-domain, unconverged, ill-conditioned or none)"
-                )),
-            },
-        };
-        if criterion == HaltCriterion::Class(ValidityClass::IllConditioned) && conditioning == Conditioning::Off {
-            usage_error("--halt-on ill-conditioned needs the twins, which --conditioning off does not run");
-        }
-        let default_after = if criterion == HaltCriterion::Xfoil {
-            HaltRule::XFOIL.after
-        } else {
-            1
-        };
-        let after = match n {
-            None => default_after,
-            Some(n) => match n.parse::<usize>() {
-                Ok(n) if n >= 1 => n,
-                _ => usage_error(&format!("--halt-on {name}={n}: N must be a whole number of at least 1")),
-            },
-        };
-        if rules.iter().any(|r| r.criterion == criterion) {
-            usage_error(&format!("--halt-on: `{name}` is given twice"));
-        }
-        rules.push(HaltRule { criterion, after });
-    }
-    rules
+    HaltRule::parse_list(spec, conditioning != Conditioning::Off).unwrap_or_else(|e| usage_error(&e))
 }
 
 fn main() {
