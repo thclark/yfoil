@@ -26,12 +26,13 @@ result, and the record always carries a `status`:
   "initialised_from": "y8v0z1ll6a2m",
   "status": "Invalid",
   "reasons": ["KarmanTsienOutOfDomain", "MachClNewtonExhausted"],
-  "diagnostics": { "karman_tsien_margin_forces": -0.0296, "mach_limited": true },
-  "values": null
+  "classes": ["out-of-domain", "unconverged"],
+  "diagnostics": { "karman_tsien_margin_forces": -0.0296, "mach_limited": true, ... }
 }
 ```
 
-`values` — the lift, drag and moment — is present only when the status is `Valid`. Pass
+`values` — the lift, drag and moment — is present only when the status is `Valid`, so it is absent
+here. Pass
 `--allow-invalid` to `yfoil analyse` or `yfoil polar` and it is filled in for invalid points too;
 that flag changes **only** whether the numbers are present, never the status or the reasons, so a
 result carrying numbers can still be recognised as one that should not be trusted.
@@ -206,7 +207,9 @@ In a polar the `study` array lists every point's twins; for `yfoil analyse -o` a
 `yfoil polar --distributions` embeds, each record's `study` holds its twins' full records, geometry,
 surface and boundary layer included. **A study's records always carry their numbers**, whatever
 their status and whatever `--allow-invalid` says: withholding them would hide exactly what a study
-is for, and each still carries its own `status` and `reasons`. `results` is unchanged by a study.
+is for, and each still carries its own `status` and `reasons`. `results` is unchanged by a study. [Polars](../commands/polars.md#keeping-the-twins-studies) works through an
+example, and [halting a leg](../commands/polars.md#halting-a-leg) shows a polar stopped at its first
+ill-conditioned point.
 
 `--allow-invalid` is separate from all three: with it the twins still run and an ill-conditioned
 point is still `Invalid`, but its numbers are shown in `results`.

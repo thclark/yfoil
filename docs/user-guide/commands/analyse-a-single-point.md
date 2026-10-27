@@ -96,6 +96,7 @@ array holding each twin's full record — its own jittered geometry, surface and
 `results` with `role: twin`, `twin_of` (the point's id), its `seed` and an id of its own. A study's
 records always carry their numbers, whatever their status and whatever `--allow-invalid` says,
 because tracing what was computed is the point of a study; `results` still follows `--allow-invalid`.
+[Polars](polars.md#keeping-the-twins-studies) shows a twin record.
 
 ## The XFOIL equivalent
 
