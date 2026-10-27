@@ -10,9 +10,10 @@
 use crate::fixtures;
 use yfoil::geometry::jitter::{jitter, TWIN_SEEDS};
 use yfoil::geometry::{panel_foil, read_geometry_from_file, Geometry};
+
 use yfoil::output::{
-    PointRecord, PointStatus, Reason, Thresholds, Warning, CONDITIONING_ERROR_THRESHOLD,
-    CONDITIONING_WARNING_THRESHOLD,
+    classes, OutputOptions, PointRecord, PointStatus, PolarOutput, Reason, Role, Thresholds, ValidityClass, Warning,
+    CONDITIONING_ERROR_THRESHOLD, CONDITIONING_WARNING_THRESHOLD,
 };
 use yfoil::solver::analysis::{compute_polar, FlowConditions, PointResult, PolarConfig, Session};
 use yfoil::solver::Twins;
@@ -108,12 +109,20 @@ fn test_twins_carry_the_five_seeds_and_do_not_steer_the_base() {
     let with = Session::new(&foil, FlowConditions::default())
         .with_twins(Some(Twins::new(&g)))
         .alpha(2.0_f64.to_radians());
-    assert_eq!(fingerprint(&alone), fingerprint(&with), "the base solve is the same with or without twins");
+    assert_eq!(
+        fingerprint(&alone),
+        fingerprint(&with),
+        "the base solve is the same with or without twins"
+    );
     assert_eq!(with.id, alone.id, "twins are not part of what the point is");
     let seeds: Vec<u64> = with.twins.as_ref().unwrap().iter().map(|(s, _)| *s).collect();
     assert_eq!(seeds, TWIN_SEEDS);
     for (_, t) in with.twins.as_ref().unwrap() {
-        assert_ne!(fingerprint(t), fingerprint(&with), "a jittered twin is not the base bit for bit");
+        assert_ne!(
+            fingerprint(t),
+            fingerprint(&with),
+            "a jittered twin is not the base bit for bit"
+        );
     }
 }
 
@@ -140,7 +149,10 @@ fn point_with_twins(twins: Vec<PointResult>) -> PointResult {
 }
 
 fn twin_of(p: &PointResult, change: impl Fn(&mut PointResult)) -> PointResult {
-    let mut t = PointResult { twins: None, ..p.clone() };
+    let mut t = PointResult {
+        twins: None,
+        ..p.clone()
+    };
     change(&mut t);
     t
 }
@@ -185,7 +197,10 @@ fn test_twins_that_disagree_make_the_point_ill_conditioned_and_withhold_it() {
 
     // a spread below the error threshold is not ill-conditioned
     let at = point_with_twins(vec![twin_of(&base, |t| t.cl += CONDITIONING_ERROR_THRESHOLD * 0.8)]);
-    assert_eq!(PointRecord::from_point(&at, true, false, Thresholds::default()).status, PointStatus::Valid);
+    assert_eq!(
+        PointRecord::from_point(&at, true, false, Thresholds::default()).status,
+        PointStatus::Valid
+    );
 }
 
 #[test]
@@ -210,17 +225,25 @@ fn test_a_spread_between_the_thresholds_is_a_warning_and_the_thresholds_are_sett
 
     // a spread at or below the warning threshold says nothing
     let quiet = point_with_twins(vec![twin_of(&base, |t| t.cm += 0.5 * CONDITIONING_WARNING_THRESHOLD)]);
-    assert!(PointRecord::from_point(&quiet, true, false, Thresholds::default()).warnings.is_empty());
+    assert!(PointRecord::from_point(&quiet, true, false, Thresholds::default())
+        .warnings
+        .is_empty());
 
     // a lower error threshold withholds the same point, with no warning beside the reason
-    let strict = Thresholds { warning: 1e-9, error: 1e-8 };
+    let strict = Thresholds {
+        warning: 1e-9,
+        error: 1e-8,
+    };
     let r = PointRecord::from_point(&p, true, false, strict);
     assert_eq!(r.reasons, [Reason::IllConditioned]);
     assert!(r.warnings.is_empty());
     assert_eq!(r.diagnostics.unwrap().conditioning.unwrap().thresholds, strict);
 
     // a higher warning threshold silences it
-    let lax = Thresholds { warning: 1e-6, error: 1e-4 };
+    let lax = Thresholds {
+        warning: 1e-6,
+        error: 1e-4,
+    };
     let r = PointRecord::from_point(&p, true, false, lax);
     assert_eq!(r.status, PointStatus::Valid);
     assert!(r.warnings.is_empty());
@@ -252,12 +275,14 @@ fn test_unconverged_twins_warn_but_only_values_decide() {
     assert_eq!(r.status, PointStatus::Valid, "agreeing values: valid");
     assert_eq!(r.warnings, [Warning::TwinsNotValid { count: 2 }]);
     assert_eq!(r.warnings[0].to_string(), "solution converged but 2 twins did not");
-    assert!(serde_json::to_string(&r).unwrap().contains("\"warnings\":[{\"TwinsNotValid\":{\"count\":2}}]"));
+    assert!(serde_json::to_string(&r)
+        .unwrap()
+        .contains("\"warnings\":[{\"TwinsNotValid\":{\"count\":2}}]"));
 }
 
 #[test]
-fn test_no_twins_and_invalid_points_carry_no_conditioning() {
-    // --no-twins: nothing measured, the record is as it was before twins existed
+fn test_conditioning_off_and_invalid_points_carry_no_conditioning() {
+    // --conditioning off: nothing measured, the record is as it was before twins existed
     let alone = PointResult {
         twins: None,
         ..point_with_twins(vec![])
@@ -265,9 +290,11 @@ fn test_no_twins_and_invalid_points_carry_no_conditioning() {
     let r = PointRecord::from_point(&alone, true, false, Thresholds::default());
     assert_eq!(r.status, PointStatus::Valid);
     assert!(r.diagnostics.unwrap().conditioning.is_none());
-    assert!(!serde_json::to_string(&PointRecord::from_point(&alone, true, false, Thresholds::default()))
-        .unwrap()
-        .contains("conditioning"));
+    assert!(
+        !serde_json::to_string(&PointRecord::from_point(&alone, true, false, Thresholds::default()))
+            .unwrap()
+            .contains("conditioning")
+    );
 
     // a point already invalid on its own computation is not judged on its twins
     let base = point_with_twins(vec![]);
@@ -288,4 +315,135 @@ fn test_jitter_is_the_reference_twins_jitter() {
         drawn,
         [(-1, 0), (-1, 1), (-1, 0), (-1, 0), (1, 1), (0, -1), (1, 0), (-1, 0)]
     );
+}
+
+#[test]
+fn test_a_twin_has_an_id_of_its_own_and_the_base_predecessor() {
+    // a twin hashes its own panels and seed, so every study record can be referenced; it starts
+    // from the base's state, so it cites the base's predecessor
+    let g = geometry("naca0012_n60_polar30_re1e6");
+    let foil = panel_foil(&g);
+    let mut session = Session::new(&foil, FlowConditions::default()).with_twins(Some(Twins::new(&g)));
+    let first = session.alpha(0.0);
+    let second = session.alpha(1.0_f64.to_radians());
+    for p in [&first, &second] {
+        let twins = p.twins.as_ref().unwrap();
+        let mut ids: Vec<&str> = twins.iter().map(|(_, t)| t.id.as_str()).collect();
+        ids.push(&p.id);
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 6, "the point and its five twins have six distinct ids");
+        for (_, t) in twins {
+            assert_eq!(
+                t.initialised_from, p.initialised_from,
+                "a twin starts where its point does"
+            );
+        }
+    }
+    assert_eq!(second.initialised_from.as_deref(), Some(first.id.as_str()));
+}
+
+#[test]
+fn test_twin_records_always_carry_their_numbers() {
+    // a study is for tracing everything computed: an invalid twin keeps its numbers in `study`,
+    // whatever --allow-invalid says, while `results` still withholds the invalid point
+    let base = point_with_twins(vec![]);
+    let unconverged = twin_of(&base, |t| {
+        t.converged = false;
+        t.id = "twin2".into();
+    });
+    let p = point_with_twins(vec![twin_of(&base, |t| t.id = "twin1".into()), unconverged]);
+    let records = PointRecord::twin_records(&p, true);
+    assert_eq!(records.len(), 2);
+    for (r, seed) in records.iter().zip([1, 2]) {
+        assert_eq!(r.role, Some(Role::Twin));
+        assert_eq!(r.twin_of.as_deref(), Some("base"));
+        assert_eq!(r.seed, Some(seed));
+        assert!(r.values.is_some(), "a study record carries its numbers");
+    }
+    assert_eq!(records[1].status, PointStatus::Invalid);
+    assert_eq!(records[1].classes, [ValidityClass::Unconverged]);
+
+    let mut invalid = p.clone();
+    invalid.converged = false;
+    let r = PointRecord::from_point(&invalid, true, false, Thresholds::default());
+    assert!(r.values.is_none(), "results still obey --allow-invalid");
+    assert!(r.role.is_none() && r.twin_of.is_none() && r.seed.is_none());
+}
+
+#[test]
+fn test_every_reason_but_a_halt_has_one_class() {
+    let all = [
+        (Reason::KarmanTsienOutOfDomain, Some(ValidityClass::OutOfDomain)),
+        (Reason::MachClNewtonExhausted, Some(ValidityClass::Unconverged)),
+        (Reason::ClNewtonExhausted, Some(ValidityClass::Unconverged)),
+        (Reason::ViscousNotConverged, Some(ValidityClass::Unconverged)),
+        (Reason::NonFiniteStationFailure, Some(ValidityClass::Unconverged)),
+        (Reason::IllConditioned, Some(ValidityClass::IllConditioned)),
+        (Reason::SequenceHalted, None),
+    ];
+    for (reason, class) in all {
+        assert_eq!(reason.class(), class, "{reason}");
+    }
+    // a record lists each class once, in the order A, B, C
+    assert_eq!(
+        classes(&[
+            Reason::IllConditioned,
+            Reason::ViscousNotConverged,
+            Reason::NonFiniteStationFailure,
+            Reason::KarmanTsienOutOfDomain
+        ]),
+        [
+            ValidityClass::OutOfDomain,
+            ValidityClass::Unconverged,
+            ValidityClass::IllConditioned
+        ]
+    );
+    assert_eq!(
+        serde_json::to_string(&ValidityClass::IllConditioned).unwrap(),
+        "\"ill-conditioned\"",
+        "the name a record carries is the name --halt-on takes"
+    );
+}
+
+#[test]
+fn test_polar_study_lists_every_twin_and_leaves_results_alone() {
+    let g = geometry("naca0012_n60_polar30_re1e6");
+    let foil = panel_foil(&g);
+    let config = PolarConfig {
+        alpha_max: 1.0,
+        alpha_min: 0.0,
+        alpha_step: 1.0,
+        twins: Some(Twins::new(&g)),
+        ..PolarConfig::default()
+    };
+    let result = compute_polar(&foil, &config);
+    let plain = PolarOutput::from_polar(&result, "naca0012", &OutputOptions::default());
+    let study = PolarOutput::from_polar(
+        &result,
+        "naca0012",
+        &OutputOptions {
+            study: true,
+            ..OutputOptions::default()
+        },
+    );
+    assert!(plain.study.is_empty());
+    assert_eq!(
+        study.study.len(),
+        2 * TWIN_SEEDS.len(),
+        "five twins at each of 0° and 1°"
+    );
+    assert_eq!(
+        serde_json::to_value(&plain.results).unwrap(),
+        serde_json::to_value(&study.results).unwrap(),
+        "a study adds records and changes none"
+    );
+    for r in &study.study {
+        let of = study
+            .results
+            .iter()
+            .find(|p| p.id == r.twin_of)
+            .expect("each twin cites a point");
+        assert_eq!(r.alpha_deg, of.alpha_deg);
+    }
 }

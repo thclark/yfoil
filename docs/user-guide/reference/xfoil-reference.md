@@ -1249,12 +1249,15 @@ base names are listed with the sensitivities XFOIL carries.
 | ITRAN | `i_transition_station` | |
 | RMSBL | `residual` | last iteration |
 | — | `iterations`, `iteration_records` | |
-| — | `twins` | the point's five twins, `(seed, PointResult)` in seed order (`src/solver/twins.rs`); `None` with `--no-twins`. No XFOIL equivalent: the output layer measures `conditioning` from them |
+| — | `twins` | the point's five twins, `(seed, PointResult)` in seed order (`src/solver/twins.rs`); `None` with `--conditioning off`. No XFOIL equivalent: the output layer measures `conditioning` from them |
 | — | `Session::with_twins`, `Twins` | the jittered panels every point of a session is also solved on (`src/geometry/jitter.rs`) |
 | ASEQ | keep | degrees |
-| NSEQEX | `max_consecutive_failures` | |
+| NSEQEX | `HaltRule::XFOIL.after` | 4; XFOIL's rule is the `xfoil` criterion of `PolarConfig::halt_on` (`--halt-on`), the default |
+| ISEQEX | the count of the `xfoil` rule in `compute_polar_with` | one count per `HaltRule`, reset by a point that does not meet it |
+| — | `HaltRule`, `HaltCriterion`, `Classifier`, `Halt` | `--halt-on`: a criterion (XFOIL's rule or a `ValidityClass`), its count, the caller's classification of a point, and where a leg halted. No XFOIL equivalent beyond NSEQEX |
+| — | `PolarConfig::keep_twin_sessions`, `Session::keeping_twin_sessions`, `Session::twin_sessions` | `--conditioning study`: each twin's session kept after its point so its full record can be written |
 | — | `PolarConfig::twins` | the twins every recorded polar point is solved with |
-| — | {`results`, `failed_alphas`, `conditions`, `completed`} | |
+| — | {`results`, `not_attempted`, `conditions`, `completed`, `halts`} | |
 
 ### Table 10: functions (each carries `#[doc(alias = "XFOIL NAME")]`)
 

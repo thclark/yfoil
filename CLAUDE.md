@@ -251,9 +251,12 @@ yfoil analyse  - single operating point (--alpha or --cl, --inviscid); -o writes
 yfoil polar    - alpha sweep (state machine: 0°→max, reinitialise, 0°→min, stitched ascending);
                  --label names the curve, -o writes the polar JSON, --distributions embeds a full
                  analysis record at every sweep point (--max-iterations, --ncrit as for analyse)
-                 both: each point checked by its five 1-ULP twins (--no-twins: none run),
+                 both: --conditioning on|off|study (each point checked by its five 1-ULP twins;
+                 off: none run; study: every twin's record under `study`, numbers always shown),
                  --spread-warning-threshold / --spread-error-threshold (1e-8 / 1e-4);
-                 --allow-invalid shows the numbers of invalid points, status unchanged
+                 --allow-invalid shows the numbers of invalid points of any class, status unchanged
+                 polar: --halt-on CRITERION[=N],... (xfoil = NSEQEX, the default; out-of-domain,
+                 unconverged, ill-conditioned; none)
 yfoil plot     - foil <file>... | analysis <file> | polar <file>...   (feature-gated)
                  foil: geometry files (panels only), analysis JSONs (design points, same panels) or
                  one polar JSON (--alpha selects points); --panels notches|dots|none, --wake,
@@ -320,8 +323,14 @@ largest spread is beyond only the warning threshold carries an `IllConditioned` 
 threshold (1e-4) sits in the gap between the noise floor and a twin that reached another solution, the
 warning threshold (1e-8) in the upper reaches of the noise floor; both are derived by the conditioning
 study (`studies/conditioning`, `docs/validation/conditioning/`) and settable per run
-(`--spread-warning-threshold`, `--spread-error-threshold`). `--no-twins` runs no twins at all and
-reports as XFOIL would; `--allow-invalid` is independent of it. Nothing is ever inferred from the size or
+(`--spread-warning-threshold`, `--spread-error-threshold`). `--conditioning off` runs no twins at all
+and reports as XFOIL would; `--conditioning study` also writes every twin's record (`role: twin`,
+`twin_of`, `seed`, its own content-addressed id) in a `study` array, and a study's records always carry
+their numbers; `--allow-invalid` is independent of all three and governs `results` only. Every record
+lists the `classes` of its reasons (`out-of-domain`, `unconverged`, `ill-conditioned`), and
+`yfoil polar --halt-on` halts a leg after N consecutive points of a class; its default `xfoil` is
+XFOIL's NSEQEX rule exactly (four consecutive unconverged viscous points), which is narrower than
+Class B. The design, with Class D (`anomalous`, issue #12), is the design comment on issue #11. Nothing is ever inferred from the size or
 smoothness of the point's own numbers: `docs/user-guide/reference/known-xfoil-issues.md` §7.7 is the
 worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
 records the A/B evidence, write-only, enforced by `ci/validity-write-only.sh`.

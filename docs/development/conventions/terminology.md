@@ -47,7 +47,7 @@ to cover those branches.
 Conditioning is Class C in [solution validity](../../user-guide/reference/solution-validity.md),
 which a single run cannot detect: yFoil measures it with its twins and reports an ill-conditioned
 point — one whose twins spread a reported quantity beyond the error threshold — as `Invalid`
-(`IllConditioned`) unless `--no-twins` is given. A point whose twins spread it beyond only the
+(`IllConditioned`) unless `--conditioning off` is given. A point whose twins spread it beyond only the
 warning threshold *may be* ill-conditioned: it stays `Valid`, with an `IllConditioned` warning.
 
 ## Divergent comparison

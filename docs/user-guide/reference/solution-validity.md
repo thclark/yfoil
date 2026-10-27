@@ -53,7 +53,7 @@ valid points alone, so an artefact cannot become the reported CL~max~.
 |---|---|
 | `Valid` | Solved, every formula was evaluated inside its domain, every iteration met its tolerance, and the point's twins agree with it. `values` present. |
 | `Invalid` | Solved, but at least one `reason` applies, so the numbers are not to be believed. `values` withheld unless `--allow-invalid`. |
-| `NotAttempted` | Never solved. The sweep halted before reaching this alpha (XFOIL's NSEQEX rule ends a sequence after four consecutive non-converged points). It is reported because you asked for it. |
+| `NotAttempted` | Never solved. The sweep halted before reaching this alpha (by default XFOIL's NSEQEX rule, which ends a sequence after four consecutive non-converged points; see [halting](#halting-a-polar)). It is reported because you asked for it. |
 
 ## How failures are classified
 
@@ -94,7 +94,7 @@ Where each is embodied:
 |---|---|---|---|
 | A | `karman_tsien_margin_forces`, `karman_tsien_margin_pressure` | `KarmanTsienOutOfDomain` | yes |
 | B | `mach_cl_newton_exhausted`, `converged`, `inviscid_cl_iterations`, `nonfinite_station_failures` | `MachClNewtonExhausted`, `ClNewtonExhausted`, `ViscousNotConverged`, `NonFiniteStationFailure` | yes |
-| C | `conditioning` (the twins' spreads) | `IllConditioned` (beyond the error threshold; beyond only the warning threshold, an `IllConditioned` warning) | yes, unless `--no-twins` |
+| C | `conditioning` (the twins' spreads) | `IllConditioned` (beyond the error threshold; beyond only the warning threshold, an `IllConditioned` warning) | yes, unless `--conditioning off` |
 
 On the [worked case](#worked-case) A and B between them separate the 61 points exactly, with no
 false positives and no false negatives, and **both are load-bearing**: two points have a positive
@@ -119,7 +119,7 @@ numbers; see [the diagnostics](#diagnostics).
 | `ClNewtonExhausted` | B | `SPECCL`'s alpha Newton used all 20 iterations without reaching `\|DALFA\| ≤ 1e-6`. | The alpha reported does not deliver the CL you asked for. Typically a CL beyond what the section can reach. |
 | `ViscousNotConverged` | B | `VISCAL` finished without `LVCONV`: the viscous–inviscid iteration did not converge in `--max-iterations`. | The BL and the outer flow are not consistent with each other. Common past stall; raising `--max-iterations` sometimes helps and sometimes does not. |
 | `NonFiniteStationFailure` | B | A station Newton failed with a non-finite residual, and the march was carried over it by XFOIL's iterate fallback: beyond the third station the station is set from the one upstream, at the first three the non-finite iterate is kept. | The run passed through a NaN and kept going. See [known issues §4](known-xfoil-issues.md), the TRCHEK2 row. |
-| `IllConditioned` | C | A 1-ULP jitter of the panel coordinates moves a reported quantity (CL, CD, CM, …) further than the [error threshold](#twins): at least one twin reached another solution. | The point is balanced on a knife edge: another solution is one rounding error away, so the one reported is an accident of the last bit of the input. Usual past stall and in deep separation. `--no-twins` reports it as XFOIL would. |
+| `IllConditioned` | C | A 1-ULP jitter of the panel coordinates moves a reported quantity (CL, CD, CM, …) further than the [error threshold](#twins): at least one twin reached another solution. | The point is balanced on a knife edge: another solution is one rounding error away, so the one reported is an accident of the last bit of the input. Usual past stall and in deep separation. `--conditioning off` reports it as XFOIL would. |
 | `SequenceHalted` | — | Only on `NotAttempted` points: the sweep stopped before this alpha. | Nothing was computed. |
 
 ## Diagnostics
@@ -138,7 +138,7 @@ would make the verdict unfalsifiable.
 | `converged`, `iterations`, `residual` | `LVCONV`, the VISCAL iteration count, and the final RMSBL. |
 | `inviscid_cl_iterations` | `SPECCL`'s exit iteration (21 when exhausted). |
 | `nonfinite_station_failures` | Station Newton failures with a non-finite residual. |
-| `conditioning` | How far the [twins](#twins) moved what the point reports: `seeds`, `thresholds` (`warning` and `error`), `spread` (one entry per reported quantity), `worst` (the quantity with the largest spread) and `twins_not_valid`. Absent with `--no-twins`, or when the point is invalid for an A or B reason. |
+| `conditioning` | How far the [twins](#twins) moved what the point reports: `seeds`, `thresholds` (`warning` and `error`), `spread` (one entry per reported quantity), `worst` (the quantity with the largest spread) and `twins_not_valid`. Absent with `--conditioning off`, or when the point is invalid for an A or B reason. |
 
 The margins are reported as numbers rather than collapsed to a flag on purpose. On the worked case
 below, α = −1° reports CL = −52 and α = −5° reports CL = +0.128 — and the *first* is the smaller
@@ -159,7 +159,7 @@ thoroughly out of domain. Read these fields as evidence, not as the verdict.
 A **twin** of a point is the same solve — the same command, from the same initial state — on panels
 whose every coordinate has been jittered by −1, 0 or +1 ULP, x and y independently, from a fixed
 seed. yFoil solves each point with five twins (seeds 1 to 5, the same jitter the validation studies
-apply to XFOIL) unless `--no-twins` is given, and compares.
+apply to XFOIL) unless `--conditioning off` is given, and compares.
 
 - **The spread** of a reported quantity is the furthest any twin moved it, `|a − b| / max(|a|, |b|, 1)`:
   absolute for the coefficients, relative for anything larger. A twin that went non-finite where the
@@ -186,14 +186,56 @@ apply to XFOIL) unless `--no-twins` is given, and compares.
   of the whole sweep. A point's verdict therefore depends only on what its `id` hashes — its inputs
   and its predecessor — so it is the same however the point was reached, and results from different
   runs can be merged.
-- **Twins observe; they never steer.** The sweep's halting rule counts non-converged points only,
-  and the numbers reported are the base solve's, identical with or without twins.
+- **Twins observe; they never steer.** The numbers reported are the base solve's, identical with
+  or without twins. By default the sweep's halting rule counts non-converged points only; a polar
+  stops on ill-conditioned points only when asked to ([halting](#halting-a-polar)).
 
 Twins cost five more solves per point, run in parallel: about twice the wall-clock time on a
-machine with six or more cores. `--no-twins` turns the check off entirely — no twins are run, no
-`conditioning` is recorded, and every converged, in-domain point is reported as XFOIL would report
-it. `--allow-invalid` is separate: with it the twins still run and an ill-conditioned point is still
-`Invalid`, but its numbers are shown.
+machine with six or more cores. `--conditioning` sets what they do:
+
+| `--conditioning` | Twins run | Ill-conditioned points | Twins' records |
+|---|---|---|---|
+| `on` (default) | yes | `Invalid (IllConditioned)` | — |
+| `off` | no; no `conditioning` is recorded, and every converged, in-domain point is reported as XFOIL would report it | — | — |
+| `study` | yes | `Invalid (IllConditioned)` | in a `study` array |
+
+A **study** keeps everything the check computed. Each twin is written as a record of its own beside
+the point's: `role: twin`, `twin_of` (the point's `id`), its `seed`, and an `id` of its own (a twin
+hashes its jittered panels and seed, and cites the point's predecessor, the state it started from).
+In a polar the `study` array lists every point's twins; for `yfoil analyse -o` and the records
+`yfoil polar --distributions` embeds, each record's `study` holds its twins' full records, geometry,
+surface and boundary layer included. **A study's records always carry their numbers**, whatever
+their status and whatever `--allow-invalid` says: withholding them would hide exactly what a study
+is for, and each still carries its own `status` and `reasons`. `results` is unchanged by a study.
+
+`--allow-invalid` is separate from all three: with it the twins still run and an ill-conditioned
+point is still `Invalid`, but its numbers are shown in `results`.
+
+## Classes on records
+
+Every record lists the classes of its reasons in `classes`, once each in the order A, B, C, by the
+names the command line uses:
+
+| Class | Name | Reasons |
+|---|---|---|
+| A | `out-of-domain` | `KarmanTsienOutOfDomain` |
+| B | `unconverged` | `MachClNewtonExhausted`, `ClNewtonExhausted`, `ViscousNotConverged`, `NonFiniteStationFailure` |
+| C | `ill-conditioned` | `IllConditioned` |
+
+## Halting a polar
+
+`yfoil polar --halt-on CRITERION[=N],...` halts a leg of the sweep after N consecutive points
+that meet a criterion: a class name (N defaults to 1), `xfoil` (N defaults to 4), or `none`. Each
+criterion keeps its own count, reset by a point that does not meet it. The default, `xfoil`, is
+XFOIL's own NSEQEX rule — four consecutive viscous points whose iteration did not converge — and is
+narrower than `unconverged`, which also counts the inviscid Newtons and a converged point that
+passed through a NaN; only `xfoil` reproduces XFOIL's sweep exactly. Halting decides which alphas
+are attempted, never the numbers of a point that is: the alphas past a halt are `NotAttempted`, and
+the polar's `halts` records each halted leg's criterion and its last alpha.
+
+A fourth class, D (`anomalous`: a point inconsistent with its neighbours, known only from
+neighbouring operating points), is designed in
+[issue #12](https://github.com/thclark/yfoil/issues/12) and not yet available.
 
 ## What `Valid` does not mean
 
@@ -201,7 +243,7 @@ it. `--allow-invalid` is separate: with it the twins still run and an ill-condit
 (Class B), and none of five twins moved the answer beyond the error threshold (Class C). A valid
 point with an `IllConditioned` warning passed that test with less room than most. Five twins are a
 sample, not a proof: a point can be closer to a knife edge than they happened to reach, and a point
-solved with `--no-twins` has not been checked at all. Treat validity as strong evidence, not a
+solved with `--conditioning off` has not been checked at all. Treat validity as strong evidence, not a
 guarantee.
 
 ## Worked case

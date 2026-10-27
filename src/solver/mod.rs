@@ -28,6 +28,7 @@ pub mod viscal;
 pub mod xywake;
 
 pub use analysis::{
-    analyse, compute_polar, compute_polar_with, FlowConditions, PointResult, PolarConfig, PolarResult, Session,
+    analyse, compute_polar, compute_polar_with, Classifier, FlowConditions, Halt, HaltCriterion, HaltRule, PointResult,
+    PolarConfig, PolarResult, Session,
 };
 pub use twins::Twins;

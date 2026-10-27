@@ -97,3 +97,51 @@ impl ValidityRecord {
         self.cl_floored || self.mach_limited || self.re_limited
     }
 }
+
+/// The class of a reason a point is invalid (`docs/user-guide/reference/solution-validity.md`,
+/// "How failures are classified"): what it would take to know it. Each output-layer `Reason`
+/// belongs to one class; the class names are what `--halt-on` takes and what a record lists in
+/// `classes`. Class D (`anomalous`, a point inconsistent with its neighbours) is issue #12.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ValidityClass {
+    /// Class A: a formula was evaluated outside its analytic domain (one run)
+    OutOfDomain,
+    /// Class B: an iteration hit its cap without meeting its tolerance (one run)
+    Unconverged,
+    /// Class C: a 1-ULP jitter of the input moves the answer (the point's twins)
+    IllConditioned,
+}
+
+impl ValidityClass {
+    /// Every class, in the order A, B, C
+    pub const ALL: [ValidityClass; 3] = [
+        ValidityClass::OutOfDomain,
+        ValidityClass::Unconverged,
+        ValidityClass::IllConditioned,
+    ];
+
+    /// The name a user types and a record carries (`out-of-domain`, …)
+    pub fn name(self) -> &'static str {
+        match self {
+            ValidityClass::OutOfDomain => "out-of-domain",
+            ValidityClass::Unconverged => "unconverged",
+            ValidityClass::IllConditioned => "ill-conditioned",
+        }
+    }
+
+    /// The class's letter in the documentation's classification
+    pub fn letter(self) -> char {
+        match self {
+            ValidityClass::OutOfDomain => 'A',
+            ValidityClass::Unconverged => 'B',
+            ValidityClass::IllConditioned => 'C',
+        }
+    }
+}
+
+impl std::fmt::Display for ValidityClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}

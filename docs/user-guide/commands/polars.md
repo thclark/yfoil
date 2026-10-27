@@ -48,8 +48,9 @@ no configurable start angle — both legs start from 0°, as XFOIL does.
 | `--label` | file stem | Legend entry for `yfoil plot polar` |
 | `--distributions` | off | Embed the full analysis record at every point |
 | `--include-lagged-closures` | off | Also embed the lagged closure arrays |
-| `--allow-invalid` | off | Report the numbers of invalid points too; their status is unchanged |
-| `--no-twins` | off | Do not run the twins: skip the conditioning check and report every converged, in-domain point as XFOIL would |
+| `--allow-invalid` | off | Show the numbers of invalid points of any class (out-of-domain, unconverged, ill-conditioned); their status is unchanged |
+| `--conditioning` | `on` | `on`: check each point with its five 1-ULP twins. `off`: run no twins, as XFOIL. `study`: `on`, and also write every twin's record under `study` |
+| `--halt-on` | `xfoil` | Halt a leg after N consecutive points meeting a criterion: `CRITERION[=N],...` ([below](#halting-a-leg)) |
 | `--spread-warning-threshold` | 1e-8 | Spread over the twins beyond which a valid point carries a warning that it may be ill-conditioned |
 | `--spread-error-threshold` | 1e-4 | Spread over the twins beyond which a point is ill-conditioned: `Invalid`, numbers withheld |
 | `--json` | off | Emit JSON on stdout |
@@ -59,12 +60,37 @@ no configurable start angle — both legs start from 0°, as XFOIL does.
 `yfoil plot foil` to draw boundary-layer distributions at selected angles.
 
 Each point is checked with its [twins](../reference/solution-validity.md#twins) unless
-`--no-twins` is given. A twin of a polar point starts from the same boundary layer the point starts
+`--conditioning off` is given. A twin of a polar point starts from the same boundary layer the point starts
 from, its predecessor's, so the check is of that one solve and does not depend on how the sweep got
 there. Points beyond the warning threshold only are listed `Valid` with a warning that they may
 be ill-conditioned. Ill-conditioned points are listed as `Invalid (IllConditioned)` with their numbers withheld,
 counted in the summary, and left out of \(C_{L,max}\), \((L/D)_{max}\) and \(C_{D0}\); the
-sweep itself runs exactly as XFOIL's, since the twins never steer it.
+sweep itself runs exactly as XFOIL's, since the twins never steer it. `--conditioning study` adds a
+`study` array with every twin's record (`role: twin`, `twin_of`, `seed`), each carrying its numbers
+whatever its status; with `--distributions`, each embedded record also carries its twins' full
+records.
+
+## Halting a leg
+
+XFOIL halts a sequence after four consecutive points whose viscous iteration did not converge
+(`NSEQEX`), and yFoil does the same by default. `--halt-on` takes a list of criteria, each with
+the number of consecutive points that halts a leg:
+
+| Criterion | Counts a point that is | Default N |
+| --- | --- | --- |
+| `xfoil` | viscous and unconverged (XFOIL's own rule) | 4 |
+| `out-of-domain` | invalid for a Class A reason | 1 |
+| `unconverged` | invalid for a Class B reason | 1 |
+| `ill-conditioned` | invalid for a Class C reason (needs the twins) | 1 |
+| `none` | — never halt | — |
+
+Each criterion keeps its own count, reset by a point that does not meet it, so
+`--halt-on xfoil,ill-conditioned` keeps XFOIL's rule and also stops a leg at its first
+ill-conditioned point — typically past stall, before the solutions diverge. `xfoil` is narrower
+than `unconverged`: XFOIL does not count the inviscid Newtons, nor a converged point that passed
+through a NaN, so only `xfoil` reproduces XFOIL's sweep exactly. The alphas a halted leg never
+reaches are reported `NotAttempted`, and the polar's `halts` names the criterion and where it
+stopped.
 
 ## The XFOIL equivalent
 

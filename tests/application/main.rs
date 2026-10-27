@@ -12,6 +12,7 @@ mod utilities;
 
 mod cli_geometry;
 mod cli_plot;
+mod cli_validity;
 mod fixed_cl;
 mod geometry;
 mod geometry_errors;
@@ -21,5 +22,5 @@ mod output;
 mod panelling;
 mod polar_driver;
 mod repanel_cosine;
-mod validity_record;
 mod twins;
+mod validity_record;

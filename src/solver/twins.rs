@@ -1,4 +1,4 @@
-//! yFoil's own twins: the conditioning check every analysed point carries unless `--no-twins`.
+//! yFoil's own twins: the conditioning check every analysed point carries unless `--conditioning off`.
 //!
 //! A **twin** of a point is the same solve — the same OPER command from the same initial state —
 //! on panels jittered by −1, 0 or +1 ULP per coordinate (`crate::geometry::jitter`). Five twins
