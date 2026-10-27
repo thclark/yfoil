@@ -8,6 +8,7 @@
 //! - `figures` - Shared conventions of yFoil's ironlab figures (feature-gated)
 //! - `foil_plot` / `plot` - The `yfoil plot` figures (feature-gated)
 
+pub mod conditioning;
 mod foil;
 mod results;
 
@@ -18,13 +19,17 @@ mod foil_plot;
 #[cfg(feature = "plotting")]
 mod plot;
 
+pub use conditioning::{
+    Conditioning, Spread, Thresholds, CONDITIONING_ERROR_THRESHOLD, CONDITIONING_WARNING_THRESHOLD,
+};
 pub use foil::{
     BlQuantity, BoundaryLayerOutput, Closures, FoilNodes, LaggedClosures, Primaries, SeparationKind, SeparationMarker,
     SideStations, StagnationMarker, TransitionMarker, WakeNodes,
 };
 pub use results::{
-    AnalysisOutput, Diagnostics, GeometryDistributions, GeometryInfo, GeometrySummary, PointRecord, PointStatus,
-    PointValues, PolarOutput, PolarSummary, Reason, SurfaceDistributions,
+    classes, AnalysisOutput, Diagnostics, GeometryDistributions, GeometryInfo, GeometrySummary, HaltRecord,
+    OutputOptions, PointRecord, PointStatus, PointValues, PolarOutput, PolarSummary, Reason, Role,
+    SurfaceDistributions, ValidityClass, Warning,
 };
 
 #[cfg(feature = "plotting")]

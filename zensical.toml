@@ -191,6 +191,9 @@ nav = [
       "validation/tolerances/index.md",
       "validation/tolerances/measurement-history.md",
     ] },
+    { "Conditioning" = [
+      "validation/conditioning/index.md",
+    ] },
   ] },
 ]
 

@@ -191,25 +191,12 @@ pub fn prologue(c: &Case, call: usize, alpha: Option<f64>) -> Session {
     prologue_jogged(c, call, alpha, None)
 }
 
-/// The one-ULP jog of item `i` under `seed`: −1, 0 or +1 ULP for each of a pair of values, drawn
-/// from splitmix64 of (seed, i) — the jog `cargo xtask twins` applies to panel coordinates.
-pub fn jog(seed: u64, i: usize) -> (i8, i8) {
-    let mut z = (seed << 32) ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^= z >> 31;
-    let three = |v: u64| -> i8 { (v % 3) as i8 - 1 };
-    (three(z & 0xFFFF_FFFF), three(z >> 32))
-}
+/// The one-ULP jog of item `i` under `seed`: −1, 0 or +1 ULP for each of a pair of values — the
+/// twins' jitter (`yfoil::geometry::jitter`), which `cargo xtask twins` applies to panel coordinates.
+pub use yfoil::geometry::jitter::jitter as jog;
 
 /// `v` moved by `by` ULP (−1, 0 or +1).
-pub fn ulp(v: f64, by: i8) -> f64 {
-    match by {
-        1 => v.next_up(),
-        -1 => v.next_down(),
-        _ => v,
-    }
-}
+pub use yfoil::geometry::jitter::step_ulp as ulp;
 
 /// A dump with every BL entry but XSSI (which the pointers rebuild) moved by −1, 0 or +1 ULP.
 pub fn jog_dump(d: &BlDump, seed: u64) -> BlDump {

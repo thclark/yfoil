@@ -11,6 +11,7 @@ use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::point_id::IdHasher;
 use crate::solver::specal::{alpha_command, cl_command, sequence_command};
+use crate::solver::twins::Twins;
 use crate::solver::viscal::{solve_viscous, IterationRecord};
 
 /// The flow conditions shared by every point of a polar: the OPER settings that must be pinned
@@ -85,10 +86,10 @@ pub struct PointResult {
     /// Newton's exhaustion and MRCL's substitutions (`crate::solver::validity`). Recorded by the
     /// solver, never read by it; the output layer classifies the point from this.
     pub validity: crate::solver::validity::ValidityRecord,
-    /// This point's stable reference: a random 8-character id, unique to this solve. Random
-    /// rather than positional so that points from different runs can be held together — a polar
-    /// restarted from a point of an earlier one, or two sweeps merged — without the references
-    /// colliding, which a per-run counter would guarantee.
+    /// This point's stable reference: a 12-character content-addressed id, the hash of everything
+    /// the solve depended on (`crate::solver::point_id`). Content-addressed rather than positional
+    /// so that points from different runs can be held together — a polar restarted from a point
+    /// of an earlier one, or two sweeps merged — without the references colliding.
     pub id: String,
     /// The `id` of the point whose converged boundary layer seeded this solve, or `None` when the
     /// BL was marched fresh (MRCHUE from the inviscid solution). A polar is a state machine, so
@@ -100,6 +101,10 @@ pub struct PointResult {
     pub residual: f64,
     /// Per-iteration record
     pub iteration_records: Vec<IterationRecord>,
+    /// The point's twins (`crate::solver::twins`), in seed order with their seeds, or `None` when
+    /// none were run (`--conditioning off`). A twin's own `twins` is `None` and its iteration
+    /// records are dropped. The output layer measures the conditioning from these.
+    pub twins: Option<Vec<(u64, PointResult)>>,
 }
 
 /// A persistent analysis session: the geometry, inviscid system and BL state that XFOIL keeps
@@ -116,6 +121,21 @@ pub struct Session {
     /// The id of the last point solved, which is the predecessor of the next one whenever the
     /// boundary layer is carried across.
     last_point_id: Option<String>,
+    /// The twins every point is solved with, or `None` to solve points alone
+    twins: Option<Twins>,
+    /// Keep each twin's session after its point (`--conditioning study`), so its full record can
+    /// be written; otherwise a twin's session is dropped as soon as it has solved
+    keep_twin_sessions: bool,
+    /// The sessions of the last point's twins, in seed order, when they are kept
+    twin_sessions: Vec<(u64, Session)>,
+}
+
+/// One OPER command that solves a point.
+#[derive(Debug, Clone, Copy)]
+enum Command {
+    Alpha(f64),
+    Cl(f64),
+    Sequence(f64),
 }
 
 impl Session {
@@ -168,28 +188,117 @@ impl Session {
         state.viscous = spec.re.is_some();
         state.alpha_specified = true;
         state.qinf = 1.0;
-        let mut inputs_hash = IdHasher::new();
-        inputs_hash
-            .str("yfoil_version", env!("CARGO_PKG_VERSION"))
-            .f64_slice("x", &airfoil.x)
-            .f64_slice("y", &airfoil.y)
-            .opt_f64("re", spec.re)
-            .f64("mach", spec.mach)
-            .f64("ncrit", spec.ncrit)
-            .usize("max_iterations", spec.max_iterations)
-            .f64("wake_length", spec.wake_length)
-            .f64("elimination_threshold", spec.elimination_threshold)
-            .f64("x_trip_1", spec.x_trip[0])
-            .f64("x_trip_2", spec.x_trip[1])
-            .u8("mach_cl_dependence", spec.mach_cl_dependence as u8)
-            .u8("re_cl_dependence", spec.re_cl_dependence as u8)
-            .u8("amplification_model", spec.amplification_model as u8);
+        let inputs_hash = inputs_hash(airfoil, &spec);
         Self {
             state,
             inviscid: None,
             inputs_hash,
             last_point_id: None,
             conditions: spec,
+            twins: None,
+            keep_twin_sessions: false,
+            twin_sessions: Vec::new(),
+        }
+    }
+
+    /// Keep each twin's session after its point, for [`Session::twin_sessions`]
+    /// (`--conditioning study`).
+    pub fn keeping_twin_sessions(mut self, keep: bool) -> Self {
+        self.keep_twin_sessions = keep;
+        self
+    }
+
+    /// The sessions of the last point's twins, as each twin left it, in seed order; empty unless
+    /// they are kept ([`Session::keeping_twin_sessions`]). Replaced by every point.
+    pub fn twin_sessions(&self) -> &[(u64, Session)] {
+        &self.twin_sessions
+    }
+
+    /// The session with every point from here on solved alongside these twins.
+    pub fn with_twins(mut self, twins: Option<Twins>) -> Self {
+        self.twins = twins;
+        self
+    }
+
+    /// The twins points are solved with, if any
+    pub fn twins(&self) -> Option<&Twins> {
+        self.twins.as_ref()
+    }
+
+    /// A twin of this session for the next point: a copy of the whole state as it stands, with
+    /// the airfoil panels swapped for `panels` and GGCALC's inviscid system dropped, so SPECAL
+    /// rebuilds it — and VISCAL the DIJ, whose airfoil block goes with it (LADIJ) — on the
+    /// jittered panels. The boundary layer, pointers, wake and flags are the base's: the twin is
+    /// the same solve from the same initial state (`crate::solver::twins`).
+    ///
+    /// A twin's id hashes its own panels and its seed in place of the base's panels, so every
+    /// twin record has an id of its own; its predecessor is the base's, the state it starts from.
+    fn twin(&self, seed: u64, panels: &PanelledFoil) -> Session {
+        let mut twin = self.clone();
+        twin.twins = None;
+        twin.keep_twin_sessions = false;
+        twin.state.set_foil_geometry(panels);
+        twin.inviscid = None;
+        twin.inputs_hash = inputs_hash(panels, &self.conditions);
+        twin.inputs_hash.usize("twin_seed", seed as usize);
+        twin
+    }
+
+    /// Solve one point; with twins, the five twins run concurrently with the base on copies of
+    /// the session as the point finds it, and their results are attached to the base's.
+    fn run(&mut self, command: Command) -> PointResult {
+        self.twin_sessions.clear();
+        let Some(twins) = self.twins.clone() else {
+            return self.execute(command);
+        };
+        let keep = self.keep_twin_sessions;
+        let sessions: Vec<(u64, Session)> = twins
+            .panels
+            .iter()
+            .map(|(seed, p)| (*seed, self.twin(*seed, p)))
+            .collect();
+        let (base, twin_sessions) = std::thread::scope(|scope| {
+            let handles: Vec<_> = sessions
+                .into_iter()
+                .map(|(seed, mut twin)| {
+                    scope.spawn(move || {
+                        let mut r = twin.execute(command);
+                        r.iteration_records = Vec::new();
+                        (seed, r, keep.then_some(twin))
+                    })
+                })
+                .collect();
+            let mut base = self.execute(command);
+            let mut results = Vec::new();
+            let mut kept = Vec::new();
+            for h in handles {
+                let (seed, r, session) = h.join().expect("a twin panicked");
+                results.push((seed, r));
+                if let Some(session) = session {
+                    kept.push((seed, session));
+                }
+            }
+            base.twins = Some(results);
+            (base, kept)
+        });
+        self.twin_sessions = twin_sessions;
+        base
+    }
+
+    fn execute(&mut self, command: Command) -> PointResult {
+        match command {
+            Command::Alpha(alpha) => {
+                alpha_command(&mut self.state, &mut self.inviscid, alpha);
+                self.solve_point(self.conditions.max_iterations, 0)
+            }
+            Command::Cl(clspec) => {
+                let ital = cl_command(&mut self.state, &mut self.inviscid, clspec);
+                self.solve_point(self.conditions.max_iterations, ital)
+            }
+            Command::Sequence(alpha) => {
+                sequence_command(&mut self.state, &mut self.inviscid, alpha);
+                self.solve_point(self.conditions.max_iterations + 5, 0)
+            }
         }
     }
 
@@ -207,22 +316,19 @@ impl Session {
     /// OPER `ALFA`: SPECAL for the new angle, then VISCAL(ITMAX) when viscous.
     #[doc(alias = "ALFA")]
     pub fn alpha(&mut self, alpha: f64) -> PointResult {
-        alpha_command(&mut self.state, &mut self.inviscid, alpha);
-        self.solve_point(self.conditions.max_iterations, 0)
+        self.run(Command::Alpha(alpha))
     }
 
     /// OPER `CL`: SPECCL for the specified CL (alpha is the unknown), then VISCAL(ITMAX) when
     /// viscous — UPDATE then drives alpha so that the viscous CL meets CLSPEC.
     pub fn cl(&mut self, clspec: f64) -> PointResult {
-        let ital = cl_command(&mut self.state, &mut self.inviscid, clspec);
-        self.solve_point(self.conditions.max_iterations, ital)
+        self.run(Command::Cl(clspec))
     }
 
     /// One point of OPER `ASEQ`: SPECAL for the new angle, then VISCAL(ITMAX + 5) when viscous.
     #[doc(alias = "ASEQ")]
     pub fn sequence_point(&mut self, alpha: f64) -> PointResult {
-        sequence_command(&mut self.state, &mut self.inviscid, alpha);
-        self.solve_point(self.conditions.max_iterations + 5, 0)
+        self.run(Command::Sequence(alpha))
     }
 
     fn solve_point(&mut self, niter: usize, inviscid_cl_iterations: usize) -> PointResult {
@@ -283,8 +389,30 @@ impl Session {
             initialised_from,
             residual: trace.last().map(|t| t.residual).unwrap_or(0.0),
             iteration_records: trace,
+            twins: None,
         }
     }
+}
+
+/// Everything a point id depends on that does not change within a session: the yFoil version,
+/// the panel geometry and the flow conditions (`crate::solver::point_id`).
+fn inputs_hash(airfoil: &PanelledFoil, spec: &FlowConditions) -> IdHasher {
+    let mut h = IdHasher::new();
+    h.str("yfoil_version", env!("CARGO_PKG_VERSION"))
+        .f64_slice("x", &airfoil.x)
+        .f64_slice("y", &airfoil.y)
+        .opt_f64("re", spec.re)
+        .f64("mach", spec.mach)
+        .f64("ncrit", spec.ncrit)
+        .usize("max_iterations", spec.max_iterations)
+        .f64("wake_length", spec.wake_length)
+        .f64("elimination_threshold", spec.elimination_threshold)
+        .f64("x_trip_1", spec.x_trip[0])
+        .f64("x_trip_2", spec.x_trip[1])
+        .u8("mach_cl_dependence", spec.mach_cl_dependence as u8)
+        .u8("re_cl_dependence", spec.re_cl_dependence as u8)
+        .u8("amplification_model", spec.amplification_model as u8);
+    h
 }
 
 /// Translates XFOIL's `ALFA`.
@@ -293,6 +421,67 @@ impl Session {
 #[doc(alias = "ALFA")]
 pub fn analyse(airfoil: &PanelledFoil, alpha: f64, spec: &FlowConditions) -> PointResult {
     Session::new(airfoil, spec.clone()).alpha(alpha)
+}
+
+/// What a polar leg counts towards halting (`--halt-on`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HaltCriterion {
+    /// XFOIL's own rule (NSEQEX): a viscous point whose VISCAL did not converge (LVCONV false).
+    /// Narrower than Class B — XFOIL ignores the inviscid Newtons and resets on a converged point
+    /// that passed through a NaN — so the default sweep is XFOIL's to the point.
+    Xfoil,
+    /// A point invalid for a reason of this class, as the caller's [`Classifier`] judges it
+    Class(crate::solver::validity::ValidityClass),
+}
+
+impl HaltCriterion {
+    /// The name `--halt-on` takes
+    pub fn name(self) -> &'static str {
+        match self {
+            HaltCriterion::Xfoil => "xfoil",
+            HaltCriterion::Class(c) => c.name(),
+        }
+    }
+}
+
+/// Halt a polar leg once `after` consecutive points meet `criterion`. Each rule keeps its own
+/// count, reset by any point that does not meet it, as XFOIL's ISEQEX is reset by a converged
+/// point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HaltRule {
+    pub criterion: HaltCriterion,
+    pub after: usize,
+}
+
+impl HaltRule {
+    /// XFOIL's NSEQEX rule: four consecutive unconverged viscous points (`xfoil.f:698`)
+    pub const XFOIL: HaltRule = HaltRule {
+        criterion: HaltCriterion::Xfoil,
+        after: 4,
+    };
+}
+
+/// The classes of the reasons a solved point is invalid, for the halt rules that count a class.
+/// Supplied by the caller, because the classification (the conditioning thresholds among it) is
+/// the output layer's; the sweep only counts what it returns. It decides which alphas are
+/// attempted, never the numbers of a point that is.
+#[derive(Clone)]
+pub struct Classifier(pub std::sync::Arc<ClassifyFn>);
+
+/// The function a [`Classifier`] wraps: a point to the classes of its reasons.
+pub type ClassifyFn = dyn Fn(&PointResult) -> Vec<crate::solver::validity::ValidityClass> + Send + Sync;
+
+impl std::fmt::Debug for Classifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Classifier")
+    }
+}
+
+/// Where a leg halted: the rule that halted it and the last alpha it solved (radians).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Halt {
+    pub rule: HaltRule,
+    pub alpha: f64,
 }
 
 /// Polar sweep configuration.
@@ -305,8 +494,14 @@ pub struct PolarConfig {
     /// Step size (degrees, positive)
     pub alpha_step: f64,
     pub conditions: FlowConditions,
-    /// NSEQEX: an ASEQ sequence halts once this many consecutive points fail to converge
-    pub max_consecutive_failures: usize,
+    /// When an ASEQ leg halts (`--halt-on`); empty never halts. The default is XFOIL's NSEQEX.
+    pub halt_on: Vec<HaltRule>,
+    /// Classifies a point for the rules that count a class; required when any does
+    pub classifier: Option<Classifier>,
+    /// The twins every recorded point is solved with (`crate::solver::twins`), or `None`
+    pub twins: Option<Twins>,
+    /// Keep each twin's session for the observer (`--conditioning study`)
+    pub keep_twin_sessions: bool,
 }
 
 impl Default for PolarConfig {
@@ -316,7 +511,10 @@ impl Default for PolarConfig {
             alpha_min: -5.0,
             alpha_step: 0.5,
             conditions: FlowConditions::default(),
-            max_consecutive_failures: 4,
+            halt_on: vec![HaltRule::XFOIL],
+            classifier: None,
+            twins: None,
+            keep_twin_sessions: false,
         }
     }
 }
@@ -329,12 +527,14 @@ impl Default for PolarConfig {
 pub struct PolarResult {
     /// Every point the sweep solved, converged or not, ascending in alpha
     pub results: Vec<PointResult>,
-    /// Alphas (radians) the sweep halted before reaching, ascending. The halt is XFOIL's own
-    /// NSEQEX rule and is not changed by recording what it skipped.
+    /// Alphas (radians) the sweep halted before reaching, ascending. By default the halt is
+    /// XFOIL's own NSEQEX rule, and is not changed by recording what it skipped.
     pub not_attempted: Vec<f64>,
     pub conditions: FlowConditions,
-    /// Neither sequence was halted by NSEQEX consecutive failures
+    /// Neither leg was halted
     pub completed: bool,
+    /// Where each halted leg stopped, and the rule that stopped it
+    pub halts: Vec<Halt>,
 }
 
 /// The polar as XFOIL's OPER script runs it (CLAUDE.md):
@@ -359,7 +559,18 @@ pub fn compute_polar_with(
     observe: &mut dyn FnMut(&Session, &PointResult),
 ) -> PolarResult {
     let step = config.alpha_step.abs();
-    let mut session = Session::new(airfoil, config.conditions.clone());
+    let needs_classifier = config
+        .halt_on
+        .iter()
+        .any(|r| matches!(r.criterion, HaltCriterion::Class(_)));
+    assert!(
+        !needs_classifier || config.classifier.is_some(),
+        "a halt rule that counts a class needs a classifier"
+    );
+    let mut session = Session::new(airfoil, config.conditions.clone())
+        .with_twins(config.twins.clone())
+        .keeping_twin_sessions(config.keep_twin_sessions);
+    let mut halts = Vec::new();
     let mut points = Vec::new();
     let mut not_attempted = Vec::new();
     let mut completed = true;
@@ -376,24 +587,38 @@ pub fn compute_polar_with(
                 alphas: Vec<f64>,
                 points: &mut Vec<PointResult>,
                 not_attempted: &mut Vec<f64>,
+                halts: &mut Vec<Halt>,
                 observe: &mut dyn FnMut(&Session, &PointResult)|
      -> bool {
-        let mut iseqex = 0;
+        // one count per rule; XFOIL's ISEQEX is the count of the `xfoil` rule
+        let mut counts = vec![0usize; config.halt_on.len()];
         for (k, adeg) in alphas.iter().enumerate() {
             let p = session.sequence_point(adeg.to_radians());
             observe(session, &p);
-            let conv = p.converged;
+            let classes = match &config.classifier {
+                Some(c) if needs_classifier => (c.0)(&p),
+                _ => Vec::new(),
+            };
+            let unconverged_viscous = session.state.viscous && !p.converged;
+            let alpha = p.alpha;
             points.push(p);
-            if session.state.viscous && !conv {
-                iseqex += 1;
-                if iseqex >= config.max_consecutive_failures {
-                    // 'Sequence halted since previous N points did not converge'. The halt is
-                    // XFOIL's; recording the alphas it skipped is not a change to it.
-                    not_attempted.extend(alphas[k + 1..].iter().map(|a| a.to_radians()));
-                    return false;
+            let mut halted = None;
+            for (rule, count) in config.halt_on.iter().zip(counts.iter_mut()) {
+                let met = match rule.criterion {
+                    HaltCriterion::Xfoil => unconverged_viscous,
+                    HaltCriterion::Class(c) => classes.contains(&c),
+                };
+                *count = if met { *count + 1 } else { 0 };
+                if met && *count >= rule.after && halted.is_none() {
+                    halted = Some(*rule);
                 }
-            } else {
-                iseqex = 0;
+            }
+            if let Some(rule) = halted {
+                // 'Sequence halted since previous N points did not converge' under the default
+                // rule. The halt is XFOIL's; recording the alphas it skipped is not a change to it.
+                not_attempted.extend(alphas[k + 1..].iter().map(|a| a.to_radians()));
+                halts.push(Halt { rule, alpha });
+                return false;
             }
         }
         true
@@ -410,6 +635,7 @@ pub fn compute_polar_with(
             aseq_alphas(step, config.alpha_max, step),
             &mut points,
             &mut not_attempted,
+            &mut halts,
             observe,
         );
     }
@@ -417,7 +643,10 @@ pub fn compute_polar_with(
     // INIT, ALFA 0 (re-solve to seed the leg; not recorded), ASEQ -step alpha_min -step
     if config.alpha_min <= -step {
         session.init();
+        // the re-solve is not a recorded point, so it has no twins to run
+        let twins = session.twins.take();
         session.alpha(0.0);
+        session.twins = twins;
         // The re-solve seeds the downward leg and is not a polar point (OPER cannot store a BL
         // state, so the leg starts from a fresh MRCHUE march at 0°). Its inputs — geometry,
         // conditions, operating point, iteration limit, and no predecessor — are those of the
@@ -429,6 +658,7 @@ pub fn compute_polar_with(
             aseq_alphas(-step, config.alpha_min, -step),
             &mut points,
             &mut not_attempted,
+            &mut halts,
             observe,
         );
     }
@@ -440,5 +670,6 @@ pub fn compute_polar_with(
         not_attempted,
         conditions: config.conditions.clone(),
         completed,
+        halts,
     }
 }

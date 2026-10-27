@@ -202,6 +202,7 @@
 
 mod airfoil;
 mod io;
+pub mod jitter;
 mod naca;
 mod panel;
 pub mod series;

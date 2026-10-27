@@ -7,7 +7,7 @@
 
 use crate::fixtures;
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
-use yfoil::output::{PointRecord, PointStatus, Reason};
+use yfoil::output::{PointRecord, PointStatus, Reason, Thresholds};
 use yfoil::solver::analysis::{FlowConditions, Session};
 use yfoil::solver::validity::ValidityRecord;
 
@@ -61,11 +61,11 @@ fn test_viscous_iteration_exhaustion_withholds_the_numbers() {
     );
     let p = session.alpha(2.0_f64.to_radians());
     assert!(!p.converged);
-    let r = PointRecord::from_point(&p, true, false);
+    let r = PointRecord::from_point(&p, true, false, Thresholds::default());
     assert_eq!(r.status, PointStatus::Invalid);
     assert!(r.reasons.contains(&Reason::ViscousNotConverged), "{:?}", r.reasons);
     assert!(r.values.is_none(), "an invalid point's numbers are withheld");
-    let r = PointRecord::from_point(&p, true, true);
+    let r = PointRecord::from_point(&p, true, true, Thresholds::default());
     assert_eq!(
         r.status,
         PointStatus::Invalid,

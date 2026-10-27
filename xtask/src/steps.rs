@@ -37,7 +37,9 @@ use std::process::{Command, Stdio};
 /// `tests/common/utilities/tolerances.rs`), and the fraction of it the spread may use.
 const TOL_SOLVER: f64 = 1e-10;
 const CONDITIONING_FRACTION: f64 = 0.25;
-const SEEDS: [u64; 5] = [1, 2, 3, 4, 5];
+/// The twins' seeds and jitter are yFoil's own (`yfoil::geometry::jitter`): the reference's
+/// twin k and yFoil's twin k see the same panels.
+use yfoil::geometry::jitter::{jitter as jog, step_ulp, TWIN_SEEDS as SEEDS};
 
 pub fn twins(flags: &[String]) {
     let root = super::root();
@@ -92,16 +94,6 @@ pub(crate) fn run_twins(xfoil: &Path, work: &Path, inviscid: bool) -> Result<Str
     super::noise_floor::write(work, inviscid, &SEEDS).map_err(|e| format!("noise floor: {e}"))
 }
 
-/// The jog of node `i`'s coordinates in twin `seed`: −1, 0 or +1 ULP for x and for y.
-fn jog(seed: u64, i: usize) -> (i8, i8) {
-    let mut z = (seed << 32) ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^= z >> 31;
-    let three = |v: u64| -> i8 { (v % 3) as i8 - 1 };
-    (three(z & 0xFFFF_FFFF), three(z >> 32))
-}
-
 fn twin(xfoil: &Path, work: &Path, seed: u64) -> Result<(), String> {
     let dir = work.join(format!("ulp{seed}"));
     let _ = fs::remove_dir_all(&dir);
@@ -109,11 +101,7 @@ fn twin(xfoil: &Path, work: &Path, seed: u64) -> Result<(), String> {
     let src = fs::read_to_string(work.join("panels.dat")).map_err(|e| e.to_string())?;
     let mut lines = src.lines();
     let mut out = format!("{}\n", lines.next().unwrap_or(""));
-    let step = |v: f64, by: i8| match by {
-        1 => v.next_up(),
-        -1 => v.next_down(),
-        _ => v,
-    };
+    let step = step_ulp;
     for (i, l) in lines.filter(|l| l.split_whitespace().count() >= 2).enumerate() {
         let t: Vec<&str> = l.split_whitespace().collect();
         let x: f64 = t[0].parse().map_err(|_| format!("bad coordinate {l}"))?;

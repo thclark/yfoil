@@ -77,15 +77,18 @@ foil                 name of the section
 conditions           re, mach, ncrit, max_iterations, wake_length,
                      elimination_threshold, x_trip, mach_cl_dependence,
                      re_cl_dependence, amplification_model
-results              alpha_deg, cl, cm, cd, cd_friction, cd_pressure, ldratio,
-                     transition_upper, transition_lower, converged, iterations,
-                     residual
+results              alpha_deg, id, initialised_from, status, reasons, classes,
+                     diagnostics{…}, warnings, values{cl, cm, cd_pressure, cd,
+                     cd_friction, ldratio, transition_upper, transition_lower}
+                     (see solution validity); a study record adds role, twin_of,
+                     seed
 geometry             x, y, s, normal_x, normal_y, chord, x_le, y_le, x_te, y_te,
                      s_le, i_le_node, te_thickness_normal, sharp_te, wake{…}
 surface              q, cp                       (one value per panel node)
 boundary_layer       upper{…}, lower{…}, wake{…}, plus i_te_station,
                      i_transition_station, n_wake_nodes, qinf, stagnation{…},
                      transition[…], wake_split
+study                the twins' full records (`--conditioning study`)
 ```
 
 Each boundary-layer side carries its station and node indices, the station
@@ -114,11 +117,17 @@ machsqd_edge
 ``` text
 foil          name of the section
 conditions    as above
-results       one entry per angle, each the same shape as an analysis `results`
+results       one entry per requested angle, each the same shape as an analysis
+              `results`
 summary       cl_max, alpha_at_cl_max, ldratio_max, cl_at_ldratio_max, cd0,
-              n_converged, n_failed
+              n_valid, n_invalid, n_not_attempted
 completed     whether the sweep ran to both limits
+halts         criterion, after, alpha_deg of each halted leg (`--halt-on`)
+study         every twin's record (`--conditioning study`): role, twin_of, seed
 ```
+
+`status`, `reasons`, `classes`, `diagnostics`, `warnings` and when `values` is
+withheld are described in [solution validity](solution-validity.md).
 
 With `--distributions`, every entry also carries the full analysis record for
 that angle.

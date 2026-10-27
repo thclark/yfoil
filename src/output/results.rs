@@ -3,10 +3,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Why a point is not valid. Each variant is an exact, single-run fact — a formula evaluated
-/// outside its analytic domain, or an iteration that ran out before meeting its tolerance.
-/// Nothing here is inferred from the size or the smoothness of a returned number
-/// (`docs/user-guide/reference/known-xfoil-issues.md` §7.10).
+pub use crate::solver::validity::ValidityClass;
+
+/// Why a point is not valid. Every variant but one is an exact, single-run fact — a formula
+/// evaluated outside its analytic domain, or an iteration that ran out before meeting its
+/// tolerance — and nothing is inferred from the size or the smoothness of the point's own numbers
+/// (`docs/user-guide/reference/known-xfoil-issues.md` §7.10). The exception is
+/// [`Reason::IllConditioned`], which compares the point with its twins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reason {
     /// The Kármán–Tsien denominator `β + BFAC·Cp_inc` reached zero or below, so the
@@ -27,6 +30,10 @@ pub enum Reason {
     NonFiniteStationFailure,
     /// The sweep halted before reaching this alpha, so it was never attempted
     SequenceHalted,
+    /// A 1-ULP jitter of the panel coordinates moves a reported quantity further than the error
+    /// threshold (`crate::output::conditioning::Thresholds`): the point's twins reached another
+    /// solution, so this one is balanced on a knife edge (Class C, conditioning)
+    IllConditioned,
 }
 
 /// Whether a point's numeric results can be believed.
@@ -51,9 +58,49 @@ impl std::fmt::Display for Reason {
             Reason::ViscousNotConverged => "ViscousNotConverged",
             Reason::NonFiniteStationFailure => "NonFiniteStationFailure",
             Reason::SequenceHalted => "SequenceHalted",
+            Reason::IllConditioned => "IllConditioned",
         };
         f.write_str(s)
     }
+}
+
+impl Reason {
+    /// The class the reason belongs to (`docs/user-guide/reference/solution-validity.md`, "How
+    /// failures are classified"); `None` for `SequenceHalted`, which records that nothing was
+    /// computed rather than a failure of a computation.
+    pub fn class(self) -> Option<ValidityClass> {
+        match self {
+            Reason::KarmanTsienOutOfDomain => Some(ValidityClass::OutOfDomain),
+            Reason::MachClNewtonExhausted
+            | Reason::ClNewtonExhausted
+            | Reason::ViscousNotConverged
+            | Reason::NonFiniteStationFailure => Some(ValidityClass::Unconverged),
+            Reason::IllConditioned => Some(ValidityClass::IllConditioned),
+            Reason::SequenceHalted => None,
+        }
+    }
+}
+
+/// What a record is, when it is not the answer for a requested operating point: the `role` of a
+/// record in a study's `study` array (`--conditioning study`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    /// One of a point's five 1-ULP twins (`crate::solver::twins`), with `twin_of` and `seed`
+    Twin,
+}
+
+/// How a result set is written: whether invalid points' numbers are shown, the conditioning
+/// thresholds, and whether a study's extra records are kept.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct OutputOptions {
+    /// Show the numbers of invalid points in `results` (`--allow-invalid`)
+    pub allow_invalid: bool,
+    /// The spreads the twins are judged against
+    pub thresholds: super::conditioning::Thresholds,
+    /// Write every twin's record in `study` (`--conditioning study`). A study's records always
+    /// carry their numbers, whatever their status and whatever `allow_invalid` says.
+    pub study: bool,
 }
 
 impl std::fmt::Display for PointStatus {
@@ -101,6 +148,69 @@ pub struct Diagnostics {
     pub inviscid_cl_iterations: Option<usize>,
     /// Station Newton failures with a non-finite residual in this point's marches
     pub nonfinite_station_failures: usize,
+    /// How far the point's twins moved what it reports. Absent when no twins were run
+    /// (`--conditioning off`) or the point is already invalid for a single-run reason
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conditioning: Option<super::conditioning::Conditioning>,
+}
+
+/// Something about a point worth knowing that does not change its status.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Warning {
+    /// The point converged but `count` of its twins did not (or are invalid for another
+    /// single-run reason). Their values were compared all the same, and agreed if the point is
+    /// still valid: only values decide conditioning.
+    TwinsNotValid { count: usize },
+    /// The point is valid, but its twins move `quantity` by `spread`, beyond the warning
+    /// threshold though within the error threshold: it may be ill-conditioned
+    IllConditioned { quantity: String, spread: f64 },
+}
+
+impl std::fmt::Display for Warning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Warning::TwinsNotValid { count } => {
+                let s = if *count == 1 { "" } else { "s" };
+                write!(f, "solution converged but {count} twin{s} did not")
+            }
+            Warning::IllConditioned { quantity, spread } => {
+                write!(
+                    f,
+                    "solution may be ill-conditioned: its twins spread {quantity} by {spread:.2e}"
+                )
+            }
+        }
+    }
+}
+
+/// The single-run reasons a solved point is invalid (Classes A and B): what its own computation
+/// shows, before any comparison with its twins. Empty for a valid point.
+pub fn reasons(p: &crate::solver::analysis::PointResult, viscous: bool) -> Vec<Reason> {
+    let mut reasons = Vec::new();
+    if p.validity.out_of_domain() {
+        reasons.push(Reason::KarmanTsienOutOfDomain);
+    }
+    if p.validity.mach_cl_newton_exhausted {
+        reasons.push(Reason::MachClNewtonExhausted);
+    }
+    if p.inviscid_cl_iterations == 21 {
+        reasons.push(Reason::ClNewtonExhausted);
+    }
+    if viscous && !p.converged {
+        reasons.push(Reason::ViscousNotConverged);
+    }
+    if p.nonfinite_station_failures > 0 {
+        reasons.push(Reason::NonFiniteStationFailure);
+    }
+    reasons
+}
+
+/// The classes of a set of reasons, once each, in the order A, B, C.
+pub fn classes(reasons: &[Reason]) -> Vec<ValidityClass> {
+    ValidityClass::ALL
+        .into_iter()
+        .filter(|c| reasons.iter().any(|r| r.class() == Some(*c)))
+        .collect()
 }
 
 /// One operating point's numbers, as XFOIL reports them after `ALFA`/`CL`. The viscous-only
@@ -139,9 +249,10 @@ pub struct PointValues {
 pub struct PointRecord {
     /// Angle of attack (degrees)
     pub alpha_deg: f64,
-    /// This point's stable reference: a random 8-character id, unique to this solve. Absent when
-    /// the point was never attempted. Random rather than positional so that points from different
-    /// runs can be held together without their references colliding.
+    /// This point's stable reference: a 12-character content-addressed id, the hash of everything
+    /// the solve depended on (`crate::solver::point_id`). Absent when the point was never
+    /// attempted. Content-addressed rather than positional so that points from different runs can
+    /// be held together without their references colliding.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// The `id` of the record whose converged boundary layer seeded this solve, or absent when
@@ -154,9 +265,26 @@ pub struct PointRecord {
     /// Empty when the status is valid
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reasons: Vec<Reason>,
+    /// The classes of `reasons`, in the order A, B, C (`out-of-domain`, `unconverged`,
+    /// `ill-conditioned`): what `--halt-on` counts. Empty when the status is valid
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub classes: Vec<ValidityClass>,
+    /// What this record is when it is not the answer for a requested point: set only on the
+    /// records of a study's `study` array
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+    /// The `id` of the point a `twin` record is a twin of
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub twin_of: Option<String>,
+    /// The jitter seed of a `twin` record (`crate::geometry::jitter`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
     /// Absent only when the point was never attempted
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<Diagnostics>,
+    /// Facts worth knowing that do not change the status
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<Warning>,
     /// The numbers, withheld unless the point is valid or `--allow-invalid` was given
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<PointValues>,
@@ -166,23 +294,40 @@ impl PointRecord {
     /// Classify a solved point. `viscous` selects whether the viscous-only fields are carried;
     /// `allow_invalid` populates `values` even when the status is invalid, and never changes the
     /// status itself, so a consumer cannot read a withheld point as a sound one.
-    pub fn from_point(p: &crate::solver::analysis::PointResult, viscous: bool, allow_invalid: bool) -> Self {
+    ///
+    /// A point that is valid on its own computation and was solved with twins is then judged on
+    /// its conditioning against `thresholds`: `IllConditioned` when they moved a reported
+    /// quantity beyond the error threshold, a [`Warning::IllConditioned`] when only beyond the
+    /// warning threshold, and a [`Warning::TwinsNotValid`] when some of them are themselves
+    /// invalid.
+    pub fn from_point(
+        p: &crate::solver::analysis::PointResult,
+        viscous: bool,
+        allow_invalid: bool,
+        thresholds: super::conditioning::Thresholds,
+    ) -> Self {
         let v = viscous;
-        let mut reasons = Vec::new();
-        if p.validity.out_of_domain() {
-            reasons.push(Reason::KarmanTsienOutOfDomain);
-        }
-        if p.validity.mach_cl_newton_exhausted {
-            reasons.push(Reason::MachClNewtonExhausted);
-        }
-        if p.inviscid_cl_iterations == 21 {
-            reasons.push(Reason::ClNewtonExhausted);
-        }
-        if v && !p.converged {
-            reasons.push(Reason::ViscousNotConverged);
-        }
-        if p.nonfinite_station_failures > 0 {
-            reasons.push(Reason::NonFiniteStationFailure);
+        let mut reasons = reasons(p, v);
+        let mut warnings = Vec::new();
+        let conditioning = if reasons.is_empty() {
+            super::conditioning::Conditioning::measure(p, v, thresholds)
+        } else {
+            None
+        };
+        if let Some(c) = &conditioning {
+            if c.ill_conditioned() {
+                reasons.push(Reason::IllConditioned);
+            } else if c.may_be_ill_conditioned() {
+                warnings.push(Warning::IllConditioned {
+                    quantity: c.worst.clone(),
+                    spread: c.worst_spread(),
+                });
+            }
+            if c.twins_not_valid > 0 {
+                warnings.push(Warning::TwinsNotValid {
+                    count: c.twins_not_valid,
+                });
+            }
         }
         let status = if reasons.is_empty() {
             PointStatus::Valid
@@ -205,6 +350,10 @@ impl PointRecord {
             id: Some(p.id.clone()),
             initialised_from: p.initialised_from.clone(),
             status,
+            classes: classes(&reasons),
+            role: None,
+            twin_of: None,
+            seed: None,
             reasons,
             diagnostics: Some(Diagnostics {
                 karman_tsien_margin_forces: finite(p.validity.karman_tsien_margin_forces),
@@ -218,7 +367,9 @@ impl PointRecord {
                 residual: v.then_some(p.residual),
                 inviscid_cl_iterations: (p.inviscid_cl_iterations > 0).then_some(p.inviscid_cl_iterations),
                 nonfinite_station_failures: p.nonfinite_station_failures,
+                conditioning,
             }),
+            warnings,
             values,
         }
     }
@@ -232,12 +383,34 @@ impl PointRecord {
             initialised_from: None,
             status: PointStatus::NotAttempted,
             reasons: vec![Reason::SequenceHalted],
+            classes: Vec::new(),
+            role: None,
+            twin_of: None,
+            seed: None,
             diagnostics: None,
+            warnings: Vec::new(),
             values: None,
         }
     }
 
     /// The point was solved and nothing disqualifies it.
+    /// The records of a point's twins for a study's `study` array, in seed order: each judged on
+    /// its own computation (a twin has no twins), with `role: twin`, `twin_of` and `seed`, and
+    /// always with its numbers. Empty when the point had no twins.
+    pub fn twin_records(p: &crate::solver::analysis::PointResult, viscous: bool) -> Vec<PointRecord> {
+        p.twins
+            .iter()
+            .flatten()
+            .map(|(seed, t)| {
+                let mut r = PointRecord::from_point(t, viscous, true, Default::default());
+                r.role = Some(Role::Twin);
+                r.twin_of = Some(p.id.clone());
+                r.seed = Some(*seed);
+                r
+            })
+            .collect()
+    }
+
     pub fn is_valid(&self) -> bool {
         self.status == PointStatus::Valid
     }
@@ -258,14 +431,31 @@ pub struct PolarOutput {
     pub results: Vec<PointRecord>,
     /// Summary statistics
     pub summary: PolarSummary,
-    /// Whether the sweep completed without excessive failures
+    /// Whether the sweep completed without either leg being halted
     pub completed: bool,
+    /// Where each halted leg stopped, and the `--halt-on` rule that stopped it
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub halts: Vec<HaltRecord>,
+    /// Every extra solve of a study (`--conditioning study`): the twins of every solved point,
+    /// ascending in alpha and then in seed. Each record carries its numbers whatever its status:
+    /// a study is for tracing everything that was computed
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub study: Vec<PointRecord>,
     /// Full analysis records (geometry, wake and boundary layer) at every point the sweep
     /// visited, converged or not, ascending in alpha; written by `yfoil polar --distributions`.
     /// A point reached inside a sweep starts from the previous alpha's BL and is not the same
     /// solve as `yfoil analyse` at that alpha.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub distributions: Vec<AnalysisOutput>,
+}
+
+/// A halted polar leg: the `--halt-on` criterion and count that stopped it, at the last alpha it
+/// solved (degrees).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HaltRecord {
+    pub criterion: String,
+    pub after: usize,
+    pub alpha_deg: f64,
 }
 
 /// Summary statistics for a polar
@@ -293,12 +483,12 @@ impl PolarOutput {
     /// Create from PolarResult. `allow_invalid` carries the numbers of invalid points through
     /// as well; it never changes a status, and the summary is always computed from the valid
     /// points alone — a Kármán–Tsien artefact must not be able to become the reported CL_max.
-    pub fn from_polar(result: &crate::solver::analysis::PolarResult, foil_name: &str, allow_invalid: bool) -> Self {
+    pub fn from_polar(result: &crate::solver::analysis::PolarResult, foil_name: &str, options: &OutputOptions) -> Self {
         let viscous = result.conditions.re.is_some();
         let mut results: Vec<PointRecord> = result
             .results
             .iter()
-            .map(|p| PointRecord::from_point(p, viscous, allow_invalid))
+            .map(|p| PointRecord::from_point(p, viscous, options.allow_invalid, options.thresholds))
             .chain(
                 result
                     .not_attempted
@@ -348,6 +538,24 @@ impl PolarOutput {
             results,
             summary,
             completed: result.completed,
+            halts: result
+                .halts
+                .iter()
+                .map(|h| HaltRecord {
+                    criterion: h.rule.criterion.name().to_string(),
+                    after: h.rule.after,
+                    alpha_deg: h.alpha.to_degrees(),
+                })
+                .collect(),
+            study: if options.study {
+                result
+                    .results
+                    .iter()
+                    .flat_map(|p| PointRecord::twin_records(p, viscous))
+                    .collect()
+            } else {
+                Vec::new()
+            },
             distributions: Vec::new(),
         }
     }
@@ -391,6 +599,10 @@ pub struct AnalysisOutput {
     /// Boundary-layer distributions and markers; absent for an inviscid point
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundary_layer: Option<crate::output::BoundaryLayerOutput>,
+    /// The full records of the point's twins, in seed order (`--conditioning study`), each with
+    /// its own jittered geometry, `results.role` `twin`, and its numbers whatever its status
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub study: Vec<AnalysisOutput>,
 }
 
 impl AnalysisOutput {
@@ -402,8 +614,43 @@ impl AnalysisOutput {
         p: &crate::solver::analysis::PointResult,
         foil_name: &str,
         include_lagged_closures: bool,
-        allow_invalid: bool,
+        options: &OutputOptions,
     ) -> Self {
+        let mut out = Self::from_session_alone(session, p, foil_name, include_lagged_closures, options);
+        if options.study {
+            // a twin's session as it left it, paired with its result by seed
+            let viscous = session.conditions().re.is_some();
+            let records = PointRecord::twin_records(p, viscous);
+            let twin_results: Vec<&crate::solver::analysis::PointResult> =
+                p.twins.iter().flatten().map(|(_, t)| t).collect();
+            for ((seed, twin_session), (record, t)) in session
+                .twin_sessions()
+                .iter()
+                .zip(records.into_iter().zip(twin_results))
+            {
+                debug_assert_eq!(Some(*seed), record.seed);
+                let always = OutputOptions {
+                    allow_invalid: true,
+                    study: false,
+                    ..*options
+                };
+                let mut twin = Self::from_session_alone(twin_session, t, foil_name, include_lagged_closures, &always);
+                twin.results = record;
+                out.study.push(twin);
+            }
+        }
+        out
+    }
+
+    /// [`AnalysisOutput::from_session`] without the study.
+    fn from_session_alone(
+        session: &crate::solver::analysis::Session,
+        p: &crate::solver::analysis::PointResult,
+        foil_name: &str,
+        include_lagged_closures: bool,
+        options: &OutputOptions,
+    ) -> Self {
+        let (allow_invalid, thresholds) = (options.allow_invalid, options.thresholds);
         let state = session.state();
         let viscous = session.conditions().re.is_some();
         let n = state.n_foil_nodes;
@@ -426,7 +673,7 @@ impl AnalysisOutput {
         } else {
             None
         };
-        let results = PointRecord::from_point(p, viscous, allow_invalid);
+        let results = PointRecord::from_point(p, viscous, allow_invalid, thresholds);
         // the numeric payload is given or withheld as one: values, surface distributions and BL alike
         let disclose = results.is_valid() || allow_invalid;
         Self {
@@ -436,6 +683,7 @@ impl AnalysisOutput {
             geometry: crate::output::FoilNodes::from_state(state),
             surface: disclose.then_some(surface),
             boundary_layer: boundary_layer.filter(|_| disclose),
+            study: Vec::new(),
         }
     }
 
@@ -649,6 +897,10 @@ mod tests {
             initialised_from: Some("a7f2m0xd".to_string()),
             status: PointStatus::Valid,
             reasons: vec![],
+            classes: vec![],
+            role: None,
+            twin_of: None,
+            seed: None,
             diagnostics: Some(Diagnostics {
                 karman_tsien_margin_forces: Some(0.81),
                 karman_tsien_margin_pressure: Some(0.81),
@@ -661,7 +913,9 @@ mod tests {
                 residual: Some(1.2e-5),
                 inviscid_cl_iterations: None,
                 nonfinite_station_failures: 0,
+                conditioning: None,
             }),
+            warnings: vec![],
             values: Some(PointValues {
                 cl: 0.55,
                 cm: -0.05,
@@ -695,6 +949,10 @@ mod tests {
             initialised_from: Some("t6y1u8io".to_string()),
             status: PointStatus::Invalid,
             reasons: vec![Reason::KarmanTsienOutOfDomain, Reason::MachClNewtonExhausted],
+            classes: classes(&[Reason::KarmanTsienOutOfDomain, Reason::MachClNewtonExhausted]),
+            role: None,
+            twin_of: None,
+            seed: None,
             diagnostics: Some(Diagnostics {
                 karman_tsien_margin_forces: Some(-0.0296),
                 karman_tsien_margin_pressure: Some(-0.0296),
@@ -707,7 +965,9 @@ mod tests {
                 residual: None,
                 inviscid_cl_iterations: None,
                 nonfinite_station_failures: 0,
+                conditioning: None,
             }),
+            warnings: vec![],
             values: None,
         };
         let json = serde_json::to_string(&point).unwrap();

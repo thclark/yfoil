@@ -41,10 +41,62 @@ yfoil analyse naca0012.json --alpha 5 --inviscid
 | `--max-iterations` | 20 | Maximum viscous Newton iterations (XFOIL's `ITER`) |
 | `-o`, `--output` | — | Write the full result record as JSON |
 | `--include-lagged-closures` | off | Also emit XFOIL's lagged closure arrays |
+| `--allow-invalid` | off | Show the numbers of invalid points of any class (out-of-domain, unconverged, ill-conditioned); their status is unchanged |
+| `--conditioning` | `on` | `on`: check each point with its five 1-ULP twins. `off`: run no twins, as XFOIL. `study`: `on`, and also write every twin's record under `study` |
+| `--spread-warning-threshold` | 1e-8 | Spread over the twins beyond which a valid point carries a warning that it may be ill-conditioned |
+| `--spread-error-threshold` | 1e-4 | Spread over the twins beyond which a point is ill-conditioned: `Invalid`, numbers withheld |
 
 Without `-o`, a summary is printed: \(C_L\), \(C_D\) (split into friction and
 pressure), \(C_M\), transition locations and the iteration count. With `-o`, the
 [full record](../reference/the-data-model.md) is written.
+
+## Ill-conditioned points
+
+By default every point is solved six times: once as asked, and five more on copies of the panels
+jittered by one ULP (its [twins](../reference/solution-validity.md#twins)), in parallel. Where the
+twins land far from the point, a rounding error would have given a different answer, so the point is
+reported `Invalid (IllConditioned)` and its numbers are withheld. A NACA 0012 at −16°:
+
+``` sh
+yfoil geometry naca 0012 -n 160 --method cosine -o naca0012.json
+yfoil analyse naca0012.json --alpha -16 --max-iterations 100
+```
+
+``` text
+Status:  Invalid (IllConditioned); warning: solution converged but 2 twins did not
+
+Results withheld: the point is ill-conditioned — a 1-ULP jitter of the panel coordinates moves cl by 7.2e-1 (error threshold 1e-4).
+Pass --allow-invalid to report them anyway, or --conditioning off to skip the check.
+
+Diagnostics:
+  Karman-Tsien margin (forces):   +1.0000e0
+  Karman-Tsien margin (pressure): +1.0000e0
+  Iterations: 78
+  rms:        9.14e-5
+  Twins:      largest spread 7.23e-1 (cl); warning threshold 1e-8, error threshold 1e-4
+```
+
+The point converged, so XFOIL would report it, and with `--conditioning off` yFoil does too:
+\(C_L = -0.383\). The twins are not changes to that answer — the point itself is the same solve with
+or without them — but five more solves beside it. Three converge to within 2e-5 of it; the other
+two run out of iterations, one at \(C_L = -0.163\) and one at \(C_L = -1.381\). It is a value that
+decides, so the point is ill-conditioned; that two twins did not converge is the warning.
+
+A point whose twins agree, but less closely than the warning threshold, keeps its status and
+numbers and carries a warning instead, such as
+`Valid; warning: solution may be ill-conditioned: its twins spread cl by 1.86e-7`. The two
+thresholds are [explained with the twins](../reference/solution-validity.md#twins).
+
+`--allow-invalid` shows the numbers and keeps the verdict; `--conditioning off` skips the twins
+altogether, roughly halving the run time, and reports such points as XFOIL does — numbers with no
+verdict on their conditioning. The twins never change the numbers of the point itself.
+
+`--conditioning study` keeps everything the check computed: with `-o`, the record gains a `study`
+array holding each twin's full record — its own jittered geometry, surface and boundary layer, and
+`results` with `role: twin`, `twin_of` (the point's id), its `seed` and an id of its own. A study's
+records always carry their numbers, whatever their status and whatever `--allow-invalid` says,
+because tracing what was computed is the point of a study; `results` still follows `--allow-invalid`.
+[Polars](polars.md#keeping-the-twins-studies) shows a twin record.
 
 ## The XFOIL equivalent
 

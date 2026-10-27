@@ -6,7 +6,7 @@
 //! Fixtures: the panels of `tests/fixtures/xfoil/naca0012_n60_polar_re1e6/` — `cargo xtask fixtures --case naca0012_n60_polar_re1e6`.
 use crate::fixtures;
 use yfoil::geometry::{panel_foil, read_geometry_from_file};
-use yfoil::output::{PointStatus, PolarOutput};
+use yfoil::output::{OutputOptions, PointStatus, PolarOutput};
 use yfoil::solver::analysis::{compute_polar, FlowConditions, PolarConfig};
 
 fn case_dir(case: &str) -> std::path::PathBuf {
@@ -32,7 +32,7 @@ fn polar() -> PolarOutput {
             ..PolarConfig::default()
         },
     );
-    PolarOutput::from_polar(&result, "naca0012", false)
+    PolarOutput::from_polar(&result, "naca0012", &OutputOptions::default())
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn test_the_id_covers_the_inputs_the_solve_depended_on() {
             },
         ),
         "naca0012",
-        false,
+        &OutputOptions::default(),
     );
     assert_ne!(at(&base, 0.0), at(&other, 0.0), "Re is part of the identity");
     assert_ne!(at(&base, 2.0), at(&other, 2.0));

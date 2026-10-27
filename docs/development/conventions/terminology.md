@@ -44,8 +44,11 @@ Ill-conditioned solutions are not to be avoided in testing. Most of XFOIL's rare
 the stagnation-point fallbacks — exist precisely to cope with them, so the tests must reach them
 to cover those branches.
 
-A result can be ill-conditioned and still valid: conditioning is Class C in
-[solution validity](../../user-guide/reference/solution-validity.md), which a single run cannot detect.
+Conditioning is Class C in [solution validity](../../user-guide/reference/solution-validity.md),
+which a single run cannot detect: yFoil measures it with its twins and reports an ill-conditioned
+point — one whose twins spread a reported quantity beyond the error threshold — as `Invalid`
+(`IllConditioned`) unless `--conditioning off` is given. A point whose twins spread it beyond only the
+warning threshold *may be* ill-conditioned: it stays `Valid`, with an `IllConditioned` warning.
 
 ## Divergent comparison
 
@@ -95,7 +98,16 @@ twin of: its conditioning says nothing about the same section at another panelli
 along another path.
 
 Moving every coordinate the same way is not a twin: it translates the aerofoil and measures
-almost nothing.
+almost nothing. The perturbation is called a **1-ULP jitter** wherever a user reads it.
+
+yFoil carries twins of its own (`src/solver/twins.rs`), with the same jitter and seeds
+(`src/geometry/jitter.rs`, which `cargo xtask twins` also uses): by default every point it
+analyses is solved again on five jittered copies of the panels, and the point is withheld as
+ill-conditioned when they disagree ([solution validity](../../user-guide/reference/solution-validity.md#twins)).
+These are twins of **one point**, not of a run: each starts from the state the point starts from
+(its predecessor's converged boundary layer, in a polar), so a point's verdict depends only on what
+its id hashes. The reference's twins are twins of the whole run, and inherit histories that parted
+at earlier points.
 
 ## Noise floor
 

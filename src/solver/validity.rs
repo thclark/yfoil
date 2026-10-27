@@ -24,11 +24,12 @@
 //! - **Class B, iteration exhaustion.** A Newton ran to its cap without meeting its tolerance, so
 //!   the value returned is not a solution to the problem that was posed.
 //!
-//! **Class C, conditioning** — a converged, in-domain point that a 1-ULP perturbation moves by
-//! O(1) — cannot be seen from one run at all, because it is a property of the problem near that
-//! point rather than of the arithmetic performed. It is not recorded here and does not make a
-//! point invalid; the twins every validation run carries measure it. So a `Valid` verdict from this record is a
-//! necessary condition for trusting a number, not a sufficient one.
+//! **Class C, conditioning** — a converged, in-domain point that a 1-ULP jitter of its input
+//! moves by O(1) — cannot be seen from one run at all, because it is a property of the problem
+//! near that point rather than of the arithmetic performed. It is not recorded here: the point's
+//! twins (`crate::solver::twins`) are further runs, and the output layer measures it from them
+//! (`crate::output::conditioning`). So a `Valid` verdict from this record alone is a necessary
+//! condition for trusting a number, not a sufficient one.
 //!
 //! Each field describes **the state currently stored**, not the history of the point: a writer
 //! overwrites, so after a point is solved the record refers to the values that point reports.
@@ -94,5 +95,53 @@ impl ValidityRecord {
     /// substituted a floored CL or a limited Mach/Re because the request had no real solution.
     pub fn conditions_substituted(&self) -> bool {
         self.cl_floored || self.mach_limited || self.re_limited
+    }
+}
+
+/// The class of a reason a point is invalid (`docs/user-guide/reference/solution-validity.md`,
+/// "How failures are classified"): what it would take to know it. Each output-layer `Reason`
+/// belongs to one class; the class names are what `--halt-on` takes and what a record lists in
+/// `classes`. Class D (`anomalous`, a point inconsistent with its neighbours) is issue #12.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ValidityClass {
+    /// Class A: a formula was evaluated outside its analytic domain (one run)
+    OutOfDomain,
+    /// Class B: an iteration hit its cap without meeting its tolerance (one run)
+    Unconverged,
+    /// Class C: a 1-ULP jitter of the input moves the answer (the point's twins)
+    IllConditioned,
+}
+
+impl ValidityClass {
+    /// Every class, in the order A, B, C
+    pub const ALL: [ValidityClass; 3] = [
+        ValidityClass::OutOfDomain,
+        ValidityClass::Unconverged,
+        ValidityClass::IllConditioned,
+    ];
+
+    /// The name a user types and a record carries (`out-of-domain`, …)
+    pub fn name(self) -> &'static str {
+        match self {
+            ValidityClass::OutOfDomain => "out-of-domain",
+            ValidityClass::Unconverged => "unconverged",
+            ValidityClass::IllConditioned => "ill-conditioned",
+        }
+    }
+
+    /// The class's letter in the documentation's classification
+    pub fn letter(self) -> char {
+        match self {
+            ValidityClass::OutOfDomain => 'A',
+            ValidityClass::Unconverged => 'B',
+            ValidityClass::IllConditioned => 'C',
+        }
+    }
+}
+
+impl std::fmt::Display for ValidityClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
     }
 }
