@@ -21,6 +21,10 @@
 //!   test itself (`RMSBL < EPS1`: the iteration counts differ, every common iteration matched, and
 //!   the reference's RMSBL at the last common one moves by more than `DIVERGENCE_FLOOR`) — the
 //!   one-step replay from XFOIL's exact state is the evidence that the step itself is faithful;
+//! - every earlier iteration matched, and a 1-ULP twin left the reference's branch trace (IST,
+//!   ITRAN) at this or an earlier iteration of the same call: the runs are allowed to part here
+//!   even where no spread is recorded (a twin that stops earlier leaves the last iterations
+//!   without one) — the earlier-call rule above, applied within the call;
 //! - UPDATE's *reported* limiter (VMXBL/IMXBL: the largest normalised change) differs while
 //!   |RMXBL| agrees within the floor: two near-tied changes, RLX itself unaffected — a tie.
 
@@ -385,6 +389,14 @@ pub fn flip_call(line: &str) -> Option<usize> {
         .and_then(|n| n.parse().ok())
 }
 
+/// The iteration a twin flip line refers to (`call 42 iteration 17: …`); `None` for a line that
+/// names no iteration (`call 42: NITDONE …`).
+pub fn flip_iteration(line: &str) -> Option<usize> {
+    line.split_once(" iteration ")
+        .and_then(|(_, r)| r.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|n| n.parse().ok())
+}
+
 /// Everything a call comparison measured, whether or not it passed. `outcome` is the verdict;
 /// the diffs are what the branch-coverage study tabulates (`studies/branch-coverage`).
 #[derive(Debug, Clone, Default)]
@@ -528,6 +540,11 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
     // itself moves by more than `DIVERGENCE_FLOOR` — the divergent rule applied to that
     // threshold; otherwise the count is a mismatch, settled after the loop
     let count_differs = !count_flip && (p.iterations != report.iterations.1 || p.converged != report.converged.1);
+    // the first iteration of this call at which a twin leaves the reference's branch trace (IST,
+    // ITRAN): from there on the reference cannot reproduce its own state, so a parting at or after
+    // it is divergent even where the twins' spread is not recorded (a twin that stops earlier
+    // leaves the last iterations without a floor)
+    let first_flip_iteration = within_call.iter().filter_map(|l| flip_iteration(l)).min();
     let its = &rec.iters[&k];
     if report.iterations.1 != its.len() {
         let why = format!(
@@ -629,7 +646,10 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
         });
         let trace_ok =
             y.i_stagnation_node == r[7] as usize && y.i_transition_station[1..] == [r[8] as usize, r[9] as usize];
-        if (parted_value.is_some() || !trace_ok || limiter_flip.is_some()) && floor_rmsbl > DIVERGENCE_FLOOR {
+        let twin_left_trace = first_flip_iteration.is_some_and(|j| j <= y.iteration);
+        if (parted_value.is_some() || !trace_ok || limiter_flip.is_some())
+            && (floor_rmsbl > DIVERGENCE_FLOOR || twin_left_trace)
+        {
             report.parted_by = Some(if limiter_flip.is_some() {
                 "branch: limiter".to_string()
             } else if !trace_ok {
@@ -648,10 +668,18 @@ pub fn compare_call(rec: &Records, k: usize, p: &PointResult, st: &SolverState, 
                 let (name, ours, theirs, _) = parted_value.unwrap();
                 format!("{name} yfoil {ours:.6e} vs xfoil {theirs:.6e}")
             };
-            let why = format!(
-                "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {DIVERGENCE_FLOOR:.0e}) under 1 ULP and the runs part ({parted})",
-                y.iteration
-            );
+            let why = if floor_rmsbl > DIVERGENCE_FLOOR {
+                format!(
+                    "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; at iteration {} the reference itself moves by {floor_rmsbl:.2e} (> {DIVERGENCE_FLOOR:.0e}) under 1 ULP and the runs part ({parted})",
+                    y.iteration
+                )
+            } else {
+                format!(
+                    "every earlier iteration matched within {FLOOR_FACTOR}× the reference's own 1-ULP floor; one of the reference's own 1-ULP twins left its branch trace at iteration {} of this call, and at iteration {} the runs part ({parted})",
+                    first_flip_iteration.unwrap(),
+                    y.iteration
+                )
+            };
             println!("{ictx}: DIVERGENT — {why}. Values from here on are not compared; the one-step replay from XFOIL's state is the evidence that the step itself is faithful.");
             report.outcome = Outcome::Divergent {
                 at_iteration: y.iteration,

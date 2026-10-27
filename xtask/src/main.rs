@@ -754,6 +754,8 @@ fn fixtures(flags: &[String]) {
                 }
                 println!("  twins kept (same panels, script and reference)");
                 twins_ready = true;
+            } else if case.twins {
+                println!("  twins discarded (the inputs or the reference changed): rerunning them");
             } else {
                 println!(
                     "  twins discarded (the inputs or the reference changed): rerun `cargo xtask twins --case {}`",

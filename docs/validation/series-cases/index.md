@@ -28,7 +28,8 @@ is the first point where yFoil's iterations leave XFOIL's. Whether that matters 
 alone, using its **twins**: five reruns of XFOIL with every panel coordinate jogged by −1, 0 or +1 ULP
 ([terminology](../../development/conventions/terminology.md)).
 
-- If the twins themselves spread by more than `DIVERGENCE_FLOOR` there, XFOIL is
+- If the twins themselves spread by more than `DIVERGENCE_FLOOR` there, or one of them has already
+  left XFOIL's branch trace earlier in the same call or in an earlier one, XFOIL is
   **ill-conditioned** at that point, and yFoil parting from it is expected. The result says nothing
   about the translation.
 - If the twins agree, the parting is a **mismatch**. It is settled by replaying that one step: yFoil is

@@ -54,7 +54,7 @@ uses are `track = false`.
 
 ```bash
 cargo xtask fixtures --group series        # the series cases, each with its twins (twins = true)
-cargo xtask fixtures --group known-issues  # the known-issues cases (references only)
+cargo xtask fixtures --group known-issues  # the known-issues cases, likewise with their twins
 cargo xtask fixtures --group branch-coverage  # likewise; --group non-finite for the probes
 cargo xtask twins --case NAME ...           # rerun a case's five twins and noise_floor.json alone
 cargo run --release -p branch-coverage      # each run writes studies/<study>/runs/<UTC>/

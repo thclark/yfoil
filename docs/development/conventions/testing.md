@@ -49,7 +49,7 @@ Every test performs one, and only one, of the following functions.
    `series` case for a section or regime under normal conditions, a `known-issues` case for one of
    XFOIL's known issues (`docs/user-guide/reference/known-xfoil-issues.md`). A run whose only purpose is a known issue is
    a `known-issues` case, never a `series` one. Every study run — each `branch-coverage`,
-   `non-finite` and `series` case — carries its own five 1-ULP twins (`twins = true`), at its own
+   `non-finite`, `series` and `known-issues` case — carries its own five 1-ULP twins (`twins = true`), at its own
    panelling, which is the only way to know whether XFOIL was ill-conditioned at a given point; a
    twin of a different case, or of the same section at another panel count, says nothing about it.
    The studies live in `studies/` (indexed by `studies/README.md`), the tests in `tests/`.
