@@ -43,6 +43,7 @@ plotting = ["ironlab"]
 members = [
     ".",
     "cr-libm",
+    "bindings/wasm",
     "xtask",
     "studies/input-sensitivity",
     "studies/xfoil-instrumentation-check",

@@ -29,6 +29,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for flag in CORE_MATH_CFLAGS {
         build.flag(flag);
     }
+    // wasm32 has no C library headers of its own, and wasi-libc's fenv.h lacks the rounding-mode
+    // and flag macros CORE-MATH names: `wasm-include/` holds the few the sources include, stating
+    // WebAssembly's single rounding mode and absent flags. Only the include path changes; the
+    // sources, CORE_MATH_OPT_LEVEL and CORE_MATH_CFLAGS are the native ones (docs/bindings.md).
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("wasm32") {
+        let include = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("wasm-include");
+        println!("cargo:rerun-if-changed={}", include.display());
+        build
+            .flag("-nostdlibinc")
+            .flag("-isystem")
+            .flag(include.to_str().ok_or("bad include path")?);
+    }
     build.try_compile("core-math")?;
     Ok(())
 }

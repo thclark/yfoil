@@ -1,0 +1,134 @@
+name: WebAssembly
+
+# Build the WebAssembly binding (bindings/wasm) and check it bit for bit against the native build
+# (docs/bindings.md, "Numerical identity"): the native CLI's records against the module's on every
+# tracked panel set, and the maths library's raw bits. Run whenever the solver, the maths library,
+# the binding or its build changes, and on demand.
+# NaNs compare as a class (any NaN equals any NaN); every other value is compared bit for bit.
+#
+# Every run uploads the packages it checked as the artifact `yfoil-wasm` (the release assets:
+# yfoil-wasm-<version>-{web,nodejs}.tar.gz and SHA256SUMS) and smoke-tests that artifact as
+# downloaded. The release workflow (release.yml) calls this one with the release's tag, and makes
+# the release only from the artifact a passing run produced; nothing is published to npm.
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "src/**"
+      - "bindings/wasm/**"
+      - "cr-libm/**"
+      - "third-party/core-math/**"
+      - "third-party/core-math.*"
+      - "scripts/wasm.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/wasm.yml"
+  push:
+    branches: [ "main" ]
+    paths:
+      - "src/**"
+      - "bindings/wasm/**"
+      - "cr-libm/**"
+      - "third-party/core-math/**"
+      - "third-party/core-math.*"
+      - "scripts/wasm.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/wasm.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to name the assets after (empty: a -dev build)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to name the assets after; must match the crate version"
+        type: string
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  # binaryen's wasm-opt, pinned with the checksum of its release archive
+  BINARYEN_VERSION: "133"
+  BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
+
+permissions:
+  contents: read
+
+jobs:
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # scripts/wasm.sh needs a clang with the wasm32 backend and its llvm-ar (Ubuntu's have both)
+      - run: sudo apt-get update && sudo apt-get install -y clang llvm
+      - uses: Swatinem/rust-cache@v2
+      # wasm-bindgen-cli at the version bindings/wasm/Cargo.toml pins, and wasm-opt, kept outside
+      # target/ so the cargo cache's pruning cannot drop them
+      - id: bindgen
+        run: echo "version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' bindings/wasm/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - id: tools-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/wasm-tools
+          key: wasm-tools-bindgen-${{ steps.bindgen.outputs.version }}-binaryen-${{ env.BINARYEN_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install wasm-bindgen-cli --version "${{ steps.bindgen.outputs.version }}" --locked --root ~/wasm-tools
+          archive="binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz"
+          curl -sSfL -o "/tmp/$archive" "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/$archive"
+          echo "$BINARYEN_SHA256  /tmp/$archive" | sha256sum -c -
+          tar -xzf "/tmp/$archive" -C ~/wasm-tools --strip-components=1 "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
+      - run: scripts/wasm.sh check
+        env:
+          WASM_BINDGEN: /home/runner/wasm-tools/bin/wasm-bindgen
+          WASM_OPT: /home/runner/wasm-tools/bin/wasm-opt
+      # the release tag, from release.yml or the dispatch input (empty on pull requests and pushes);
+      # fails if the tag's version is not the crates' version
+      - env:
+          TAG: ${{ inputs.tag }}
+        run: scripts/wasm.sh package ${TAG:+--tag "$TAG"}
+      # the record the smoke test expects, from the native CLI that was checked against
+      - run: |
+          mkdir -p target/wasm-expected
+          target/release/yfoil analyse tests/fixtures/xfoil/naca0012_n60_a2_re1e6/panels.json -a 2 \
+            -o target/wasm-expected/reference.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yfoil-wasm
+          path: target/wasm-dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yfoil-wasm-expected
+          path: target/wasm-expected/reference.json
+          if-no-files-found: error
+
+  # the artifact as a reviewer or the release workflow downloads it: checksums, contents, and both
+  # packages loading and reproducing the native record
+  smoke:
+    needs: wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: yfoil-wasm
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: yfoil-wasm-expected
+          path: expected
+      - run: node bindings/wasm/tests/smoke.mjs dist --expect expected/reference.json

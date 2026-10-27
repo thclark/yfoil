@@ -1,0 +1,80 @@
+name: Release
+
+# Make the GitHub release of the version on main, with its WebAssembly assets. The release is
+# created only after the assets are built, checked bit for bit against the native build and
+# smoke-tested from this commit (wasm.yml, called with the release's tag), and it is created with
+# them attached, so a release never exists without its artifacts. A push to main whose version
+# already has a release does nothing. The tag is v<version>, the title the squash-merge commit's
+# subject (the PR title, docs/conventions/git-pull-requests.md).
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, check and package, but do not create the release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# one release at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      needed: ${{ steps.version.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "release $tag exists: nothing to do"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  wasm:
+    needs: version
+    if: needs.version.outputs.needed == 'true'
+    uses: ./.github/workflows/wasm.yml
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+
+  add-artifact:
+    needs: [ version, wasm ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: yfoil-wasm
+          path: dist
+      - run: cd dist && sha256sum -c SHA256SUMS
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          title="$(git log -1 --format=%s)"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry run: would create release $TAG ($title) at $GITHUB_SHA with:" && ls -l dist
+          else
+            gh release create "$TAG" dist/yfoil-wasm-*.tar.gz dist/SHA256SUMS \
+              --target "$GITHUB_SHA" --title "$title" --generate-notes
+          fi

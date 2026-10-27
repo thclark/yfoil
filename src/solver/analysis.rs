@@ -257,6 +257,25 @@ impl Session {
             .iter()
             .map(|(seed, p)| (*seed, self.twin(*seed, p)))
             .collect();
+        // WebAssembly has no threads: the twins run one after another. They start from copies of
+        // the session as the point finds it and never steer the base, so the order is immaterial.
+        #[cfg(target_family = "wasm")]
+        let (base, twin_sessions) = {
+            let mut results = Vec::new();
+            let mut kept = Vec::new();
+            for (seed, mut twin) in sessions {
+                let mut r = twin.execute(command);
+                r.iteration_records = Vec::new();
+                results.push((seed, r));
+                if keep {
+                    kept.push((seed, twin));
+                }
+            }
+            let mut base = self.execute(command);
+            base.twins = Some(results);
+            (base, kept)
+        };
+        #[cfg(not(target_family = "wasm"))]
         let (base, twin_sessions) = std::thread::scope(|scope| {
             let handles: Vec<_> = sessions
                 .into_iter()
@@ -459,6 +478,60 @@ impl HaltRule {
         criterion: HaltCriterion::Xfoil,
         after: 4,
     };
+
+    /// `--halt-on`: CRITERION[=N],... into rules, `none` into none. `twins_run` says whether the
+    /// points are solved with their twins, without which `ill-conditioned` cannot be judged.
+    pub fn parse_list(spec: &str, twins_run: bool) -> Result<Vec<HaltRule>, String> {
+        use crate::solver::validity::ValidityClass;
+        let spec = spec.trim();
+        if spec == "none" {
+            return Ok(Vec::new());
+        }
+        let mut rules: Vec<HaltRule> = Vec::new();
+        for item in spec.split(',').map(str::trim) {
+            let (name, n) = match item.split_once('=') {
+                Some((name, n)) => (name.trim(), Some(n.trim())),
+                None => (item, None),
+            };
+            let criterion = match name {
+                "xfoil" => HaltCriterion::Xfoil,
+                "none" => return Err("--halt-on none cannot be combined with other criteria".into()),
+                "anomalous" => {
+                    return Err(
+                        "--halt-on anomalous needs anomaly detection, which is not yet available (issue #12)".into(),
+                    )
+                }
+                _ => match ValidityClass::ALL.into_iter().find(|c| c.name() == name) {
+                    Some(c) => HaltCriterion::Class(c),
+                    None => {
+                        return Err(format!(
+                            "--halt-on: unknown criterion `{name}` (expected xfoil, out-of-domain, unconverged, ill-conditioned or none)"
+                        ))
+                    }
+                },
+            };
+            if criterion == HaltCriterion::Class(ValidityClass::IllConditioned) && !twins_run {
+                return Err("--halt-on ill-conditioned needs the twins, which --conditioning off does not run".into());
+            }
+            let default_after = if criterion == HaltCriterion::Xfoil {
+                HaltRule::XFOIL.after
+            } else {
+                1
+            };
+            let after = match n {
+                None => default_after,
+                Some(n) => match n.parse::<usize>() {
+                    Ok(n) if n >= 1 => n,
+                    _ => return Err(format!("--halt-on {name}={n}: N must be a whole number of at least 1")),
+                },
+            };
+            if rules.iter().any(|r| r.criterion == criterion) {
+                return Err(format!("--halt-on: `{name}` is given twice"));
+            }
+            rules.push(HaltRule { criterion, after });
+        }
+        Ok(rules)
+    }
 }
 
 /// The classes of the reasons a solved point is invalid, for the halt rules that count a class.
