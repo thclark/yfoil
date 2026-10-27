@@ -66,6 +66,13 @@ reproducible studies:
 - [Tolerances](tolerances/index.md): Determines much XFOIL's internal and output values move under 1-ULP ('Unit of Least Precision') changes to its
   inputs. This study was used as a basis to generate tolerances for comparisons between yFoil and XFOIL (for the series cases and for unit test fixtures).
 
+- [Conditioning](conditioning/index.md): Determines how far yFoil's own twins (five re-solves of each point on panels given a 1-ULP
+  jitter) move the points of the series and branch-coverage cases. A point balanced on a knife edge, where another solution lies one
+  rounding error away, cannot be recognised from a single run, so yFoil checks every point with its twins by default. This study
+  was used as a basis to set the two thresholds those checks apply: the error threshold, beyond which a point is withheld as
+  ill-conditioned, sits in the gap between the noise floor and twins that reached another solution; the warning threshold
+  marks points whose twins agree less closely than the noise floor.
+
 
 ## Reproducing studies
 
@@ -91,6 +98,11 @@ cargo run --release -p branch-coverage
 
 # Tolerances (builds the reference if it is missing)
 studies/tolerances/tolerances.sh
+
+# Conditioning (reads the cases' panels only)
+cargo xtask fixtures --group series
+cargo xtask fixtures --group branch-coverage
+cargo run --release -p conditioning
 ```
 
 A run never changes documentation pages. How the pages and the runs fit together is set out in 
@@ -103,7 +115,7 @@ cargo xtask publish <study>                 # Copies results across to the docs 
 cargo xtask publish <study> --run <UTC>     # ...or a chosen historical run
 ```
 
-`<study>` is `aerofoil-series`, `series-cases`, `known-issues`, `branch-coverage` or `tolerances`.
+`<study>` is `aerofoil-series`, `series-cases`, `known-issues`, `branch-coverage`, `tolerances` or `conditioning`.
 
 
 !!! note "Developer note"

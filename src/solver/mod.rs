@@ -20,6 +20,7 @@ pub mod psilin;
 pub mod qdcalc;
 pub mod setbl;
 pub mod specal;
+pub mod twins;
 pub mod update;
 pub mod validity;
 pub mod velocity;
@@ -29,3 +30,4 @@ pub mod xywake;
 pub use analysis::{
     analyse, compute_polar, compute_polar_with, FlowConditions, PointResult, PolarConfig, PolarResult, Session,
 };
+pub use twins::Twins;

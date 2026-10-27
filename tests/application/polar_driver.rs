@@ -120,6 +120,7 @@ fn test_polar_driver_halts_a_leg_after_consecutive_failures() {
             ..spec()
         },
         max_consecutive_failures: 1,
+        twins: None,
     };
     let polar = compute_polar(&airfoil, &config);
     assert!(!polar.completed, "both legs halt");

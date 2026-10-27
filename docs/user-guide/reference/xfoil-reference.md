@@ -1249,8 +1249,11 @@ base names are listed with the sensitivities XFOIL carries.
 | ITRAN | `i_transition_station` | |
 | RMSBL | `residual` | last iteration |
 | — | `iterations`, `iteration_records` | |
+| — | `twins` | the point's five twins, `(seed, PointResult)` in seed order (`src/solver/twins.rs`); `None` with `--no-twins`. No XFOIL equivalent: the output layer measures `conditioning` from them |
+| — | `Session::with_twins`, `Twins` | the jittered panels every point of a session is also solved on (`src/geometry/jitter.rs`) |
 | ASEQ | keep | degrees |
 | NSEQEX | `max_consecutive_failures` | |
+| — | `PolarConfig::twins` | the twins every recorded polar point is solved with |
 | — | {`results`, `failed_alphas`, `conditions`, `completed`} | |
 
 ### Table 10: functions (each carries `#[doc(alias = "XFOIL NAME")]`)

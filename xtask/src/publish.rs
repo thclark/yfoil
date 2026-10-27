@@ -18,12 +18,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The studies that publish into `docs/validation/<study>/`, each from `studies/<study>/runs/`.
-const STUDIES: [&str; 5] = [
+const STUDIES: [&str; 6] = [
     "aerofoil-series",
     "series-cases",
     "known-issues",
     "branch-coverage",
     "tolerances",
+    "conditioning",
 ];
 
 pub fn run(args: &[String]) {

@@ -48,11 +48,23 @@ no configurable start angle — both legs start from 0°, as XFOIL does.
 | `--label` | file stem | Legend entry for `yfoil plot polar` |
 | `--distributions` | off | Embed the full analysis record at every point |
 | `--include-lagged-closures` | off | Also embed the lagged closure arrays |
+| `--allow-invalid` | off | Report the numbers of invalid points too; their status is unchanged |
+| `--no-twins` | off | Do not run the twins: skip the conditioning check and report every converged, in-domain point as XFOIL would |
+| `--spread-warning-threshold` | 1e-8 | Spread over the twins beyond which a valid point carries a warning that it may be ill-conditioned |
+| `--spread-error-threshold` | 1e-4 | Spread over the twins beyond which a point is ill-conditioned: `Invalid`, numbers withheld |
 | `--json` | off | Emit JSON on stdout |
 | `-o`, `--output` | — | Output file |
 
 `--distributions` makes the polar file self-contained: it can then be fed to
 `yfoil plot foil` to draw boundary-layer distributions at selected angles.
+
+Each point is checked with its [twins](../reference/solution-validity.md#twins) unless
+`--no-twins` is given. A twin of a polar point starts from the same boundary layer the point starts
+from, its predecessor's, so the check is of that one solve and does not depend on how the sweep got
+there. Points beyond the warning threshold only are listed `Valid` with a warning that they may
+be ill-conditioned. Ill-conditioned points are listed as `Invalid (IllConditioned)` with their numbers withheld,
+counted in the summary, and left out of \(C_{L,max}\), \((L/D)_{max}\) and \(C_{D0}\); the
+sweep itself runs exactly as XFOIL's, since the twins never steer it.
 
 ## The XFOIL equivalent
 

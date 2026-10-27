@@ -294,8 +294,18 @@ impl SolverState {
     /// State for a paneled airfoil with `nw` wake nodes to be set later (XYWAKE, stage S3).
     /// Copies the airfoil geometry into the 1-based panel arrays and evaluates TECALC.
     pub fn from_foil(airfoil: &PanelledFoil, nw: usize) -> Self {
+        let mut state = Self::empty(airfoil.n_foil_nodes, nw);
+        state.set_foil_geometry(airfoil);
+        state
+    }
+
+    /// Copy the airfoil's panel nodes (1..=n) and what LOAD derives from them (chord, LE, TE,
+    /// TECALC) into the state, leaving the wake nodes and everything else as they are. A twin
+    /// (`crate::solver::twins`) swaps its jittered panels into a copy of a session with this.
+    pub fn set_foil_geometry(&mut self, airfoil: &PanelledFoil) {
         let n = airfoil.n_foil_nodes;
-        let mut state = Self::empty(n, nw);
+        assert_eq!(n, self.n_foil_nodes, "a foil with another node count is another state");
+        let state = self;
         for i in 1..=n {
             state.x[i] = airfoil.x[i - 1];
             state.y[i] = airfoil.y[i - 1];
@@ -312,8 +322,7 @@ impl SolverState {
         state.y_le = crate::geometry::spline_value(airfoil.s_le, &airfoil.y, &airfoil.dyds, &airfoil.s);
         state.x_te = 0.5 * (state.x[1] + state.x[n]);
         state.y_te = 0.5 * (state.y[1] + state.y[n]);
-        crate::solver::pointers::set_te_thickness(&mut state);
-        state
+        crate::solver::pointers::set_te_thickness(state);
     }
 
     /// Install wake node coordinates `n+1..=n+nw` (from XYWAKE, or from a fixture).

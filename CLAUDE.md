@@ -251,6 +251,9 @@ yfoil analyse  - single operating point (--alpha or --cl, --inviscid); -o writes
 yfoil polar    - alpha sweep (state machine: 0°→max, reinitialise, 0°→min, stitched ascending);
                  --label names the curve, -o writes the polar JSON, --distributions embeds a full
                  analysis record at every sweep point (--max-iterations, --ncrit as for analyse)
+                 both: each point checked by its five 1-ULP twins (--no-twins: none run),
+                 --spread-warning-threshold / --spread-error-threshold (1e-8 / 1e-4);
+                 --allow-invalid shows the numbers of invalid points, status unchanged
 yfoil plot     - foil <file>... | analysis <file> | polar <file>...   (feature-gated)
                  foil: geometry files (panels only), analysis JSONs (design points, same panels) or
                  one polar JSON (--alpha selects points); --panels notches|dots|none, --wake,
@@ -303,12 +306,25 @@ on `naca4412_n60_inviscid_m07_a10` and `naca64a010_n60_inviscid_type2_m03_am23_a
 Failures are classified by *what it would take to know*, not by severity (`docs/user-guide/reference/solution-validity.md`,
 "How failures are classified"): **Class A** a domain violation, **Class B** an iteration exhaustion —
 both exact from a single run, both recorded, both withholding the numbers — and **Class C**
-conditioning, which needs two runs to see, stays `Valid`: such a result is *ill-conditioned*
-(`docs/development/conventions/terminology.md`), measured by the twins every validation run carries. A result is therefore invalid on exact, single-run facts only
-(A or B), **never** on the size or smoothness of a number: `docs/user-guide/reference/known-xfoil-issues.md` §7.7 is the
+conditioning, which needs more runs to see. Those runs are the point's **twins**
+(`src/solver/twins.rs`): by default every point is solved again on five copies of the panels
+jittered by −1/0/+1 ULP per coordinate (`src/geometry/jitter.rs`, seeds 1–5, the same jitter
+`cargo xtask twins` applies to the reference), each from the state the point starts from — so the
+verdict depends only on what the point's id hashes, never on twin histories across a sweep — and
+the twins run concurrently and never steer the base. A point valid on A and B whose twins move a
+reported quantity beyond the error threshold (`src/output/conditioning.rs`, `Thresholds`; spread
+`|a − b| / max(|a|, |b|, 1)`, NaN counts as beyond) is *ill-conditioned*
+(`docs/development/conventions/terminology.md`) and `Invalid` with `IllConditioned`; only values decide,
+and twins that did not converge raise a `TwinsNotValid` warning, never a reason. A valid point whose
+largest spread is beyond only the warning threshold carries an `IllConditioned` *warning*. The error
+threshold (1e-4) sits in the gap between the noise floor and a twin that reached another solution, the
+warning threshold (1e-8) in the upper reaches of the noise floor; both are derived by the conditioning
+study (`studies/conditioning`, `docs/validation/conditioning/`) and settable per run
+(`--spread-warning-threshold`, `--spread-error-threshold`). `--no-twins` runs no twins at all and
+reports as XFOIL would; `--allow-invalid` is independent of it. Nothing is ever inferred from the size or
+smoothness of the point's own numbers: `docs/user-guide/reference/known-xfoil-issues.md` §7.7 is the
 worked case, where the spectacular-looking point is the *smaller* violation. `src/solver/validity.rs`
-records the evidence, write-only, enforced by `ci/validity-write-only.sh`. Ill-conditioned but converged
-points are not covered by this and stay valid.
+records the A/B evidence, write-only, enforced by `ci/validity-write-only.sh`.
 
 Both commands exit zero whenever the solver ran to completion: an invalid point is a result, not a tool
 failure, and the status carries it.

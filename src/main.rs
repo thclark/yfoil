@@ -10,8 +10,12 @@ use yfoil::geometry::{
     write_dat_file, write_geometry_to_json, CosineConfig, Geometry, KarmanTrefftz, PanelConfig, PanelMethod,
     PangenConfig, RepanelError, Section, Series, TeGap,
 };
-use yfoil::output::{AnalysisOutput, PolarOutput};
+use yfoil::output::{
+    AnalysisOutput, PolarOutput, Reason, Thresholds, Warning, CONDITIONING_ERROR_THRESHOLD,
+    CONDITIONING_WARNING_THRESHOLD,
+};
 use yfoil::solver::analysis::{compute_polar, compute_polar_with, FlowConditions, PolarConfig, Session};
+use yfoil::solver::Twins;
 
 #[cfg(feature = "plotting")]
 use yfoil::output::{
@@ -82,6 +86,22 @@ enum Commands {
         /// are unchanged — this only stops the numeric results being withheld.
         #[arg(long)]
         allow_invalid: bool,
+
+        /// Do not run the twins: skip the conditioning check and report every converged,
+        /// in-domain point as XFOIL would. By default each point is also solved on five copies of
+        /// the panels jittered by one ULP, and withheld as ill-conditioned if they disagree.
+        #[arg(long)]
+        no_twins: bool,
+
+        /// The spread of a reported quantity over the twins beyond which a valid point carries
+        /// a warning that it may be ill-conditioned
+        #[arg(long, default_value_t = CONDITIONING_WARNING_THRESHOLD, conflicts_with = "no_twins")]
+        spread_warning_threshold: f64,
+
+        /// The spread of a reported quantity over the twins beyond which a point is
+        /// ill-conditioned: invalid, with its numbers withheld
+        #[arg(long, default_value_t = CONDITIONING_ERROR_THRESHOLD, conflicts_with = "no_twins")]
+        spread_error_threshold: f64,
     },
 
     /// Generate polar sweep
@@ -138,6 +158,22 @@ enum Commands {
         /// are unchanged — this only stops the numeric results being withheld.
         #[arg(long)]
         allow_invalid: bool,
+
+        /// Do not run the twins: skip the conditioning check and report every converged,
+        /// in-domain point as XFOIL would. By default each point is also solved on five copies of
+        /// the panels jittered by one ULP, and withheld as ill-conditioned if they disagree.
+        #[arg(long)]
+        no_twins: bool,
+
+        /// The spread of a reported quantity over the twins beyond which a valid point carries
+        /// a warning that it may be ill-conditioned
+        #[arg(long, default_value_t = CONDITIONING_WARNING_THRESHOLD, conflicts_with = "no_twins")]
+        spread_warning_threshold: f64,
+
+        /// The spread of a reported quantity over the twins beyond which a point is
+        /// ill-conditioned: invalid, with its numbers withheld
+        #[arg(long, default_value_t = CONDITIONING_ERROR_THRESHOLD, conflicts_with = "no_twins")]
+        spread_error_threshold: f64,
 
         /// Output file path
         #[arg(short, long)]
@@ -596,6 +632,43 @@ fn status_line(point: &yfoil::output::PointRecord) -> String {
     format!("{} ({})", point.status, reasons.join(", "))
 }
 
+/// The status line with the point's warnings, if any, after it.
+fn status_with_warnings(point: &yfoil::output::PointRecord) -> String {
+    let mut line = status_line(point);
+    for w in &point.warnings {
+        line.push_str(&format!("; warning: {w}"));
+    }
+    line
+}
+
+/// Why an ill-conditioned point's numbers are withheld, in one sentence: the quantity its twins
+/// moved furthest and by how much.
+fn ill_conditioned_explanation(point: &yfoil::output::PointRecord) -> Option<String> {
+    let c = point.diagnostics.as_ref()?.conditioning.as_ref()?;
+    let spread = c.worst_spread();
+    let by = if spread.is_nan() {
+        "to a non-finite value".to_string()
+    } else {
+        format!("by {spread:.1e}")
+    };
+    Some(format!(
+        "the point is ill-conditioned — a 1-ULP jitter of the panel coordinates moves {} {by} (error threshold {:.0e})",
+        c.worst, c.thresholds.error
+    ))
+}
+
+/// The thresholds given on the command line, refused when the warning would come after the error.
+fn thresholds(warning: f64, error: f64) -> Thresholds {
+    if !(warning > 0.0 && warning <= error) {
+        eprintln!(
+            "error: --spread-warning-threshold ({warning:e}) must be positive and no larger than \
+             --spread-error-threshold ({error:e})"
+        );
+        std::process::exit(2);
+    }
+    Thresholds { warning, error }
+}
+
 fn main() {
     // Initialize logger
     env_logger::init();
@@ -616,9 +689,14 @@ fn main() {
             max_iterations,
             include_lagged_closures,
             allow_invalid,
+            no_twins,
+            spread_warning_threshold,
+            spread_error_threshold,
         } => {
+            let thresholds = thresholds(spread_warning_threshold, spread_error_threshold);
             let geometry = read_geometry_auto(&file);
             let foil = panel_foil(&geometry);
+            let twins = (!no_twins).then(|| Twins::new(&geometry));
             let foil_name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown");
 
             let conditions = FlowConditions {
@@ -628,7 +706,7 @@ fn main() {
                 max_iterations,
                 ..FlowConditions::default()
             };
-            let mut session = Session::new(&foil, conditions.clone());
+            let mut session = Session::new(&foil, conditions.clone()).with_twins(twins);
             let point = match cl {
                 Some(clspec) => session.cl(clspec),
                 None => session.alpha(alpha.to_radians()),
@@ -656,8 +734,8 @@ fn main() {
             println!();
 
             // the same record a polar entry carries, and the same rule on its numbers
-            let record = yfoil::output::PointRecord::from_point(&point, !inviscid, allow_invalid);
-            println!("Status:  {}", status_line(&record));
+            let record = yfoil::output::PointRecord::from_point(&point, !inviscid, allow_invalid, thresholds);
+            println!("Status:  {}", status_with_warnings(&record));
             println!();
             match &record.values {
                 Some(v) => {
@@ -684,6 +762,13 @@ fn main() {
                         );
                     }
                 }
+                None if record.reasons == [Reason::IllConditioned] => {
+                    println!(
+                        "Results withheld: {}.",
+                        ill_conditioned_explanation(&record).unwrap_or_default()
+                    );
+                    println!("Pass --allow-invalid to report them anyway, or --no-twins to skip the check.");
+                }
                 None => {
                     println!("Results withheld: this point is not valid, so its numbers are not");
                     println!("to be believed. Pass --allow-invalid to report them anyway.");
@@ -704,11 +789,27 @@ fn main() {
                 if let Some(r) = d.residual {
                     println!("  rms:        {:.2e}", r);
                 }
+                if let Some(c) = &d.conditioning {
+                    println!(
+                        "  Twins:      largest spread {:.2e} ({}); warning threshold {:.0e}, error threshold {:.0e}",
+                        c.worst_spread(),
+                        c.worst,
+                        c.thresholds.warning,
+                        c.thresholds.error
+                    );
+                }
             }
 
             if let Some(ref path) = output {
                 let result =
-                    AnalysisOutput::from_session(&session, &point, foil_name, include_lagged_closures, allow_invalid);
+                    AnalysisOutput::from_session(
+                    &session,
+                    &point,
+                    foil_name,
+                    include_lagged_closures,
+                    allow_invalid,
+                    thresholds,
+                );
                 let json_str = result.to_json().expect("Failed to serialize results");
                 std::fs::write(path, &json_str).expect("Failed to write output file");
                 println!();
@@ -730,7 +831,11 @@ fn main() {
             distributions,
             include_lagged_closures,
             allow_invalid,
+            no_twins,
+            spread_warning_threshold,
+            spread_error_threshold,
         } => {
+            let thresholds = thresholds(spread_warning_threshold, spread_error_threshold);
             // Read geometry
             let geometry = read_geometry_auto(&file);
             let aerofoil = panel_foil(&geometry);
@@ -748,6 +853,7 @@ fn main() {
                     max_iterations,
                     ..FlowConditions::default()
                 },
+                twins: (!no_twins).then(|| Twins::new(&geometry)),
                 ..Default::default()
             };
 
@@ -761,6 +867,7 @@ fn main() {
                         airfoil_name,
                         include_lagged_closures,
                         allow_invalid,
+                        thresholds,
                     ));
                 })
             } else {
@@ -769,7 +876,7 @@ fn main() {
             records.sort_by(|a, b| a.results.alpha_deg.partial_cmp(&b.results.alpha_deg).unwrap());
 
             // Create output struct
-            let mut polar_output = PolarOutput::from_polar(&result, airfoil_name, allow_invalid);
+            let mut polar_output = PolarOutput::from_polar(&result, airfoil_name, allow_invalid, thresholds);
             polar_output.label = label;
             polar_output.distributions = records;
 
@@ -811,7 +918,7 @@ fn main() {
                             v.transition_lower.map_or(0.0, |t| t[0]),
                             d.and_then(|d| d.iterations).unwrap_or(0),
                             d.and_then(|d| d.residual).unwrap_or(0.0),
-                            status_line(point),
+                            status_with_warnings(point),
                         ),
                         // the point was asked for, so it is reported; its numbers are withheld
                         None => println!(
@@ -825,7 +932,7 @@ fn main() {
                             "-",
                             "-",
                             "-",
-                            status_line(point),
+                            status_with_warnings(point),
                         ),
                     }
                 }
@@ -862,6 +969,31 @@ fn main() {
                             " (numbers withheld; --allow-invalid reports them)"
                         }
                     );
+                }
+                let n_ill = polar_output
+                    .results
+                    .iter()
+                    .filter(|r| r.reasons.contains(&Reason::IllConditioned))
+                    .count();
+                if n_ill > 0 {
+                    println!(
+                        "    of which ill-conditioned: {n_ill} — a 1-ULP jitter of the panel coordinates moves them beyond {:.0e}",
+                        thresholds.error
+                    );
+                }
+                let n_may = polar_output
+                    .results
+                    .iter()
+                    .filter(|r| r.warnings.iter().any(|w| matches!(w, Warning::IllConditioned { .. })))
+                    .count();
+                if n_may > 0 {
+                    println!(
+                        "  May be ill-conditioned: {n_may} valid point(s) — a 1-ULP jitter of the panel coordinates moves them beyond {:.0e}",
+                        thresholds.warning
+                    );
+                }
+                if no_twins {
+                    println!("  Twins not run (--no-twins): conditioning was not checked");
                 }
                 if sm.n_not_attempted > 0 {
                     println!(

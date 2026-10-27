@@ -50,6 +50,7 @@ members = [
     "studies/branch-coverage",
     "studies/series-cases",
     "studies/known-issues",
+    "studies/conditioning",
 ]
 
 # Lints allowed because they fight the translation goal (CLAUDE.md Rule 1/2). Each one is a

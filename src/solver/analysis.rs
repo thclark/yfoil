@@ -11,6 +11,7 @@ use crate::solver::blstate::SolverState;
 use crate::solver::ggcalc::InviscidSystem;
 use crate::solver::point_id::IdHasher;
 use crate::solver::specal::{alpha_command, cl_command, sequence_command};
+use crate::solver::twins::Twins;
 use crate::solver::viscal::{solve_viscous, IterationRecord};
 
 /// The flow conditions shared by every point of a polar: the OPER settings that must be pinned
@@ -85,10 +86,10 @@ pub struct PointResult {
     /// Newton's exhaustion and MRCL's substitutions (`crate::solver::validity`). Recorded by the
     /// solver, never read by it; the output layer classifies the point from this.
     pub validity: crate::solver::validity::ValidityRecord,
-    /// This point's stable reference: a random 8-character id, unique to this solve. Random
-    /// rather than positional so that points from different runs can be held together — a polar
-    /// restarted from a point of an earlier one, or two sweeps merged — without the references
-    /// colliding, which a per-run counter would guarantee.
+    /// This point's stable reference: a 12-character content-addressed id, the hash of everything
+    /// the solve depended on (`crate::solver::point_id`). Content-addressed rather than positional
+    /// so that points from different runs can be held together — a polar restarted from a point
+    /// of an earlier one, or two sweeps merged — without the references colliding.
     pub id: String,
     /// The `id` of the point whose converged boundary layer seeded this solve, or `None` when the
     /// BL was marched fresh (MRCHUE from the inviscid solution). A polar is a state machine, so
@@ -100,6 +101,10 @@ pub struct PointResult {
     pub residual: f64,
     /// Per-iteration record
     pub iteration_records: Vec<IterationRecord>,
+    /// The point's twins (`crate::solver::twins`), in seed order with their seeds, or `None` when
+    /// none were run (`--no-twins`). A twin's own `twins` is `None` and its iteration records are
+    /// dropped. The output layer measures the conditioning from these.
+    pub twins: Option<Vec<(u64, PointResult)>>,
 }
 
 /// A persistent analysis session: the geometry, inviscid system and BL state that XFOIL keeps
@@ -116,6 +121,16 @@ pub struct Session {
     /// The id of the last point solved, which is the predecessor of the next one whenever the
     /// boundary layer is carried across.
     last_point_id: Option<String>,
+    /// The twins every point is solved with, or `None` to solve points alone
+    twins: Option<Twins>,
+}
+
+/// One OPER command that solves a point.
+#[derive(Debug, Clone, Copy)]
+enum Command {
+    Alpha(f64),
+    Cl(f64),
+    Sequence(f64),
 }
 
 impl Session {
@@ -190,6 +205,72 @@ impl Session {
             inputs_hash,
             last_point_id: None,
             conditions: spec,
+            twins: None,
+        }
+    }
+
+    /// The session with every point from here on solved alongside these twins.
+    pub fn with_twins(mut self, twins: Option<Twins>) -> Self {
+        self.twins = twins;
+        self
+    }
+
+    /// The twins points are solved with, if any
+    pub fn twins(&self) -> Option<&Twins> {
+        self.twins.as_ref()
+    }
+
+    /// A twin of this session for the next point: a copy of the whole state as it stands, with
+    /// the airfoil panels swapped for `panels` and GGCALC's inviscid system dropped, so SPECAL
+    /// rebuilds it — and VISCAL the DIJ, whose airfoil block goes with it (LADIJ) — on the
+    /// jittered panels. The boundary layer, pointers, wake and flags are the base's: the twin is
+    /// the same solve from the same initial state (`crate::solver::twins`).
+    fn twin(&self, panels: &PanelledFoil) -> Session {
+        let mut twin = self.clone();
+        twin.twins = None;
+        twin.state.set_foil_geometry(panels);
+        twin.inviscid = None;
+        twin
+    }
+
+    /// Solve one point; with twins, the five twins run concurrently with the base on copies of
+    /// the session as the point finds it, and their results are attached to the base's.
+    fn run(&mut self, command: Command) -> PointResult {
+        let Some(twins) = self.twins.clone() else {
+            return self.execute(command);
+        };
+        let sessions: Vec<(u64, Session)> = twins.panels.iter().map(|(seed, p)| (*seed, self.twin(p))).collect();
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = sessions
+                .into_iter()
+                .map(|(seed, mut twin)| {
+                    scope.spawn(move || {
+                        let mut r = twin.execute(command);
+                        r.iteration_records = Vec::new();
+                        (seed, r)
+                    })
+                })
+                .collect();
+            let mut base = self.execute(command);
+            base.twins = Some(handles.into_iter().map(|h| h.join().expect("a twin panicked")).collect());
+            base
+        })
+    }
+
+    fn execute(&mut self, command: Command) -> PointResult {
+        match command {
+            Command::Alpha(alpha) => {
+                alpha_command(&mut self.state, &mut self.inviscid, alpha);
+                self.solve_point(self.conditions.max_iterations, 0)
+            }
+            Command::Cl(clspec) => {
+                let ital = cl_command(&mut self.state, &mut self.inviscid, clspec);
+                self.solve_point(self.conditions.max_iterations, ital)
+            }
+            Command::Sequence(alpha) => {
+                sequence_command(&mut self.state, &mut self.inviscid, alpha);
+                self.solve_point(self.conditions.max_iterations + 5, 0)
+            }
         }
     }
 
@@ -207,22 +288,19 @@ impl Session {
     /// OPER `ALFA`: SPECAL for the new angle, then VISCAL(ITMAX) when viscous.
     #[doc(alias = "ALFA")]
     pub fn alpha(&mut self, alpha: f64) -> PointResult {
-        alpha_command(&mut self.state, &mut self.inviscid, alpha);
-        self.solve_point(self.conditions.max_iterations, 0)
+        self.run(Command::Alpha(alpha))
     }
 
     /// OPER `CL`: SPECCL for the specified CL (alpha is the unknown), then VISCAL(ITMAX) when
     /// viscous — UPDATE then drives alpha so that the viscous CL meets CLSPEC.
     pub fn cl(&mut self, clspec: f64) -> PointResult {
-        let ital = cl_command(&mut self.state, &mut self.inviscid, clspec);
-        self.solve_point(self.conditions.max_iterations, ital)
+        self.run(Command::Cl(clspec))
     }
 
     /// One point of OPER `ASEQ`: SPECAL for the new angle, then VISCAL(ITMAX + 5) when viscous.
     #[doc(alias = "ASEQ")]
     pub fn sequence_point(&mut self, alpha: f64) -> PointResult {
-        sequence_command(&mut self.state, &mut self.inviscid, alpha);
-        self.solve_point(self.conditions.max_iterations + 5, 0)
+        self.run(Command::Sequence(alpha))
     }
 
     fn solve_point(&mut self, niter: usize, inviscid_cl_iterations: usize) -> PointResult {
@@ -283,6 +361,7 @@ impl Session {
             initialised_from,
             residual: trace.last().map(|t| t.residual).unwrap_or(0.0),
             iteration_records: trace,
+            twins: None,
         }
     }
 }
@@ -307,6 +386,8 @@ pub struct PolarConfig {
     pub conditions: FlowConditions,
     /// NSEQEX: an ASEQ sequence halts once this many consecutive points fail to converge
     pub max_consecutive_failures: usize,
+    /// The twins every recorded point is solved with (`crate::solver::twins`), or `None`
+    pub twins: Option<Twins>,
 }
 
 impl Default for PolarConfig {
@@ -317,6 +398,7 @@ impl Default for PolarConfig {
             alpha_step: 0.5,
             conditions: FlowConditions::default(),
             max_consecutive_failures: 4,
+            twins: None,
         }
     }
 }
@@ -359,7 +441,7 @@ pub fn compute_polar_with(
     observe: &mut dyn FnMut(&Session, &PointResult),
 ) -> PolarResult {
     let step = config.alpha_step.abs();
-    let mut session = Session::new(airfoil, config.conditions.clone());
+    let mut session = Session::new(airfoil, config.conditions.clone()).with_twins(config.twins.clone());
     let mut points = Vec::new();
     let mut not_attempted = Vec::new();
     let mut completed = true;
@@ -417,7 +499,10 @@ pub fn compute_polar_with(
     // INIT, ALFA 0 (re-solve to seed the leg; not recorded), ASEQ -step alpha_min -step
     if config.alpha_min <= -step {
         session.init();
+        // the re-solve is not a recorded point, so it has no twins to run
+        let twins = session.twins.take();
         session.alpha(0.0);
+        session.twins = twins;
         // The re-solve seeds the downward leg and is not a polar point (OPER cannot store a BL
         // state, so the leg starts from a fresh MRCHUE march at 0°). Its inputs — geometry,
         // conditions, operating point, iteration limit, and no predecessor — are those of the
