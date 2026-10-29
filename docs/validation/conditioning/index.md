@@ -36,10 +36,23 @@ OPER procedure, which yFoil runs with its twins:
   that take XFOIL's rarely-taken branches: inviscid, fixed CL, `TYPE 2` and `3`, forced transition,
   `DAMP` (see [Branch coverage](../branch-coverage/index.md)).
 
-**The measure.** The *spread* of a reported quantity (α, CL, CM, CDp, CD, CDf and the two
-transition locations) is the furthest any of the five twins moved it, `|a − b| / max(|a|, |b|, 1)`.
-A point's largest spread is the largest over its quantities. A spread that is not a number (a twin
-went through a NaN where the point did not) counts as the largest possible.
+**The measure.** Let $q_v$ be a reported quantity $v$ of the point and $q_{v,k}$ the same
+quantity from its twin $k = 1, \dots, 5$. The *spread* of $v$ is the furthest any twin moved it,
+and the point's *largest spread* is the largest over its quantities:
+
+$$
+s_v = \max_k \frac{|q_v - q_{v,k}|}{\max\left(|q_v|,\ |q_{v,k}|,\ 1\right)},
+\qquad
+S = \max_v s_v .
+$$
+
+The quantities $v$ are α, CL, CM, CDp, CD, CDf and the x/c of the upper and lower transition
+(the first four only for an inviscid point). Each twin is compared with the point, never with
+another twin. The floor of 1 in the denominator makes the spread an absolute difference for every
+quantity of order one or less, which is all of them in practice, and a relative one only beyond
+that. A spread that is not a number (a twin went through a NaN where the point did not) counts as
+the largest possible, so then $S$ is too. This is the measure yFoil applies to every point
+(`src/output/conditioning.rs`); $S$ is what the figures below plot.
 
 **Which points are measured.** A point already invalid on its own run, because it did not converge
 or left the Kármán–Tsien domain, is withheld whatever its twins do. Its twins are not compared, so
