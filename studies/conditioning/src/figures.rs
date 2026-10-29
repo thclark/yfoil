@@ -195,8 +195,11 @@ pub fn spread_against_alpha(run_dir: &Path, s: &Value) -> Result<(), String> {
             invalid.push(a);
         }
     }
-    let mut fig = figure("spread-against-alpha", s);
-    let k = key(&mut fig, 2);
+    let mut fig = figure("spread-against-alpha", s).title(
+        "Spread of $q_v$ over twins $q_{v,k}$, \
+         $v \\in \\{\\alpha, C_L, C_M, C_D, C_{Dp}, C_{Df}, x_\\mathrm{tr}\\}$, $k \\in \\{1, \\dots, 5\\}$",
+    );
+    let k = key(&mut fig, 1);
     {
         let mut ax = fig.axes(0, 0);
         if !invalid.is_empty() {
@@ -271,7 +274,7 @@ pub fn spread_against_alpha(run_dir: &Path, s: &Value) -> Result<(), String> {
             .xlim(-31.0, 31.0)
             .ylim(floor, top)
             .xlabel("$\\alpha$ (°)")
-            .ylabel("largest spread over five 1-ULP twins")
+            .ylabel("$\\max_v \\max_k |q_v - q_{v,k}| / \\max(|q_v|, |q_{v,k}|, 1)$")
             .legend_in(k);
     }
     figures::save_with_pdf(&fig, &run_dir.join("spread-against-alpha")).map_err(|e| e.to_string())
