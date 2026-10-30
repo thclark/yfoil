@@ -18,7 +18,7 @@ the upper surface, round the leading edge, and back along the lower surface.
 ## 2. Solve one operating point
 
 ``` sh
-yfoil analyse naca0012.json --alpha 5 --reynolds 1e9 -o naca0012_a5.json
+yfoil analyse naca0012.json --alpha 4 --reynolds 1e6 -o naca0012_a4.json
 ```
 
 The output JSON carries the operating conditions, the integrated forces, the
@@ -40,8 +40,8 @@ initialised from the previous one, exactly as XFOIL does it.
 
 ``` sh
 yfoil plot polar naca0012_polar.json -o naca0012_polar.fig
-yfoil plot analysis naca0012_a5.json -o naca0012_a5.fig
-ironlab-viewer naca0012_polar.fig naca0012_a5.fig
+yfoil plot analysis naca0012_a4.json -o naca0012_a4.fig
+ironlab-viewer naca0012_polar.fig naca0012_a4.fig
 ```
 
 The figures open in the [ironlab viewer](../commands/plotting.md#viewing-and-exporting), which exports
@@ -50,7 +50,7 @@ to visualise them, this analysis should produce the polar and distributions belo
 
 <ironlab-figure src="../figures/naca0012_polar.fig" format="fig" name="naca0012_polar" alt="NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees">NACA 0012 polar at Re 1e6, alpha -5 to 15 degrees</ironlab-figure>
 
-<ironlab-figure src="../figures/naca0012_a5.fig" format="fig" name="naca0012_a5" alt="NACA 0012 at alpha 5 degrees, Re 1e9: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 0012 at alpha 5 degrees, Re 1e9: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
+<ironlab-figure src="../figures/naca0012_a4.fig" format="fig" name="naca0012_a4" alt="NACA 0012 at alpha 4 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline">NACA 0012 at alpha 4 degrees, Re 1e6: -Cp and Ue over x/c, upper and lower surfaces, above the aerofoil outline</ironlab-figure>
 
 ## Next
 

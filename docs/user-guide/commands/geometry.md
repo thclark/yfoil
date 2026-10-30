@@ -32,7 +32,7 @@ the references are in [aerofoil series](../reference/aerofoil-series.md).
 
 ``` sh
 yfoil geometry naca 0012 -n 160 -o naca0012.json
-yfoil geometry naca 4412 -n 200 --sharp -o naca4412.json
+yfoil geometry naca 4412 -n 160 -o naca4412.json
 yfoil geometry naca 23018 -o naca23018.json
 yfoil geometry naca 0012-34 -o naca0012-34.json
 yfoil geometry naca 16-212 -o naca16-212.json
