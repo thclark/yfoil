@@ -9,6 +9,7 @@ yfoil polar <GEOMETRY.json> [OPTIONS]
 ```
 
 ``` sh
+yfoil geometry naca 4412 -n 160 -o naca4412.json
 yfoil polar naca4412.json \
     --alpha-min -5 --alpha-max 15 --alpha-step 0.5 \
     --reynolds 1e6 --max-iterations 20 \

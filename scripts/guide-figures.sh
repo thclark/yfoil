@@ -22,12 +22,12 @@ cd "$work"
 
 # Your first analysis (get-started/your-first-analysis.md)
 "$yfoil" geometry naca 0012 -n 160 -o naca0012.json
-"$yfoil" analyse naca0012.json --alpha 5 --reynolds 1e9 -o naca0012_a5.json
+"$yfoil" analyse naca0012.json --alpha 4 --reynolds 1e6 -o naca0012_a4.json
 "$yfoil" polar naca0012.json \
     --alpha-min -5 --alpha-max 15 --alpha-step 0.5 \
     --reynolds 1e6 --label "NACA 0012" -o naca0012_polar.json
 "$yfoil" plot polar naca0012_polar.json -o naca0012_polar.fig
-"$yfoil" plot analysis naca0012_a5.json -o naca0012_a5.fig
+"$yfoil" plot analysis naca0012_a4.json -o naca0012_a4.fig
 
 # Polars (commands/polars.md)
 "$yfoil" geometry naca 4412 -n 160 -o naca4412.json
@@ -57,6 +57,6 @@ done
     --title "NACA 0012 vs 4412" -o intro.fig
 
 rm -f "$repo_root/$out"/*.fig
-cp intro.fig naca0012_polar.fig naca0012_a5.fig naca4412_polar.fig compare.fig a5.fig naca4412_foil.fig foil.fig \
+cp intro.fig naca0012_polar.fig naca0012_a4.fig naca4412_polar.fig compare.fig a5.fig naca4412_foil.fig foil.fig \
     "$repo_root/$out/"
 echo "wrote $(ls "$repo_root/$out"/*.fig | wc -l | tr -d ' ') figures to $out"

@@ -11,7 +11,7 @@ yfoil analyse <GEOMETRY.json> [OPTIONS]
 ## Fixed angle of attack
 
 ``` sh
-yfoil analyse naca0012.json --alpha 5 --reynolds 1e6 --ncrit 9 -o a5.json
+yfoil analyse naca0012.json --alpha 4 --reynolds 1e6 --ncrit 9 -o a4.json
 ```
 
 ## Fixed lift coefficient
@@ -25,7 +25,7 @@ yfoil analyse naca0012.json --cl 0.6 --reynolds 1e6 -o cl06.json
 ## Inviscid
 
 ``` sh
-yfoil analyse naca0012.json --alpha 5 --inviscid
+yfoil analyse naca0012.json --alpha 4 --inviscid
 ```
 
 ## Options
